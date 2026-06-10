@@ -24,7 +24,7 @@ interface OutputDeviceFormData {
   location_id: string; // optional; blank -> null (the location, not the antenna)
   is_active: boolean;
   // Rule config (TRA-943/935), persisted to metadata. Strings in the form;
-  // coerced to numbers on submit. Blank = "system default" (omit the key).
+  // coerced to numbers on submit. Blank = "org/system default" (omit the key).
   mode: OutputDeviceMode;
   age_out_seconds: string;
   auto_off_seconds: string;
@@ -173,7 +173,7 @@ export function OutputDeviceForm({
     // stale/empty base_url for mqtt trips the backend's url validation and is
     // an unrecoverable dead end since the field isn't shown (TRA-928).
     // Rule config (TRA-943/935) round-trips through the metadata jsonb. Blank
-    // numeric fields are omitted (= system default). auto_off only applies to
+    // numeric fields are omitted (= org/system default). auto_off only applies to
     // egress — presence owns the OFF edge, so the engine ignores it.
     const metadata: Record<string, number | string> = { mode: formData.mode };
     if (formData.age_out_seconds.trim() !== '')
@@ -409,7 +409,7 @@ export function OutputDeviceForm({
             <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.rssi_threshold}</p>
           )}
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Minimum signal strength for this output to react (stronger is closer to 0). Blank = system
+            Minimum signal strength for this output to react (stronger is closer to 0). Blank = org/system
             default.
           </p>
         </div>

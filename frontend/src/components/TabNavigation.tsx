@@ -2,7 +2,7 @@ import React from 'react';
 import { useUIStore, useDeviceStore, useOrgStore } from '@/stores';
 import type { TabType } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
-import { Package2, Search, Settings, ScanLine, HelpCircle, Home, Package, MapPinned, BarChart3, RadioTower, Siren, Radio } from 'lucide-react';
+import { Package2, Search, Settings, ScanLine, HelpCircle, Home, Package, MapPinned, BarChart3, RadioTower, Siren, Radio, SlidersHorizontal } from 'lucide-react';
 import { appVersion } from '@/version';
 
 interface NavItemProps {
@@ -60,6 +60,8 @@ export default function TabNavigation() {
   // only — those are gated separately in OrgSwitcher.
   const canManageDevices =
     !!currentRole && ['owner', 'admin', 'manager', 'operator'].includes(currentRole);
+  // Geofence defaults are org-wide tuning — admin-only, matching the backend.
+  const isAdmin = currentRole === 'owner' || currentRole === 'admin';
   
   // Handle browser back button navigation
   React.useEffect(() => {
@@ -261,6 +263,17 @@ export default function TabNavigation() {
                 icon={<Siren className="w-5 h-5" />}
                 tooltip="Manage output devices (e.g. Shelly relays) and test-fire them"
               />
+
+              {isAdmin && (
+                <NavItem
+                  id="org-geofence-defaults"
+                  label="Geofence defaults"
+                  isActive={activeTab === 'org-geofence-defaults'}
+                  onClick={() => handleTabClick('org-geofence-defaults')}
+                  icon={<SlidersHorizontal className="w-5 h-5" />}
+                  tooltip="Org-wide geofence tuning (RSSI, age-out, auto-off, mode) — applied to every portal unless an output overrides it"
+                />
+              )}
             </div>
           )}
 

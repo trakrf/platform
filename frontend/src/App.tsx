@@ -29,12 +29,13 @@ const ResetPasswordScreen = lazyWithRetry(() => import('@/components/ResetPasswo
 const CreateOrgScreen = lazyWithRetry(() => import('@/components/CreateOrgScreen'));
 const MembersScreen = lazyWithRetry(() => import('@/components/MembersScreen'));
 const OrgSettingsScreen = lazyWithRetry(() => import('@/components/OrgSettingsScreen'));
+const OrgGeofenceDefaultsScreen = lazyWithRetry(() => import('@/components/OrgGeofenceDefaultsScreen'));
 const AcceptInviteScreen = lazyWithRetry(() => import('@/components/AcceptInviteScreen'));
 const APIKeysScreen = lazyWithRetry(() => import('@/components/APIKeysScreen'));
 const ReportsScreen = lazyWithRetry(() => import('@/components/ReportsScreen'));
 const ReportsHistoryScreen = lazyWithRetry(() => import('@/components/ReportsHistoryScreen'));
 
-const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'accept-invite', 'api-keys'];
+const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'org-geofence-defaults', 'accept-invite', 'api-keys'];
 
 export default function App() {
   const activeTab = useUIStore((state) => state.activeTab);
@@ -209,6 +210,7 @@ export default function App() {
       'create-org': CreateOrgScreen,
       'org-members': MembersScreen,
       'org-settings': OrgSettingsScreen,
+      'org-geofence-defaults': OrgGeofenceDefaultsScreen,
       'accept-invite': AcceptInviteScreen,
       reports: ReportsScreen,
       'reports-history': ReportsHistoryScreen,
@@ -234,6 +236,7 @@ export default function App() {
       'create-org': LoadingScreen,
       'org-members': LoadingScreen,
       'org-settings': LoadingScreen,
+      'org-geofence-defaults': LoadingScreen,
       'accept-invite': LoadingScreen,
       reports: LoadingScreen,
       'reports-history': LoadingScreen,
