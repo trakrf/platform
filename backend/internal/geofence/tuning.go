@@ -9,10 +9,10 @@ import (
 // the engine actually applies for one output device, after collapsing the three
 // config tiers.
 type Tuning struct {
-	RSSIThreshold  int    // dBm trip line
-	AgeOutSeconds  int    // egress re-arm window / presence departure window
-	AutoOffSeconds int    // device-side auto-off (egress only)
-	Mode           string // "egress" | "presence"
+	RSSIThreshold  int    `json:"rssi_threshold"`   // dBm trip line
+	AgeOutSeconds  int    `json:"age_out_seconds"`  // egress re-arm / presence departure window
+	AutoOffSeconds int    `json:"auto_off_seconds"` // device-side auto-off (egress only)
+	Mode           string `json:"mode"`             // "egress" | "presence"
 }
 
 // SystemTuning is the code/system-tier Tuning: the Config numbers plus the model
