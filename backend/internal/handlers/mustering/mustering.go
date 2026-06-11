@@ -257,7 +257,9 @@ func (h *Handler) Unlock(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
 		return
 	}
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"unlocked": true}})
+	// Bare {"unlocked":true} (no data envelope) — matches the frontend contract
+	// (musterStore.unlock awaits this without reading the body).
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"unlocked": true})
 }
 
 // patchEntryRequest is the verify / mark_safe body.
