@@ -69,6 +69,11 @@ export default function MusterDashboard({ onLocate }: MusterDashboardProps) {
   const [showAllClearConfirm, setShowAllClearConfirm] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showRevealConfirm, setShowRevealConfirm] = useState(false);
+  // Mark-safe note prompt: the entry being marked safe (null = closed) + the
+  // optional note. markSafe(entryId, note?) already threads the note to the
+  // backend (persisted as marked_safe_note); the Dashboard now captures it.
+  const [markSafeFor, setMarkSafeFor] = useState<MusterEntry | null>(null);
+  const [markSafeNote, setMarkSafeNote] = useState('');
   const [showDemo, setShowDemo] = useState(false);
   const [completedReport, setCompletedReport] = useState<{ id: number; report: MusterReport } | null>(null);
 
@@ -193,7 +198,7 @@ export default function MusterDashboard({ onLocate }: MusterDashboardProps) {
           canOperate={canOperate}
           busy={busy}
           onVerify={(id) => guard(() => verify(id))()}
-          onMarkSafe={(id) => guard(() => markSafe(id))()}
+          onMarkSafe={(entry) => { setMarkSafeNote(''); setMarkSafeFor(entry); }}
           onLocate={onLocate}
           onReveal={() => setShowRevealConfirm(true)}
           onAllClear={() => setShowAllClearConfirm(true)}
@@ -286,6 +291,64 @@ export default function MusterDashboard({ onLocate }: MusterDashboardProps) {
           void guard(() => unlock())();
         }}
       />
+
+      {/* Mark-safe note prompt (optional note → marked_safe_note) */}
+      {markSafeFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black bg-opacity-50"
+            onClick={() => setMarkSafeFor(null)}
+            data-testid="muster-mark-safe-backdrop"
+          />
+          <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
+            <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">
+              Mark {markSafeFor.label} safe?
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300 mb-3 text-sm">
+              Accounts for this person manually. Add an optional note (e.g. how they were reached).
+            </p>
+            <input
+              type="text"
+              value={markSafeNote}
+              onChange={(e) => setMarkSafeNote(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const entryId = markSafeFor.id;
+                  const note = markSafeNote.trim();
+                  setMarkSafeFor(null);
+                  void guard(() => markSafe(entryId, note || undefined))();
+                }
+              }}
+              placeholder="Note (optional)"
+              autoFocus
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 mb-6"
+              data-testid="muster-mark-safe-note"
+            />
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setMarkSafeFor(null)}
+                className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100"
+                data-testid="muster-mark-safe-cancel"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const entryId = markSafeFor.id;
+                  const note = markSafeNote.trim();
+                  setMarkSafeFor(null);
+                  void guard(() => markSafe(entryId, note || undefined))();
+                }}
+                disabled={busy}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                data-testid="muster-mark-safe-confirm"
+              >
+                Mark safe
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -392,7 +455,7 @@ interface MusterModeProps {
   canOperate: boolean;
   busy: boolean;
   onVerify: (entryId: number) => void;
-  onMarkSafe: (entryId: number) => void;
+  onMarkSafe: (entry: MusterEntry) => void;
   onLocate: (assetId: number) => void;
   onReveal: () => void;
   onAllClear: () => void;
@@ -518,7 +581,7 @@ interface EntryRowProps {
   canOperate: boolean;
   busy: boolean;
   onVerify: (entryId: number) => void;
-  onMarkSafe: (entryId: number) => void;
+  onMarkSafe: (entry: MusterEntry) => void;
   onLocate: (assetId: number) => void;
 }
 
@@ -562,7 +625,7 @@ function EntryRow({ entry, zoneName, revealUnlocked, canOperate, busy, onVerify,
         )}
         {canOperate && (entry.status === 'missing' || entry.status === 'at_muster') && (
           <button
-            onClick={() => onMarkSafe(entry.id)}
+            onClick={() => onMarkSafe(entry)}
             disabled={busy}
             className="px-2.5 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
           >
