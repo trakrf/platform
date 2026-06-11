@@ -37,6 +37,7 @@ const presenceCoalesce = 1 * time.Second
 // satisfies it. Narrowed so engine_test.go can inject a fake.
 type engineStore interface {
 	ListPersonPresence(ctx context.Context, orgID int, window time.Duration) ([]muster.PersonPresence, error)
+	ListPersonAssetIDs(ctx context.Context, orgID int) ([]int, error)
 	ListZones(ctx context.Context, orgID int) ([]muster.ZonePresence, error)
 	ListMusterPointIDs(ctx context.Context, orgID int) ([]int, error)
 	CreateMusterEvent(ctx context.Context, orgID, startedBy, windowMinutes int) (*muster.Event, error)
@@ -207,11 +208,16 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, _ int64, receivedAt ti
 // ── lazy cache hydration (caller holds st.mu) ─────────────────────────────────
 
 func (e *Engine) ensurePresenceLoaded(ctx context.Context, orgID int, st *orgState) {
+	// Person-ness is metadata-driven, independent of any sighting window, so a
+	// freshly-created person (no scans yet) is recognized immediately. Refreshed
+	// on a cacheTTL cadence so newly-seeded persons appear within the demo cycle.
+	e.refreshPersonSet(ctx, orgID, st)
+
 	if st.presenceLoaded {
 		return
 	}
-	// Hydrate from the widest reasonable window so headcounts are warm; the
-	// engine keeps presence live thereafter.
+	// Hydrate last-known location/time from the widest reasonable window so
+	// headcounts are warm; the engine keeps presence live thereafter.
 	persons, err := e.store.ListPersonPresence(ctx, orgID, 15*time.Minute)
 	if err != nil {
 		e.log.Error().Err(err).Int("org_id", orgID).Msg("presence hydration failed")
@@ -219,10 +225,27 @@ func (e *Engine) ensurePresenceLoaded(ctx context.Context, orgID int, st *orgSta
 	}
 	for _, p := range persons {
 		st.presence[p.AssetID] = personState{locationID: p.LocationID, lastSeen: p.LastSeenAt}
-		st.personSet[p.AssetID] = struct{}{}
 	}
-	st.personSetAt = e.now()
 	st.presenceLoaded = true
+}
+
+// refreshPersonSet repopulates the person-ness cache from ListPersonAssetIDs at
+// most once per cacheTTL. Caller holds st.mu.
+func (e *Engine) refreshPersonSet(ctx context.Context, orgID int, st *orgState) {
+	if !st.personSetAt.IsZero() && e.now().Sub(st.personSetAt) < cacheTTL {
+		return
+	}
+	ids, err := e.store.ListPersonAssetIDs(ctx, orgID)
+	if err != nil {
+		e.log.Error().Err(err).Int("org_id", orgID).Msg("person-set hydration failed")
+		return
+	}
+	set := make(map[int]struct{}, len(ids))
+	for _, id := range ids {
+		set[id] = struct{}{}
+	}
+	st.personSet = set
+	st.personSetAt = e.now()
 }
 
 func (e *Engine) ensureMusterPointsLoaded(ctx context.Context, orgID int, st *orgState) {
@@ -277,19 +300,10 @@ func (e *Engine) isPerson(ctx context.Context, orgID int, st *orgState, assetID 
 	if _, ok := st.personSet[assetID]; ok {
 		return true
 	}
-	// Refresh at most every cacheTTL on a miss to avoid hammering storage for a
-	// genuinely-unknown (non-person) asset read every message.
-	if !st.personSetAt.IsZero() && e.now().Sub(st.personSetAt) < cacheTTL {
-		return false
-	}
-	persons, err := e.store.ListPersonPresence(ctx, orgID, 15*time.Minute)
-	if err != nil {
-		return false
-	}
-	for _, p := range persons {
-		st.personSet[p.AssetID] = struct{}{}
-	}
-	st.personSetAt = e.now()
+	// Miss: refresh from storage at most every cacheTTL (covers a person seeded
+	// since the last hydration), then re-check. The throttle avoids a DB round-
+	// trip per read for a genuinely-unknown (non-person) asset.
+	e.refreshPersonSet(ctx, orgID, st)
 	_, ok := st.personSet[assetID]
 	return ok
 }

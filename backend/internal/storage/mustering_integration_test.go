@@ -9,6 +9,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/trakrf/platform/backend/internal/models/muster"
+	"github.com/trakrf/platform/backend/internal/models/scandevice"
+	"github.com/trakrf/platform/backend/internal/models/scanpoint"
+	"github.com/trakrf/platform/backend/internal/models/shared"
 	"github.com/trakrf/platform/backend/internal/testutil"
 )
 
@@ -648,6 +651,97 @@ func TestMuster_AppendMusterUnlock(t *testing.T) {
 	arr, ok := unlocks.([]any)
 	require.True(t, ok, "metadata.unlocks must be a JSON array")
 	require.Len(t, arr, 2, "two AppendMusterUnlock calls must accumulate, not overwrite")
+}
+
+// ── Simulator + seed support helpers (TRA-978) ─────────────────────────────────
+
+func TestMuster_FindSimScanPointForLocation(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	zoneID := createZoneLocation(t, db, orgID, "Floor")
+	topic := "test-org/DEV-1/reads"
+	dev, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
+		Name: "Floor Reader", Type: scandevice.DeviceTypeGLS10, Transport: scandevice.TransportMQTT, PublishTopic: &topic,
+	})
+	require.NoError(t, err)
+
+	// No scan point bound to the location yet → nil.
+	sp, err := db.Store.FindSimScanPointForLocation(ctx, orgID, zoneID)
+	require.NoError(t, err)
+	require.Nil(t, sp)
+
+	// Bind the auto-created scan point to the zone.
+	points, err := db.Store.ListScanPointsByDevice(ctx, orgID, dev.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, points)
+	loc := zoneID
+	_, err = db.Store.UpdateScanPoint(ctx, orgID, points[0].ID, scanpoint.UpdateScanPointRequest{LocationID: &loc})
+	require.NoError(t, err)
+
+	sp, err = db.Store.FindSimScanPointForLocation(ctx, orgID, zoneID)
+	require.NoError(t, err)
+	require.NotNil(t, sp)
+	require.Equal(t, dev.ID, sp.ScanDeviceID)
+	require.Equal(t, scandevice.DeviceTypeGLS10, sp.DeviceType)
+	require.Equal(t, topic, sp.PublishTopic)
+	require.GreaterOrEqual(t, sp.AntennaPort, 1)
+}
+
+func TestMuster_GetAssetTagValue(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	personID := createPersonAsset(t, db, orgID, "Operator 001")
+
+	// No tag yet → "".
+	val, err := db.Store.GetAssetTagValue(ctx, orgID, personID)
+	require.NoError(t, err)
+	require.Equal(t, "", val)
+
+	// Add a tag.
+	rfid := "rfid"
+	_, err = db.Store.AddTagToAsset(ctx, orgID, personID, shared.TagRequest{TagType: &rfid, Value: "AA:BB:CC:00:00:01"})
+	require.NoError(t, err)
+
+	val, err = db.Store.GetAssetTagValue(ctx, orgID, personID)
+	require.NoError(t, err)
+	require.Equal(t, "AA:BB:CC:00:00:01", val)
+}
+
+func TestMuster_SetLocationMusterPoint(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	zoneID := createZoneLocation(t, db, orgID, "WillBecomeMuster")
+	require.NoError(t, db.Store.SetLocationMusterPoint(ctx, orgID, zoneID))
+
+	ids, err := db.Store.ListMusterPointIDs(ctx, orgID)
+	require.NoError(t, err)
+	require.Contains(t, ids, zoneID)
+}
+
+func TestMuster_ScanDeviceTopicExists(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	topic := "test-org/DEV-EXISTS/reads"
+	exists, err := db.Store.ScanDeviceTopicExists(ctx, orgID, topic)
+	require.NoError(t, err)
+	require.False(t, exists)
+
+	_, err = db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
+		Name: "Dev", Type: scandevice.DeviceTypeGLS10, Transport: scandevice.TransportMQTT, PublishTopic: &topic,
+	})
+	require.NoError(t, err)
+
+	exists, err = db.Store.ScanDeviceTopicExists(ctx, orgID, topic)
+	require.NoError(t, err)
+	require.True(t, exists)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

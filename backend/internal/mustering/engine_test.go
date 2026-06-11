@@ -53,6 +53,15 @@ func (f *fakeStore) ListPersonPresence(_ context.Context, _ int, _ time.Duration
 	defer f.mu.Unlock()
 	return append([]muster.PersonPresence(nil), f.persons...), nil
 }
+func (f *fakeStore) ListPersonAssetIDs(_ context.Context, _ int) ([]int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	ids := make([]int, 0, len(f.persons))
+	for _, p := range f.persons {
+		ids = append(ids, p.AssetID)
+	}
+	return ids, nil
+}
 func (f *fakeStore) ListZones(_ context.Context, _ int) ([]muster.ZonePresence, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -21,6 +21,7 @@ import (
 	inventoryhandler "github.com/trakrf/platform/backend/internal/handlers/inventory"
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
+	musteringhandler "github.com/trakrf/platform/backend/internal/handlers/mustering"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
 	outputdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/outputdevices"
 	readstreamhandler "github.com/trakrf/platform/backend/internal/handlers/readstream"
@@ -52,6 +53,7 @@ func setupRouter(
 	healthHandler *healthhandler.Handler,
 	frontendHandler *frontendhandler.Handler,
 	readstreamHandler *readstreamhandler.Handler,
+	musteringHandler *musteringhandler.Handler,
 	testHandler *testhandler.Handler,
 	store *storage.Storage,
 ) *chi.Mux {
@@ -160,6 +162,9 @@ func setupRouter(
 		lookupHandler.RegisterRoutes(r)
 		// TRA-924: org-enforced Live Reads SSE stream (session-auth, internal).
 		readstreamHandler.RegisterRoutes(r)
+		// TRA-978: internal mustering POC surface (SSE + REST + simulate/seed).
+		// Session-auth only, NOT in the public OpenAPI spec (no paidGate).
+		musteringHandler.RegisterRoutes(r)
 
 		r.Get("/swagger/openapi.internal.json", swaggerspec.ServeJSON)
 		r.Get("/swagger/openapi.internal.yaml", swaggerspec.ServeYAML)

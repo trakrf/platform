@@ -67,6 +67,42 @@ func (s *Storage) ListPersonPresence(ctx context.Context, orgID int, window time
 	return out, nil
 }
 
+// ListPersonAssetIDs returns the ids of every live person-asset
+// (metadata->>'person' = 'true') for the org, independent of any sighting
+// window. The engine uses this for its person-ness cache so a freshly-created
+// person (no scans yet) is still recognized — presence/location is tracked
+// separately via ListPersonPresence.
+func (s *Storage) ListPersonAssetIDs(ctx context.Context, orgID int) ([]int, error) {
+	query := `
+		SELECT id FROM trakrf.assets
+		WHERE org_id = $1
+		  AND deleted_at IS NULL
+		  AND is_active = true
+		  AND metadata->>'person' = 'true'
+		ORDER BY id
+	`
+	var out []int
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, orgID)
+		if err != nil {
+			return fmt.Errorf("ListPersonAssetIDs query: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id int
+			if err := rows.Scan(&id); err != nil {
+				return fmt.Errorf("ListPersonAssetIDs scan: %w", err)
+			}
+			out = append(out, id)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ListZones returns all live locations for the org with MusterPoint flag set
 // when metadata->>'muster_point' = 'true'. Count is always 0 (filled by engine).
 func (s *Storage) ListZones(ctx context.Context, orgID int) ([]muster.ZonePresence, error) {
@@ -200,6 +236,43 @@ func (s *Storage) GetAssetTagValue(ctx context.Context, orgID, assetID int) (str
 		return "", fmt.Errorf("GetAssetTagValue: %w", err)
 	}
 	return value, nil
+}
+
+// ── Seed support (TRA-978) ─────────────────────────────────────────────────────
+
+// SetLocationMusterPoint stamps metadata.muster_point = true on a location
+// (idempotent jsonb merge). Used by the demo seed since CreateLocation does not
+// accept metadata.
+func (s *Storage) SetLocationMusterPoint(ctx context.Context, orgID, locationID int) error {
+	return s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			UPDATE trakrf.locations
+			   SET metadata = COALESCE(metadata, '{}'::jsonb) || '{"muster_point": true}'::jsonb,
+			       updated_at = now()
+			WHERE id = $2 AND org_id = $1`,
+			orgID, locationID,
+		)
+		return err
+	})
+}
+
+// ScanDeviceTopicExists reports whether a live scan device with the given
+// publish_topic already exists for the org. Used by the idempotent demo seed.
+func (s *Storage) ScanDeviceTopicExists(ctx context.Context, orgID int, topic string) (bool, error) {
+	var exists bool
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM trakrf.scan_devices
+				WHERE org_id = $1 AND publish_topic = $2 AND deleted_at IS NULL
+			)`,
+			orgID, topic,
+		).Scan(&exists)
+	})
+	if err != nil {
+		return false, fmt.Errorf("ScanDeviceTopicExists: %w", err)
+	}
+	return exists, nil
 }
 
 // ── Event lifecycle ───────────────────────────────────────────────────────────

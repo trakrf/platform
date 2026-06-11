@@ -19,6 +19,7 @@ import (
 	inventoryhandler "github.com/trakrf/platform/backend/internal/handlers/inventory"
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
+	musteringhandler "github.com/trakrf/platform/backend/internal/handlers/mustering"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
 	outputdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/outputdevices"
 	readstreamhandler "github.com/trakrf/platform/backend/internal/handlers/readstream"
@@ -27,6 +28,9 @@ import (
 	scanpointshandler "github.com/trakrf/platform/backend/internal/handlers/scanpoints"
 	testhandler "github.com/trakrf/platform/backend/internal/handlers/testhandler"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
+	"github.com/trakrf/platform/backend/internal/ingest"
+	"github.com/trakrf/platform/backend/internal/logger"
+	"github.com/trakrf/platform/backend/internal/mustering"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
 	orgsservice "github.com/trakrf/platform/backend/internal/services/orgs"
 	readstreamsvc "github.com/trakrf/platform/backend/internal/services/readstream"
@@ -54,9 +58,12 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 	healthHandler := healthhandler.NewHandler(nil, buildinfo.Info{Version: "test"}, time.Now())
 	frontendHandler := frontendhandler.NewHandler(fstest.MapFS{}, "frontend/dist", "")
 	readstreamHandler := readstreamhandler.NewHandler(readstreamsvc.New())
+	musterBC := mustering.NewBroadcaster()
+	musterEngine := mustering.NewEngine(store, musterBC, logger.Get())
+	musteringHandler := musteringhandler.NewHandler(musterEngine, musterBC, store, ingest.MultiEvaluator{musterEngine}, nil)
 	testHandler := testhandler.NewHandler(store)
 
-	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, testHandler, store)
+	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, testHandler, store)
 }
 
 func TestRouterSetup(t *testing.T) {
@@ -102,6 +109,13 @@ func TestRouterRegistration(t *testing.T) {
 		{"POST", "/api/v1/users/me/current-org"},
 		{"GET", "/api/v1/users"},
 		{"GET", "/api/v1/reads/stream"},
+		{"GET", "/api/v1/mustering/stream"},
+		{"GET", "/api/v1/mustering/status"},
+		{"POST", "/api/v1/mustering/events"},
+		{"POST", "/api/v1/mustering/events/1/all-clear"},
+		{"PATCH", "/api/v1/mustering/events/1/entries/2"},
+		{"POST", "/api/v1/mustering/simulate"},
+		{"POST", "/api/v1/mustering/seed"},
 		{"GET", "/assets/index.js"},
 		{"GET", "/favicon.ico"},
 		{"GET", "/version.json"},
