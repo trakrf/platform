@@ -103,6 +103,13 @@ export interface MusterSighting {
   location_id: number;
 }
 
+/** One break-glass unlock log entry (stored in event.metadata.unlocks). */
+export interface MusterUnlockEntry {
+  user_id: number;
+  email: string;
+  at: string; // ISO 8601
+}
+
 // --- SSE frame payloads (GET /api/v1/mustering/stream) ---
 
 export interface MusterSnapshotPayload {
