@@ -117,6 +117,9 @@ export default function MusterDashboard({ onLocate }: MusterDashboardProps) {
   };
 
   const handleActivate = guard(async () => {
+    // Drop any prior drill's report so it can't reappear if this new drill is
+    // later cancelled (cancel produces no report and never clears this).
+    setCompletedReport(null);
     await activate(windowMinutes);
   });
 
@@ -148,7 +151,10 @@ export default function MusterDashboard({ onLocate }: MusterDashboardProps) {
       location_id: target,
     }));
     await simulate(sightings);
-    toast.success('Sent everyone to Muster Point A');
+    // Name the actual target zone rather than hardcoding "A" — the demo seeds
+    // more than one muster point and we always pick the first.
+    const targetName = zoneName.get(target) ?? `Muster point #${target}`;
+    toast.success(`Sent everyone to ${targetName}`);
   });
 
   const scatterAcrossZones = guard(async () => {
