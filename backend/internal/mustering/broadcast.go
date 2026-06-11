@@ -37,10 +37,13 @@ type SnapshotPayload struct {
 }
 
 // PresencePayload is a zone-headcount delta. Persons (per-person location) is
-// populated only while an event is active (break-glass).
+// populated only while an event is active (break-glass). PersonsOnSite is the
+// sum of non-muster-point zone counts — the same total the snapshot carries —
+// so the dashboard's "on site" tile stays live between snapshots (BUG 3).
 type PresencePayload struct {
-	Zones   []muster.ZonePresence   `json:"zones"`
-	Persons []muster.PersonPresence `json:"persons,omitempty"`
+	Zones         []muster.ZonePresence   `json:"zones"`
+	PersonsOnSite int                     `json:"persons_on_site"`
+	Persons       []muster.PersonPresence `json:"persons,omitempty"`
 }
 
 // entryPayload carries a single entry transition + refreshed counts.

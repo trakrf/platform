@@ -120,6 +120,9 @@ export interface MusterSnapshotPayload {
 
 export interface MusterPresencePayload {
   zones: ZonePresence[];
+  // Sum of non-muster-point zone counts — the same "on site" total the snapshot
+  // carries, so the dashboard tile stays live between snapshots.
+  persons_on_site: number;
   persons: PersonPresence[];
 }
 

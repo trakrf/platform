@@ -476,6 +476,48 @@ func TestStatus_PresenceAndActiveEvent(t *testing.T) {
 	require.NotNil(t, snap.Event)
 }
 
+// TestStatus_EmptyOrgZonesMarshalAsArray guards BUG 1: a fresh org with no
+// locations must serialize zones as [] (never null), or the frontend Dashboard
+// useMemo throws "not iterable" and the whole Mustering tab dies.
+func TestStatus_EmptyOrgZonesMarshalAsArray(t *testing.T) {
+	store := newFakeStore() // no persons, no zones
+	e := newTestEngine(store, &fakeBC{})
+
+	snap, err := e.Status(context.Background(), 1)
+	require.NoError(t, err)
+	require.NotNil(t, snap.Zones)
+	require.Len(t, snap.Zones, 0)
+
+	data, err := json.Marshal(snap)
+	require.NoError(t, err)
+	require.Contains(t, string(data), `"zones":[]`)
+}
+
+// TestPresenceFrame_CarriesPersonsOnSite guards BUG 3: every presence frame must
+// carry persons_on_site (the non-muster-point headcount) so the dashboard "on
+// site" total stays live between snapshots.
+func TestPresenceFrame_CarriesPersonsOnSite(t *testing.T) {
+	store := newFakeStore()
+	store.persons = []muster.PersonPresence{
+		{AssetID: 1, Label: "Op1", LocationID: ptr(10)},
+		{AssetID: 2, Label: "Op2", LocationID: ptr(10)},
+	}
+	store.zones = []muster.ZonePresence{
+		{LocationID: 10, Name: "Floor"},
+		{LocationID: 20, Name: "Muster", MusterPoint: true},
+	}
+	store.musterPoints = []int{20}
+	bc := &fakeBC{}
+	e := newTestEngine(store, bc)
+
+	// Two zone reads (non-muster) populate presence and emit a presence frame.
+	e.Evaluate(context.Background(), 1, 1, time.Now(), []storage.ResolvedRead{resolved(1, 10), resolved(2, 10)})
+
+	require.NotEmpty(t, bc.presence)
+	last := bc.presence[len(bc.presence)-1]
+	require.Equal(t, 2, last.PersonsOnSite) // both on the floor, none at muster
+}
+
 func TestStatus_EnrichesEntriesWithLastSeenWhileActive(t *testing.T) {
 	store := newFakeStore()
 	store.persons = []muster.PersonPresence{{AssetID: 1, Label: "Op1", LocationID: ptr(10), LastSeenAt: time.Now()}}

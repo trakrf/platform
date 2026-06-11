@@ -9,7 +9,7 @@
 //
 // Frame contract (see backend/internal/handlers/mustering/stream.go):
 //   event: snapshot  data {zones, persons_on_site, event|null}
-//   event: presence  data {zones, persons}  (persons only while event active)
+//   event: presence  data {zones, persons_on_site, persons}  (persons only while event active)
 //   event: entry     data {entry, counts}
 //   event: event     data {event}           (activated/completed/cancelled)
 // Heartbeats are SSE comments or empty events — parsed defensively (dropped).
@@ -271,7 +271,7 @@ export const useMusterStore = create<MusterState>()(
             break;
           }
           case 'presence':
-            set({ zones: frame.data.zones });
+            set({ zones: frame.data.zones, personsOnSite: frame.data.persons_on_site });
             break;
           case 'entry': {
             const next = applyEntryToEvent(get().event, frame.data.entry, frame.data.counts);
@@ -320,8 +320,11 @@ export const useMusterStore = create<MusterState>()(
             const prev = get().event;
             const reset = !incoming || (prev && incoming && prev.id !== incoming.id) || incoming.status !== 'active';
             set({
-              zones: data.zones,
-              personsOnSite: data.persons_on_site,
+              // Defensive: a fresh org with no locations can serialize zones as
+              // null (Go nil slice). Coerce to [] so the Dashboard useMemo that
+              // iterates zones never throws (mirrors the SSE path's toFrame guard).
+              zones: Array.isArray(data.zones) ? data.zones : [],
+              personsOnSite: data.persons_on_site ?? 0,
               event: incoming,
               error: null,
               ...(reset ? { revealUnlocked: false } : {}),

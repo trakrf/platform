@@ -345,7 +345,23 @@ func (e *Engine) maybeBroadcastPresence(ctx context.Context, orgID int, st *orgS
 	st.mu.Unlock()
 
 	zones, persons := e.computePresence(ctx, orgID, st, eventActive)
-	e.bc.BroadcastPresence(orgID, PresencePayload{Zones: zones, Persons: persons})
+	e.bc.BroadcastPresence(orgID, PresencePayload{
+		Zones:         zones,
+		PersonsOnSite: personsOnSite(zones),
+		Persons:       persons,
+	})
+}
+
+// personsOnSite sums the headcount of every non-muster-point zone — the canonical
+// "on site" total shared by the snapshot and presence frames (BUG 3).
+func personsOnSite(zones []muster.ZonePresence) int {
+	onsite := 0
+	for _, z := range zones {
+		if !z.MusterPoint {
+			onsite += z.Count
+		}
+	}
+	return onsite
 }
 
 // computePresence builds zone headcounts (from live locations + in-memory
@@ -355,7 +371,12 @@ func (e *Engine) computePresence(ctx context.Context, orgID int, st *orgState, e
 	zones, err := e.store.ListZones(ctx, orgID)
 	if err != nil {
 		e.log.Error().Err(err).Int("org_id", orgID).Msg("ListZones failed")
-		zones = nil
+	}
+	// Never hand back a nil slice — a fresh org with no locations would otherwise
+	// marshal as JSON `null`, which crashes the frontend's Dashboard useMemo
+	// (TypeError: not iterable) and kills the whole tab (BUG 1).
+	if zones == nil {
+		zones = []muster.ZonePresence{}
 	}
 
 	st.mu.Lock()
@@ -363,7 +384,7 @@ func (e *Engine) computePresence(ctx context.Context, orgID int, st *orgState, e
 
 	counts := map[int]int{}
 	cutoff := e.now().Add(-15 * time.Minute)
-	var persons []muster.PersonPresence
+	persons := []muster.PersonPresence{}
 	for assetID, ps := range st.presence {
 		if ps.lastSeen.Before(cutoff) {
 			continue
@@ -509,12 +530,7 @@ func (e *Engine) Status(ctx context.Context, orgID int) (SnapshotPayload, error)
 	st.mu.Unlock()
 
 	zones, _ := e.computePresence(ctx, orgID, st, eventActive)
-	onsite := 0
-	for _, z := range zones {
-		if !z.MusterPoint {
-			onsite += z.Count
-		}
-	}
+	onsite := personsOnSite(zones)
 
 	ev, err := e.store.GetActiveMusterEvent(ctx, orgID)
 	if err != nil {

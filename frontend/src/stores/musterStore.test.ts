@@ -1,4 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// Mock the REST api so refreshStatus() can be exercised against a fixed payload.
+const statusMock = vi.fn();
+vi.mock('@/lib/api/mustering', () => ({
+  musteringApi: {
+    status: () => statusMock(),
+  },
+}));
+
 import {
   useMusterStore,
   parseSSEChunk,
@@ -81,7 +90,7 @@ describe('parseSSEChunk', () => {
   it('parses each frame type from the wire', () => {
     const chunk =
       wire('snapshot', { zones: [zone()], persons_on_site: 3, event: null }) +
-      wire('presence', { zones: [zone({ count: 2 })], persons: [] }) +
+      wire('presence', { zones: [zone({ count: 2 })], persons_on_site: 2, persons: [] }) +
       wire('entry', { entry: entry(), counts: counts() }) +
       wire('event', { event: event() });
 
@@ -134,12 +143,13 @@ describe('musterStore applyFrame', () => {
     expect(s.event?.id).toBe(1);
   });
 
-  it('presence updates zones only, discarding per-person data', () => {
+  it('presence updates zones + persons-on-site, discarding per-person data', () => {
     useMusterStore.setState({ event: event(), personsOnSite: 5 });
     apply({
       type: 'presence',
       data: {
         zones: [zone({ count: 7 })],
+        persons_on_site: 7,
         persons: [{ asset_id: 5, label: 'Alice', location_id: 10, last_seen_at: 'x' }],
       },
     });
@@ -147,9 +157,10 @@ describe('musterStore applyFrame', () => {
     expect(s.zones[0].count).toBe(7);
     // Person-level detail is never reduced into store state.
     expect(JSON.stringify(s)).not.toContain('last_seen_at');
-    // event / personsOnSite untouched by a presence frame.
+    // event untouched by a presence frame; persons-on-site now tracks the frame
+    // (BUG 3 — the "on site" tile must stay live between snapshots).
     expect(s.event?.id).toBe(1);
-    expect(s.personsOnSite).toBe(5);
+    expect(s.personsOnSite).toBe(7);
   });
 
   it('entry frame replaces the matching entry by id and updates counts', () => {
@@ -173,6 +184,21 @@ describe('musterStore applyFrame', () => {
     const s = useMusterStore.getState();
     expect(s.event?.entries).toHaveLength(2);
     expect(s.event?.counts.expected).toBe(2);
+  });
+
+  it('refreshStatus coerces a null zones payload to [] (fresh-org guard, BUG 1)', async () => {
+    // A fresh org with no locations: backend nil slice → JSON null. The REST
+    // status path must coerce so the Dashboard useMemo that iterates zones never
+    // throws "not iterable" and kills the whole tab.
+    statusMock.mockResolvedValueOnce({
+      data: { zones: null, persons_on_site: null, event: null },
+    });
+    await useMusterStore.getState().refreshStatus();
+    const s = useMusterStore.getState();
+    expect(Array.isArray(s.zones)).toBe(true);
+    expect(s.zones).toHaveLength(0);
+    expect(s.personsOnSite).toBe(0);
+    expect(s.error).toBeNull();
   });
 
   it('keeps revealUnlocked across a same-id re-snapshot (so unlock survives)', () => {
