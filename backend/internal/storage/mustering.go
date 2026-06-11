@@ -15,34 +15,37 @@ import (
 // ── Presence queries ──────────────────────────────────────────────────────────
 
 // ListPersonPresence returns the most-recent sighting (within window) for
-// each live person-asset (metadata->>'person' = 'true'). Uses DISTINCT ON
-// to pick the most-recent scan per asset — same pattern as ListCurrentLocations.
+// each live person-asset (metadata->>'person' = 'true').
+//
+// Drives from person-assets and LATERAL-joins the latest sighting per asset.
+// This avoids a DISTINCT ON over the asset_scans hypertable, which trips
+// Timescale's SkipScan optimizer on preview ("unsupported subplan type for
+// SkipScan", SQLSTATE XX000). The LATERAL uses the existing
+// (asset_id, timestamp DESC) index — one cheap lookup per person — so no
+// SkipScan plan is considered.
 // All ids use int (house style); pgx scans BIGINT into int safely on 64-bit.
 func (s *Storage) ListPersonPresence(ctx context.Context, orgID int, window time.Duration) ([]muster.PersonPresence, error) {
 	cutoff := time.Now().Add(-window)
 	query := `
-		WITH latest AS (
-			SELECT DISTINCT ON (s.asset_id)
-				s.asset_id,
-				s.location_id,
-				s.timestamp AS last_seen_at
-			FROM trakrf.asset_scans s
-			WHERE s.org_id = $1
-			  AND s.timestamp >= $2
-			ORDER BY s.asset_id, s.timestamp DESC
-		)
 		SELECT
 			a.id         AS asset_id,
 			a.name       AS label,
-			l.location_id,
-			l.last_seen_at
-		FROM latest l
-		JOIN trakrf.assets a
-		  ON a.id = l.asset_id
-		 AND a.org_id = $1
-		 AND a.deleted_at IS NULL
-		 AND a.is_active = true
-		 AND a.metadata->>'person' = 'true'
+			s.location_id,
+			s.last_seen_at
+		FROM trakrf.assets a
+		CROSS JOIN LATERAL (
+			SELECT s.location_id, s.timestamp AS last_seen_at
+			FROM trakrf.asset_scans s
+			WHERE s.asset_id = a.id
+			  AND s.org_id = $1
+			  AND s.timestamp >= $2
+			ORDER BY s.timestamp DESC
+			LIMIT 1
+		) s
+		WHERE a.org_id = $1
+		  AND a.deleted_at IS NULL
+		  AND a.is_active = true
+		  AND a.metadata->>'person' = 'true'
 		ORDER BY a.id
 	`
 	var out []muster.PersonPresence
