@@ -24,7 +24,7 @@ import type {
   MusterSighting,
   ZonePresence,
 } from '@/types/mustering';
-import { OPERATOR_PLUS, ADMIN_PLUS, STATUS_LABEL } from './helpers';
+import { OPERATOR_PLUS, ADMIN_PLUS, STATUS_LABEL, fetchPersonRoster } from './helpers';
 
 interface MusterDashboardProps {
   /** Deep-link a person into the Locate sub-tab. */
@@ -119,11 +119,17 @@ export default function MusterDashboard({ onLocate }: MusterDashboardProps) {
 
   // --- Simulator (demo) sighting builders ---
 
-  const rosterAssetIds = useMemo(() => {
-    // Prefer the active event's entries; the simulator targets those persons.
+  // Resolve the simulator's target roster. While a drill is active the simulator
+  // targets the event's own entries; before activation (presence mode) the event
+  // has no entries, so source the roster from the live person-asset list — the
+  // same source MusterBadges uses. Without this, pre-drill scatter/send-all
+  // no-op and Activate snapshots Expected=0 (the seed presence window expires
+  // before any drill is ever started).
+  const resolveRosterAssetIds = async (): Promise<number[]> => {
     if (event?.entries?.length) return event.entries.map((e) => e.asset_id);
-    return [];
-  }, [event]);
+    const persons = await fetchPersonRoster();
+    return persons.map((p) => p.id);
+  };
 
   const sendEveryoneToMuster = guard(async () => {
     const target = musterPointIds[0];
@@ -131,8 +137,9 @@ export default function MusterDashboard({ onLocate }: MusterDashboardProps) {
       toast.error('No muster point seeded.');
       return;
     }
+    const rosterAssetIds = await resolveRosterAssetIds();
     if (rosterAssetIds.length === 0) {
-      toast.error('No roster — activate a drill (or seed) first.');
+      toast.error('No roster — add people (or seed) first.');
       return;
     }
     const sightings: MusterSighting[] = rosterAssetIds.map((asset_id) => ({
@@ -147,7 +154,12 @@ export default function MusterDashboard({ onLocate }: MusterDashboardProps) {
   });
 
   const scatterAcrossZones = guard(async () => {
-    if (nonMusterZones.length === 0 || rosterAssetIds.length === 0) {
+    if (nonMusterZones.length === 0) {
+      toast.error('Need seeded zones and a roster to scatter.');
+      return;
+    }
+    const rosterAssetIds = await resolveRosterAssetIds();
+    if (rosterAssetIds.length === 0) {
       toast.error('Need seeded zones and a roster to scatter.');
       return;
     }

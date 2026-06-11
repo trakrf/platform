@@ -1,6 +1,20 @@
 // Shared helpers for mustering components (TRA-978).
 
+import { assetsApi } from '@/lib/api/assets';
+import type { Asset } from '@/types/assets';
 import type { MusterEntryStatus } from '@/types/mustering';
+
+/**
+ * Fetch the active person-asset roster (metadata.person === true, is_active).
+ *
+ * POC: limit:200 (the API max) client-filter cliff — a server-side person
+ * filter is the post-POC fix. Shared by MusterBadges (roster table) and
+ * MusterDashboard (pre-drill simulator targets) so the two never drift.
+ */
+export async function fetchPersonRoster(): Promise<Asset[]> {
+  const { data } = await assetsApi.list({ limit: 200 });
+  return data.data.filter((a) => a.is_active && a.metadata?.person === true);
+}
 
 /** Roles allowed to perform operator-level mustering actions. */
 export const OPERATOR_PLUS = ['owner', 'admin', 'manager', 'operator'];

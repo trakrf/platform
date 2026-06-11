@@ -16,7 +16,7 @@ import toast from 'react-hot-toast';
 import { assetsApi } from '@/lib/api/assets';
 import { useMusterStore, useOrgStore } from '@/stores';
 import type { Asset } from '@/types/assets';
-import { OPERATOR_PLUS, relativeAge } from './helpers';
+import { OPERATOR_PLUS, relativeAge, fetchPersonRoster } from './helpers';
 
 // Uppercase a MAC address so it matches what the backend stores / GL-S10 sends.
 function normaliseMac(raw: string): string {
@@ -57,12 +57,7 @@ export default function MusterBadges() {
     setLoading(true);
     setError(null);
     try {
-      // POC: limit:200 (the API max) client-filter cliff — server-side person filter is the post-POC fix.
-      const { data } = await assetsApi.list({ limit: 200 });
-      const personAssets = data.data.filter(
-        (a) => a.is_active && a.metadata?.person === true,
-      );
-      setPersons(personAssets);
+      setPersons(await fetchPersonRoster());
     } catch {
       setError('Failed to load person roster.');
     } finally {
