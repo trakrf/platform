@@ -67,13 +67,14 @@ export const musteringApi = {
     apiClient.post<Envelope<MusterEvent>>(`/mustering/events/${id}/cancel`),
 
   /**
-   * Log a break-glass reveal (appends to metadata.unlocks). Returns
-   * {data: {unlocked: true}} — not the event; callers re-snapshot so the
-   * entries' last_seen_location_id fields populate.
+   * Log a break-glass reveal (appends to metadata.unlocks). Returns bare
+   * {unlocked: true} — NOT a data-envelope; the body is discarded by callers
+   * (the store re-snapshots instead). The type here reflects the real wire
+   * shape so nothing falsely tries to unwrap .data.
    * POST /api/v1/mustering/events/:id/unlock
    */
   unlock: (id: number) =>
-    apiClient.post<Envelope<{ unlocked: boolean }>>(`/mustering/events/${id}/unlock`),
+    apiClient.post<{ unlocked: boolean }>(`/mustering/events/${id}/unlock`),
 
   /**
    * Verify / mark-safe a single entry.
