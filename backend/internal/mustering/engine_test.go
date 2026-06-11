@@ -468,6 +468,26 @@ func TestStatus_PresenceAndActiveEvent(t *testing.T) {
 	require.NotNil(t, snap.Event)
 }
 
+func TestStatus_EnrichesEntriesWithLastSeenWhileActive(t *testing.T) {
+	store := newFakeStore()
+	store.persons = []muster.PersonPresence{{AssetID: 1, Label: "Op1", LocationID: ptr(10), LastSeenAt: time.Now()}}
+	store.zones = []muster.ZonePresence{{LocationID: 10, Name: "Floor"}}
+	e := newTestEngine(store, &fakeBC{})
+	_, _ = e.Activate(context.Background(), 1, 99, 15)
+
+	// A read updates in-memory presence to zone 10.
+	e.Evaluate(context.Background(), 1, 1, time.Now(), []storage.ResolvedRead{resolved(1, 10)})
+
+	snap, err := e.Status(context.Background(), 1)
+	require.NoError(t, err)
+	require.NotNil(t, snap.Event)
+	require.Len(t, snap.Event.Entries, 1)
+	// Break-glass: last_seen_location_id populated from in-memory presence.
+	require.NotNil(t, snap.Event.Entries[0].LastSeenLocationID)
+	require.Equal(t, 10, *snap.Event.Entries[0].LastSeenLocationID)
+	require.NotNil(t, snap.Event.Entries[0].LastSeenAt)
+}
+
 func TestUnlock_RecordsReveal(t *testing.T) {
 	store := newFakeStore()
 	e := newTestEngine(store, &fakeBC{})

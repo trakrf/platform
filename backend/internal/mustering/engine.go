@@ -497,7 +497,34 @@ func (e *Engine) Status(ctx context.Context, orgID int) (SnapshotPayload, error)
 	if err != nil {
 		return SnapshotPayload{}, err
 	}
+	// Break-glass: while an event is active, enrich each entry with its person's
+	// last-known location from in-memory presence (last_seen_location_id /
+	// last_seen_at). The API exposes this only while an event is active per spec;
+	// the UI additionally gates the display behind an explicit unlock.
+	if ev != nil {
+		e.enrichEntriesWithPresence(orgID, ev)
+	}
 	return SnapshotPayload{Zones: zones, PersonsOnSite: onsite, Event: ev}, nil
+}
+
+// enrichEntriesWithPresence fills last_seen_location_id / last_seen_at on each
+// entry from the engine's in-memory per-person presence. Used only for an active
+// event (break-glass per-person location).
+func (e *Engine) enrichEntriesWithPresence(orgID int, ev *muster.Event) {
+	st := e.state(orgID)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	for i := range ev.Entries {
+		ps, ok := st.presence[ev.Entries[i].AssetID]
+		if !ok {
+			continue
+		}
+		ev.Entries[i].LastSeenLocationID = ps.locationID
+		if !ps.lastSeen.IsZero() {
+			t := ps.lastSeen
+			ev.Entries[i].LastSeenAt = &t
+		}
+	}
 }
 
 // ── report ────────────────────────────────────────────────────────────────────
