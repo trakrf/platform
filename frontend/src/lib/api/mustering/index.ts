@@ -57,14 +57,14 @@ export const musteringApi = {
    * POST /api/v1/mustering/events/:id/all-clear
    */
   allClear: (id: number) =>
-    apiClient.post<Envelope<MusterEvent>>(`/mustering/events/${id}/all-clear`),
+    apiClient.post<Envelope<MusterEvent>>(`/mustering/events/${id}/all-clear`, {}),
 
   /**
    * Cancel a drill.
    * POST /api/v1/mustering/events/:id/cancel
    */
   cancel: (id: number) =>
-    apiClient.post<Envelope<MusterEvent>>(`/mustering/events/${id}/cancel`),
+    apiClient.post<Envelope<MusterEvent>>(`/mustering/events/${id}/cancel`, {}),
 
   /**
    * Log a break-glass reveal (appends to metadata.unlocks). Returns bare
@@ -74,7 +74,7 @@ export const musteringApi = {
    * POST /api/v1/mustering/events/:id/unlock
    */
   unlock: (id: number) =>
-    apiClient.post<{ unlocked: boolean }>(`/mustering/events/${id}/unlock`),
+    apiClient.post<{ unlocked: boolean }>(`/mustering/events/${id}/unlock`, {}),
 
   /**
    * Verify / mark-safe a single entry.
@@ -102,5 +102,5 @@ export const musteringApi = {
    * Idempotent demo seed (admin+).
    * POST /api/v1/mustering/seed
    */
-  seed: () => apiClient.post('/mustering/seed'),
+  seed: () => apiClient.post('/mustering/seed', {}),
 };
