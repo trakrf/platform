@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/trakrf/platform/backend/internal/models/muster"
 )
 
@@ -137,7 +137,9 @@ func (s *Storage) ListMusterPointIDs(ctx context.Context, orgID int) ([]int, err
 
 // CreateMusterEvent creates an active muster event and snapshots all
 // person-assets with a sighting in the last windowMinutes as entries
-// (all starting with status='missing'). The entire operation is ONE
+// (all starting with status='missing'). The presence snapshot is read
+// just before the write transaction, which is acceptable "as of trigger"
+// semantics for the POC. The event row and its entries are written in ONE
 // transaction. Returns ErrActiveEventExists if the org already has an
 // active event (partial unique index violation).
 func (s *Storage) CreateMusterEvent(ctx context.Context, orgID, startedBy, windowMinutes int) (*muster.Event, error) {
@@ -196,7 +198,8 @@ func (s *Storage) CreateMusterEvent(ctx context.Context, orgID, startedBy, windo
 		return nil
 	})
 	if err != nil {
-		if isUniqueViolation(err) && strings.Contains(err.Error(), "muster_events_one_active_per_org") {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "muster_events_one_active_per_org" {
 			return nil, muster.ErrActiveEventExists{}
 		}
 		return nil, fmt.Errorf("CreateMusterEvent: %w", err)
@@ -584,10 +587,4 @@ func computeCounts(entries []muster.Entry) muster.Counts {
 		}
 	}
 	return c
-}
-
-// isUniqueViolation returns true when the error is a PostgreSQL unique-constraint
-// violation (SQLSTATE 23505).
-func isUniqueViolation(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "23505")
 }

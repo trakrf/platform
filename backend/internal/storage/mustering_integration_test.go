@@ -234,8 +234,6 @@ func TestMuster_CreateMusterEvent_Basic(t *testing.T) {
 	userID := createMusterUser(t, db, orgID, "operator@example.com")
 
 	zoneID := createZoneLocation(t, db, orgID, "Zone")
-	mpID := createMusterPointLocation(t, db, orgID, "MP A") //nolint:ineffassign,staticcheck
-	_ = mpID
 	personID := createPersonAsset(t, db, orgID, "Operator 001")
 
 	now := time.Now()
@@ -302,6 +300,22 @@ func TestMuster_CreateMusterEvent_ExcludesStalePersons(t *testing.T) {
 	// Only the fresh person should be in the entries
 	require.Len(t, event.Entries, 1)
 	require.Equal(t, personFresh, event.Entries[0].AssetID)
+}
+
+func TestMuster_CreateMusterEvent_ZeroPersons(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+	userID := createMusterUser(t, db, orgID, "operator-zero@example.com")
+
+	// No person-assets and no asset scans — presence snapshot is empty.
+	event, err := db.Store.CreateMusterEvent(ctx, orgID, userID, 15)
+	require.NoError(t, err)
+	require.NotNil(t, event)
+	require.NotZero(t, event.ID)
+	require.Equal(t, "active", event.Status)
+	require.Len(t, event.Entries, 0)
+	require.Equal(t, 0, event.Counts.Expected)
 }
 
 // ── GetActiveMusterEvent ──────────────────────────────────────────────────────
@@ -607,21 +621,33 @@ func TestMuster_AppendMusterUnlock(t *testing.T) {
 	event, err := db.Store.CreateMusterEvent(ctx, orgID, userID, 15)
 	require.NoError(t, err)
 
-	unlock := map[string]any{
+	unlock1 := map[string]any{
 		"user_id": userID,
 		"email":   "op12@example.com",
 		"at":      time.Now().Format(time.RFC3339),
+		"seq":     1,
 	}
-	err = db.Store.AppendMusterUnlock(ctx, orgID, event.ID, unlock)
+	err = db.Store.AppendMusterUnlock(ctx, orgID, event.ID, unlock1)
 	require.NoError(t, err)
 
-	// Verify it was stored
+	unlock2 := map[string]any{
+		"user_id": userID,
+		"email":   "op12@example.com",
+		"at":      time.Now().Add(time.Second).Format(time.RFC3339),
+		"seq":     2,
+	}
+	err = db.Store.AppendMusterUnlock(ctx, orgID, event.ID, unlock2)
+	require.NoError(t, err)
+
+	// Verify both records were accumulated (not overwritten)
 	refreshed, err := db.Store.GetMusterEvent(ctx, orgID, event.ID)
 	require.NoError(t, err)
 	require.NotNil(t, refreshed)
 	unlocks, ok := refreshed.Metadata["unlocks"]
 	require.True(t, ok, "metadata.unlocks must exist after AppendMusterUnlock")
-	require.NotNil(t, unlocks)
+	arr, ok := unlocks.([]any)
+	require.True(t, ok, "metadata.unlocks must be a JSON array")
+	require.Len(t, arr, 2, "two AppendMusterUnlock calls must accumulate, not overwrite")
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
