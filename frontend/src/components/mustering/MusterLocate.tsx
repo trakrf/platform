@@ -43,9 +43,9 @@ export default function MusterLocate({ assetId }: MusterLocateProps) {
   useEffect(() => {
     if (!isActive) { setPersons([]); return; }
     setLoadingPersons(true);
-    // POC: limit:500 client-filter cliff — server-side person filter is the post-POC fix.
+    // POC: limit:200 (the API max) client-filter cliff — server-side person filter is the post-POC fix.
     assetsApi
-      .list({ limit: 500 })
+      .list({ limit: 200 })
       .then(({ data }) => {
         setPersons(data.data.filter((a) => a.is_active && a.metadata?.person === true));
       })

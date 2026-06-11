@@ -57,8 +57,8 @@ export default function MusterBadges() {
     setLoading(true);
     setError(null);
     try {
-      // POC: limit:500 client-filter cliff — server-side person filter is the post-POC fix.
-      const { data } = await assetsApi.list({ limit: 500 });
+      // POC: limit:200 (the API max) client-filter cliff — server-side person filter is the post-POC fix.
+      const { data } = await assetsApi.list({ limit: 200 });
       const personAssets = data.data.filter(
         (a) => a.is_active && a.metadata?.person === true,
       );
