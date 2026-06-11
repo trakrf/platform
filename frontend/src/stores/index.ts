@@ -13,3 +13,4 @@ export type { BarcodeData } from './barcodeStore';
 export { useAssetStore, type AssetStore, type SearchMatchInfo } from './assets/assetStore';
 export { useLocationStore, type LocationStore } from './locations/locationStore';
 export { useOrgStore } from './orgStore';
+export { useMusterStore, type MusterConnection } from './musterStore';
