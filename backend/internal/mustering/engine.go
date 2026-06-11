@@ -219,6 +219,10 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, _ int64, receivedAt ti
 			counts = ev.Counts
 		}
 		for _, entry := range transitioned {
+			// Enrich with last-known presence so the broadcast entry frame carries
+			// last_seen_location_id/at (same break-glass rule as Status). Only
+			// reached while an event is active (transitions require one).
+			e.enrichEntryWithPresence(orgID, entry)
 			e.bc.BroadcastEntry(orgID, *entry, counts)
 		}
 	}
@@ -505,6 +509,10 @@ func (e *Engine) applyEntry(ctx context.Context, orgID, eventID, entryID int, ac
 	if ev, err := e.store.GetMusterEvent(ctx, orgID, eventID); err == nil && ev != nil {
 		counts = ev.Counts
 	}
+	// Enrich the broadcast entry with last-known presence (break-glass), matching
+	// the Status() path so the entry frame doesn't overwrite the store's enriched
+	// row with a bare storage row (Locate "last-known location" would go to "—").
+	e.enrichEntryWithPresence(orgID, entry)
 	e.bc.BroadcastEntry(orgID, *entry, counts)
 	return entry, &counts, nil
 }
@@ -554,15 +562,34 @@ func (e *Engine) enrichEntriesWithPresence(orgID int, ev *muster.Event) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	for i := range ev.Entries {
-		ps, ok := st.presence[ev.Entries[i].AssetID]
-		if !ok {
-			continue
-		}
-		ev.Entries[i].LastSeenLocationID = ps.locationID
-		if !ps.lastSeen.IsZero() {
-			t := ps.lastSeen
-			ev.Entries[i].LastSeenAt = &t
-		}
+		e.applyPresenceToEntry(st, &ev.Entries[i])
+	}
+}
+
+// enrichEntryWithPresence fills last_seen_location_id / last_seen_at on a single
+// entry from in-memory presence. The `entry` SSE frames broadcast on transitions
+// are raw storage rows (no presence enrichment); without this they overwrite the
+// Status()-enriched entries in the store and the Locate "last-known location"
+// shows "—" while a drill is active. Same break-glass privacy rule as Status:
+// caller invokes it only while the event is active.
+func (e *Engine) enrichEntryWithPresence(orgID int, entry *muster.Entry) {
+	st := e.state(orgID)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	e.applyPresenceToEntry(st, entry)
+}
+
+// applyPresenceToEntry copies in-memory last-known presence onto one entry.
+// Caller holds st.mu.
+func (e *Engine) applyPresenceToEntry(st *orgState, entry *muster.Entry) {
+	ps, ok := st.presence[entry.AssetID]
+	if !ok {
+		return
+	}
+	entry.LastSeenLocationID = ps.locationID
+	if !ps.lastSeen.IsZero() {
+		t := ps.lastSeen
+		entry.LastSeenAt = &t
 	}
 }
 

@@ -538,6 +538,59 @@ func TestStatus_EnrichesEntriesWithLastSeenWhileActive(t *testing.T) {
 	require.NotNil(t, snap.Event.Entries[0].LastSeenAt)
 }
 
+// TestBroadcastEntry_EnrichedWithLastSeen guards BUG C-2: the `entry` SSE frames
+// broadcast on a transition must carry last_seen_location_id/at from in-memory
+// presence, otherwise they overwrite the Status()-enriched entry in the store and
+// the Locate "last-known location" shows "—" while a drill is active.
+func TestBroadcastEntry_EnrichedWithLastSeen(t *testing.T) {
+	store := newFakeStore()
+	store.persons = []muster.PersonPresence{{AssetID: 1, Label: "Op1", LocationID: ptr(10)}}
+	store.zones = []muster.ZonePresence{
+		{LocationID: 10, Name: "Floor"},
+		{LocationID: 20, Name: "Muster", MusterPoint: true},
+	}
+	store.musterPoints = []int{20}
+	bc := &fakeBC{}
+	e := newTestEngine(store, bc)
+	ev, _ := e.Activate(context.Background(), 1, 99, 15)
+
+	// A zone read sets in-memory presence to zone 10 (no transition: zone 10 is
+	// not a muster point).
+	e.Evaluate(context.Background(), 1, 1, time.Now(), []storage.ResolvedRead{resolved(1, 10)})
+
+	// Mark-safe broadcasts an entry frame; it must be enriched with last_seen.
+	entry, _, err := e.MarkSafe(context.Background(), 1, ev.ID, ev.Entries[0].ID, 99, "")
+	require.NoError(t, err)
+	require.NotNil(t, entry)
+
+	require.NotEmpty(t, bc.entries)
+	last := bc.entries[len(bc.entries)-1]
+	require.NotNil(t, last.Entry.LastSeenLocationID)
+	require.Equal(t, 10, *last.Entry.LastSeenLocationID)
+	require.NotNil(t, last.Entry.LastSeenAt)
+}
+
+// TestBroadcastEntry_TransitionEnrichedWithLastSeen guards BUG C-2 on the
+// muster-point transition path (Evaluate → MarkEntryAtMuster → BroadcastEntry).
+func TestBroadcastEntry_TransitionEnrichedWithLastSeen(t *testing.T) {
+	store := newFakeStore()
+	store.persons = []muster.PersonPresence{{AssetID: 1, Label: "Op1", LocationID: ptr(10)}}
+	store.musterPoints = []int{20}
+	bc := &fakeBC{}
+	e := newTestEngine(store, bc)
+	_, _ = e.Activate(context.Background(), 1, 99, 15)
+
+	// Read person 1 at the muster point: transitions to at_muster and broadcasts.
+	e.Evaluate(context.Background(), 1, 1, time.Now(), []storage.ResolvedRead{resolved(1, 20)})
+
+	require.Len(t, bc.entries, 1)
+	require.Equal(t, "at_muster", bc.entries[0].Entry.Status)
+	// In-memory presence was set to zone 20 by the same read.
+	require.NotNil(t, bc.entries[0].Entry.LastSeenLocationID)
+	require.Equal(t, 20, *bc.entries[0].Entry.LastSeenLocationID)
+	require.NotNil(t, bc.entries[0].Entry.LastSeenAt)
+}
+
 func TestUnlock_RecordsReveal(t *testing.T) {
 	store := newFakeStore()
 	e := newTestEngine(store, &fakeBC{})
