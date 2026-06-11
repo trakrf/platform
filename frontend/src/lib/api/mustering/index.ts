@@ -14,6 +14,7 @@ import type {
   MusterCounts,
   MusterSighting,
   MusterSnapshotPayload,
+  FloorPlan,
 } from '@/types/mustering';
 
 /** REST responses wrap their payload in `{ data: ... }` (same envelope as scandevices). */
@@ -103,4 +104,17 @@ export const musteringApi = {
    * POST /api/v1/mustering/seed
    */
   seed: () => apiClient.post('/mustering/seed', {}),
+
+  /**
+   * Get the org's optional floor plan (image + pins), or an empty plan.
+   * GET /api/v1/mustering/floor-plan
+   */
+  getFloorPlan: () => apiClient.get<Envelope<FloorPlan>>('/mustering/floor-plan'),
+
+  /**
+   * Full-replace the org's floor plan (admin+). PUT carries the whole object.
+   * PUT /api/v1/mustering/floor-plan
+   */
+  putFloorPlan: (plan: FloorPlan) =>
+    apiClient.put<Envelope<FloorPlan>>('/mustering/floor-plan', plan),
 };

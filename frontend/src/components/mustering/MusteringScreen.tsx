@@ -14,14 +14,16 @@ import MusterDashboard from './MusterDashboard';
 import MusterBadges from './MusterBadges';
 import MusterLocate from './MusterLocate';
 import MusterReport from './MusterReport';
+import MusterFloorPlan from './MusterFloorPlan';
 
-type SubTab = 'dashboard' | 'badges' | 'locate' | 'report';
+type SubTab = 'dashboard' | 'badges' | 'locate' | 'report' | 'floorplan';
 
 const SUB_TABS: { id: SubTab; label: string }[] = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'badges', label: 'Badges' },
   { id: 'locate', label: 'Locate' },
   { id: 'report', label: 'Report' },
+  { id: 'floorplan', label: 'Floor plan' },
 ];
 
 const CONNECTION_LABEL: Record<string, string> = {
@@ -93,6 +95,7 @@ export default function MusteringScreen() {
           {activeSubTab === 'badges' && <MusterBadges />}
           {activeSubTab === 'locate' && <MusterLocate assetId={locateAssetId} />}
           {activeSubTab === 'report' && <MusterReport />}
+          {activeSubTab === 'floorplan' && <MusterFloorPlan />}
         </div>
       </div>
     </ProtectedRoute>

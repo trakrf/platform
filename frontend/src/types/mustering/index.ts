@@ -110,6 +110,21 @@ export interface MusterUnlockEntry {
   at: string; // ISO 8601
 }
 
+// --- Floor plan (TRA-978 phase 7) ---
+
+/** One pin positioning a Location on the floor-plan image (percent coords). */
+export interface FloorPlanPin {
+  location_id: number;
+  x_pct: number;
+  y_pct: number;
+}
+
+/** Optional static floor plan for an org: one image + manually placed pins. */
+export interface FloorPlan {
+  image_url: string;
+  pins: FloorPlanPin[];
+}
+
 // --- SSE frame payloads (GET /api/v1/mustering/stream) ---
 
 export interface MusterSnapshotPayload {
