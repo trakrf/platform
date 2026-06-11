@@ -35,8 +35,9 @@ const APIKeysScreen = lazyWithRetry(() => import('@/components/APIKeysScreen'));
 const ReportsScreen = lazyWithRetry(() => import('@/components/ReportsScreen'));
 const ReportsHistoryScreen = lazyWithRetry(() => import('@/components/ReportsHistoryScreen'));
 const SuperadminOrgsScreen = lazyWithRetry(() => import('@/components/SuperadminOrgsScreen'));
+const MusteringScreen = lazyWithRetry(() => import('@/components/mustering/MusteringScreen'));
 
-const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'org-geofence-defaults', 'accept-invite', 'api-keys', 'admin-orgs'];
+const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'mustering', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'org-geofence-defaults', 'accept-invite', 'api-keys', 'admin-orgs'];
 
 export default function App() {
   const activeTab = useUIStore((state) => state.activeTab);
@@ -215,6 +216,7 @@ export default function App() {
       'accept-invite': AcceptInviteScreen,
       reports: ReportsScreen,
       'reports-history': ReportsHistoryScreen,
+      mustering: MusteringScreen,
       'api-keys': APIKeysScreen,
       'admin-orgs': SuperadminOrgsScreen,
     };
@@ -242,6 +244,7 @@ export default function App() {
       'accept-invite': LoadingScreen,
       reports: LoadingScreen,
       'reports-history': LoadingScreen,
+      mustering: LoadingScreen,
       'api-keys': LoadingScreen,
       'admin-orgs': LoadingScreen,
     };

@@ -2,7 +2,7 @@ import React from 'react';
 import { useUIStore, useDeviceStore, useOrgStore } from '@/stores';
 import type { TabType } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
-import { Package2, Search, Settings, ScanLine, HelpCircle, Home, Package, MapPinned, BarChart3, RadioTower, Siren, Radio, SlidersHorizontal } from 'lucide-react';
+import { Package2, Search, Settings, ScanLine, HelpCircle, Home, Package, MapPinned, BarChart3, RadioTower, Siren, Radio, SlidersHorizontal, Users } from 'lucide-react';
 import { appVersion } from '@/version';
 
 interface NavItemProps {
@@ -222,6 +222,15 @@ export default function TabNavigation() {
             onClick={() => handleTabClick('reports')}
             icon={<BarChart3 className="w-5 h-5" />}
             tooltip="View asset location reports and movement history"
+          />
+
+          <NavItem
+            id="mustering"
+            label="Mustering"
+            isActive={activeTab === 'mustering'}
+            onClick={() => handleTabClick('mustering')}
+            icon={<Users className="w-5 h-5" />}
+            tooltip="Run a muster drill — track who is accounted for at muster points during an evacuation"
           />
 
           <NavItem
