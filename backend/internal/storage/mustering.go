@@ -133,6 +133,75 @@ func (s *Storage) ListMusterPointIDs(ctx context.Context, orgID int) ([]int, err
 	return out, nil
 }
 
+// ── Simulator support (TRA-978) ───────────────────────────────────────────────
+
+// SimScanPoint is a scan point resolved for the simulator: the device the
+// synthetic read should route through (so the real PersistReads correlation by
+// (scan_device_id, antenna_port) succeeds) plus the antenna_port to stamp on the
+// read. publish_topic is the device's MQTT topic — the simulator publishes to a
+// "simulated/{slug}" audit topic, but the readstream live-feed key is the
+// device's real publish_topic so Locate's RSSI indicator works simulator-only.
+type SimScanPoint struct {
+	ScanDeviceID int
+	DeviceType   string
+	AntennaPort  int
+	PublishTopic string
+}
+
+// FindSimScanPointForLocation returns one live scan point bound to the given
+// location, along with its (mqtt) scan device, for the simulator to route a
+// synthetic read through. Returns (nil, nil) when the location has no live
+// scan point on a live mqtt device — the handler maps that to 422.
+func (s *Storage) FindSimScanPointForLocation(ctx context.Context, orgID, locationID int) (*SimScanPoint, error) {
+	var sp SimScanPoint
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT sp.scan_device_id, d.type, sp.antenna_port,
+			       COALESCE(d.publish_topic, '')
+			FROM trakrf.scan_points sp
+			JOIN trakrf.scan_devices d
+			  ON d.id = sp.scan_device_id AND d.org_id = sp.org_id
+			WHERE sp.org_id = $1
+			  AND sp.location_id = $2
+			  AND sp.deleted_at IS NULL AND sp.is_active = true
+			  AND d.deleted_at IS NULL AND d.is_active = true
+			ORDER BY sp.antenna_port
+			LIMIT 1`,
+			orgID, locationID,
+		).Scan(&sp.ScanDeviceID, &sp.DeviceType, &sp.AntennaPort, &sp.PublishTopic)
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("FindSimScanPointForLocation: %w", err)
+	}
+	return &sp, nil
+}
+
+// GetAssetTagValue returns the value of one live tag linked to the asset (the
+// badge MAC the simulator emits as a synthetic read EPC). Returns ("", nil)
+// when the asset has no live tag — the handler maps that to 422.
+func (s *Storage) GetAssetTagValue(ctx context.Context, orgID, assetID int) (string, error) {
+	var value string
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT value FROM trakrf.tags
+			WHERE org_id = $1 AND asset_id = $2 AND deleted_at IS NULL
+			ORDER BY id
+			LIMIT 1`,
+			orgID, assetID,
+		).Scan(&value)
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", fmt.Errorf("GetAssetTagValue: %w", err)
+	}
+	return value, nil
+}
+
 // ── Event lifecycle ───────────────────────────────────────────────────────────
 
 // CreateMusterEvent creates an active muster event and snapshots all
