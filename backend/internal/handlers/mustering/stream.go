@@ -106,4 +106,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Patch("/api/v1/mustering/events/{id}/entries/{entryId}", h.PatchEntry)
 	r.Post("/api/v1/mustering/simulate", h.Simulate)
 	r.Post("/api/v1/mustering/seed", h.Seed)
+	// TRA-978 phase 7: optional static floor plan (image + pins on Locations).
+	r.Get("/api/v1/mustering/floor-plan", h.GetFloorPlan)
+	r.Put("/api/v1/mustering/floor-plan", h.PutFloorPlan)
 }

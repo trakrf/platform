@@ -717,6 +717,66 @@ func scanEntryRow(row pgx.Row, e *muster.Entry) error {
 	)
 }
 
+// ── Floor plan (TRA-978 phase 7) ──────────────────────────────────────────────
+
+// GetMusterFloorPlan returns the org's floor plan parsed from
+// organizations.metadata.floor_plan, or the zero value when unset. Read inside
+// WithOrgTx so it runs under the org's RLS context (same as the rest of the
+// mustering storage surface).
+func (s *Storage) GetMusterFloorPlan(ctx context.Context, orgID int) (muster.FloorPlan, error) {
+	var blob []byte
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT COALESCE(metadata->'floor_plan', '{}'::jsonb)
+			FROM trakrf.organizations
+			WHERE id = $1 AND deleted_at IS NULL
+		`, orgID).Scan(&blob)
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return muster.FloorPlan{}, nil
+	}
+	if err != nil {
+		return muster.FloorPlan{}, fmt.Errorf("failed to get floor plan: %w", err)
+	}
+	var fp muster.FloorPlan
+	if len(blob) > 0 {
+		if err := json.Unmarshal(blob, &fp); err != nil {
+			return muster.FloorPlan{}, fmt.Errorf("failed to parse floor plan: %w", err)
+		}
+	}
+	if fp.Pins == nil {
+		fp.Pins = []muster.FloorPlanPin{}
+	}
+	return fp, nil
+}
+
+// UpdateMusterFloorPlan full-replaces metadata.floor_plan with fp, preserving
+// other metadata keys via jsonb_set. Runs inside WithOrgTx.
+func (s *Storage) UpdateMusterFloorPlan(ctx context.Context, orgID int, fp muster.FloorPlan) error {
+	if fp.Pins == nil {
+		fp.Pins = []muster.FloorPlanPin{}
+	}
+	blob, err := json.Marshal(fp)
+	if err != nil {
+		return fmt.Errorf("failed to marshal floor plan: %w", err)
+	}
+	return s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		result, err := tx.Exec(ctx, `
+			UPDATE trakrf.organizations
+			SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{floor_plan}', $2::jsonb, true),
+			    updated_at = NOW()
+			WHERE id = $1 AND deleted_at IS NULL
+		`, orgID, blob)
+		if err != nil {
+			return fmt.Errorf("failed to update floor plan: %w", err)
+		}
+		if result.RowsAffected() == 0 {
+			return errors.New("organization not found")
+		}
+		return nil
+	})
+}
+
 // computeCounts tallies entry statuses. Used immediately after CreateMusterEvent
 // before the event is returned (counts are also computed by the aggregate query
 // in getEventByFilter, but not yet populated at create time).

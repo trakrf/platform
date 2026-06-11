@@ -84,6 +84,25 @@ type PersonPresence struct {
 	LastSeenAt time.Time `json:"last_seen_at"`
 }
 
+// FloorPlan is the optional static-image floor plan for an org (TRA-978
+// phase 7). A single image per org with manually positioned pins, each
+// referencing an existing Location. No new geo entity, no drag-builder.
+// Stored under organizations.metadata.floor_plan; an unset plan is the zero
+// value (empty image_url, no pins).
+type FloorPlan struct {
+	ImageURL string         `json:"image_url"`
+	Pins     []FloorPlanPin `json:"pins"`
+}
+
+// FloorPlanPin positions one Location on the floor-plan image. x_pct/y_pct are
+// percentages (0..100) of the image's width/height, so the overlay scales with
+// the rendered image.
+type FloorPlanPin struct {
+	LocationID int     `json:"location_id"`
+	XPct       float64 `json:"x_pct"`
+	YPct       float64 `json:"y_pct"`
+}
+
 // ErrActiveEventExists is returned by CreateMusterEvent when the org already
 // has an active event. Handlers map this to 409 Conflict.
 type ErrActiveEventExists struct{}
