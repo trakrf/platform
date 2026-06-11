@@ -353,8 +353,14 @@ export const useMusterStore = create<MusterState>()(
             return;
           }
           try {
-            const { data } = await musteringApi.unlock(ev.id);
-            set({ event: data.data, revealUnlocked: true, error: null });
+            // POST returns {unlocked:true}, not the event — flip the UI flag,
+            // then re-snapshot so entries' last_seen_location_id populate (the
+            // break-glass reveal). The active-event guard in refreshStatus
+            // preserves revealUnlocked for the same event id.
+            await musteringApi.unlock(ev.id);
+            set({ revealUnlocked: true, error: null });
+            await get().refreshStatus();
+            set({ revealUnlocked: true });
           } catch (err) {
             const msg = readableError(err);
             set({ error: msg });
