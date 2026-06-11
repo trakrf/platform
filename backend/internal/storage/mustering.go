@@ -360,6 +360,9 @@ func (s *Storage) GetActiveMusterEvent(ctx context.Context, orgID int) (*muster.
 // GetMusterEvent returns a muster event by id for the org (with entries and
 // counts), or (nil, nil) when not found / wrong org.
 func (s *Storage) GetMusterEvent(ctx context.Context, orgID int, id int) (*muster.Event, error) {
+	// SAFETY: the filter string is interpolated into the query via fmt.Sprintf, so
+	// it must only ever carry an int (%d) — never a user-controlled string. If a
+	// string-valued filter is ever needed here, parameterize it ($N) instead.
 	return s.getEventByFilter(ctx, orgID, fmt.Sprintf("AND me.id = %d", id))
 }
 

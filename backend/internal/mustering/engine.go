@@ -150,7 +150,20 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, _ int64, receivedAt ti
 	e.ensureActiveLoaded(ctx, orgID, st)
 
 	presenceChanged := false
-	var transitioned []*muster.Entry
+
+	// candidate is a muster-point transition collected under st.mu and applied via
+	// MarkEntryAtMuster *after* the lock is released — that DB call is synchronous,
+	// so holding st.mu across it would serialize every Evaluate/Status/Activate for
+	// the org behind DB latency. Doing the write outside the lock is race-safe
+	// because the SQL UPDATE is guarded by `AND status='missing'` (sticky semantics
+	// enforced DB-side): a concurrent duplicate candidate just no-ops (returns nil).
+	// Mirrors the geofence engine's best-effort-outside-lock precedent.
+	type candidate struct {
+		assetID    int
+		locationID int
+	}
+	var candidates []candidate
+	activeEventID := 0
 
 	for _, rd := range reads {
 		// Only person-assets participate in muster presence.
@@ -168,7 +181,8 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, _ int64, receivedAt ti
 		presenceChanged = true
 
 		// Muster-point transition only while an event is active and the asset is
-		// in the expected set.
+		// in the expected set. Collect the candidate; the DB write happens below,
+		// outside the lock.
 		if st.activeEventID == 0 || rd.LocationID == nil {
 			continue
 		}
@@ -178,9 +192,18 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, _ int64, receivedAt ti
 		if _, ok := st.expectedSet[rd.AssetID]; !ok {
 			continue
 		}
-		entry, err := e.store.MarkEntryAtMuster(ctx, orgID, st.activeEventID, rd.AssetID, *rd.LocationID, receivedAt)
+		activeEventID = st.activeEventID
+		candidates = append(candidates, candidate{assetID: rd.AssetID, locationID: *rd.LocationID})
+	}
+
+	st.mu.Unlock()
+
+	// Apply muster-point transitions via the synchronous DB write, outside st.mu.
+	var transitioned []*muster.Entry
+	for _, c := range candidates {
+		entry, err := e.store.MarkEntryAtMuster(ctx, orgID, activeEventID, c.assetID, c.locationID, receivedAt)
 		if err != nil {
-			e.log.Error().Err(err).Int("org_id", orgID).Int("asset_id", rd.AssetID).Msg("MarkEntryAtMuster failed")
+			e.log.Error().Err(err).Int("org_id", orgID).Int("asset_id", c.assetID).Msg("MarkEntryAtMuster failed")
 			continue
 		}
 		if entry != nil { // real transition (nil == already non-missing, no-op)
@@ -188,15 +211,15 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, _ int64, receivedAt ti
 		}
 	}
 
-	activeEventID := st.activeEventID
-	st.mu.Unlock()
-
-	// Broadcast entry transitions + refreshed counts (outside the lock).
-	for _, entry := range transitioned {
+	// Broadcast entry transitions + refreshed counts (outside the lock). Counts are
+	// identical across a batch, so fetch the active event once and reuse it.
+	if len(transitioned) > 0 {
+		var counts muster.Counts
 		if ev, err := e.store.GetActiveMusterEvent(ctx, orgID); err == nil && ev != nil {
-			e.bc.BroadcastEntry(orgID, *entry, ev.Counts)
-		} else {
-			e.bc.BroadcastEntry(orgID, *entry, muster.Counts{})
+			counts = ev.Counts
+		}
+		for _, entry := range transitioned {
+			e.bc.BroadcastEntry(orgID, *entry, counts)
 		}
 	}
 

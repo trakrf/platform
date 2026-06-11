@@ -97,9 +97,7 @@ func (f *fakeStore) GetActiveMusterEvent(_ context.Context, _ int) (*muster.Even
 	if f.active == nil {
 		return nil, nil
 	}
-	cp := *f.active
-	cp.Counts = countEntries(f.active.Entries)
-	return &cp, nil
+	return snapshotEvent(f.active), nil
 }
 func (f *fakeStore) GetMusterEvent(_ context.Context, _ int, id int) (*muster.Event, error) {
 	f.mu.Lock()
@@ -108,9 +106,19 @@ func (f *fakeStore) GetMusterEvent(_ context.Context, _ int, id int) (*muster.Ev
 	if ev == nil {
 		return nil, nil
 	}
+	return snapshotEvent(ev), nil
+}
+
+// snapshotEvent returns an independent copy of ev — including a fresh Entries
+// backing array — mirroring real storage, which materializes fresh rows per
+// query. Without the deep copy, callers that mutate returned entries in place
+// (e.g. enrichEntriesWithPresence) would race with concurrent readers over the
+// shared backing array. Caller holds f.mu.
+func snapshotEvent(ev *muster.Event) *muster.Event {
 	cp := *ev
+	cp.Entries = append([]muster.Entry(nil), ev.Entries...)
 	cp.Counts = countEntries(ev.Entries)
-	return &cp, nil
+	return &cp
 }
 func (f *fakeStore) ListMusterEvents(_ context.Context, _ int) ([]muster.Event, error) {
 	return nil, nil
@@ -495,4 +503,79 @@ func TestUnlock_RecordsReveal(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, store.unlocks, 1)
 	require.Equal(t, "op@example.com", store.unlocks[0]["email"])
+}
+
+// TestEvaluate_ConcurrentNoRace fans out Evaluate (muster-point + zone reads),
+// Status, and one Activate/AllClear cycle concurrently against the behavioral
+// fakeStore (which is mutex-guarded). It is primarily a `-race` canary — the race
+// detector is the real assertion (`just backend test-race`, or `go test -race
+// ./internal/mustering/`). Under plain `go test` (how `just backend test` runs it)
+// it still exercises the code and checks basic invariants hold afterward.
+func TestEvaluate_ConcurrentNoRace(t *testing.T) {
+	store := newFakeStore()
+	store.persons = []muster.PersonPresence{
+		{AssetID: 1, Label: "Op1", LocationID: ptr(10)},
+		{AssetID: 2, Label: "Op2", LocationID: ptr(10)},
+		{AssetID: 3, Label: "Op3", LocationID: ptr(11)},
+	}
+	store.zones = []muster.ZonePresence{
+		{LocationID: 10, Name: "Floor"},
+		{LocationID: 11, Name: "Bay"},
+		{LocationID: 20, Name: "Muster", MusterPoint: true},
+	}
+	store.musterPoints = []int{20}
+	bc := &fakeBC{}
+	e := newTestEngine(store, bc)
+
+	ev, err := e.Activate(context.Background(), 1, 99, 15)
+	require.NoError(t, err)
+
+	const workers = 8
+	const iters = 50
+	var wg sync.WaitGroup
+
+	// Muster-point readers: drive persons to at_muster (sticky DB-side).
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < iters; i++ {
+				e.Evaluate(context.Background(), 1, 1, time.Now(),
+					[]storage.ResolvedRead{resolved(1, 20), resolved(2, 20), resolved(3, 20)})
+			}
+		}()
+	}
+	// Zone readers: only touch presence.
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < iters; i++ {
+				e.Evaluate(context.Background(), 1, 1, time.Now(),
+					[]storage.ResolvedRead{resolved(1, 10), resolved(3, 11)})
+			}
+		}()
+	}
+	// Status readers.
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < iters; i++ {
+				_, _ = e.Status(context.Background(), 1)
+			}
+		}()
+	}
+	wg.Wait()
+
+	// Invariants: all three persons reached the muster point and the event is
+	// fully accounted; AllClear completes cleanly.
+	got, err := store.GetMusterEvent(context.Background(), 1, ev.ID)
+	require.NoError(t, err)
+	require.Equal(t, 0, got.Counts.Missing)
+	require.Equal(t, 3, got.Counts.AtMuster)
+
+	done, err := e.AllClear(context.Background(), 1, ev.ID, 99)
+	require.NoError(t, err)
+	require.Equal(t, "completed", done.Status)
 }
