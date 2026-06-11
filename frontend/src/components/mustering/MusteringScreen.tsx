@@ -6,9 +6,10 @@
 // a "Locate" selection (asset id) via state lifted here so a per-row Locate
 // link can deep-link into the Locate sub-tab.
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useMusterStore } from '@/stores';
+import { useMusterFeed } from '@/hooks/mustering/useMusterFeed';
 import MusterDashboard from './MusterDashboard';
 import MusterBadges from './MusterBadges';
 import MusterLocate from './MusterLocate';
@@ -36,14 +37,10 @@ export default function MusteringScreen() {
   const [locateAssetId, setLocateAssetId] = useState<number | null>(null);
 
   const connection = useMusterStore((s) => s.connection);
-  const connect = useMusterStore((s) => s.connect);
-  const disconnect = useMusterStore((s) => s.disconnect);
 
-  // Open the SSE stream while the Mustering screen is mounted.
-  useEffect(() => {
-    connect();
-    return () => disconnect();
-  }, [connect, disconnect]);
+  // Open the SSE stream while the Mustering screen is mounted; the hook tears it
+  // down and reopens on an org switch.
+  useMusterFeed();
 
   const goLocate = (assetId: number) => {
     setLocateAssetId(assetId);
