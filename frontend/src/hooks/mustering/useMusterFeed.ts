@@ -37,10 +37,15 @@ export function useMusterFeed(): void {
       },
       callbacks: {
         onOpen: () => {
-          useMusterStore.getState().setConnection('live');
-          // Reconnect → re-snapshot, so we never render stale presence after a
-          // dropped connection or an org switch.
-          void useMusterStore.getState().refreshStatus();
+          const store = useMusterStore.getState();
+          store.setConnection('live');
+          // Re-arm the pre-snapshot presence gate for this fresh connection
+          // (BUG C-1) and rely on the backend's first `snapshot` frame for the
+          // authoritative state. We deliberately do NOT call refreshStatus() here:
+          // racing a separate GET /status against the stream is exactly what let a
+          // stale presence frame win and stick (the 4/Office-only freeze). The
+          // server sends a snapshot as the first framed event on every connect.
+          store.resetConnection();
         },
         onRetry: () => useMusterStore.getState().setConnection('connecting'),
         onFrames: (frames) => {

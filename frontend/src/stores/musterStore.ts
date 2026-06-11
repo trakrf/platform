@@ -45,6 +45,18 @@ interface MusterState {
   revealUnlocked: boolean;
   error: string | null;
 
+  // Connection-scoped gate (BUG C-1): the backend sends a `snapshot` as the first
+  // framed event on every connection (stream.go), and `presence` frames are mere
+  // deltas. A presence frame queued in the per-subscriber channel BEFORE that
+  // snapshot was computed reflects older backend state; applied after the
+  // snapshot it would clobber the fresh full state with a stale partial headcount
+  // (the 4/Office-only stick). We drop any presence frame until this connection's
+  // first snapshot has been applied. resetConnection() re-arms the gate on each
+  // (re)connect; useMusterFeed.onOpen calls it and relies on the SSE snapshot
+  // instead of racing refreshStatus against the stream.
+  snapshotSeen: boolean;
+  resetConnection: () => void;
+
   // Stream → store reducer surface (driven by useMusterFeed via openMusterStream).
   applyFrame: (frame: MusterFrame) => void;
   setConnection: (connection: MusterConnection) => void;
@@ -266,11 +278,17 @@ export const useMusterStore = create<MusterState>()(
               zones: frame.data.zones,
               personsOnSite: frame.data.persons_on_site,
               event: incoming,
+              // The snapshot is the connection's authoritative reset: from here on
+              // presence deltas are newer than the backend state behind it.
+              snapshotSeen: true,
               ...(reset ? { revealUnlocked: false } : {}),
             });
             break;
           }
           case 'presence':
+            // Drop pre-snapshot presence frames (BUG C-1): they were queued before
+            // this connection's snapshot and would clobber it with stale state.
+            if (!get().snapshotSeen) break;
             set({ zones: frame.data.zones, personsOnSite: frame.data.persons_on_site });
             break;
           case 'entry': {
@@ -299,6 +317,10 @@ export const useMusterStore = create<MusterState>()(
         connection: 'idle',
         revealUnlocked: false,
         error: null,
+        snapshotSeen: false,
+
+        // Re-arm the pre-snapshot presence gate for a new connection (BUG C-1).
+        resetConnection: () => set({ snapshotSeen: false }),
 
         applyFrame,
 
@@ -327,6 +349,10 @@ export const useMusterStore = create<MusterState>()(
               personsOnSite: data.persons_on_site ?? 0,
               event: incoming,
               error: null,
+              // A successful REST status is authoritative full state too, so it
+              // arms the presence gate (BUG C-1) — a later live presence frame is
+              // newer and allowed through.
+              snapshotSeen: true,
               ...(reset ? { revealUnlocked: false } : {}),
             });
           } catch (err) {

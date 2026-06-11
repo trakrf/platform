@@ -78,6 +78,7 @@ function resetStore() {
     connection: 'idle',
     revealUnlocked: false,
     error: null,
+    snapshotSeen: false,
   });
 }
 
@@ -144,7 +145,9 @@ describe('musterStore applyFrame', () => {
   });
 
   it('presence updates zones + persons-on-site, discarding per-person data', () => {
-    useMusterStore.setState({ event: event(), personsOnSite: 5 });
+    // Arm the gate (BUG C-1): presence frames only apply after this connection's
+    // snapshot has been seen.
+    useMusterStore.setState({ event: event(), personsOnSite: 5, snapshotSeen: true });
     apply({
       type: 'presence',
       data: {
@@ -237,6 +240,52 @@ describe('musterStore applyFrame', () => {
     useMusterStore.setState({ event: event({ id: 1 }), revealUnlocked: true });
     apply({ type: 'event', data: { event: event({ id: 1, status: 'active' }) } });
     expect(useMusterStore.getState().revealUnlocked).toBe(true);
+  });
+
+  // --- BUG C-1: snapshot/presence application ordering ---
+
+  it('drops a presence frame that arrives before this connection snapshot', () => {
+    // Fresh connection: snapshot not yet seen. A pre-snapshot (stale) presence
+    // frame queued on the per-subscriber channel must NOT clobber state.
+    useMusterStore.setState({ zones: [zone({ count: 12 })], personsOnSite: 12, snapshotSeen: false });
+    apply({ type: 'presence', data: { zones: [zone({ count: 4 })], persons_on_site: 4, persons: [] } });
+    const s = useMusterStore.getState();
+    expect(s.personsOnSite).toBe(12); // unchanged — stale frame ignored
+    expect(s.zones[0].count).toBe(12);
+  });
+
+  it('snapshot then a stale presence frame: snapshot wins, later live frame applies', () => {
+    // Simulate the reconnect race: a stale presence frame was queued before the
+    // snapshot. Snapshot arrives first (arms the gate with full state)...
+    apply({ type: 'snapshot', data: { zones: [zone({ count: 12 })], persons_on_site: 12, event: null } });
+    expect(useMusterStore.getState().personsOnSite).toBe(12);
+
+    // ...then a genuinely newer live presence frame (post-snapshot) does apply.
+    apply({ type: 'presence', data: { zones: [zone({ count: 11 })], persons_on_site: 11, persons: [] } });
+    const s = useMusterStore.getState();
+    expect(s.personsOnSite).toBe(11);
+    expect(s.zones[0].count).toBe(11);
+  });
+
+  it('resetConnection re-arms the gate so the next connection drops pre-snapshot presence', () => {
+    apply({ type: 'snapshot', data: { zones: [zone({ count: 12 })], persons_on_site: 12, event: null } });
+    expect(useMusterStore.getState().snapshotSeen).toBe(true);
+
+    // Reconnect: gate re-armed; a presence frame before the new snapshot is dropped.
+    useMusterStore.getState().resetConnection();
+    expect(useMusterStore.getState().snapshotSeen).toBe(false);
+    apply({ type: 'presence', data: { zones: [zone({ count: 4 })], persons_on_site: 4, persons: [] } });
+    expect(useMusterStore.getState().personsOnSite).toBe(12); // dropped
+  });
+
+  it('refreshStatus arms the gate so a subsequent live presence frame applies', async () => {
+    statusMock.mockResolvedValueOnce({
+      data: { zones: [zone({ count: 12 })], persons_on_site: 12, event: null },
+    });
+    await useMusterStore.getState().refreshStatus();
+    expect(useMusterStore.getState().snapshotSeen).toBe(true);
+    apply({ type: 'presence', data: { zones: [zone({ count: 11 })], persons_on_site: 11, persons: [] } });
+    expect(useMusterStore.getState().personsOnSite).toBe(11);
   });
 });
 
