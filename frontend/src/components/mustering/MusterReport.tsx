@@ -11,9 +11,9 @@ import { useMusterStore } from '@/stores';
 import type {
   MusterEvent,
   MusterEntry,
-  MusterEntryStatus,
   MusterUnlockEntry,
 } from '@/types/mustering';
+import { STATUS_LABEL, STATUS_CLASS } from './helpers';
 
 // ---- CSV export (pure function — testable in isolation) ----
 
@@ -144,20 +144,6 @@ function downloadCsv(filename: string, content: string): void {
 }
 
 // ---- Formatting helpers ----
-
-const STATUS_LABEL: Record<MusterEntryStatus, string> = {
-  missing: 'Missing',
-  at_muster: 'At muster',
-  verified: 'Verified',
-  safe_manual: 'Marked safe',
-};
-
-const STATUS_CLASS: Record<MusterEntryStatus, string> = {
-  missing: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-  at_muster: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
-  verified: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-  safe_manual: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-};
 
 function formatDuration(event: MusterEvent): string {
   if (event.report?.total_seconds != null) {

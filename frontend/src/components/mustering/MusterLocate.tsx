@@ -22,17 +22,11 @@ import { useMusterStore } from '@/stores';
 import { assetsApi } from '@/lib/api/assets';
 import type { Asset } from '@/types/assets';
 import type { TagState } from '@/types/readerfeed';
+import { relativeAge } from './helpers';
 
 interface MusterLocateProps {
   /** Deep-link target from a Dashboard "Locate" action. */
   assetId?: number | null;
-}
-
-function relativeAge(isoString: string): string {
-  const delta = Math.max(0, Math.floor((Date.now() - new Date(isoString).getTime()) / 1000));
-  if (delta < 60) return `${delta}s ago`;
-  if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
-  return `${Math.floor(delta / 3600)}h ago`;
 }
 
 export default function MusterLocate({ assetId }: MusterLocateProps) {
@@ -49,6 +43,7 @@ export default function MusterLocate({ assetId }: MusterLocateProps) {
   useEffect(() => {
     if (!isActive) { setPersons([]); return; }
     setLoadingPersons(true);
+    // POC: limit:500 client-filter cliff — server-side person filter is the post-POC fix.
     assetsApi
       .list({ limit: 500 })
       .then(({ data }) => {
@@ -191,13 +186,14 @@ export default function MusterLocate({ assetId }: MusterLocateProps) {
     <div className="space-y-6" data-testid="muster-locate">
       {/* Person picker */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        <label htmlFor="muster-locate-person" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
           Person
         </label>
         {loadingPersons ? (
           <div className="text-sm text-gray-500 dark:text-gray-400">Loading roster…</div>
         ) : (
           <select
+            id="muster-locate-person"
             value={selectedId ?? ''}
             onChange={(e) => setSelectedId(e.target.value ? Number(e.target.value) : null)}
             className="rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 w-full max-w-xs"

@@ -16,16 +16,7 @@ import toast from 'react-hot-toast';
 import { assetsApi } from '@/lib/api/assets';
 import { useMusterStore, useOrgStore } from '@/stores';
 import type { Asset } from '@/types/assets';
-
-const OPERATOR_PLUS = ['owner', 'admin', 'manager', 'operator'];
-
-/** Format a UTC ISO string as a relative age, e.g. "3m ago" / "now". */
-function relativeAge(isoString: string): string {
-  const delta = Math.max(0, Math.floor((Date.now() - new Date(isoString).getTime()) / 1000));
-  if (delta < 60) return `${delta}s ago`;
-  if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
-  return `${Math.floor(delta / 3600)}h ago`;
-}
+import { OPERATOR_PLUS, relativeAge } from './helpers';
 
 // Uppercase a MAC address so it matches what the backend stores / GL-S10 sends.
 function normaliseMac(raw: string): string {
@@ -66,6 +57,7 @@ export default function MusterBadges() {
     setLoading(true);
     setError(null);
     try {
+      // POC: limit:500 client-filter cliff — server-side person filter is the post-POC fix.
       const { data } = await assetsApi.list({ limit: 500 });
       const personAssets = data.data.filter(
         (a) => a.is_active && a.metadata?.person === true,
@@ -111,18 +103,29 @@ export default function MusterBadges() {
     const value = normaliseMac(raw);
     if (!value) return;
 
+    // Short-circuit if the user re-typed the same value that's already assigned
+    // (the partial unique index on (org_id, type, value) would reject it anyway).
+    const existingRfid = asset.tags.filter((t) => t.tag_type === 'rfid');
+    if (existingRfid.length === 1 && existingRfid[0].value === value) {
+      toast('Badge already assigned to this person', { icon: 'ℹ️' });
+      return;
+    }
+
     setAssigningId(asset.id);
     try {
-      // Remove all existing rfid tags first (only one badge per person).
-      for (const t of asset.tags.filter((t) => t.tag_type === 'rfid')) {
+      // Add the new badge FIRST so the old one is only removed on success.
+      // If addTag fails (e.g. value already used by another asset), the old badge
+      // stays intact — the catch below surfaces this to the user.
+      await assetsApi.addTag(asset.id, { tag_type: 'rfid', value });
+      // Remove old rfid tag(s) only after the new one is confirmed saved.
+      for (const t of existingRfid) {
         await assetsApi.removeTag(asset.id, t.id);
       }
-      await assetsApi.addTag(asset.id, { tag_type: 'rfid', value });
       setBadgeInputs((prev) => ({ ...prev, [asset.id]: '' }));
       toast.success('Badge assigned');
       await fetchPersons();
     } catch {
-      toast.error('Failed to assign badge');
+      toast.error('Badge unchanged — could not assign (value may already be in use)');
     } finally {
       setAssigningId(null);
     }
@@ -260,6 +263,7 @@ export default function MusterBadges() {
                             }
                             onKeyDown={(e) => e.key === 'Enter' && void handleAssignBadge(person)}
                             placeholder="AA:BB:CC:DD:EE:FF"
+                            aria-label={`Badge MAC for ${person.name}`}
                             className="w-40 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-xs font-mono text-gray-900 dark:text-gray-100"
                             data-testid={`muster-badges-badge-input-${person.id}`}
                           />

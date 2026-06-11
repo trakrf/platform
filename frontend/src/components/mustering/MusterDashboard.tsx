@@ -24,23 +24,12 @@ import type {
   MusterSighting,
   ZonePresence,
 } from '@/types/mustering';
+import { OPERATOR_PLUS, ADMIN_PLUS, STATUS_LABEL } from './helpers';
 
 interface MusterDashboardProps {
   /** Deep-link a person into the Locate sub-tab. */
   onLocate: (assetId: number) => void;
 }
-
-// operator+ can run drills + simulate; admin+ can seed. Mirrors the device-CRUD
-// gating in TabNavigation.
-const OPERATOR_PLUS = ['owner', 'admin', 'manager', 'operator'];
-const ADMIN_PLUS = ['owner', 'admin'];
-
-const STATUS_LABEL: Record<MusterEntryStatus, string> = {
-  missing: 'Missing',
-  at_muster: 'At muster (unverified)',
-  verified: 'Verified',
-  safe_manual: 'Marked safe',
-};
 
 const STATUS_ORDER: MusterEntryStatus[] = ['missing', 'at_muster', 'verified', 'safe_manual'];
 
