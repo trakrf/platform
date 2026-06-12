@@ -49,3 +49,23 @@ export const STATUS_CLASS: Record<MusterEntryStatus, string> = {
   verified: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
   safe_manual: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
 };
+
+/**
+ * Allowlist a user-supplied floor-plan image URL for use as an <img src>.
+ * Mirrors the backend PUT validation (http(s) or data:image/*); everything
+ * else — javascript:, data:text/html, relative paths, garbage — returns null
+ * so it is never assigned to the DOM (CodeQL js/xss-through-dom).
+ */
+export function safeImageUrl(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  if (url.protocol === 'http:' || url.protocol === 'https:') return url.href;
+  if (url.protocol === 'data:' && url.pathname.startsWith('image/')) return trimmed;
+  return null;
+}

@@ -32,12 +32,11 @@ beforeEach(() => {
     configurable: true
   });
 
-  // Mock URL methods
-  global.URL = {
-    ...global.URL,
-    createObjectURL: mockCreateObjectURL,
-    revokeObjectURL: mockRevokeObjectURL,
-  } as typeof URL;
+  // Mock URL methods on the real class — replacing global.URL with a spread
+  // object would drop the URL constructor for every later test in this worker
+  // (new URL() would throw suite-wide).
+  global.URL.createObjectURL = mockCreateObjectURL;
+  global.URL.revokeObjectURL = mockRevokeObjectURL;
 
   // Remove any existing Blob.text mock to test actual content
   if (Blob.prototype.text) {

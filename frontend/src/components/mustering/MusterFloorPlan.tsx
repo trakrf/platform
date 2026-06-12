@@ -17,7 +17,7 @@ import { MapPin, X } from 'lucide-react';
 import { useMusterStore, useOrgStore } from '@/stores';
 import { musteringApi } from '@/lib/api/mustering';
 import type { FloorPlan, FloorPlanPin, MusterEvent, ZonePresence } from '@/types/mustering';
-import { ADMIN_PLUS } from './helpers';
+import { ADMIN_PLUS, safeImageUrl } from './helpers';
 
 /** What a pin should display, computed purely from store state. */
 export interface PinBadge {
@@ -163,7 +163,9 @@ export default function MusterFloorPlan() {
   }
 
   // Pins + image to render: drafts while editing, else the saved plan.
-  const renderImageUrl = editing ? draftImageUrl : plan?.image_url ?? '';
+  // safeImageUrl re-validates even the saved value so nothing unvetted ever
+  // reaches the <img src> attribute (defense in depth vs the PUT validation).
+  const renderImageUrl = safeImageUrl(editing ? draftImageUrl : plan?.image_url ?? '');
   const renderPins = editing ? draftPins : plan?.pins ?? [];
   const pinnedLocationIds = new Set(renderPins.map((p) => p.location_id));
 

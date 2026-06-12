@@ -4,6 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { pinBadge } from './MusterFloorPlan';
+import { safeImageUrl } from './helpers';
 import type { MusterEvent, MusterEntry, ZonePresence } from '@/types/mustering';
 
 const zones: ZonePresence[] = [
@@ -84,5 +85,30 @@ describe('pinBadge', () => {
       entry({ id: 1, status: 'at_muster', muster_location_id: 999 }), // other point
     ]);
     expect(pinBadge(200, zones, ev)).toEqual({ kind: 'arrivals', count: 0 });
+  });
+});
+
+describe('safeImageUrl', () => {
+  it('allows https and http URLs', () => {
+    expect(safeImageUrl('https://example.com/plan.png')).toBe('https://example.com/plan.png');
+    expect(safeImageUrl('http://example.com/plan.jpg')).toBe('http://example.com/plan.jpg');
+  });
+
+  it('allows data:image/* URIs verbatim', () => {
+    const uri = 'data:image/png;base64,iVBORw0KGgo=';
+    expect(safeImageUrl(uri)).toBe(uri);
+  });
+
+  it('rejects javascript: and non-image data: URIs', () => {
+    expect(safeImageUrl('javascript:alert(1)')).toBeNull();
+    expect(safeImageUrl('data:text/html,<script>alert(1)</script>')).toBeNull();
+  });
+
+  it('rejects relative paths, other schemes, and garbage', () => {
+    expect(safeImageUrl('/plans/site.png')).toBeNull();
+    expect(safeImageUrl('ftp://example.com/a.png')).toBeNull();
+    expect(safeImageUrl('not a url')).toBeNull();
+    expect(safeImageUrl('')).toBeNull();
+    expect(safeImageUrl('   ')).toBeNull();
   });
 });
