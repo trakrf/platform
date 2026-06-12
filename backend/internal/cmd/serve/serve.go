@@ -21,6 +21,7 @@ import (
 	inventoryhandler "github.com/trakrf/platform/backend/internal/handlers/inventory"
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
+	musteringhandler "github.com/trakrf/platform/backend/internal/handlers/mustering"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
 	outputdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/outputdevices"
 	readstreamhandler "github.com/trakrf/platform/backend/internal/handlers/readstream"
@@ -31,6 +32,7 @@ import (
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
 	"github.com/trakrf/platform/backend/internal/ingest"
 	"github.com/trakrf/platform/backend/internal/logger"
+	"github.com/trakrf/platform/backend/internal/mustering"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
 	"github.com/trakrf/platform/backend/internal/services/email"
 	orgsservice "github.com/trakrf/platform/backend/internal/services/orgs"
@@ -113,6 +115,17 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 		log.Warn().Err(err).Msg("initial topic registry load failed; ticker will retry")
 	}
 
+	// TRA-978: the mustering engine + SSE broadcaster are always constructed so
+	// the mustering REST/SSE/simulate surface serves regardless of whether MQTT
+	// ingestion is on (the simulator drives the same Evaluate path directly). The
+	// engine joins the ingest fan-out via the MultiEvaluator below when MQTT is on.
+	musterBroadcaster := mustering.NewBroadcaster()
+	musterEngine := mustering.NewEngine(store, musterBroadcaster, log)
+	// Evaluator fan-out shared by the subscriber (hardware reads) and the
+	// mustering simulate handler (synthetic reads). Geofence is prepended when
+	// ingestion is enabled (it only exists then). nil-safe.
+	musterEvaluators := ingest.MultiEvaluator{musterEngine}
+
 	mqttCfg := ingest.ConfigFromEnv()
 	var alarmDispatcher alarm.Dispatcher
 	if mqttCfg.Enabled() {
@@ -130,7 +143,11 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 		geofenceEngine.Start()
 		defer geofenceEngine.Stop()
 
-		subscriber := ingest.NewSubscriber(mqttCfg, store, topicRegistry, geofenceEngine, readBroadcaster, log)
+		// TRA-978: prepend geofence to the fan-out so the subscriber drives both
+		// geofence and mustering off the same membership-passing reads.
+		musterEvaluators = ingest.MultiEvaluator{geofenceEngine, musterEngine}
+
+		subscriber := ingest.NewSubscriber(mqttCfg, store, topicRegistry, musterEvaluators, readBroadcaster, log)
 		if err := subscriber.Start(); err != nil {
 			log.Error().Err(err).Msg("Failed to start MQTT subscriber")
 			return err
@@ -187,10 +204,13 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// is gone.
 	frontendHandler := frontendhandler.NewHandler(frontendFS, "frontend/dist", os.Getenv("ENVIRONMENT_LABEL"))
 	readstreamHandler := readstreamhandler.NewHandler(readBroadcaster)
+	// TRA-978: mustering handler shares the engine, broadcaster, evaluator fan-out
+	// (for simulate), and the Live Reads feed (so simulate's RSSI reaches Locate).
+	musteringHandler := musteringhandler.NewHandler(musterEngine, musterBroadcaster, store, musterEvaluators, readBroadcaster)
 	testHandler := testhandler.NewHandler(store)
 	log.Info().Msg("Handlers initialized")
 
-	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, testHandler, store)
+	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, testHandler, store)
 	log.Info().Msg("Routes registered")
 
 	server := &http.Server{

@@ -23,8 +23,8 @@ type ScanPoint struct {
 }
 
 type CreateScanPointRequest struct {
-	Name        string         `json:"name" validate:"required,min=1,max=255" example:"Antenna 1"`
-	LocationID  *int           `json:"location_id,omitempty" validate:"omitempty,min=1"`
+	Name       string `json:"name" validate:"required,min=1,max=255" example:"Antenna 1"`
+	LocationID *int   `json:"location_id,omitempty" validate:"omitempty,min=1"`
 	// AntennaPort is the per-antenna correlation key reads are matched on
 	// (TRA-956); it defaults to 1 when omitted. Unique per device among live rows.
 	AntennaPort *int           `json:"antenna_port,omitempty" validate:"omitempty,min=1" example:"1"`
