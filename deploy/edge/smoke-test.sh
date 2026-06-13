@@ -14,7 +14,7 @@ cd "$(dirname "$0")/../.."   # repo root
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 EPC=${EPC:-E2E0000000000000BB000001}
 CAP=${CAP:-door-1}
-MQPW=$(grep -oP 'trakrf-mqtt:\K[^@]+' deploy/edge/.env)
+MQPW=$(grep -oP 'trakrf-mqtt:\K[^@]+' /srv/trakrf/secrets/.env)
 
 echo "1) DB bootstrap + seed (idempotent)"
 deploy/edge/db-init.sh

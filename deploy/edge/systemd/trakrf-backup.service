@@ -1,0 +1,8 @@
+[Unit]
+Description=TrakRF demo DB backup (pg_dump -> /srv/trakrf/backups)
+After=timescaledb.service
+Wants=timescaledb.service
+
+[Service]
+Type=oneshot
+ExecStart=/srv/trakrf/scripts/trakrf-backup.sh
