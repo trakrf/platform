@@ -16,8 +16,8 @@ Image=docker.io/cloudflare/cloudflared:latest
 # Must share trakrf.network so the dashboard/Terraform ingress can target https://traefik:443 by name.
 Network=trakrf.network
 # Token only — kept out of the shared .env so DB/JWT secrets aren't exposed to this sidecar.
-# Managed by trakrf/infra Terraform (TRA-957); drop the real value in deploy/edge/cloudflared.env.
-EnvironmentFile=%h/platform/deploy/edge/cloudflared.env
+# Managed by trakrf/infra Terraform (TRA-957); drop the real value in /srv/trakrf/secrets/cloudflared.env.
+EnvironmentFile=/srv/trakrf/secrets/cloudflared.env
 # Outbound-only: no PublishPort (the whole point — no inbound, NAT/double-NAT agnostic).
 # cloudflared reads the tunnel token from $TUNNEL_TOKEN. Public hostname -> service ingress
 # (app.demo.trakrf.id -> https://traefik:443) is configured in Cloudflare, not here.
