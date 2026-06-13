@@ -1,4 +1,11 @@
-# Secrets and generated artifacts — never commit
+# Secrets and generated artifacts — never commit. Live only on the box under
+# deploy/edge/secrets/ (legacy) and /srv/trakrf/secrets/ (runtime).
+secrets/.env
+secrets/cloudflared.env
+secrets/mosquitto/passwd
+secrets/traefik/certs/
+secrets/traefik/lego/
+# legacy paths (pre-TRA-988), keep ignored until the box is migrated + cleaned
 .env
 cloudflared.env
 mosquitto/passwd
