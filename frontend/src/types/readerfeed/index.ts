@@ -86,6 +86,12 @@ export type SortKey =
   | 'lastSeen';
 
 export interface SortState {
-  key: SortKey;
+  /**
+   * The sorted column, or `null` for the default stable "natural" order — rows
+   * stay in first-seen order and don't churn as live reads stream in (TRA-992,
+   * matching Keypr's reads view). A column is set only by an explicit header
+   * click.
+   */
+  key: SortKey | null;
   dir: 'asc' | 'desc';
 }

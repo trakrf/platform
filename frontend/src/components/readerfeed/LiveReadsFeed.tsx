@@ -37,7 +37,10 @@ const STATUS_DOT: Record<ReaderFeedStatus, string> = {
   closed: 'bg-gray-400',
 };
 
-const DEFAULT_SORT: SortState = { key: 'lastSeen', dir: 'desc' };
+// Default to the stable "natural" order (key: null): rows keep first-seen order
+// and don't churn as reads stream in (TRA-992 — Keypr's reads view). A column
+// sort is opt-in via a header click.
+const DEFAULT_SORT: SortState = { key: null, dir: 'asc' };
 
 export interface LiveReadsFeedProps {
   /** Scope the feed to a single reader's key. Omit for the whole org feed. */

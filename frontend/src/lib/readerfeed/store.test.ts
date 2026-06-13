@@ -256,6 +256,77 @@ describe('sortRows', () => {
     sortRows(rows, { key: 'epc', dir: 'desc' });
     expect(rows.map((r) => r.epc)).toEqual(before);
   });
+
+  it('breaks sort ties deterministically by rowKey so equal values keep a stable relative order', () => {
+    const tied = toDisplayRows(
+      [
+        tag({ readerKey: 'r', epc: 'C', readCount: 5 }),
+        tag({ readerKey: 'r', epc: 'A', readCount: 5 }),
+        tag({ readerKey: 'r', epc: 'B', readCount: 5 }),
+      ],
+      false,
+    );
+    // All three share readCount 5; the tiebreaker (rowKey, which embeds the epc)
+    // gives a single deterministic order regardless of incoming order.
+    expect(sortRows(tied, { key: 'readCount', dir: 'desc' }).map((r) => r.epc)).toEqual([
+      'A',
+      'B',
+      'C',
+    ]);
+  });
+
+  // TRA-992: the default (no column selected) is a stable "first-seen" order that
+  // does NOT churn as live reads stream in — matching Keypr's reads view.
+  describe('natural order (key: null)', () => {
+    it('orders rows by firstSeen ascending (oldest first, new tags append)', () => {
+      const rows = toDisplayRows(
+        [
+          tag({ epc: 'SECOND', firstSeen: 200 }),
+          tag({ epc: 'FIRST', firstSeen: 100 }),
+          tag({ epc: 'THIRD', firstSeen: 300 }),
+        ],
+        false,
+      );
+      expect(sortRows(rows, { key: null, dir: 'asc' }).map((r) => r.epc)).toEqual([
+        'FIRST',
+        'SECOND',
+        'THIRD',
+      ]);
+    });
+
+    it('does not reorder when a row updates (count / RSSI / lastSeen change)', () => {
+      const before = toDisplayRows(
+        [
+          tag({ epc: 'A', firstSeen: 100, lastSeen: 100, readCount: 1 }),
+          tag({ epc: 'B', firstSeen: 200, lastSeen: 200, readCount: 1 }),
+        ],
+        false,
+      );
+      // B is re-seen many times and is now the freshest with the highest count —
+      // under a lastSeen/readCount sort it would jump to the top. Natural order
+      // must keep it in place.
+      const after = toDisplayRows(
+        [
+          tag({ epc: 'A', firstSeen: 100, lastSeen: 100, readCount: 1 }),
+          tag({ epc: 'B', firstSeen: 200, lastSeen: 9999, readCount: 500 }),
+        ],
+        false,
+      );
+      const natural = { key: null, dir: 'asc' } as const;
+      expect(sortRows(before, natural).map((r) => r.epc)).toEqual(['A', 'B']);
+      expect(sortRows(after, natural).map((r) => r.epc)).toEqual(['A', 'B']);
+    });
+
+    it('is independent of incoming row order (stable across snapshot keyframes)', () => {
+      const a = tag({ epc: 'A', firstSeen: 100 });
+      const b = tag({ epc: 'B', firstSeen: 200 });
+      const natural = { key: null, dir: 'asc' } as const;
+      const order1 = sortRows(toDisplayRows([a, b], false), natural).map((r) => r.epc);
+      const order2 = sortRows(toDisplayRows([b, a], false), natural).map((r) => r.epc);
+      expect(order1).toEqual(['A', 'B']);
+      expect(order2).toEqual(['A', 'B']);
+    });
+  });
 });
 
 describe('expireStale (client backstop only)', () => {

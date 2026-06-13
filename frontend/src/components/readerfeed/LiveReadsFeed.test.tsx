@@ -126,6 +126,43 @@ describe('LiveReadsFeed', () => {
     expect(screen.queryByText('1,2')).not.toBeInTheDocument();
   });
 
+  it('orders rows by first-seen on load and does not resort when reads stream in (TRA-992)', () => {
+    // B is the freshest with the most reads; under the old lastSeen-desc default
+    // it would sit on top and jump around. The stable default keeps first-seen
+    // order (A before B) and leaves it put as deltas arrive.
+    mockFeed({
+      tags: [
+        tag({ epc: 'A', firstSeen: 100, lastSeen: 100, readCount: 1 }),
+        tag({ epc: 'B', firstSeen: 200, lastSeen: 9999, readCount: 500 }),
+      ],
+    });
+    const { rerender } = render(<LiveReadsFeed />);
+
+    let bodyRows = screen.getAllByRole('row').slice(1);
+    expect(bodyRows[0]).toHaveTextContent('A'); // oldest first-seen on top
+    expect(bodyRows[1]).toHaveTextContent('B');
+
+    // A live update makes A the freshest/highest-count — order must NOT change.
+    mockFeed({
+      tags: [
+        tag({ epc: 'A', firstSeen: 100, lastSeen: 99999, readCount: 999 }),
+        tag({ epc: 'B', firstSeen: 200, lastSeen: 9999, readCount: 500 }),
+      ],
+    });
+    rerender(<LiveReadsFeed />);
+    bodyRows = screen.getAllByRole('row').slice(1);
+    expect(bodyRows[0]).toHaveTextContent('A');
+    expect(bodyRows[1]).toHaveTextContent('B');
+  });
+
+  it('does not show an active sort indicator on any column by default', () => {
+    mockFeed({ tags: [tag()] });
+    render(<LiveReadsFeed />);
+    // The active-sort glyph (▲/▼) is only rendered next to the sorted column.
+    expect(screen.queryByText('▲')).not.toBeInTheDocument();
+    expect(screen.queryByText('▼')).not.toBeInTheDocument();
+  });
+
   it('sorts by a column when its header is clicked', () => {
     mockFeed({ tags: [tag({ epc: 'A', readCount: 1 }), tag({ epc: 'B', readCount: 9 })] });
     render(<LiveReadsFeed />);
