@@ -37,7 +37,10 @@ const STATUS_DOT: Record<ReaderFeedStatus, string> = {
   closed: 'bg-gray-400',
 };
 
-const DEFAULT_SORT: SortState = { key: 'lastSeen', dir: 'desc' };
+// Default to the stable "natural" order (key: null): rows keep first-seen order
+// and don't churn as reads stream in (TRA-992 — Keypr's reads view). A column
+// sort is opt-in via a header click.
+const DEFAULT_SORT: SortState = { key: null, dir: 'asc' };
 
 export interface LiveReadsFeedProps {
   /** Scope the feed to a single reader's key. Omit for the whole org feed. */
@@ -94,17 +97,25 @@ export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFee
   const rssiRange =
     rssiValues.length > 0 ? `${Math.min(...rssiValues)} … ${Math.max(...rssiValues)} dBm` : '—';
 
+  // Tri-state column sort (TRA-992): each header click cycles
+  //   natural → first dir → opposite dir → natural.
+  // The first direction is column-aware — text columns read better ascending,
+  // counts/RSSI/age better descending (highest/freshest first). The third click
+  // returns to DEFAULT_SORT (the stable natural order), so the same control that
+  // applies a sort also removes it — no need to Clear just to stop the churn.
   const toggleSort = (key: SortKey) =>
-    setSort((prev) =>
-      prev.key === key
-        ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-        : { key, dir: key === 'epc' || key === 'readerKey' ? 'asc' : 'desc' },
-    );
+    setSort((prev) => {
+      const firstDir = key === 'epc' || key === 'readerKey' ? 'asc' : 'desc';
+      if (prev.key !== key) return { key, dir: firstDir };
+      if (prev.dir === firstDir) return { key, dir: firstDir === 'asc' ? 'desc' : 'asc' };
+      return DEFAULT_SORT; // opposite dir → back to natural order
+    });
 
   const togglePause = () => setFrozen(paused ? null : { tags, now });
 
   const clear = () => {
     setFrozen(null);
+    setSort(DEFAULT_SORT); // full reset also drops back to the stable natural order
     reconnect(); // fresh server session ⇒ counts restart at zero
   };
 
