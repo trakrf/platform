@@ -174,6 +174,74 @@ describe('LiveReadsFeed', () => {
     expect(bodyRows[1]).toHaveTextContent('A');
   });
 
+  it('cycles a column header tri-state: natural → first dir → opposite → natural (TRA-992)', () => {
+    mockFeed({
+      tags: [
+        tag({ epc: 'A', readCount: 1, firstSeen: 100 }),
+        tag({ epc: 'B', readCount: 9, firstSeen: 200 }),
+      ],
+    });
+    render(<LiveReadsFeed />);
+    const reads = () => screen.getByRole('button', { name: /reads/i });
+    const order = () => screen.getAllByRole('row').slice(1).map((r) => r.textContent ?? '');
+
+    // Default: stable first-seen order, no active glyph.
+    expect(order()[0]).toContain('A');
+    expect(order()[1]).toContain('B');
+    expect(screen.queryByText('▼')).not.toBeInTheDocument();
+    expect(screen.queryByText('▲')).not.toBeInTheDocument();
+
+    // 1st click → desc (numeric column's first dir): highest count on top.
+    fireEvent.click(reads());
+    expect(order()[0]).toContain('B');
+    expect(screen.getByText('▼')).toBeInTheDocument();
+
+    // 2nd click → asc.
+    fireEvent.click(reads());
+    expect(order()[0]).toContain('A');
+    expect(screen.getByText('▲')).toBeInTheDocument();
+
+    // 3rd click → back to the natural order: no glyph, first-seen order.
+    fireEvent.click(reads());
+    expect(order()[0]).toContain('A');
+    expect(order()[1]).toContain('B');
+    expect(screen.queryByText('▼')).not.toBeInTheDocument();
+    expect(screen.queryByText('▲')).not.toBeInTheDocument();
+  });
+
+  it('a text column cycles asc first (column-aware first direction)', () => {
+    mockFeed({ tags: [tag({ epc: 'B' }), tag({ epc: 'A' })] });
+    render(<LiveReadsFeed />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^epc/i }));
+    const bodyRows = screen.getAllByRole('row').slice(1);
+    expect(bodyRows[0]).toHaveTextContent('A'); // asc first for text columns
+    expect(screen.getByText('▲')).toBeInTheDocument();
+  });
+
+  it('Clear returns an active column sort to the default natural order (TRA-992)', () => {
+    const reconnect = vi.fn();
+    mockFeed({
+      tags: [
+        tag({ epc: 'A', readCount: 1, firstSeen: 100 }),
+        tag({ epc: 'B', readCount: 9, firstSeen: 200 }),
+      ],
+      reconnect,
+    });
+    render(<LiveReadsFeed />);
+    const order = () => screen.getAllByRole('row').slice(1).map((r) => r.textContent ?? '');
+
+    fireEvent.click(screen.getByRole('button', { name: /reads/i })); // → desc
+    expect(order()[0]).toContain('B');
+    expect(screen.getByText('▼')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /clear/i }));
+    expect(reconnect).toHaveBeenCalledTimes(1);
+    expect(order()[0]).toContain('A'); // back to first-seen order
+    expect(order()[1]).toContain('B');
+    expect(screen.queryByText('▼')).not.toBeInTheDocument();
+  });
+
   it('pause freezes the rendered rows; resume re-applies live deltas', () => {
     mockFeed({ tags: [tag({ epc: 'A' })] });
     const { rerender } = render(<LiveReadsFeed />);
