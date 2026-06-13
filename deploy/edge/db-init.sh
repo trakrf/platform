@@ -8,10 +8,10 @@
 # These settings persist in the Postgres catalog (survive restarts); only a fresh
 # volume needs a re-run.
 set -euo pipefail
-cd "$(dirname "$0")"
-[ -f .env ] || { echo "deploy/edge/.env missing (cp .env.example .env and fill it)"; exit 1; }
-KEY=$(grep -oP '^OBFUSCATION_KEY=\K.*' .env || true)
-[ -n "${KEY:-}" ] && [ "$KEY" != CHANGEME ] || { echo "OBFUSCATION_KEY not set in .env"; exit 1; }
+ENV_FILE=/srv/trakrf/secrets/.env
+[ -f "$ENV_FILE" ] || { echo "$ENV_FILE missing (see deploy/edge/README.md bring-up)"; exit 1; }
+KEY=$(grep -oP '^OBFUSCATION_KEY=\K.*' "$ENV_FILE" || true)
+[ -n "${KEY:-}" ] && [ "$KEY" != CHANGEME ] || { echo "OBFUSCATION_KEY not set in $ENV_FILE"; exit 1; }
 podman exec -i timescaledb psql -U postgres -d postgres -v ON_ERROR_STOP=1 <<SQL
 CREATE SCHEMA IF NOT EXISTS trakrf;
 ALTER DATABASE postgres SET search_path = trakrf, public;
