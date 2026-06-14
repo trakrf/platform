@@ -20,13 +20,21 @@ const loginOK = `<?xml version="1.0"?><CSL><Command>login</Command><Ack>OK: sess
 const loginBusy = `<?xml version="1.0"?><CSL><Command>login</Command><Error alreadyLoginIP="192.168.50.203" alreadyLoginUser="root" code="-10" msg="Error: Multiple login not allowed!"/></CSL>`
 const ackOK = `<?xml version="1.0"?><CSL><Command>x</Command><Ack>OK:</Ack></CSL>`
 
+// wipedProfileList is what a firmware that drops antenna enablement returns
+// after setOperProfile: the active profile with antenna_port emptied.
+const wipedProfileList = `<?xml version="1.0"?><CSL><Command>getOperProfile</Command><ProfileList>` +
+	`<profile active="true" antennaPort="" antenna_port="" profile_id="TrakRF" transmitPower1="18.0" transmitPower2="30.0"/>` +
+	`</ProfileList></CSL>`
+
 // fakeReader records setOperProfile params and serves canned responses.
 type fakeReader struct {
-	srv       *httptest.Server
-	busy      bool
-	forced    bool
-	setParams url.Values
-	loggedOut bool
+	srv          *httptest.Server
+	busy         bool
+	forced       bool
+	setParams    url.Values
+	loggedOut    bool
+	wipeAfterSet bool // simulate firmware that drops antenna_port on setOperProfile
+	didSet       bool
 }
 
 func newFakeReader() *fakeReader {
@@ -46,9 +54,14 @@ func newFakeReader() *fakeReader {
 			f.busy = false
 			_, _ = w.Write([]byte(ackOK))
 		case "getOperProfile":
+			if f.wipeAfterSet && f.didSet {
+				_, _ = w.Write([]byte(wipedProfileList))
+				return
+			}
 			_, _ = w.Write([]byte(twoProfileList))
 		case "setOperProfile":
 			f.setParams = q
+			f.didSet = true
 			_, _ = w.Write([]byte(ackOK))
 		case "logout":
 			f.loggedOut = true
@@ -100,6 +113,35 @@ func TestApply_SetsPowerOnActiveProfile(t *testing.T) {
 	}
 	if !f.loggedOut {
 		t.Fatalf("expected logout after apply (fast login/act/logout)")
+	}
+}
+
+func TestApply_ForwardsAntennaEnablement(t *testing.T) {
+	f := newFakeReader()
+	defer f.close()
+	if _, err := f.client().Apply(context.Background(), map[int]float64{1: 22}, false); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	// Both enablement forms must be forwarded so a power-only change can't drop
+	// enabled ports.
+	if got := f.setParams.Get("antenna_port"); got != "1,2" {
+		t.Fatalf("antenna_port = %q, want 1,2", got)
+	}
+	if got := f.setParams.Get("antennaPort"); got != "12" {
+		t.Fatalf("antennaPort = %q, want 12 (concatenated enablement form must be preserved)", got)
+	}
+}
+
+func TestApply_DetectsAntennaWipe(t *testing.T) {
+	f := newFakeReader()
+	f.wipeAfterSet = true // firmware drops antenna_port on setOperProfile
+	defer f.close()
+	_, err := f.client().Apply(context.Background(), map[int]float64{1: 18}, false)
+	if err == nil {
+		t.Fatalf("want error when antenna enablement is wiped after set")
+	}
+	if !strings.Contains(err.Error(), "antenna enablement changed") {
+		t.Fatalf("error %q should report antenna enablement change", err.Error())
 	}
 }
 
@@ -188,16 +230,19 @@ func TestSetProfile_OmitsUnknownAttrs(t *testing.T) {
 		Attrs: map[string]string{
 			"profile_id":     "P",
 			"transmitPower1": "20.0",
+			"antennaPort":    "12",   // settable enablement form — MUST be forwarded
 			"active":         "true", // read-only, must NOT be forwarded
-			"antennaPort":    "12",   // read-only concatenated form, must NOT be forwarded
 			"bogusAttr":      "x",    // unknown, must NOT be forwarded
 		},
 	}
 	if err := c.SetProfile(context.Background(), "s", prof); err != nil {
 		t.Fatalf("SetProfile: %v", err)
 	}
-	if f.setParams.Has("active") || f.setParams.Has("antennaPort") || f.setParams.Has("bogusAttr") {
+	if f.setParams.Has("active") || f.setParams.Has("bogusAttr") {
 		t.Fatalf("forwarded a non-settable attr: %v", f.setParams)
+	}
+	if !f.setParams.Has("antennaPort") {
+		t.Fatalf("antennaPort (enablement) must be forwarded")
 	}
 	if !strings.Contains(f.setParams.Get("transmitPower1"), "20") {
 		t.Fatalf("expected transmitPower1 forwarded")

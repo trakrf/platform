@@ -37,7 +37,14 @@ const (
 // unknown attribute back — while still preserving the reader's existing config.
 var settableParams = []string{
 	"profile_id", "linkProfile", "populationEst", "sessionNo", "target",
-	"queryAlgorithm", "reflectedPowerThreshold", "tagModel", "antenna_port",
+	"queryAlgorithm", "reflectedPowerThreshold", "tagModel",
+	// Antenna enablement: forward BOTH forms on the read-modify-write so a
+	// power-only change can never drop enabled ports. antenna_port is the comma
+	// form ("1,2"); antennaPort/antennaPortEnabled are the concatenated form
+	// ("12"). Some firmware (e.g. CS463 web app 1.3.23) honors only the
+	// concatenated form on setOperProfile, so omitting it wipes the antennas and
+	// stops all reads — Apply re-reads to detect that (see verifyEnablement).
+	"antenna_port", "antennaPort", "antennaPortEnabled",
 	"transmitPower",
 	"transmitPower1", "transmitPower2", "transmitPower3", "transmitPower4",
 	"transmitPower5", "transmitPower6", "transmitPower7", "transmitPower8",
@@ -278,10 +285,25 @@ func (c *Client) Apply(ctx context.Context, powers map[int]float64, force bool) 
 	for port, dbm := range powers {
 		prof.Attrs["transmitPower"+strconv.Itoa(port)] = formatPower(dbm)
 	}
+	wantEnable := prof.Attrs["antenna_port"]
 	if err := c.SetProfile(ctx, session, prof); err != nil {
 		return Result{}, err
 	}
-	return Result{ActiveProfile: prof.ID, Powers: extractPowers(prof.Attrs)}, nil
+
+	// Verify the write preserved antenna enablement. setOperProfile is a
+	// profile-level replace, and some firmware drops antenna_port; if that
+	// happens, NO antenna transmits and all reads stop. Detect it and fail loud
+	// rather than silently bricking the read pipeline.
+	after, err := c.GetActiveProfile(ctx, session)
+	if err != nil {
+		return Result{}, err
+	}
+	if after.Attrs["antenna_port"] != wantEnable {
+		return Result{ActiveProfile: after.ID, Powers: after.Powers}, fmt.Errorf(
+			"csl: antenna enablement changed after setOperProfile (was %q, now %q) — this firmware does not preserve antenna_port; reads may be stopped, restore via the reader's Operation Profile page",
+			wantEnable, after.Attrs["antenna_port"])
+	}
+	return Result{ActiveProfile: after.ID, Powers: after.Powers}, nil
 }
 
 // --- helpers --------------------------------------------------------------
