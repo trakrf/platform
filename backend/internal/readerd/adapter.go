@@ -1,0 +1,22 @@
+// Package readerd hosts the on-reader daemon's reader-agnostic adapter layer.
+//
+// An Adapter translates the vendor-neutral readerrpc contract into one reader
+// family's native operations. The daemon's RPC dispatch depends only on this
+// interface, so future readers (e.g. Impinj R420/R700) plug in by implementing
+// it without touching the dispatch or contract packages.
+package readerd
+
+import (
+	"context"
+
+	"github.com/trakrf/platform/backend/internal/readerrpc"
+)
+
+// Adapter is the reader-agnostic control surface the daemon drives. Each reader
+// family provides one implementation (cs463.Adapter is the first).
+type Adapter interface {
+	GetCapabilities(ctx context.Context) (readerrpc.Capabilities, error)
+	GetConfig(ctx context.Context) (readerrpc.ReaderConfig, error)
+	SetConfig(ctx context.Context, cfg readerrpc.ReaderConfig) (readerrpc.SetConfigResult, error)
+	GetStatus(ctx context.Context) (readerrpc.Status, error)
+}
