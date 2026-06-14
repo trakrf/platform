@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	httpSwagger "github.com/swaggo/http-swagger"
 
+	antennapowerhandler "github.com/trakrf/platform/backend/internal/handlers/antennapower"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
@@ -49,6 +50,7 @@ func setupRouter(
 	scanDevicesHandler *scandeviceshandler.Handler,
 	scanPointsHandler *scanpointshandler.Handler,
 	outputDevicesHandler *outputdeviceshandler.Handler,
+	antennaPowerHandler *antennapowerhandler.Handler,
 	lookupHandler *lookuphandler.Handler,
 	healthHandler *healthhandler.Handler,
 	frontendHandler *frontendhandler.Handler,
@@ -159,6 +161,8 @@ func setupRouter(
 		scanPointsHandler.RegisterRoutes(r, paidGate)
 		// Internal-only output device management (not public API).
 		outputDevicesHandler.RegisterRoutes(r, paidGate)
+		// TRA-993: internal-only per-antenna power tuning (not public API).
+		antennaPowerHandler.RegisterRoutes(r, paidGate)
 		lookupHandler.RegisterRoutes(r)
 		// TRA-924: org-enforced Live Reads SSE stream (session-auth, internal).
 		readstreamHandler.RegisterRoutes(r)

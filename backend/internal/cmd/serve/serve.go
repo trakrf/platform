@@ -14,6 +14,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/alarm/shelly"
 	"github.com/trakrf/platform/backend/internal/buildinfo"
 	"github.com/trakrf/platform/backend/internal/geofence"
+	antennapowerhandler "github.com/trakrf/platform/backend/internal/handlers/antennapower"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
@@ -33,6 +34,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/ingest"
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/mustering"
+	"github.com/trakrf/platform/backend/internal/readercontrol"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
 	"github.com/trakrf/platform/backend/internal/services/email"
 	orgsservice "github.com/trakrf/platform/backend/internal/services/orgs"
@@ -128,11 +130,19 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 
 	mqttCfg := ingest.ConfigFromEnv()
 	var alarmDispatcher alarm.Dispatcher
+	var readerController *readercontrol.Controller // nil when MQTT disabled
 	if mqttCfg.Enabled() {
 		// TRA-906: dedicated publish client on the same broker (reuses MQTT_URL).
 		alarmPublisher, stopPublisher := alarm.NewMQTTPublisher(mqttCfg, log)
 		defer stopPublisher()
 		alarmDispatcher = alarm.NewDispatcher(shellyClient, alarmPublisher)
+
+		// TRA-993: reader-control seam — publishes power commands to the power
+		// agent and subscribes to its state topics, caching results on scan_point
+		// metadata. Own broker client (reuses MQTT_URL).
+		var stopReaderCtl func()
+		readerController, stopReaderCtl = readercontrol.New(mqttCfg, store, topicRegistry, log)
+		defer stopReaderCtl()
 
 		// TRA-901/943: geofence engine evaluates the membership-passing reads the
 		// subscriber derives, resolving each read's location to its output devices
@@ -197,6 +207,13 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// 2s test-fire pulse: long enough for an operator to see the strobe, short
 	// enough not to leave the relay latched after a confidence check.
 	outputDevicesHandler := outputdeviceshandler.NewHandler(store, alarmDispatcher, 2*time.Second)
+	// TRA-993: antenna-power tuning. Pass the controller as a nil interface when
+	// the broker is disabled so the handler reports a clean 503 on set.
+	var powerPublisher antennapowerhandler.CommandPublisher
+	if readerController != nil {
+		powerPublisher = readerController
+	}
+	antennaPowerHandler := antennapowerhandler.NewHandler(store, powerPublisher)
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), info, startTime)
 	// TRA-924: Live Reads is now served by the org-enforced SSE endpoint, so the
@@ -210,7 +227,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	testHandler := testhandler.NewHandler(store)
 	log.Info().Msg("Handlers initialized")
 
-	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, testHandler, store)
+	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, antennaPowerHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, testHandler, store)
 	log.Info().Msg("Routes registered")
 
 	server := &http.Server{
