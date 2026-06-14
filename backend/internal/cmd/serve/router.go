@@ -24,6 +24,7 @@ import (
 	musteringhandler "github.com/trakrf/platform/backend/internal/handlers/mustering"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
 	outputdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/outputdevices"
+	readerconfighandler "github.com/trakrf/platform/backend/internal/handlers/readerconfig"
 	readstreamhandler "github.com/trakrf/platform/backend/internal/handlers/readstream"
 	reportshandler "github.com/trakrf/platform/backend/internal/handlers/reports"
 	scandeviceshandler "github.com/trakrf/platform/backend/internal/handlers/scandevices"
@@ -49,6 +50,7 @@ func setupRouter(
 	scanDevicesHandler *scandeviceshandler.Handler,
 	scanPointsHandler *scanpointshandler.Handler,
 	outputDevicesHandler *outputdeviceshandler.Handler,
+	readerConfigHandler *readerconfighandler.Handler,
 	lookupHandler *lookuphandler.Handler,
 	healthHandler *healthhandler.Handler,
 	frontendHandler *frontendhandler.Handler,
@@ -159,6 +161,8 @@ func setupRouter(
 		scanPointsHandler.RegisterRoutes(r, paidGate)
 		// Internal-only output device management (not public API).
 		outputDevicesHandler.RegisterRoutes(r, paidGate)
+		// TRA-993: internal-only reader live get/set config over MQTT-RPC.
+		readerConfigHandler.RegisterRoutes(r, paidGate)
 		lookupHandler.RegisterRoutes(r)
 		// TRA-924: org-enforced Live Reads SSE stream (session-auth, internal).
 		readstreamHandler.RegisterRoutes(r)

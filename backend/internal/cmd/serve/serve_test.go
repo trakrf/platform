@@ -22,6 +22,7 @@ import (
 	musteringhandler "github.com/trakrf/platform/backend/internal/handlers/mustering"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
 	outputdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/outputdevices"
+	readerconfighandler "github.com/trakrf/platform/backend/internal/handlers/readerconfig"
 	readstreamhandler "github.com/trakrf/platform/backend/internal/handlers/readstream"
 	reportshandler "github.com/trakrf/platform/backend/internal/handlers/reports"
 	scandeviceshandler "github.com/trakrf/platform/backend/internal/handlers/scandevices"
@@ -54,6 +55,7 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 	scanDevicesHandler := scandeviceshandler.NewHandler(store, nil)
 	scanPointsHandler := scanpointshandler.NewHandler(store)
 	outputDevicesHandler := outputdeviceshandler.NewHandler(store, alarm.NewDispatcher(shelly.New(0), nil), 0)
+	readerConfigHandler := readerconfighandler.NewHandler(store, nil)
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(nil, buildinfo.Info{Version: "test"}, time.Now())
 	frontendHandler := frontendhandler.NewHandler(fstest.MapFS{}, "frontend/dist", "")
@@ -63,7 +65,7 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 	musteringHandler := musteringhandler.NewHandler(musterEngine, musterBC, store, ingest.MultiEvaluator{musterEngine}, nil)
 	testHandler := testhandler.NewHandler(store)
 
-	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, testHandler, store)
+	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, testHandler, store)
 }
 
 func TestRouterSetup(t *testing.T) {

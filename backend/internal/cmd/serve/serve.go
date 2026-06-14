@@ -24,6 +24,7 @@ import (
 	musteringhandler "github.com/trakrf/platform/backend/internal/handlers/mustering"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
 	outputdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/outputdevices"
+	readerconfighandler "github.com/trakrf/platform/backend/internal/handlers/readerconfig"
 	readstreamhandler "github.com/trakrf/platform/backend/internal/handlers/readstream"
 	reportshandler "github.com/trakrf/platform/backend/internal/handlers/reports"
 	scandeviceshandler "github.com/trakrf/platform/backend/internal/handlers/scandevices"
@@ -33,6 +34,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/ingest"
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/mustering"
+	"github.com/trakrf/platform/backend/internal/readercontrol"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
 	"github.com/trakrf/platform/backend/internal/services/email"
 	orgsservice "github.com/trakrf/platform/backend/internal/services/orgs"
@@ -128,11 +130,20 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 
 	mqttCfg := ingest.ConfigFromEnv()
 	var alarmDispatcher alarm.Dispatcher
+	// TRA-993: cloud reader-control RPC client. Only constructed when the broker
+	// is configured; nil otherwise so the reader-config endpoints report 503.
+	var readerClient *readercontrol.Client
 	if mqttCfg.Enabled() {
 		// TRA-906: dedicated publish client on the same broker (reuses MQTT_URL).
 		alarmPublisher, stopPublisher := alarm.NewMQTTPublisher(mqttCfg, log)
 		defer stopPublisher()
 		alarmDispatcher = alarm.NewDispatcher(shellyClient, alarmPublisher)
+
+		// TRA-993: dedicated RPC client (own clientID/reply namespace) on the same
+		// broker; drives the on-reader daemon for live get/set config.
+		var stopReaderClient func()
+		readerClient, stopReaderClient = readercontrol.New(mqttCfg, log)
+		defer stopReaderClient()
 
 		// TRA-901/943: geofence engine evaluates the membership-passing reads the
 		// subscriber derives, resolving each read's location to its output devices
@@ -197,6 +208,14 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// 2s test-fire pulse: long enough for an operator to see the strobe, short
 	// enough not to leave the relay latched after a confidence check.
 	outputDevicesHandler := outputdeviceshandler.NewHandler(store, alarmDispatcher, 2*time.Second)
+	// TRA-993: pass a true-nil RPCClient interface when reader control is disabled
+	// so the handler's nil check (→503) fires rather than a non-nil interface
+	// wrapping a nil *Client.
+	var readerRPC readerconfighandler.RPCClient
+	if readerClient != nil {
+		readerRPC = readerClient
+	}
+	readerConfigHandler := readerconfighandler.NewHandler(store, readerRPC)
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), info, startTime)
 	// TRA-924: Live Reads is now served by the org-enforced SSE endpoint, so the
@@ -210,7 +229,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	testHandler := testhandler.NewHandler(store)
 	log.Info().Msg("Handlers initialized")
 
-	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, testHandler, store)
+	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, testHandler, store)
 	log.Info().Msg("Routes registered")
 
 	server := &http.Server{
