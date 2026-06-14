@@ -16,6 +16,11 @@ vi.mock('./SinglePointLocationField', () => ({
     <div data-testid="single-point-field">location:{device.id}</div>
   ),
 }));
+vi.mock('./AntennaPowerPanel', () => ({
+  AntennaPowerPanel: ({ deviceId }: { deviceId: number }) => (
+    <div data-testid="antenna-power-panel">power:{deviceId}</div>
+  ),
+}));
 
 const device = (over: Partial<ScanDevice>): ScanDevice => ({
   id: 10,
@@ -41,9 +46,11 @@ const device = (over: Partial<ScanDevice>): ScanDevice => ({
 describe('ReaderPointsSection', () => {
   afterEach(() => cleanup());
 
-  it('renders the inline antenna list for a multi-point CS463', () => {
+  it('renders the inline antenna list + transmit-power panel for a multi-point CS463', () => {
     render(<ReaderPointsSection device={device({ type: 'csl_cs463', transport: 'mqtt' })} />);
     expect(screen.getByTestId('multi-point-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('antenna-power-panel')).toBeInTheDocument();
+    expect(screen.getByText('Antenna Transmit Power')).toBeInTheDocument();
     expect(screen.queryByTestId('single-point-field')).not.toBeInTheDocument();
   });
 

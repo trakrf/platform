@@ -16,6 +16,9 @@ import type {
   ListScanPointsResponse,
   CreateScanPointRequest,
   UpdateScanPointRequest,
+  ReaderConfigResponse,
+  SetReaderConfigRequest,
+  SetReaderConfigResponse,
 } from '@/types/scandevices';
 
 /**
@@ -90,6 +93,24 @@ export const scanDevicesApi = {
    */
   createPoint: (deviceId: number, data: CreateScanPointRequest) =>
     apiClient.post<ScanPointResponse>(`/scan-devices/${deviceId}/scan-points`, data),
+
+  /**
+   * Get a fixed reader's capabilities + current config via the MQTT-RPC
+   * contract (TRA-993). Can 502/503 when the reader's agent is offline.
+   * GET /api/v1/scan-devices/:id/reader-config
+   */
+  getReaderConfig: (id: number) =>
+    apiClient.get<ReaderConfigResponse>(`/scan-devices/${id}/reader-config`),
+
+  /**
+   * Push a new transmit-power map to a fixed reader (applied on its next
+   * inventory cycle).
+   * PATCH /api/v1/scan-devices/:id/reader-config
+   */
+  setReaderConfig: (id: number, body: SetReaderConfigRequest) =>
+    apiClient.patch<SetReaderConfigResponse>(`/scan-devices/${id}/reader-config`, body, {
+      headers: { 'Content-Type': 'application/json' },
+    }),
 };
 
 /**

@@ -116,3 +116,66 @@ export interface ScanPointResponse {
 export interface ListScanPointsResponse {
   data: ScanPoint[];
 }
+
+/**
+ * Reader configuration via the MQTT-RPC contract (TRA-993).
+ *
+ * The backend brokers a request/response RPC to a fixed reader's agent. The GET
+ * returns both the reader's self-described capabilities (what knobs exist and
+ * their bounds) and its current config; the PATCH pushes a new transmit-power
+ * map and is applied on the reader's next inventory cycle.
+ *
+ * The UI is capabilities-driven: it renders exactly `capabilities.antennas`
+ * sliders bounded by `capabilities.tx_power.{min,max}_dbm`, never inferring
+ * antennas from scan points.
+ */
+export interface ReaderTxPowerCap {
+  min_dbm: number;
+  max_dbm: number;
+  per_antenna: boolean;
+}
+
+export interface ReaderCapabilities {
+  contract_version: string;
+  reader_model: string;
+  antennas: number;
+  tx_power: ReaderTxPowerCap;
+  supports: string[];
+  unsupported: string[];
+}
+
+/** One antenna's transmit power, in dBm. antenna is 1-based. */
+export interface AntennaPower {
+  antenna: number;
+  power: number;
+}
+
+export interface ReaderConfig {
+  tx_power_dbm?: AntennaPower[];
+  region?: string;
+  session?: number;
+  q?: number;
+  target?: number;
+}
+
+export interface ReaderConfigData {
+  capabilities: ReaderCapabilities;
+  config: ReaderConfig;
+}
+
+export interface ReaderConfigResponse {
+  data: ReaderConfigData;
+}
+
+export interface SetReaderConfigRequest {
+  tx_power_dbm: AntennaPower[];
+}
+
+export interface SetReaderConfigResult {
+  applied: string;
+  effective_at?: string;
+}
+
+export interface SetReaderConfigResponse {
+  data: SetReaderConfigResult;
+}
