@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"strconv"
 	"strings"
@@ -44,8 +45,12 @@ func New(baseURL, user, pass string, timeout time.Duration) *Client {
 	if timeout <= 0 {
 		timeout = defaultTimeout
 	}
+	// A cookie jar persists the JSESSIONID set by the web-UI form login (/Login)
+	// across requests, so the servlet write (/OperationProfileDetail) is
+	// authenticated. The /API session_id login is unaffected by the jar.
+	jar, _ := cookiejar.New(nil)
 	return &Client{
-		http:    &http.Client{Timeout: timeout},
+		http:    &http.Client{Timeout: timeout, Jar: jar},
 		baseURL: strings.TrimRight(baseURL, "/"),
 		user:    user,
 		pass:    pass,
@@ -134,6 +139,34 @@ func (c *Client) Login(ctx context.Context) (session, holderIP string, err error
 		return "", "", fmt.Errorf("cs463: login ok but no session_id in %q", ack.Ack)
 	}
 	return session, "", nil
+}
+
+// LoginServlet performs the reader's web-UI form login (POST /Login) so the
+// JSESSIONID cookie is established in the client's cookie jar. The servlet write
+// path (OperationProfileDetail) authenticates via this cookie, NOT via the /API
+// session_id — without it the reader silently returns its login HTML and the
+// write fails (verified on hardware). Must be called before SetProfilePower.
+//
+// The reader replies 302 (redirect) on success and 200 in some firmware; both
+// 2xx and 3xx are treated as success. The cookie jar captures Set-Cookie on the
+// initial response before any redirect is followed, so the JSESSIONID persists.
+func (c *Client) LoginServlet(ctx context.Context) error {
+	form := url.Values{"username": {c.user}, "password": {c.pass}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/Login", strings.NewReader(form.Encode()))
+	if err != nil {
+		return fmt.Errorf("cs463: build form-login request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("cs463: form login to %s: %w", c.baseURL, err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		return fmt.Errorf("cs463: form login returned status %d", resp.StatusCode)
+	}
+	return nil
 }
 
 // ForceLogout clears any held session (root-only command). It is invoked only on

@@ -18,6 +18,7 @@ type readerOps interface {
 	Logout(ctx context.Context, session string) error
 	ForceLogout(ctx context.Context) error
 	GetActiveProfile(ctx context.Context, session string) (Profile, error)
+	LoginServlet(ctx context.Context) error
 	SetProfilePower(ctx context.Context, profileID string, antennaCount int, enabledPorts []int, powers map[int]float64, profileFields map[string]string) error
 	EnableEvent(ctx context.Context, session, eventID string, enable bool) error
 }
@@ -131,6 +132,13 @@ func (a *Adapter) SetConfig(ctx context.Context, cfg readerrpc.ReaderConfig) (re
 	}
 	for _, ap := range cfg.TxPowerDBm {
 		powers[ap.Antenna] = ap.Power
+	}
+
+	// The servlet write authenticates via the web-UI session cookie (JSESSIONID),
+	// not the /API session_id. Establish it via form login before posting, or the
+	// reader returns its login HTML and the write silently fails.
+	if err := a.ops.LoginServlet(ctx); err != nil {
+		return readerrpc.SetConfigResult{}, fmt.Errorf("cs463: servlet form login: %w", err)
 	}
 
 	if err := a.ops.SetProfilePower(ctx, prof.ID, a.cfg.AntennaCount, enabledPorts, powers, prof.Attrs); err != nil {

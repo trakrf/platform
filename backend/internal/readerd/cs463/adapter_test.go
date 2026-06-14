@@ -21,8 +21,9 @@ type fakeOps struct {
 	profiles []Profile // returned in order across GetActiveProfile calls; last repeats
 	profErr  error
 
-	setErr   error
-	enableEr error
+	setErr         error
+	enableEr       error
+	loginServletEr error
 
 	// recorded
 	loggedOut    bool
@@ -34,6 +35,10 @@ type fakeOps struct {
 	setPowers    map[int]float64
 	setFields    map[string]string
 	enableSeq    []bool
+
+	// callOrder records method names in the order they were invoked, used to
+	// assert LoginServlet runs before SetProfilePower.
+	callOrder []string
 }
 
 func (f *fakeOps) Login(ctx context.Context) (session, holderIP string, err error) {
@@ -72,7 +77,13 @@ func (f *fakeOps) GetActiveProfile(ctx context.Context, session string) (Profile
 	return f.profiles[i], nil
 }
 
+func (f *fakeOps) LoginServlet(ctx context.Context) error {
+	f.callOrder = append(f.callOrder, "LoginServlet")
+	return f.loginServletEr
+}
+
 func (f *fakeOps) SetProfilePower(ctx context.Context, profileID string, antennaCount int, enabledPorts []int, powers map[int]float64, profileFields map[string]string) error {
+	f.callOrder = append(f.callOrder, "SetProfilePower")
 	f.setProfileID = profileID
 	f.setAntCount = antennaCount
 	f.setPorts = enabledPorts
@@ -191,6 +202,56 @@ func TestSetConfig_HappyPath(t *testing.T) {
 	}
 	if !f.loggedOut {
 		t.Error("expected logout")
+	}
+}
+
+func TestSetConfig_LoginServletBeforeWrite(t *testing.T) {
+	p := profile("TrakRF", "1,2", map[int]float64{1: 30.0, 2: 22.5, 3: 0.0, 4: 0.0})
+	f := &fakeOps{profiles: []Profile{p, p}}
+	a := newAdapter(f)
+
+	if _, err := a.SetConfig(context.Background(), readerrpc.ReaderConfig{
+		TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 25.0}},
+	}); err != nil {
+		t.Fatalf("SetConfig: %v", err)
+	}
+
+	// LoginServlet must be called, and must precede the servlet write.
+	li, si := -1, -1
+	for i, m := range f.callOrder {
+		if m == "LoginServlet" && li == -1 {
+			li = i
+		}
+		if m == "SetProfilePower" && si == -1 {
+			si = i
+		}
+	}
+	if li == -1 {
+		t.Fatalf("LoginServlet was never called (order=%v)", f.callOrder)
+	}
+	if si == -1 || li >= si {
+		t.Fatalf("LoginServlet must run before SetProfilePower (order=%v)", f.callOrder)
+	}
+}
+
+func TestSetConfig_LoginServletErrorAbortsWrite(t *testing.T) {
+	p := profile("TrakRF", "1,2", map[int]float64{1: 30.0, 2: 22.5, 3: 0.0, 4: 0.0})
+	f := &fakeOps{profiles: []Profile{p, p}, loginServletEr: errors.New("login html")}
+	a := newAdapter(f)
+
+	_, err := a.SetConfig(context.Background(), readerrpc.ReaderConfig{
+		TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 25.0}},
+	})
+	if err == nil {
+		t.Fatal("expected LoginServlet error to abort SetConfig")
+	}
+	if f.setProfileID != "" {
+		t.Error("must NOT write after LoginServlet failure")
+	}
+	for _, m := range f.callOrder {
+		if m == "SetProfilePower" {
+			t.Fatal("SetProfilePower must not be called after LoginServlet error")
+		}
 	}
 }
 

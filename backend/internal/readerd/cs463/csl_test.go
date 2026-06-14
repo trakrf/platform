@@ -187,6 +187,86 @@ func TestLogout_AckParse(t *testing.T) {
 	}
 }
 
+// loginServletFake serves a form-login /Login (302 + Set-Cookie JSESSIONID) and a
+// /OperationProfileDetail handler that records whether the JSESSIONID cookie was
+// presented, proving the cookie jar carries the session across requests.
+type loginServletFake struct {
+	srv          *httptest.Server
+	status       int  // /Login response status
+	setCookie    bool // whether /Login sets JSESSIONID
+	gotLoginForm url.Values
+	servletHadJS bool // OperationProfileDetail saw the JSESSIONID cookie
+}
+
+func newLoginServletFake(status int, setCookie bool) *loginServletFake {
+	f := &loginServletFake{status: status, setCookie: setCookie}
+	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/Login":
+			_ = r.ParseForm()
+			f.gotLoginForm = r.PostForm
+			if f.setCookie {
+				http.SetCookie(w, &http.Cookie{Name: "JSESSIONID", Value: "abc", Path: "/"})
+			}
+			w.WriteHeader(f.status)
+		case "/OperationProfileDetail":
+			if c, err := r.Cookie("JSESSIONID"); err == nil && c.Value == "abc" {
+				f.servletHadJS = true
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("Successful!"))
+		default:
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	return f
+}
+
+func (f *loginServletFake) close() { f.srv.Close() }
+
+func TestLoginServlet_SetsCookieAndCarriesIt(t *testing.T) {
+	f := newLoginServletFake(http.StatusFound, true) // 302 + Set-Cookie
+	defer f.close()
+
+	c := New(f.srv.URL, "root", "pw", 0)
+	if err := c.LoginServlet(context.Background()); err != nil {
+		t.Fatalf("LoginServlet: %v", err)
+	}
+	// form-login posts username/password
+	if got := f.gotLoginForm.Get("username"); got != "root" {
+		t.Fatalf("username = %q, want root", got)
+	}
+	if got := f.gotLoginForm.Get("password"); got != "pw" {
+		t.Fatalf("password = %q, want pw", got)
+	}
+
+	// A subsequent request from the SAME client must carry JSESSIONID.
+	err := c.SetProfilePower(context.Background(), "TrakRF", 4,
+		[]int{1}, map[int]float64{1: 30, 2: 30, 3: 30, 4: 30}, sampleProfileFields())
+	if err != nil {
+		t.Fatalf("SetProfilePower after LoginServlet: %v", err)
+	}
+	if !f.servletHadJS {
+		t.Fatal("OperationProfileDetail did not receive JSESSIONID cookie — jar not shared")
+	}
+}
+
+func TestLoginServlet_2xxOK(t *testing.T) {
+	f := newLoginServletFake(http.StatusOK, true) // 200
+	defer f.close()
+	if err := New(f.srv.URL, "root", "pw", 0).LoginServlet(context.Background()); err != nil {
+		t.Fatalf("LoginServlet (200): %v", err)
+	}
+}
+
+func TestLoginServlet_ErrorOnNon2xx3xx(t *testing.T) {
+	f := newLoginServletFake(http.StatusUnauthorized, false) // 401
+	defer f.close()
+	if err := New(f.srv.URL, "root", "pw", 0).LoginServlet(context.Background()); err == nil {
+		t.Fatal("expected error on 401 form login")
+	}
+}
+
 func TestParseSessionID(t *testing.T) {
 	if got := parseSessionID("OK: session_id=42add4cd"); got != "42add4cd" {
 		t.Fatalf("parseSessionID = %q", got)
