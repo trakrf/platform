@@ -16,6 +16,11 @@ vi.mock('./SinglePointLocationField', () => ({
     <div data-testid="single-point-field">location:{device.id}</div>
   ),
 }));
+vi.mock('./AntennaPowerPanel', () => ({
+  AntennaPowerPanel: ({ deviceId }: { deviceId: number }) => (
+    <div data-testid="antenna-power-panel">power:{deviceId}</div>
+  ),
+}));
 
 const device = (over: Partial<ScanDevice>): ScanDevice => ({
   id: 10,

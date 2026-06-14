@@ -9,6 +9,7 @@
 
 import { ScanPointsPanel } from './ScanPointsPanel';
 import { SinglePointLocationField } from './SinglePointLocationField';
+import { AntennaPowerPanel } from './AntennaPowerPanel';
 import { deviceProfile } from '@/lib/scandevices/deviceProfile';
 import type { ScanDevice } from '@/types/scandevices';
 
@@ -20,7 +21,18 @@ export function ReaderPointsSection({ device }: ReaderPointsSectionProps) {
   const profile = deviceProfile(device);
 
   if (profile === 'multi_point') {
-    return <ScanPointsPanel deviceId={device.id} />;
+    // CS463: antenna list + per-antenna transmit-power tuning (TRA-993).
+    return (
+      <div className="space-y-8">
+        <ScanPointsPanel deviceId={device.id} />
+        <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
+          <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-4">
+            Antenna Transmit Power
+          </h4>
+          <AntennaPowerPanel deviceId={device.id} />
+        </div>
+      </div>
+    );
   }
 
   if (profile === 'single_point') {

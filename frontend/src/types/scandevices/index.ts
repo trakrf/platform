@@ -116,3 +116,32 @@ export interface ScanPointResponse {
 export interface ListScanPointsResponse {
   data: ScanPoint[];
 }
+
+/**
+ * Per-antenna transmit power (TRA-993). Matches the internal
+ * /api/v1/scan-devices/:id/antenna-power endpoints (CS463 only). power_dbm is
+ * the last-known/confirmed value; status reflects the last command outcome
+ * (pending | ok | busy | error).
+ */
+export interface AntennaPower {
+  antenna_port: number;
+  power_dbm: number | null;
+  status?: string;
+  active_profile?: string;
+  updated_at?: string;
+}
+
+export interface AntennaPowerResponse {
+  data: AntennaPower[];
+}
+
+/** Set request: maps antenna port ("1".."16") to dBm. force confirms a takeover. */
+export interface SetAntennaPowerRequest {
+  powers: Record<string, number>;
+  force?: boolean;
+}
+
+export interface SetAntennaPowerResponse {
+  status: string;
+  request_id: string;
+}

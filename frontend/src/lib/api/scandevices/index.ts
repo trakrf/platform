@@ -16,6 +16,9 @@ import type {
   ListScanPointsResponse,
   CreateScanPointRequest,
   UpdateScanPointRequest,
+  AntennaPowerResponse,
+  SetAntennaPowerRequest,
+  SetAntennaPowerResponse,
 } from '@/types/scandevices';
 
 /**
@@ -90,6 +93,20 @@ export const scanDevicesApi = {
    */
   createPoint: (deviceId: number, data: CreateScanPointRequest) =>
     apiClient.post<ScanPointResponse>(`/scan-devices/${deviceId}/scan-points`, data),
+
+  /**
+   * Get last-known per-antenna transmit power (TRA-993).
+   * GET /api/v1/scan-devices/:id/antenna-power
+   */
+  getAntennaPower: (deviceId: number) =>
+    apiClient.get<AntennaPowerResponse>(`/scan-devices/${deviceId}/antenna-power`),
+
+  /**
+   * Set per-antenna transmit power (publishes an MQTT command to the agent).
+   * POST /api/v1/scan-devices/:id/antenna-power
+   */
+  setAntennaPower: (deviceId: number, data: SetAntennaPowerRequest) =>
+    apiClient.post<SetAntennaPowerResponse>(`/scan-devices/${deviceId}/antenna-power`, data),
 };
 
 /**
