@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/trakrf/platform/backend/internal/readerd"
 	"github.com/trakrf/platform/backend/internal/readerrpc"
 )
 
@@ -40,12 +39,11 @@ type Adapter struct {
 	cfg AdapterConfig
 }
 
-// Compile-time assertions: the transport Client satisfies readerOps, and
-// *Adapter satisfies the reader-agnostic readerd.Adapter.
-var (
-	_ readerOps       = (*Client)(nil)
-	_ readerd.Adapter = (*Adapter)(nil)
-)
+// Compile-time assertion: the transport Client satisfies readerOps. (That
+// *Adapter satisfies readerd.Adapter is asserted in package readerd, where the
+// daemon consumes it — asserting it here would import readerd and create a cycle
+// once the daemon imports this package.)
+var _ readerOps = (*Client)(nil)
 
 // NewAdapter builds a CS463 adapter over the given reader operations.
 func NewAdapter(ops readerOps, cfg AdapterConfig) *Adapter {
