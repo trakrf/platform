@@ -19,6 +19,7 @@ type readerOps interface {
 	ForceLogout(ctx context.Context) error
 	GetActiveProfile(ctx context.Context, session string) (Profile, error)
 	LoginServlet(ctx context.Context) error
+	LogoutServlet(ctx context.Context) error
 	SetProfilePower(ctx context.Context, profileID string, antennaCount int, enabledPorts []int, powers map[int]float64, profileFields map[string]string) error
 	EnableEvent(ctx context.Context, session, eventID string, enable bool) error
 }
@@ -109,6 +110,15 @@ func (a *Adapter) SetConfig(ctx context.Context, cfg readerrpc.ReaderConfig) (re
 		}
 	}
 
+	// The CS463 permits only ONE root login at a time, and the /API session_id and
+	// the web-UI (JSESSIONID cookie) session BOTH consume that single slot. The
+	// servlet write authenticates via the cookie, NOT the /API session, and an
+	// /API session being held blocks the form login. So the three phases below are
+	// strictly sequenced and each releases its session before the next phase opens
+	// one. Do NOT introduce a function-level `defer Logout` that holds the /API
+	// session across the Phase B form login (that is the bug this fixes).
+
+	// --- Phase A: read the active profile via /API, then release the slot. ---
 	session, holderIP, err := a.ops.Login(ctx)
 	if err != nil {
 		return readerrpc.SetConfigResult{}, err
@@ -116,12 +126,14 @@ func (a *Adapter) SetConfig(ctx context.Context, cfg readerrpc.ReaderConfig) (re
 	if session == "" {
 		return readerrpc.SetConfigResult{}, busyErr(holderIP)
 	}
-	defer func() { _ = a.ops.Logout(ctx, session) }()
 
 	prof, err := a.ops.GetActiveProfile(ctx, session)
 	if err != nil {
+		_ = a.ops.Logout(ctx, session)
 		return readerrpc.SetConfigResult{}, err
 	}
+	// Release the /API session BEFORE the form login (single-session lock).
+	_ = a.ops.Logout(ctx, session)
 
 	enabledPorts := parseAntennaPorts(prof.Attrs["antenna_port"])
 
@@ -134,22 +146,34 @@ func (a *Adapter) SetConfig(ctx context.Context, cfg readerrpc.ReaderConfig) (re
 		powers[ap.Antenna] = ap.Power
 	}
 
-	// The servlet write authenticates via the web-UI session cookie (JSESSIONID),
-	// not the /API session_id. Establish it via form login before posting, or the
-	// reader returns its login HTML and the write silently fails.
+	// --- Phase B: write the profile via the web servlet (cookie auth), then
+	// release the web session so the Phase C /API login can take the slot. ---
 	if err := a.ops.LoginServlet(ctx); err != nil {
 		return readerrpc.SetConfigResult{}, fmt.Errorf("cs463: servlet form login: %w", err)
 	}
-
 	if err := a.ops.SetProfilePower(ctx, prof.ID, a.cfg.AntennaCount, enabledPorts, powers, prof.Attrs); err != nil {
+		_ = a.ops.LogoutServlet(ctx)
 		return readerrpc.SetConfigResult{}, err
+	}
+	// Release the web session BEFORE the second /API login (single-session lock).
+	_ = a.ops.LogoutServlet(ctx)
+
+	// --- Phase C: re-arm the inventory event and verify the write via /API. ---
+	session, holderIP, err = a.ops.Login(ctx)
+	if err != nil {
+		return readerrpc.SetConfigResult{}, err
+	}
+	if session == "" {
+		return readerrpc.SetConfigResult{}, busyErr(holderIP)
 	}
 
 	// Re-arm the inventory event so reading resumes on the new profile.
 	if err := a.ops.EnableEvent(ctx, session, a.cfg.EventID, false); err != nil {
+		_ = a.ops.Logout(ctx, session)
 		return readerrpc.SetConfigResult{}, fmt.Errorf("cs463: re-arm disable: %w", err)
 	}
 	if err := a.ops.EnableEvent(ctx, session, a.cfg.EventID, true); err != nil {
+		_ = a.ops.Logout(ctx, session)
 		return readerrpc.SetConfigResult{}, fmt.Errorf("cs463: re-arm enable: %w", err)
 	}
 
@@ -158,8 +182,11 @@ func (a *Adapter) SetConfig(ctx context.Context, cfg readerrpc.ReaderConfig) (re
 	// the enabled set changed.
 	after, err := a.ops.GetActiveProfile(ctx, session)
 	if err != nil {
+		_ = a.ops.Logout(ctx, session)
 		return readerrpc.SetConfigResult{}, fmt.Errorf("cs463: verify re-read: %w", err)
 	}
+	_ = a.ops.Logout(ctx, session)
+
 	if after.Attrs["antenna_port"] != prof.Attrs["antenna_port"] {
 		return readerrpc.SetConfigResult{}, fmt.Errorf(
 			"cs463: antenna enablement changed after write (was %q, now %q) — refusing to report success",

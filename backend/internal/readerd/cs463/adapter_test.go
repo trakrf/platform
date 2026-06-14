@@ -42,6 +42,7 @@ type fakeOps struct {
 }
 
 func (f *fakeOps) Login(ctx context.Context) (session, holderIP string, err error) {
+	f.callOrder = append(f.callOrder, "Login")
 	if f.loginErr != nil {
 		return "", "", f.loginErr
 	}
@@ -56,6 +57,7 @@ func (f *fakeOps) Login(ctx context.Context) (session, holderIP string, err erro
 }
 
 func (f *fakeOps) Logout(ctx context.Context, session string) error {
+	f.callOrder = append(f.callOrder, "Logout")
 	f.loggedOut = true
 	return nil
 }
@@ -66,6 +68,7 @@ func (f *fakeOps) ForceLogout(ctx context.Context) error {
 }
 
 func (f *fakeOps) GetActiveProfile(ctx context.Context, session string) (Profile, error) {
+	f.callOrder = append(f.callOrder, "GetActiveProfile")
 	if f.profErr != nil {
 		return Profile{}, f.profErr
 	}
@@ -82,6 +85,11 @@ func (f *fakeOps) LoginServlet(ctx context.Context) error {
 	return f.loginServletEr
 }
 
+func (f *fakeOps) LogoutServlet(ctx context.Context) error {
+	f.callOrder = append(f.callOrder, "LogoutServlet")
+	return nil
+}
+
 func (f *fakeOps) SetProfilePower(ctx context.Context, profileID string, antennaCount int, enabledPorts []int, powers map[int]float64, profileFields map[string]string) error {
 	f.callOrder = append(f.callOrder, "SetProfilePower")
 	f.setProfileID = profileID
@@ -93,6 +101,11 @@ func (f *fakeOps) SetProfilePower(ctx context.Context, profileID string, antenna
 }
 
 func (f *fakeOps) EnableEvent(ctx context.Context, session, eventID string, enable bool) error {
+	if enable {
+		f.callOrder = append(f.callOrder, "EnableEvent(true)")
+	} else {
+		f.callOrder = append(f.callOrder, "EnableEvent(false)")
+	}
 	f.enableSeq = append(f.enableSeq, enable)
 	return f.enableEr
 }
@@ -231,6 +244,37 @@ func TestSetConfig_LoginServletBeforeWrite(t *testing.T) {
 	}
 	if si == -1 || li >= si {
 		t.Fatalf("LoginServlet must run before SetProfilePower (order=%v)", f.callOrder)
+	}
+}
+
+func TestSetConfig_PhaseSequencingReleasesSessions(t *testing.T) {
+	// The CS463 single-session lock requires: /API session released BEFORE the
+	// servlet form login, and the web session released BEFORE the 2nd /API login.
+	p := profile("TrakRF", "1,2", map[int]float64{1: 30.0, 2: 22.5, 3: 0.0, 4: 0.0})
+	f := &fakeOps{profiles: []Profile{p, p}}
+	a := newAdapter(f)
+
+	if _, err := a.SetConfig(context.Background(), readerrpc.ReaderConfig{
+		TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 25.0}},
+	}); err != nil {
+		t.Fatalf("SetConfig: %v", err)
+	}
+
+	want := []string{
+		"Login",            // Phase A: read via /API
+		"GetActiveProfile", // Phase A
+		"Logout",           // Phase A: release /API session BEFORE form login
+		"LoginServlet",     // Phase B: web/cookie auth
+		"SetProfilePower",  // Phase B: write
+		"LogoutServlet",    // Phase B: release web session BEFORE 2nd /API login
+		"Login",            // Phase C: re-arm + verify via /API
+		"EnableEvent(false)",
+		"EnableEvent(true)",
+		"GetActiveProfile", // Phase C: verify re-read
+		"Logout",           // Phase C: release /API session
+	}
+	if !reflect.DeepEqual(f.callOrder, want) {
+		t.Errorf("call order mismatch\n got: %v\nwant: %v", f.callOrder, want)
 	}
 }
 

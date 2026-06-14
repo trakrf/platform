@@ -169,6 +169,29 @@ func (c *Client) LoginServlet(ctx context.Context) error {
 	return nil
 }
 
+// LogoutServlet ends the web-UI session by issuing GET /Logout, which carries the
+// JSESSIONID cookie via the client's cookie jar. The CS463 allows only one root
+// login at a time and the web (cookie) session occupies that single slot just as
+// the /API session_id does; releasing the web session here frees the slot so a
+// subsequent /API login can succeed (verified on hardware). Best-effort: the
+// reader replies 200 or a redirect; both 2xx and 3xx are treated as success.
+func (c *Client) LogoutServlet(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/Logout", nil)
+	if err != nil {
+		return fmt.Errorf("cs463: build servlet-logout request: %w", err)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("cs463: servlet logout to %s: %w", c.baseURL, err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		return fmt.Errorf("cs463: servlet logout returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // ForceLogout clears any held session (root-only command). It is invoked only on
 // an operator-confirmed force.
 func (c *Client) ForceLogout(ctx context.Context) error {

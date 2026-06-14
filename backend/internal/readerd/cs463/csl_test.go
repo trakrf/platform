@@ -267,6 +267,65 @@ func TestLoginServlet_ErrorOnNon2xx3xx(t *testing.T) {
 	}
 }
 
+// logoutServletFake serves a GET /Logout and records the cookie presented, so a
+// test can confirm LogoutServlet ends the web session via the jar-carried cookie.
+type logoutServletFake struct {
+	srv          *httptest.Server
+	status       int    // /Logout response status
+	gotLogout    bool   // /Logout was hit
+	logoutMethod string // method used on /Logout
+}
+
+func newLogoutServletFake(status int) *logoutServletFake {
+	f := &logoutServletFake{status: status}
+	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/Login":
+			http.SetCookie(w, &http.Cookie{Name: "JSESSIONID", Value: "abc", Path: "/"})
+			w.WriteHeader(http.StatusOK)
+		case "/Logout":
+			f.gotLogout = true
+			f.logoutMethod = r.Method
+			w.WriteHeader(f.status)
+		default:
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	return f
+}
+
+func (f *logoutServletFake) close() { f.srv.Close() }
+
+func TestLogoutServlet_GET2xx(t *testing.T) {
+	f := newLogoutServletFake(http.StatusOK)
+	defer f.close()
+	if err := New(f.srv.URL, "root", "pw", 0).LogoutServlet(context.Background()); err != nil {
+		t.Fatalf("LogoutServlet (200): %v", err)
+	}
+	if !f.gotLogout {
+		t.Fatal("GET /Logout was never issued")
+	}
+	if f.logoutMethod != http.MethodGet {
+		t.Fatalf("Logout method = %q, want GET", f.logoutMethod)
+	}
+}
+
+func TestLogoutServlet_3xxOK(t *testing.T) {
+	f := newLogoutServletFake(http.StatusFound) // 302
+	defer f.close()
+	if err := New(f.srv.URL, "root", "pw", 0).LogoutServlet(context.Background()); err != nil {
+		t.Fatalf("LogoutServlet (302): %v", err)
+	}
+}
+
+func TestLogoutServlet_ErrorOn4xx(t *testing.T) {
+	f := newLogoutServletFake(http.StatusInternalServerError) // 500
+	defer f.close()
+	if err := New(f.srv.URL, "root", "pw", 0).LogoutServlet(context.Background()); err == nil {
+		t.Fatal("expected error on 500 logout")
+	}
+}
+
 func TestParseSessionID(t *testing.T) {
 	if got := parseSessionID("OK: session_id=42add4cd"); got != "42add4cd" {
 		t.Fatalf("parseSessionID = %q", got)
