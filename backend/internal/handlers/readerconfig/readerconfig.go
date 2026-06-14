@@ -25,11 +25,13 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
-// Transmit-power bounds (dBm) accepted on a SetConfig. The reader enforces its
-// own per-model cap; this is a sanity guard against obviously-bad input.
+// Transmit-power bounds (dBm) accepted on a SetConfig — the CS463's operational
+// range (Indy RS2000: 10.0–31.5 dBm in 0.5 dB steps). Below ~10 dBm the read zone
+// is a few inches (meaningless); 31.5 is the module max. The daemon's capabilities
+// report the same range; the reader also enforces its own cap.
 const (
-	minTxPowerDBm = 0.0
-	maxTxPowerDBm = 32.0
+	minTxPowerDBm = 10.0
+	maxTxPowerDBm = 31.5
 )
 
 // RPCClient is the seam to the reader RPC transport. *readercontrol.Client
@@ -75,7 +77,7 @@ func baseTopicForDevice(d *scandevice.ScanDevice) string {
 func validateTxPower(cfg readerrpc.ReaderConfig) string {
 	for _, ap := range cfg.TxPowerDBm {
 		if ap.Power < minTxPowerDBm || ap.Power > maxTxPowerDBm {
-			return "tx_power_dbm must be between 0 and 32 dBm"
+			return "tx_power_dbm must be between 10 and 31.5 dBm"
 		}
 	}
 	return ""

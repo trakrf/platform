@@ -134,7 +134,7 @@ func TestGetCapabilities(t *testing.T) {
 	if caps.Antennas != 4 {
 		t.Errorf("antennas = %d, want 4", caps.Antennas)
 	}
-	if caps.TxPower.MinDBm != 0.0 || caps.TxPower.MaxDBm != 32.0 || !caps.TxPower.PerAntenna {
+	if caps.TxPower.MinDBm != 10.0 || caps.TxPower.MaxDBm != 31.5 || !caps.TxPower.PerAntenna {
 		t.Errorf("tx power cap = %+v", caps.TxPower)
 	}
 	wantSupports := []string{

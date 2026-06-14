@@ -40,9 +40,10 @@ func TestValidateTxPower(t *testing.T) {
 	}{
 		{"empty config ok", readerrpc.ReaderConfig{}, false},
 		{"in range", readerrpc.ReaderConfig{TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 22.5}}}, false},
-		{"min edge", readerrpc.ReaderConfig{TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 0}}}, false},
-		{"max edge", readerrpc.ReaderConfig{TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 32}}}, false},
-		{"over max", readerrpc.ReaderConfig{TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 32.5}}}, true},
+		{"min edge", readerrpc.ReaderConfig{TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 10}}}, false},
+		{"max edge", readerrpc.ReaderConfig{TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 31.5}}}, false},
+		{"under min", readerrpc.ReaderConfig{TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 5}}}, true},
+		{"over max", readerrpc.ReaderConfig{TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 32}}}, true},
 		{"negative", readerrpc.ReaderConfig{TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 2, Power: -1}}}, true},
 		{"one bad among many", readerrpc.ReaderConfig{TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 20}, {Antenna: 2, Power: 99}}}, true},
 	}

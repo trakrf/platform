@@ -23,12 +23,16 @@ import (
 
 const defaultTimeout = 8 * time.Second
 
-// MinPowerDBm / MaxPowerDBm are the reader's hardware limits (doc: 0.0–32.0 dBm,
-// step 0.1). The client exposes the hardware bound so the write path (separate
-// task) and callers can clamp against the radio spec.
+// MinPowerDBm / MaxPowerDBm are the CS463's OPERATIONAL transmit-power range:
+// 10.0–31.5 dBm in 0.5 dB steps. The reader is Indy RS2000-based — the module
+// tops out at 31.5 dBm conducted, and below ~10 dBm the PA chain is uncalibrated
+// and the read zone collapses to a few inches (operationally meaningless). The
+// firmware's HTTP API will technically accept 0.0–32.0 (its raw field range), but
+// that is not the usable/calibrated envelope, so capabilities and the write guard
+// use the operational range. CSL further derates to ~30 dBm at the connector.
 const (
-	MinPowerDBm = 0.0
-	MaxPowerDBm = 32.0
+	MinPowerDBm = 10.0
+	MaxPowerDBm = 31.5
 )
 
 // Client talks to one reader's HTTP API.
