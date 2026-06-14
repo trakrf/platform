@@ -267,11 +267,11 @@ func TestSetConfig_PhaseSequencingReleasesSessions(t *testing.T) {
 		"LoginServlet",     // Phase B: web/cookie auth
 		"SetProfilePower",  // Phase B: write
 		"LogoutServlet",    // Phase B: release web session BEFORE 2nd /API login
-		"Login",            // Phase C: re-arm + verify via /API
+		"Login",            // Phase C: verify + re-arm via /API
+		"GetActiveProfile", // Phase C: verify re-read BEFORE re-arm (profile still active)
 		"EnableEvent(false)",
 		"EnableEvent(true)",
-		"GetActiveProfile", // Phase C: verify re-read
-		"Logout",           // Phase C: release /API session
+		"Logout", // Phase C: release /API session
 	}
 	if !reflect.DeepEqual(f.callOrder, want) {
 		t.Errorf("call order mismatch\n got: %v\nwant: %v", f.callOrder, want)

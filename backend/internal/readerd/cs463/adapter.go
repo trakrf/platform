@@ -158,13 +158,30 @@ func (a *Adapter) SetConfig(ctx context.Context, cfg readerrpc.ReaderConfig) (re
 	// Release the web session BEFORE the second /API login (single-session lock).
 	_ = a.ops.LogoutServlet(ctx)
 
-	// --- Phase C: re-arm the inventory event and verify the write via /API. ---
+	// --- Phase C: verify the write, then re-arm the inventory event, via /API. ---
 	session, holderIP, err = a.ops.Login(ctx)
 	if err != nil {
 		return readerrpc.SetConfigResult{}, err
 	}
 	if session == "" {
 		return readerrpc.SetConfigResult{}, busyErr(holderIP)
+	}
+
+	// Verify the write did not wipe antenna enablement (#494 guard) BEFORE the
+	// re-arm: the servlet can silently clear antenna_port, and we must read while
+	// the profile is still active — the event re-arm briefly de-activates it during
+	// the inventory reload (a post-re-arm read races that window and finds no
+	// active profile).
+	after, err := a.ops.GetActiveProfile(ctx, session)
+	if err != nil {
+		_ = a.ops.Logout(ctx, session)
+		return readerrpc.SetConfigResult{}, fmt.Errorf("cs463: verify re-read: %w", err)
+	}
+	if after.Attrs["antenna_port"] != prof.Attrs["antenna_port"] {
+		_ = a.ops.Logout(ctx, session)
+		return readerrpc.SetConfigResult{}, fmt.Errorf(
+			"cs463: antenna enablement changed after write (was %q, now %q) — refusing to report success",
+			prof.Attrs["antenna_port"], after.Attrs["antenna_port"])
 	}
 
 	// Re-arm the inventory event so reading resumes on the new profile.
@@ -176,22 +193,7 @@ func (a *Adapter) SetConfig(ctx context.Context, cfg readerrpc.ReaderConfig) (re
 		_ = a.ops.Logout(ctx, session)
 		return readerrpc.SetConfigResult{}, fmt.Errorf("cs463: re-arm enable: %w", err)
 	}
-
-	// Verify the write did not wipe antenna enablement (#494 guard): the servlet
-	// can silently clear antenna_port. Re-read and refuse to report success if
-	// the enabled set changed.
-	after, err := a.ops.GetActiveProfile(ctx, session)
-	if err != nil {
-		_ = a.ops.Logout(ctx, session)
-		return readerrpc.SetConfigResult{}, fmt.Errorf("cs463: verify re-read: %w", err)
-	}
 	_ = a.ops.Logout(ctx, session)
-
-	if after.Attrs["antenna_port"] != prof.Attrs["antenna_port"] {
-		return readerrpc.SetConfigResult{}, fmt.Errorf(
-			"cs463: antenna enablement changed after write (was %q, now %q) — refusing to report success",
-			prof.Attrs["antenna_port"], after.Attrs["antenna_port"])
-	}
 
 	return readerrpc.SetConfigResult{
 		Applied:     readerrpc.AppliedPendingReload,
