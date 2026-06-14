@@ -87,7 +87,9 @@ func (c *Client) SetProfilePower(ctx context.Context, profileID string, antennaC
 				pw = defaultPowerDBm
 			}
 		}
-		form.Add("transmitpower[]", strconv.FormatFloat(pw, 'f', -1, 64))
+		// One decimal place to match the reader's own wire format (captured live:
+		// transmitpower[]=30.0), avoiding any servlet-side numeric-format quirk.
+		form.Add("transmitpower[]", strconv.FormatFloat(pw, 'f', 1, 64))
 
 		dwell := defaultDwellMs
 		if v, dok := profileFields["dwellTime"+strconv.Itoa(port)]; dok && v != "" {

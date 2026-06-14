@@ -136,7 +136,7 @@ func TestSetProfilePower_BuildsServletBody(t *testing.T) {
 	if len(tp) != 4 {
 		t.Fatalf("transmitpower[] count = %d, want 4 (%v)", len(tp), tp)
 	}
-	wantPow := []string{"22.5", "30", "30", "30"}
+	wantPow := []string{"22.5", "30.0", "30.0", "30.0"}
 	for i, w := range wantPow {
 		if tp[i] != w {
 			t.Fatalf("transmitpower[%d] = %q, want %q (full: %v)", i, tp[i], w, tp)
@@ -247,11 +247,11 @@ func TestSetProfilePower_MissingPowerFallsBack(t *testing.T) {
 	if len(tp) != 4 {
 		t.Fatalf("transmitpower[] count = %d, want 4 (%v)", len(tp), tp)
 	}
-	if tp[0] != "22.5" || tp[1] != "30" {
-		t.Fatalf("transmitpower[] first two = %v, want [22.5 30]", tp[:2])
+	if tp[0] != "22.5" || tp[1] != "30.0" {
+		t.Fatalf("transmitpower[] first two = %v, want [22.5 30.0]", tp[:2])
 	}
 	// ports 3,4 default to 30.0
-	if tp[2] != "30" || tp[3] != "30" {
-		t.Fatalf("transmitpower[] fallback = %v, want [30 30] for ports 3,4", tp[2:])
+	if tp[2] != "30.0" || tp[3] != "30.0" {
+		t.Fatalf("transmitpower[] fallback = %v, want [30.0 30.0] for ports 3,4", tp[2:])
 	}
 }
