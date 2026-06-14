@@ -1,0 +1,17 @@
+[Unit]
+Description=TrakRF reader-control daemon (CS463 MQTT-RPC)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Single static binary; `readerd` subcommand runs the on-reader MQTT-RPC daemon.
+ExecStart=/opt/trakrf/server readerd
+# Leading `-` makes the env file optional: if absent, systemd does not fail.
+# READER_API_PASS (and any overrides) live here. See readerd.env.example.
+EnvironmentFile=-/opt/trakrf/readerd.env
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
