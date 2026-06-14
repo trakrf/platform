@@ -29,6 +29,7 @@ import (
 
 	"github.com/trakrf/platform/backend/internal/buildinfo"
 	"github.com/trakrf/platform/backend/internal/cmd/migrate"
+	"github.com/trakrf/platform/backend/internal/cmd/poweragent"
 	"github.com/trakrf/platform/backend/internal/cmd/serve"
 	"github.com/trakrf/platform/backend/internal/logger"
 )
@@ -57,11 +58,12 @@ const (
 	// this default matters for local docker / ad-hoc runs.
 	cmdServe command = iota
 	cmdMigrate
+	cmdPowerAgent
 	cmdHelp
 	cmdUnknown
 )
 
-const usage = "usage: server [serve|migrate]"
+const usage = "usage: server [serve|migrate|poweragent]"
 
 func parseCommand(args []string) (command, error) {
 	if len(args) == 0 {
@@ -75,6 +77,8 @@ func parseCommand(args []string) (command, error) {
 		return cmdServe, nil
 	case "migrate":
 		return cmdMigrate, nil
+	case "poweragent":
+		return cmdPowerAgent, nil
 	case "-h", "--help":
 		return cmdHelp, nil
 	default:
@@ -121,6 +125,8 @@ func run(ctx context.Context, cmd command, info buildinfo.Info) error {
 	switch cmd {
 	case cmdMigrate:
 		return migrate.Run(ctx, info)
+	case cmdPowerAgent:
+		return poweragent.Run(ctx, info)
 	case cmdServe:
 		return serve.Run(ctx, info, frontendFS)
 	}
