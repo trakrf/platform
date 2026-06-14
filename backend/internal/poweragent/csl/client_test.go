@@ -188,9 +188,9 @@ func TestSetProfile_OmitsUnknownAttrs(t *testing.T) {
 		Attrs: map[string]string{
 			"profile_id":     "P",
 			"transmitPower1": "20.0",
-			"active":         "true",          // read-only, must NOT be forwarded
-			"antennaPort":    "12",            // read-only concatenated form, must NOT be forwarded
-			"bogusAttr":      "x",             // unknown, must NOT be forwarded
+			"active":         "true", // read-only, must NOT be forwarded
+			"antennaPort":    "12",   // read-only concatenated form, must NOT be forwarded
+			"bogusAttr":      "x",    // unknown, must NOT be forwarded
 		},
 	}
 	if err := c.SetProfile(context.Background(), "s", prof); err != nil {

@@ -13,10 +13,10 @@ import (
 )
 
 type fakeApplier struct {
-	res        csl.Result
-	err        error
-	gotPowers  map[int]float64
-	gotForce   bool
+	res       csl.Result
+	err       error
+	gotPowers map[int]float64
+	gotForce  bool
 }
 
 func (f *fakeApplier) Apply(_ context.Context, powers map[int]float64, force bool) (csl.Result, error) {

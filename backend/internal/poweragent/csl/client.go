@@ -86,9 +86,9 @@ type Profile struct {
 
 // Result is the outcome of an Apply call.
 type Result struct {
-	Busy          bool           // reader had another session and force was not requested
-	HolderIP      string         // who held the session (when Busy)
-	ActiveProfile string         // profile_id that was edited / read
+	Busy          bool            // reader had another session and force was not requested
+	HolderIP      string          // who held the session (when Busy)
+	ActiveProfile string          // profile_id that was edited / read
 	Powers        map[int]float64 // resulting per-port powers
 }
 
