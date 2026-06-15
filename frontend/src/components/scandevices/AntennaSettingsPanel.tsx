@@ -29,7 +29,7 @@ function locationLabel(l: Location): string {
 
 export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
   const { capabilities, config, isLoading, error } = useReaderConfig(deviceId);
-  const { setConfig } = useSetReaderConfig(deviceId);
+  const { setConfig, isSetting } = useSetReaderConfig(deviceId);
   const { scanPoints } = useScanPoints(deviceId);
   const { create, update } = useScanPointMutations(deviceId);
   const { locations } = useLocations();
@@ -59,6 +59,8 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
     });
   }, [capabilities, config]);
 
+  // valuesRef solves value-staleness for the debounced flush; capabilities is
+  // stable for the edit-session lifetime, so closing over it here is safe.
   const flush = () => {
     if (!capabilities) return;
     const tx_power_dbm = Array.from({ length: capabilities.antennas }, (_, i) => {
@@ -87,6 +89,7 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
   // --- scan_point join (by antenna_port) + lazy create/update --------------
   const pointByPort = useMemo(() => {
     const m = new Map<number, (typeof scanPoints)[number]>();
+    // First scan_point wins per antenna_port (the fixed-N model assumes ≤1).
     for (const sp of scanPoints) {
       if (sp.antenna_port != null && !m.has(sp.antenna_port)) m.set(sp.antenna_port, sp);
     }
@@ -173,7 +176,7 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
         </p>
       )}
       <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-        Changes apply after a short pause.
+        Changes apply after a short pause.{isSetting ? ' Sending…' : ''}
       </p>
     </div>
   );
