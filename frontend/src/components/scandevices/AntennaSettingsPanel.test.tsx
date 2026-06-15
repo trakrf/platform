@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import { AntennaSettingsPanel } from './AntennaSettingsPanel';
 import {
   useReaderConfig,
@@ -145,5 +145,48 @@ describe('AntennaSettingsPanel', () => {
     expect(screen.getByLabelText(/enable antenna 2/i)).not.toBeChecked();
     // locationLabel() renders "Receiving (receiving)" when name !== external_key.
     expect(screen.getByText(/Receiving/)).toBeInTheDocument();
+  });
+
+  it('debounces a slider change ~2s then pushes the full tx_power_dbm map', async () => {
+    vi.useFakeTimers();
+    readerState.capabilities = caps({ antennas: 2 });
+    readerState.config = {
+      tx_power_dbm: [{ antenna: 1, power: 20 }, { antenna: 2, power: 25 }],
+    };
+    setup({});
+    render(<AntennaSettingsPanel deviceId={10} />);
+
+    fireEvent.change(screen.getAllByRole('slider')[0], { target: { value: '15' } });
+    expect(setConfig).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+
+    expect(setConfig).toHaveBeenCalledTimes(1);
+    expect(setConfig.mock.calls[0][0]).toEqual({
+      tx_power_dbm: [
+        { antenna: 1, power: 15 },
+        { antenna: 2, power: 25 },
+      ],
+    });
+    vi.useRealTimers();
+  });
+
+  it('shows the pending_reload note after a successful push', async () => {
+    readerState.capabilities = caps({ antennas: 1 });
+    readerState.config = { tx_power_dbm: [{ antenna: 1, power: 20 }] };
+    setup({});
+    render(<AntennaSettingsPanel deviceId={10} />);
+
+    await act(async () => {
+      fireEvent.change(screen.getByRole('slider'), { target: { value: '18' } });
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 2100));
+    });
+
+    expect(setConfig).toHaveBeenCalled();
+    expect(screen.getByText(/next inventory cycle/i)).toBeInTheDocument();
   });
 });
