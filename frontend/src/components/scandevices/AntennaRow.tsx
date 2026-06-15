@@ -34,7 +34,7 @@ export function AntennaRow({
   onToggleEnabled,
   onSetLocation,
 }: AntennaRowProps) {
-  const pct = max > min ? ((power - min) / (max - min)) * 100 : 0;
+  const pct = max > min ? Math.min(100, Math.max(0, ((power - min) / (max - min)) * 100)) : 0;
   const labelFor = (v: string) =>
     locationOptions.find((o) => o.value === v)?.label ?? '— set location —';
 

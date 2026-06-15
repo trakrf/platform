@@ -59,4 +59,23 @@ describe('AntennaRow', () => {
     });
     expect(onPowerChange).toHaveBeenCalledWith(15);
   });
+
+  it('dims the row when the antenna is disabled', () => {
+    const { container } = render(
+      <AntennaRow
+        antenna={1}
+        enabled={false}
+        locationId={null}
+        locationOptions={OPTIONS}
+        power={28}
+        min={10}
+        max={31.5}
+        step={0.5}
+        onPowerChange={vi.fn()}
+        onToggleEnabled={vi.fn(() => Promise.resolve())}
+        onSetLocation={vi.fn(() => Promise.resolve())}
+      />
+    );
+    expect(container.firstChild).toHaveClass('opacity-50');
+  });
 });
