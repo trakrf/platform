@@ -14,7 +14,6 @@ func TestParseCommand(t *testing.T) {
 		{"no args -> serve default", []string{}, cmdServe, false},
 		{"serve explicit", []string{"serve"}, cmdServe, false},
 		{"migrate explicit", []string{"migrate"}, cmdMigrate, false},
-		{"readerd explicit", []string{"readerd"}, cmdReaderd, false},
 		{"-h prints usage", []string{"-h"}, cmdHelp, false},
 		{"--help prints usage", []string{"--help"}, cmdHelp, false},
 		{"unknown subcommand is an error", []string{"bogus"}, cmdUnknown, true},

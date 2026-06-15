@@ -8,7 +8,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/trakrf/platform/backend/internal/readerrpc"
+	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
 )
 
 // fakeAdapter is a controllable readerd.Adapter for handleRPC tests.

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trakrf/platform/backend/internal/readerrpc"
+	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
 )
 
 // fakeOps is an injectable readerOps for adapter tests. It records calls and

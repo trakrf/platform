@@ -29,7 +29,6 @@ import (
 
 	"github.com/trakrf/platform/backend/internal/buildinfo"
 	"github.com/trakrf/platform/backend/internal/cmd/migrate"
-	readerdcmd "github.com/trakrf/platform/backend/internal/cmd/readerd"
 	"github.com/trakrf/platform/backend/internal/cmd/serve"
 	"github.com/trakrf/platform/backend/internal/logger"
 )
@@ -58,12 +57,11 @@ const (
 	// this default matters for local docker / ad-hoc runs.
 	cmdServe command = iota
 	cmdMigrate
-	cmdReaderd
 	cmdHelp
 	cmdUnknown
 )
 
-const usage = "usage: server [serve|migrate|readerd]"
+const usage = "usage: server [serve|migrate]"
 
 func parseCommand(args []string) (command, error) {
 	if len(args) == 0 {
@@ -77,8 +75,6 @@ func parseCommand(args []string) (command, error) {
 		return cmdServe, nil
 	case "migrate":
 		return cmdMigrate, nil
-	case "readerd":
-		return cmdReaderd, nil
 	case "-h", "--help":
 		return cmdHelp, nil
 	default:
@@ -125,8 +121,6 @@ func run(ctx context.Context, cmd command, info buildinfo.Info) error {
 	switch cmd {
 	case cmdMigrate:
 		return migrate.Run(ctx, info)
-	case cmdReaderd:
-		return readerdcmd.Run(ctx, info)
 	case cmdServe:
 		return serve.Run(ctx, info, frontendFS)
 	}

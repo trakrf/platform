@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/trakrf/platform/backend/internal/readerrpc"
+	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
 )
 
 // readerOps is the minimal slice of CS463 reader operations the adapter drives.

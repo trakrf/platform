@@ -9,7 +9,7 @@ package readerd
 import (
 	"context"
 
-	"github.com/trakrf/platform/backend/internal/readerrpc"
+	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
 )
 
 // Adapter is the reader-agnostic control surface the daemon drives. Each reader

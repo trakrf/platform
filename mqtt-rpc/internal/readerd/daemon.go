@@ -12,7 +12,7 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/rs/zerolog"
 
-	"github.com/trakrf/platform/backend/internal/readerrpc"
+	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
 )
 
 const (
