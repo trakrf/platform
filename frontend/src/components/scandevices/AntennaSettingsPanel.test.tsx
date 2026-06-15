@@ -189,4 +189,70 @@ describe('AntennaSettingsPanel', () => {
     expect(setConfig).toHaveBeenCalled();
     expect(screen.getByText(/next inventory cycle/i)).toBeInTheDocument();
   });
+
+  it('updates an existing scan point when its location changes', async () => {
+    readerState.capabilities = caps({ antennas: 1 });
+    readerState.config = {};
+    setup({
+      scanPoints: [point({ id: 7, antenna_port: 1, location_id: null, is_active: true })],
+      locations: [location({ id: 100, name: 'Receiving' })],
+    });
+    render(<AntennaSettingsPanel deviceId={10} />);
+
+    fireEvent.click(screen.getByLabelText(/antenna 1 location/i)); // enter edit mode
+    fireEvent.change(screen.getByLabelText(/antenna 1 location/i), {
+      target: { value: '100' },
+    });
+
+    await act(async () => {});
+    expect(update).toHaveBeenCalledWith({ id: 7, updates: { location_id: 100 } });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('lazily creates an enabled scan point when location set on an antenna with none', async () => {
+    readerState.capabilities = caps({ antennas: 1 });
+    readerState.config = {};
+    setup({ scanPoints: [], locations: [location({ id: 100, name: 'Receiving' })] });
+    render(<AntennaSettingsPanel deviceId={10} />);
+
+    fireEvent.click(screen.getByLabelText(/antenna 1 location/i));
+    fireEvent.change(screen.getByLabelText(/antenna 1 location/i), {
+      target: { value: '100' },
+    });
+
+    await act(async () => {});
+    expect(create).toHaveBeenCalledWith({
+      antenna_port: 1,
+      name: 'Antenna 1',
+      location_id: 100,
+      is_active: true,
+    });
+  });
+
+  it('disables via update on an existing scan point', async () => {
+    readerState.capabilities = caps({ antennas: 1 });
+    readerState.config = {};
+    setup({ scanPoints: [point({ id: 7, antenna_port: 1, is_active: true })] });
+    render(<AntennaSettingsPanel deviceId={10} />);
+
+    fireEvent.click(screen.getByLabelText(/enable antenna 1/i)); // checked -> unchecked
+    await act(async () => {});
+    expect(update).toHaveBeenCalledWith({ id: 7, updates: { is_active: false } });
+  });
+
+  it('lazily creates an enabled scan point when enabling an antenna with none', async () => {
+    readerState.capabilities = caps({ antennas: 1 });
+    readerState.config = {};
+    setup({ scanPoints: [] });
+    render(<AntennaSettingsPanel deviceId={10} />);
+
+    fireEvent.click(screen.getByLabelText(/enable antenna 1/i)); // unchecked -> checked
+    await act(async () => {});
+    expect(create).toHaveBeenCalledWith({
+      antenna_port: 1,
+      name: 'Antenna 1',
+      location_id: null,
+      is_active: true,
+    });
+  });
 });
