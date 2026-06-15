@@ -173,11 +173,20 @@ retitled "Antennas & Power" if trivial; not load-bearing.
 
 - **Drop Name & Description editing** on this surface (deliberate; the antenna
   number is the identity, name is auto-synthesized, description was optional
-  metadata with no other editor). **Flag for user review** — if description must
+  metadata with no other editor). Dropping **Name** is confirmed safe: scan-point
+  name was once the CS463 read-correlation key but TRA-956 moved matching to
+  `antenna_port` (`backend/internal/ingest/parser_cs463.go` — *"AntennaPort
+  routes the read to its per-antenna scan_point downstream"*); name now plays no
+  role in ingest. **Description still flagged for user review** — if it must
   remain editable somewhere, that's a separate affordance.
 - **No backend / API / migration changes.** Pure frontend; reuses existing
   scan_point CRUD + reader-config RPC.
 - **Port grouping for 32-antenna hub readers** — future ticket.
+- **Retiring `scan_point.name`** — with parsing moved to `antenna_port` (TRA-956)
+  and this change removing its last editor, `name` is effectively a dead-end
+  field. Making it optional / dropping the column is a backend + migration change
+  and is **out of scope here**; candidate follow-up ticket. For now we satisfy
+  the still-required `CreateScanPointRequest.name` by synthesizing `"Antenna n"`.
 - **Hardware antenna-disable** (vs. read-attribution `is_active`) — out of scope;
   not exposed by the contract.
 
