@@ -3,6 +3,7 @@
 // antenna_port) for location + enable with the live reader config for power.
 // Replaces the old stacked ScanPointsPanel + AntennaPowerPanel.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   useReaderConfig,
@@ -29,7 +30,7 @@ function locationLabel(l: Location): string {
 
 export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
   const { capabilities, config, isLoading, error } = useReaderConfig(deviceId);
-  const { setConfig, isSetting } = useSetReaderConfig(deviceId);
+  const { setConfig } = useSetReaderConfig(deviceId);
   const { scanPoints } = useScanPoints(deviceId);
   const { create, update } = useScanPointMutations(deviceId);
   const { locations } = useLocations();
@@ -42,6 +43,10 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
   const [values, setValues] = useState<Record<number, number>>({});
   const valuesRef = useRef<Record<number, number>>({});
   const [applied, setApplied] = useState<string | null>(null);
+  // `pushing` spans the whole pending-push window — the ~2s debounce AND the
+  // in-flight RPC — so the corner spinner reflects "changes not yet on the
+  // reader" the moment a slider moves.
+  const [pushing, setPushing] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -72,7 +77,8 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
         toast.success('Power update sent');
         setApplied(res.applied);
       })
-      .catch((e) => toast.error(getApiErrorMessage(e, 'Failed to send power update')));
+      .catch((e) => toast.error(getApiErrorMessage(e, 'Failed to send power update')))
+      .finally(() => setPushing(false));
   };
 
   const onPowerChange = (antenna: number, raw: number) => {
@@ -80,6 +86,7 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
     const v = Math.min(max, Math.max(min, Math.round(raw / STEP) * STEP));
     valuesRef.current = { ...valuesRef.current, [antenna]: v };
     setValues((prev) => ({ ...prev, [antenna]: v }));
+    setPushing(true);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(flush, DEBOUNCE_MS);
   };
@@ -140,11 +147,23 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex items-start justify-between gap-3">
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
           {capabilities.reader_model}
         </span>
-        <span className="text-xs text-gray-500 dark:text-gray-400">{min}–{max} dBm</span>
+        <div className="flex flex-col items-end gap-0.5 text-right">
+          <span className="text-xs text-gray-500 dark:text-gray-400">{min}–{max} dBm</span>
+          {pushing ? (
+            <span className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-300">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Saving…
+            </span>
+          ) : applied === 'pending_reload' ? (
+            <span className="text-xs text-gray-400 dark:text-gray-500">
+              Applies on next inventory cycle
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -169,15 +188,6 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
           );
         })}
       </div>
-
-      {applied === 'pending_reload' && (
-        <p className="mt-4 text-xs text-blue-700 dark:text-blue-300">
-          Applies on the next inventory cycle — reads briefly pause.
-        </p>
-      )}
-      <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-        Changes apply after a short pause.{isSetting ? ' Sending…' : ''}
-      </p>
     </div>
   );
 }

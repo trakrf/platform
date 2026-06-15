@@ -190,6 +190,20 @@ describe('AntennaSettingsPanel', () => {
     expect(screen.getByText(/next inventory cycle/i)).toBeInTheDocument();
   });
 
+  it('shows a saving indicator while a power change is pending (before the debounce flushes)', () => {
+    vi.useFakeTimers();
+    readerState.capabilities = caps({ antennas: 1 });
+    readerState.config = { tx_power_dbm: [{ antenna: 1, power: 20 }] };
+    setup({});
+    render(<AntennaSettingsPanel deviceId={10} />);
+
+    fireEvent.change(screen.getByRole('slider'), { target: { value: '15' } });
+
+    expect(screen.getByText(/saving/i)).toBeInTheDocument();
+    expect(setConfig).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
   it('updates an existing scan point when its location changes', async () => {
     readerState.capabilities = caps({ antennas: 1 });
     readerState.config = {};
