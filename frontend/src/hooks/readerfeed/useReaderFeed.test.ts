@@ -73,6 +73,39 @@ describe('useReaderFeed', () => {
     expect(result.current.tags).toHaveLength(0);
   });
 
+  it('keeps the list when the client clock runs ahead of server time (clock-skew backstop)', () => {
+    // Repro of the Live Reads flap: a laptop whose clock is ~2 min fast made the
+    // backstop compute every tag as 120s "stale" against Date.now() and wipe the
+    // map on its 1s tick, then repopulate on the next read — flapping between the
+    // empty state and the list. The backstop must use a server-derived clock, not
+    // the raw browser clock.
+    vi.useFakeTimers();
+    try {
+      const serverNow = 1_700_000_000_000;
+      vi.setSystemTime(serverNow + 120_000); // browser clock 2 minutes fast
+
+      const { result } = renderHook(() => useReaderFeed());
+
+      act(() => {
+        opened[0].callbacks.onEvents([
+          {
+            type: 'snapshot',
+            data: { tags: [tag({ lastSeen: serverNow, firstSeen: serverNow })], uniqueTags: 1, readRate: 3 },
+          },
+        ]);
+      });
+      expect(result.current.tags).toHaveLength(1);
+
+      // Let the 1s backstop tick fire. Under the old code the tag is dropped here.
+      act(() => {
+        vi.advanceTimersByTime(1500);
+      });
+      expect(result.current.tags).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('reconnect() tears down the stream, clears the list, and reopens', () => {
     const { result } = renderHook(() => useReaderFeed());
     expect(opened).toHaveLength(1);
