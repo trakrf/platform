@@ -53,7 +53,8 @@ export interface LiveReadsFeedProps {
 }
 
 export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFeedProps) {
-  const { tags, status, error, readerCount, readRate, reconnect } = useReaderFeed(filterReaderKey);
+  const { tags, status, error, readerCount, readRate, reconnect, clockOffsetMs } =
+    useReaderFeed(filterReaderKey);
 
   // View controls (TRA-937). All client-side over the live presence map.
   const [filterText, setFilterText] = useState('');
@@ -76,7 +77,9 @@ export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFee
   }, []);
 
   const sourceTags = frozen?.tags ?? tags;
-  const displayNow = frozen?.now ?? now;
+  // Server-aligned now: the Age column and staleness gradient derive from server
+  // `lastSeen`, so add the clock offset to keep them correct on a skewed client.
+  const displayNow = (frozen?.now ?? now) + clockOffsetMs;
 
   const rows = useMemo(
     () =>

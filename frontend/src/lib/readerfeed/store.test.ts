@@ -10,6 +10,7 @@ import {
   sortRows,
   expireStale,
   tagKey,
+  newestServerTimestamp,
   BACKSTOP_TTL_SECONDS,
 } from './store';
 import type { TagState } from '@/types/readerfeed';
@@ -340,5 +341,26 @@ describe('expireStale (client backstop only)', () => {
     const m = new Map([[tagKey('dock-1', 'A', 1), tag({ epc: 'A', lastSeen: 1000 })]]);
     const out = expireStale(m, 1000 + (BACKSTOP_TTL_SECONDS + 1) * 1000, BACKSTOP_TTL_SECONDS);
     expect(out.has(tagKey('dock-1', 'A', 1))).toBe(false);
+  });
+});
+
+describe('newestServerTimestamp', () => {
+  it('returns the freshest lastSeen across snapshot and upsert events', () => {
+    const ts = newestServerTimestamp([
+      { type: 'snapshot', data: { tags: [tag({ lastSeen: 100 }), tag({ lastSeen: 300 })], uniqueTags: 2, readRate: 1 } },
+      { type: 'upsert', data: tag({ lastSeen: 250 }) },
+    ]);
+    expect(ts).toBe(300);
+  });
+
+  it('ignores LEAVE events (they carry no timestamp) and returns null for a leaves-only batch', () => {
+    const ts = newestServerTimestamp([
+      { type: 'leave', data: { readerKey: 'dock-1', epc: 'A', antennaPort: 1 } },
+    ]);
+    expect(ts).toBeNull();
+  });
+
+  it('returns null for an empty batch', () => {
+    expect(newestServerTimestamp([])).toBeNull();
   });
 });

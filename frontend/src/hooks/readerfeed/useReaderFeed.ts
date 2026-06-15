@@ -6,11 +6,12 @@
 // hearing about (a LEAVE missed across a reconnect), but the server owns normal
 // eviction.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   applyEvent,
   expireStale,
   filterByReader,
+  newestServerTimestamp,
   BACKSTOP_TTL_SECONDS,
 } from '@/lib/readerfeed/store';
 import { openReadStream } from '@/lib/readerfeed/stream';
@@ -36,6 +37,12 @@ export interface ReaderFeedState {
    * resets the counts — there is no per-row baseline to subtract (TRA-937).
    */
   reconnect: () => void;
+  /**
+   * Estimated server−client clock offset (ms): add it to the browser `Date.now()`
+   * to get a server-aligned "now" for age/staleness. Lets a client with a skewed
+   * clock still render correct ages (and stops the backstop wiping the list).
+   */
+  clockOffsetMs: number;
 }
 
 /**
@@ -49,6 +56,14 @@ export function useReaderFeed(filterReaderKey?: string): ReaderFeedState {
   const [status, setStatus] = useState<ReaderFeedStatus>('connecting');
   const [error, setError] = useState<string | null>(null);
   const [readRate, setReadRate] = useState(0);
+
+  // Server−client clock offset, derived from the freshest server `lastSeen` we
+  // receive. The ref feeds the backstop interval (which reads the latest value
+  // without re-subscribing); the state drives consumers' age rendering. The
+  // client clock's *rate* is sound — only its absolute offset drifts — so this
+  // is captured from real deltas and then held (never recomputed on a tick).
+  const [clockOffsetMs, setClockOffsetMs] = useState(0);
+  const offsetRef = useRef(0);
 
   // The active org scopes the stream server-side (the JWT bearer carries the
   // org_id claim). Switching orgs mints a new token, so the stream must tear
@@ -92,6 +107,14 @@ export function useReaderFeed(filterReaderKey?: string): ReaderFeedState {
             for (const ev of events) next = applyEvent(next, ev);
             return next;
           });
+          // Re-sync the clock offset from the freshest server timestamp in this
+          // batch (held between batches so age still advances with wall time).
+          const serverTs = newestServerTimestamp(events);
+          if (serverTs !== null) {
+            const off = serverTs - Date.now();
+            offsetRef.current = off;
+            setClockOffsetMs(off);
+          }
           // Footer read-rate rides the snapshot/keyframe.
           for (const ev of events) {
             if (ev.type === 'snapshot') setReadRate(ev.data.readRate);
@@ -107,9 +130,11 @@ export function useReaderFeed(filterReaderKey?: string): ReaderFeedState {
   }, [filterReaderKey, activeOrgId, reconnectNonce]);
 
   // Backstop expiry tick — only catches a LEAVE dropped during a reconnect.
+  // Uses the server-aligned clock (Date.now() + offset) so a skewed browser
+  // clock can't make every tag look stale and wipe the list each tick.
   useEffect(() => {
     const id = setInterval(() => {
-      setTagMap((prev) => expireStale(prev, Date.now(), BACKSTOP_TTL_SECONDS));
+      setTagMap((prev) => expireStale(prev, Date.now() + offsetRef.current, BACKSTOP_TTL_SECONDS));
     }, BACKSTOP_TICK_MS);
     return () => clearInterval(id);
   }, []);
@@ -120,5 +145,5 @@ export function useReaderFeed(filterReaderKey?: string): ReaderFeedState {
   );
   const readerCount = useMemo(() => new Set(tags.map((t) => t.readerKey)).size, [tags]);
 
-  return { tags, status, error, readerCount, readRate, reconnect };
+  return { tags, status, error, readerCount, readRate, reconnect, clockOffsetMs };
 }
