@@ -17,7 +17,7 @@
 // zero the server's per-session counts. The gradient and age recompute locally
 // on a 1s tick from server `lastSeen`, so the fade costs zero network.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Pause, Play, Trash2 } from 'lucide-react';
 import { useReaderFeed } from '@/hooks/readerfeed/useReaderFeed';
 import { ageSeconds, filterTags, gradientBackground, sortRows, toDisplayRows } from '@/lib/readerfeed/store';
@@ -70,7 +70,8 @@ export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFee
   // Re-render once per second so the live Age column, gradient and session timer
   // advance even between reads.
   const [now, setNow] = useState(() => Date.now());
-  const startedAt = useRef(Date.now());
+  // State (not a ref) so Clear can restart the stopwatch and reliably re-render.
+  const [startedAt, setStartedAt] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
@@ -116,9 +117,16 @@ export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFee
 
   const togglePause = () => setFrozen(paused ? null : { tags, now });
 
+  // Clear is a full session reset (TRA-999): zero the server counts, drop any
+  // pause, and return every view control — filters, sort and the session timer —
+  // to its initial state. The split toggle is a display preference, not a filter,
+  // so it's left as the user set it.
   const clear = () => {
     setFrozen(null);
-    setSort(DEFAULT_SORT); // full reset also drops back to the stable natural order
+    setFilterText('');
+    setAntennaFilter(null);
+    setSort(DEFAULT_SORT); // back to the stable natural order
+    setStartedAt(Date.now()); // restart the session stopwatch at 00:00
     reconnect(); // fresh server session ⇒ counts restart at zero
   };
 
@@ -126,7 +134,7 @@ export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFee
     <div className={`flex flex-col gap-4 ${compact ? '' : 'h-full min-h-0'}`}>
       <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
         <span className="font-mono tabular-nums text-gray-500 dark:text-gray-400">
-          {formatElapsed(now - startedAt.current)}
+          {formatElapsed(now - startedAt)}
         </span>
         <span className="flex items-center">
           <span className={`inline-block w-2.5 h-2.5 rounded-full mr-2 ${STATUS_DOT[status]}`} />
