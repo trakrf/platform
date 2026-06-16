@@ -1,0 +1,4 @@
+# Install (root): cp to /etc/sudoers.d/trakrf-watchdog ; chown root:root ; chmod 440 ; validate: visudo -cf /etc/sudoers.d/trakrf-watchdog
+# TRA-989 Tier-3 backstop: let the lingering demo user trigger ONLY a clean reboot.
+# Replace WATCHDOG_USER with the lingering user (brick: mike; demo box: trakrf).
+WATCHDOG_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot
