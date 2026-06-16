@@ -21,7 +21,7 @@ var (
 	metricSuppressed = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "geofence_alarms_suppressed_total",
 		Help: "Reads that did not fire, by reason.",
-	}, []string{"reason"}) // no_rssi, no_location, rssi_below_threshold, latched
+	}, []string{"reason"}) // no_rssi, no_location, rssi_below_threshold, latched, startup_grace
 
 	metricFireErrors = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "geofence_fire_errors_total",
