@@ -48,20 +48,24 @@ port_of() { case "$1" in mosquitto) echo 1883 ;; timescaledb) echo 5432 ;; esac;
 mqtt_password() { grep -oP 'trakrf-mqtt:\K[^@]+' "$ENV_FILE" 2>/dev/null; }
 
 probe_mosquitto() {
-  local pw topic nonce got s
+  local pw topic nonce got
   pw=$(mqtt_password) || return 1
   [[ -n "$pw" ]] || return 1
   topic="trakrf/_watchdog/$(cat /proc/sys/kernel/random/boot_id)"
   nonce="wd-$$-${RANDOM}"
-  got=$( { mosquitto_sub -h 127.0.0.1 -p 1883 -u trakrf-mqtt -P "$pw" \
-              -t "$topic" -C 1 -W "$PROBE_TIMEOUT" 2>/dev/null & s=$!;
-           sleep 0.5;
-           mosquitto_pub -h 127.0.0.1 -p 1883 -u trakrf-mqtt -P "$pw" \
-              -t "$topic" -m "$nonce" 2>/dev/null;
-           wait "$s"; } )
+  # The WHOLE round-trip is bounded by `timeout`, and the pub by an inner `timeout`, so a
+  # WEDGED forward — where the TCP connect is accepted (kernel backlog) but mosquitto_pub never
+  # gets a CONNACK and would otherwise hang forever — is DETECTED (empty got), never hung on.
+  # shellcheck disable=SC2016  # $1..$5 are intentionally expanded by the INNER bash, not here
+  got=$(timeout "$PROBE_TIMEOUT" bash -c '
+    mosquitto_sub -h 127.0.0.1 -p 1883 -u "$1" -P "$2" -t "$3" -C 1 -W "$5" 2>/dev/null & sub=$!
+    sleep 0.5
+    timeout 3 mosquitto_pub -h 127.0.0.1 -p 1883 -u "$1" -P "$2" -t "$3" -m "$4" 2>/dev/null
+    wait "$sub"
+  ' _ trakrf-mqtt "$pw" "$topic" "$nonce" "$PROBE_TIMEOUT")
   [[ "$got" == "$nonce" ]]
 }
-probe_timescaledb() { pg_isready -h 127.0.0.1 -p 5432 -t "$PROBE_TIMEOUT" >/dev/null 2>&1; }
+probe_timescaledb() { timeout "$PROBE_TIMEOUT" pg_isready -h 127.0.0.1 -p 5432 -t "$PROBE_TIMEOUT" >/dev/null 2>&1; }
 probe() { "probe_$1"; }
 
 # ---- state helpers ----
