@@ -14,6 +14,7 @@ package geofence
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -47,6 +48,12 @@ type Engine struct {
 	latch    *latch    // egress dedup, keyed per (org, output, epc)
 	presence *presence // presence tracker, keyed per (org, output)
 	log      zerolog.Logger
+
+	// startupGrace is the cold-start grace window (TRA-991); graceUntil is its
+	// deadline in unix nanos, set once from the first evaluated read's receive
+	// time (0 = window not yet opened). See withinStartupGrace.
+	startupGrace time.Duration
+	graceUntil   atomic.Int64
 }
 
 // NewEngine builds an engine with real-clock latch + presence sweepers.
@@ -54,12 +61,13 @@ func NewEngine(cfg Config, store *storage.Storage, driver outputDriver, log *zer
 	l := log.With().Str("component", "geofence").Logger()
 	clk := RealClock{}
 	return &Engine{
-		cfg:      cfg,
-		store:    store,
-		driver:   driver,
-		latch:    newLatch(cfg.SweepInterval, clk),
-		presence: newPresence(driver, l),
-		log:      l,
+		cfg:          cfg,
+		store:        store,
+		driver:       driver,
+		latch:        newLatch(cfg.SweepInterval, clk),
+		presence:     newPresence(driver, l),
+		startupGrace: cfg.StartupGrace,
+		log:          l,
 	}
 }
 
@@ -75,6 +83,25 @@ func (e *Engine) Stop() {
 	if e.presence != nil {
 		e.presence.Close()
 	}
+}
+
+// withinStartupGrace reports whether a read received at receivedAt falls inside
+// the post-startup grace window (TRA-991). The window opens on the first
+// evaluated read — i.e. when ingestion actually begins, independent of how long
+// the broker took to connect — and lasts startupGrace. A non-positive
+// startupGrace disables it entirely (fire on first sight, the pre-TRA-991
+// behavior). Safe for concurrent Evaluate calls: CompareAndSwap lets exactly one
+// goroutine open the window; the rest compare against the stored deadline.
+func (e *Engine) withinStartupGrace(receivedAt time.Time) bool {
+	if e.startupGrace <= 0 {
+		return false
+	}
+	now := receivedAt.UnixNano()
+	// Open the window on the first read; that read is always within grace.
+	if e.graceUntil.CompareAndSwap(0, now+e.startupGrace.Nanoseconds()) {
+		return true
+	}
+	return now < e.graceUntil.Load()
 }
 
 // Evaluate runs the rule decision over every membership-passing read of one MQTT
@@ -93,6 +120,12 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 		e.log.Warn().Err(err).Int("org_id", orgID).Msg("org geofence defaults lookup failed; using system defaults")
 		orgDefaults = organization.GeofenceDefaults{}
 	}
+
+	// TRA-991: while inside the cold-start grace window, reads below still seed the
+	// latch/presence state (so the tags already in the zone become an "already
+	// inside" baseline) but the ON edge is suppressed — a restart must not re-fire
+	// every present tag.
+	inGrace := e.withinStartupGrace(receivedAt)
 
 	for _, rd := range reads {
 		metricEvaluated.Inc()
@@ -135,6 +168,12 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 				// timer when no member is read for age-out. auto_off is ignored
 				// (the engine owns the OFF edge).
 				if e.presence.observe(orgID, dev, ttl, rd.EPC) {
+					// observe already armed the age-out timer (state seeded); only the
+					// ON drive is held back during the startup grace window.
+					if inGrace {
+						metricSuppressed.WithLabelValues("startup_grace").Inc()
+						continue
+					}
 					firedAny = true
 					e.drive(ctx, orgID, dev, true, 0)
 				}
@@ -144,6 +183,12 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 			// Egress: fire ON, then latch for the re-arm window.
 			if !e.latch.admit(latchKey(orgID, dev.ID, rd.EPC), receivedAt, ttl) {
 				metricSuppressed.WithLabelValues("latched").Inc()
+				continue
+			}
+			// admit already recorded the observation (state seeded); only the ON drive
+			// is held back during the startup grace window.
+			if inGrace {
+				metricSuppressed.WithLabelValues("startup_grace").Inc()
 				continue
 			}
 			firedAny = true

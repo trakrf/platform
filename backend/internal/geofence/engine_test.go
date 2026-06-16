@@ -97,12 +97,13 @@ func newTestEngine(cfg Config, s engineStore, d outputDriver) *Engine {
 	log := zerolog.New(io.Discard)
 	clk := NewFakeClock(time.Unix(0, 0))
 	return &Engine{
-		cfg:      cfg,
-		store:    s,
-		driver:   d,
-		latch:    newLatch(0, clk),
-		presence: newPresence(d, log),
-		log:      log,
+		cfg:          cfg,
+		store:        s,
+		driver:       d,
+		latch:        newLatch(0, clk),
+		presence:     newPresence(d, log),
+		startupGrace: cfg.StartupGrace,
+		log:          log,
 	}
 }
 
@@ -266,6 +267,85 @@ func TestEvaluate_PresenceFiresOnceAutoOffIgnored(t *testing.T) {
 	}
 }
 
+// --- TRA-991: startup grace window ---
+//
+// On a cold start the engine has no prior membership state, so every tag already
+// in the read zone would otherwise register as a fresh entry and fire (and
+// actuate the Shelly). The startup grace window hydrates those tags as an
+// "already inside" baseline — it still records them in the latch/presence state —
+// but suppresses the ON edge until the window, opened on the first evaluated
+// read, has elapsed.
+
+func TestEvaluate_StartupGraceSuppressesInZoneEgress(t *testing.T) {
+	s := &fakeStore{devices: []outputdevice.OutputDevice{dev(11, nil)}}
+	d := &fakeDriver{}
+	e := newTestEngine(Config{RSSIThreshold: -65, LatchTTL: time.Minute, StartupGrace: 30 * time.Second}, s, d)
+	defer e.Stop()
+
+	base := time.Unix(1000, 0)
+	// A tag present at startup, read repeatedly during the grace window, never fires.
+	e.Evaluate(context.Background(), 42, 1, base, []storage.ResolvedRead{read("EPC1", -50)})
+	e.Evaluate(context.Background(), 42, 2, base.Add(5*time.Second), []storage.ResolvedRead{read("EPC1", -50)})
+	e.Evaluate(context.Background(), 42, 3, base.Add(29*time.Second), []storage.ResolvedRead{read("EPC1", -50)})
+	if d.onCount() != 0 || len(s.rows) != 0 {
+		t.Fatalf("in-zone tag must not fire during the startup grace window, got on=%d rows=%d", d.onCount(), len(s.rows))
+	}
+}
+
+func TestEvaluate_StartupGraceBaselineStaysSilentNewEntryFires(t *testing.T) {
+	s := &fakeStore{devices: []outputdevice.OutputDevice{dev(11, nil)}}
+	d := &fakeDriver{}
+	e := newTestEngine(Config{RSSIThreshold: -65, LatchTTL: time.Minute, StartupGrace: 30 * time.Second}, s, d)
+	defer e.Stop()
+
+	base := time.Unix(1000, 0)
+	// Seed EPC1 as baseline during grace (suppressed, but recorded in the latch).
+	e.Evaluate(context.Background(), 42, 1, base, []storage.ResolvedRead{read("EPC1", -50)})
+	// After the window closes, the still-present baseline tag stays latched (no fire).
+	e.Evaluate(context.Background(), 42, 2, base.Add(31*time.Second), []storage.ResolvedRead{read("EPC1", -50)})
+	if d.onCount() != 0 {
+		t.Fatalf("baseline tag still in zone after grace must stay latched, got on=%d", d.onCount())
+	}
+	// ...but a genuinely new tag arriving after the window fires.
+	e.Evaluate(context.Background(), 42, 3, base.Add(32*time.Second), []storage.ResolvedRead{read("EPC2", -50)})
+	if d.onCount() != 1 || len(s.rows) != 1 {
+		t.Fatalf("a new entry after the grace window must fire, got on=%d rows=%d", d.onCount(), len(s.rows))
+	}
+}
+
+func TestEvaluate_StartupGraceSeedsPresenceBaseline(t *testing.T) {
+	device := dev(11, map[string]any{"mode": "presence"})
+	s := &fakeStore{devices: []outputdevice.OutputDevice{device}}
+	d := &fakeDriver{}
+	e := newTestEngine(Config{RSSIThreshold: -65, LatchTTL: time.Minute, StartupGrace: 30 * time.Second}, s, d)
+	defer e.Stop()
+
+	base := time.Unix(1000, 0)
+	e.Evaluate(context.Background(), 42, 1, base, []storage.ResolvedRead{read("EPC1", -50)})
+	e.Evaluate(context.Background(), 42, 2, base.Add(5*time.Second), []storage.ResolvedRead{read("EPC1", -50)})
+	if d.onCount() != 0 {
+		t.Fatalf("presence in-zone tag must not fire ON during the grace window, got %d", d.onCount())
+	}
+	// The tag was seeded as present, so after grace a continued read is not a fresh
+	// 0->1 edge and still does not fire.
+	e.Evaluate(context.Background(), 42, 3, base.Add(31*time.Second), []storage.ResolvedRead{read("EPC1", -50)})
+	if d.onCount() != 0 {
+		t.Fatalf("presence baseline tag must stay silent after grace, got %d", d.onCount())
+	}
+}
+
+func TestEvaluate_StartupGraceDisabledFiresImmediately(t *testing.T) {
+	// StartupGrace == 0 disables the window: an in-zone tag fires on first sight.
+	s := &fakeStore{devices: []outputdevice.OutputDevice{dev(11, nil)}}
+	d := &fakeDriver{}
+	e := newTestEngine(Config{RSSIThreshold: -65, LatchTTL: time.Minute, StartupGrace: 0}, s, d)
+	defer e.Stop()
+	e.Evaluate(context.Background(), 42, 1, time.Unix(1000, 0), []storage.ResolvedRead{read("EPC1", -50)})
+	if d.onCount() != 1 {
+		t.Fatalf("a zero grace window must not suppress firing, got %d", d.onCount())
+	}
+}
+
 func TestEvaluate_BestEffortOnErrors(t *testing.T) {
 	s := &fakeStore{devices: []outputdevice.OutputDevice{dev(11, nil)}, insertErr: errors.New("db down")}
 	d := &fakeDriver{err: errors.New("device offline")}
@@ -291,6 +371,23 @@ func TestConfigFromEnv_Defaults(t *testing.T) {
 	c := ConfigFromEnv()
 	if c != DefaultConfig() {
 		t.Fatalf("empty env must yield defaults, got %+v", c)
+	}
+}
+
+func TestConfigFromEnv_StartupGrace(t *testing.T) {
+	t.Setenv("GEOFENCE_STARTUP_GRACE", "45s")
+	if c := ConfigFromEnv(); c.StartupGrace != 45*time.Second {
+		t.Fatalf("GEOFENCE_STARTUP_GRACE not applied, got %v", c.StartupGrace)
+	}
+	// Malformed falls back to the default.
+	t.Setenv("GEOFENCE_STARTUP_GRACE", "nope")
+	if c := ConfigFromEnv(); c.StartupGrace != DefaultConfig().StartupGrace {
+		t.Fatalf("malformed GEOFENCE_STARTUP_GRACE must fall back to default, got %v", c.StartupGrace)
+	}
+	// Explicit zero disables the window (distinct from unset, which keeps the default).
+	t.Setenv("GEOFENCE_STARTUP_GRACE", "0s")
+	if c := ConfigFromEnv(); c.StartupGrace != 0 {
+		t.Fatalf("GEOFENCE_STARTUP_GRACE=0s must disable the window, got %v", c.StartupGrace)
 	}
 }
 

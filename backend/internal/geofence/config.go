@@ -23,15 +23,24 @@ type Config struct {
 	// SweepInterval is how often the latch GCs aged-out entries (memory hygiene;
 	// expiry is also enforced on access, so this does not affect correctness).
 	SweepInterval time.Duration
+	// StartupGrace is the cold-start grace window (TRA-991). The engine holds
+	// membership/presence state in memory only, so on a restart every tag already
+	// in the zone would otherwise look like a fresh entry and fire. During this
+	// window — opened on the first evaluated read — reads still seed the
+	// latch/presence state (hydrating the present tags as an "already inside"
+	// baseline) but the ON edge is suppressed, so a restart never re-fires every
+	// present tag. A non-positive value disables the window (fire on first sight).
+	StartupGrace time.Duration
 }
 
 // DefaultConfig returns production defaults: -65 dBm trip line, 60s latch TTL,
-// 5m sweep interval.
+// 5m sweep interval, 30s startup grace.
 func DefaultConfig() Config {
 	return Config{
 		RSSIThreshold: -65,
 		LatchTTL:      60 * time.Second,
 		SweepInterval: 5 * time.Minute,
+		StartupGrace:  30 * time.Second,
 	}
 }
 
@@ -47,6 +56,15 @@ func ConfigFromEnv() Config {
 	if v := os.Getenv("GEOFENCE_SWEEP_INTERVAL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			c.SweepInterval = d
+		}
+	}
+	// GEOFENCE_STARTUP_GRACE tunes the cold-start grace window (TRA-991). Unlike
+	// sweep interval, zero is meaningful (explicitly disable the window), so a
+	// well-formed non-negative value — including 0 — is honored; only an
+	// unparseable value falls back to the default.
+	if v := os.Getenv("GEOFENCE_STARTUP_GRACE"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d >= 0 {
+			c.StartupGrace = d
 		}
 	}
 	return c
