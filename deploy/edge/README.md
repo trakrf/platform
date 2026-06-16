@@ -46,7 +46,7 @@ TimescaleDB data stays on the Podman named volume `timescale_data`.
 
 ```bash
 # 1. Host prereqs (one time)
-sudo apt-get install -y podman mosquitto-clients rsync
+sudo apt-get install -y podman mosquitto-clients postgresql-client rsync
 loginctl enable-linger "$USER"
 echo 'net.ipv4.ip_unprivileged_port_start=443' | sudo tee /etc/sysctl.d/99-trakrf-rootless-ports.conf
 sudo sysctl --system            # lets rootless Traefik bind :443
@@ -123,6 +123,39 @@ systemctl --user daemon-reload && systemctl --user restart <unit>.service
 14. Run on demand: `systemctl --user start trakrf-backup.service`. Restore:
 `gunzip -c /srv/trakrf/backups/<file>.sql.gz | podman exec -i timescaledb psql -U postgres -d postgres`.
 
+## Rootlessport watchdog (TRA-989)
+
+`rootlessport-watchdog.timer` probes the host-published forwards (`mosquitto :1883`,
+`timescaledb :5432`) every 30 s via a **loopback round-trip** (`mosquitto_pub/sub`,
+`pg_isready`) that traverses the same `host:port → rootlessport → container` path real clients
+use — the only signal that catches a forward that is `ESTABLISHED` but no longer bridging
+(the 06-13 wedge). On failure it escalates per service: **Tier-1** `restart` (the proven manual
+fix) → **Tier-2** stop + reap the orphaned port-holder + start → **Tier-3** `systemctl reboot`
+(guarded: >10 min uptime, ≤2 consecutive reboots, persistent count). It also runs `--on-resume`
+from a system-sleep hook so a resume-from-suspend wedge clears in seconds, not on the timer.
+
+One-time host prereqs (root), beyond the base bring-up:
+
+```bash
+U=$(id -un)
+# Tier-3: allow ONLY a clean reboot
+sudo sed "s/__TRAKRF_USER__/$U/g" deploy/edge/systemd/trakrf-watchdog.sudoers.example \
+  | sudo tee /etc/sudoers.d/trakrf-watchdog >/dev/null
+sudo chmod 440 /etc/sudoers.d/trakrf-watchdog && sudo visudo -cf /etc/sudoers.d/trakrf-watchdog
+# proactive recovery on resume
+sudo sed "s/__TRAKRF_USER__/$U/g" deploy/edge/systemd/trakrf-resume-hook.example \
+  | sudo tee /usr/lib/systemd/system-sleep/trakrf-resume >/dev/null
+sudo chmod 755 /usr/lib/systemd/system-sleep/trakrf-resume
+```
+
+Observe: `journalctl --user -u rootlessport-watchdog -f`. Manual check: `--probe-only`
+(exit 0 = both forwards healthy). The DB probe needs `pg_isready` (`postgresql-client`).
+
+**Note:** the watchdog recovers the *post-boot / post-resume* forward wedge; it is not a
+substitute for the box powering back on after a true power-loss. Unattended power-on is the
+separate BIOS "restore on power loss" / laptop-battery concern (medium-term ThinkPad ticket).
+Tier-3 `systemctl reboot` is a software reboot and works regardless of that BIOS setting.
+
 ## TLS cert (`app.demo.trakrf.id`)
 
 Issued out-of-band via Let's Encrypt **Cloudflare DNS-01** (the box is offline at
@@ -166,9 +199,9 @@ tracking `prod`, with manual `preview → demo` promotion.
 
 ## Known / follow-ups
 
-- Unclean-shutdown resilience (rootless port-forward wedge after a hard power
-  loss) + clean-shutdown via power button — developed/plug-pull-tested on a home
-  box, separate tickets.
+- Unclean-shutdown / resume-from-suspend forward-wedge resilience — handled by the
+  rootlessport watchdog (TRA-989, see above). Laptop rig + lid-as-power-button + kiosk +
+  BIOS restore-on-power-loss are a separate medium-term hardware ticket.
 - Pin off the floating `:preview` tag (see Updates) — separate ticket.
 - gnome-kiosk deprioritized (laptop-driven demos); reopen for a trade-show booth.
 - Prometheus/Grafana = TRA-908 fast-follow (+2 quadlets).

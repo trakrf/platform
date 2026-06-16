@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Install (root): cp to /usr/lib/systemd/system-sleep/trakrf-resume ; chmod 755 ; then set user:
+#   sudo sed -i "s/__TRAKRF_USER__/$(id -un)/g" /usr/lib/systemd/system-sleep/trakrf-resume
+# TRA-989: on resume from suspend, proactively clear any rootlessport forward wedge for the
+# lingering demo user (lid-open = de-facto power-up). __TRAKRF_USER__ = lingering user (brick: mike).
+WATCHDOG_USER=__TRAKRF_USER__
+case "$1/$2" in
+  post/*)   # $1=post means waking back up
+    uid=$(id -u "$WATCHDOG_USER") || exit 0
+    # Set BOTH XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS so the script's `systemctl --user`
+    # calls reliably reach the lingering user's manager from this root sleep-hook context.
+    # (Validated on the brick test box; this is the critical resume-recovery path.)
+    su - "$WATCHDOG_USER" -c "XDG_RUNTIME_DIR=/run/user/$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus /srv/trakrf/scripts/rootlessport-watchdog.sh --on-resume" || true
+    ;;
+esac

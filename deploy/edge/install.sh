@@ -31,12 +31,15 @@ for f in "$ROOT"/quadlets/*.container "$ROOT"/quadlets/*.network; do
   ln -sf "$f" "$QUADLET_DIR/$(basename "$f")"
 done
 
-# 3. Link the backup timer (plain user units) -> /srv/trakrf, then enable
-for u in "$ROOT"/systemd/trakrf-backup.service "$ROOT"/systemd/trakrf-backup.timer; do
+# 3. Link plain user units (*.service/*.timer) -> /srv/trakrf, then enable timers.
+#    *.example templates (sudoers, resume hook) are intentionally NOT matched/linked.
+for u in "$ROOT"/systemd/*.service "$ROOT"/systemd/*.timer; do
+  [ -e "$u" ] || continue
   ln -sf "$u" "$USER_UNIT_DIR/$(basename "$u")"
 done
 
 systemctl --user daemon-reload
 systemctl --user enable --now trakrf-backup.timer
+systemctl --user enable --now rootlessport-watchdog.timer
 
 echo "Deployed to $ROOT; units linked + reloaded. Secrets (untouched): $ROOT/secrets"
