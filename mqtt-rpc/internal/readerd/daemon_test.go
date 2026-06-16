@@ -11,6 +11,30 @@ import (
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
 )
 
+func TestRedactBrokerURL(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"password masked, user+host kept", "mqtt://trakrf-mqtt:s3cr3t@192.168.8.10:1883", "mqtt://trakrf-mqtt:xxxxx@192.168.8.10:1883"},
+		{"mqtts password masked", "mqtts://u:p@mqtt.preview.gke.trakrf.id:8883", "mqtts://u:xxxxx@mqtt.preview.gke.trakrf.id:8883"},
+		{"no userinfo unchanged", "mqtt://192.168.8.10:1883", "mqtt://192.168.8.10:1883"},
+		{"user only unchanged", "mqtt://u@host:1883", "mqtt://u@host:1883"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := redactBrokerURL(c.in); got != c.want {
+				t.Errorf("redactBrokerURL(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
+	}
+	// A password must never survive redaction.
+	if got := redactBrokerURL("mqtt://u:s3cr3t@host:1883"); got == "mqtt://u:s3cr3t@host:1883" {
+		t.Error("redactBrokerURL leaked the password")
+	}
+}
+
 // fakeAdapter is a controllable readerd.Adapter for handleRPC tests.
 type fakeAdapter struct {
 	caps      readerrpc.Capabilities
