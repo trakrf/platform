@@ -6,6 +6,9 @@ WATCHDOG_USER=WATCHDOG_USER
 case "$1/$2" in
   post/*)   # $1=post means waking back up
     uid=$(id -u "$WATCHDOG_USER") || exit 0
-    su - "$WATCHDOG_USER" -c "XDG_RUNTIME_DIR=/run/user/$uid /srv/trakrf/scripts/rootlessport-watchdog.sh --on-resume" || true
+    # Set BOTH XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS so the script's `systemctl --user`
+    # calls reliably reach the lingering user's manager from this root sleep-hook context.
+    # (Validated on the brick test box; this is the critical resume-recovery path.)
+    su - "$WATCHDOG_USER" -c "XDG_RUNTIME_DIR=/run/user/$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus /srv/trakrf/scripts/rootlessport-watchdog.sh --on-resume" || true
     ;;
 esac

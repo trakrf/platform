@@ -6,9 +6,10 @@ set -euo pipefail
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 READERS="${READERS:-8}"
 RATE="${RATE:-1}"   # messages/sec per reader
+[ "$RATE" -gt 0 ] 2>/dev/null || RATE=1   # guard: RATE=0 would make sleep hang forever
 PW=$(grep -oP 'trakrf-mqtt:\K[^@]+' /srv/trakrf/secrets/.env)
 pids=()
-cleanup() { kill "${pids[@]}" 2>/dev/null || true; }
+cleanup() { kill "${pids[@]:-}" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
 for i in $(seq 1 "$READERS"); do
   (

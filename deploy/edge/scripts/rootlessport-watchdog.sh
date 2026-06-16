@@ -85,11 +85,12 @@ tier2_reap_restart() { local svc="$1" port pids p
   for p in $pids; do warn "$svc: reaping orphaned forwarder pid $p holding :$port"; kill "$p" 2>/dev/null || true; done
   sleep 1; systemctl --user start "$svc.service"
 }
+# Returns 1 if NO reboot happened (deferred/suppressed) so the caller cycles back to Tier-1/2.
 tier3_reboot() {
   local up reboots
   up=$(uptime_s); reboots=$(rint "$STATE_DIR/reboot_count")
-  if (( up < REBOOT_MIN_UPTIME )); then warn "Tier 3 deferred: uptime ${up}s < ${REBOOT_MIN_UPTIME}s (let fresh boot settle)"; return; fi
-  if (( reboots >= REBOOT_MAX )); then warn "Tier 3 suppressed: $reboots reboots cleared nothing — fault is not a forward wedge; staying up + retrying Tier1/2"; return; fi
+  if (( up < REBOOT_MIN_UPTIME )); then warn "Tier 3 deferred: uptime ${up}s < ${REBOOT_MIN_UPTIME}s (let fresh boot settle)"; return 1; fi
+  if (( reboots >= REBOOT_MAX )); then warn "Tier 3 suppressed: $reboots reboots cleared nothing — fault is not a forward wedge; backing off to Tier-1/2 retries"; return 1; fi
   warn "Tier 3 — rebooting to clear persistent forward wedge (reboot #$((reboots+1)))"
   [[ "$MODE" == dryrun ]] && return 0
   wint "$STATE_DIR/reboot_count" $((reboots+1))
@@ -99,7 +100,14 @@ tier3_reboot() {
 reset_service() { local svc="$1"; wint "$RUNTIME_DIR/fail_$svc" 0; wint "$RUNTIME_DIR/tier_$svc" 0; }
 
 act_and_confirm() { local svc="$1" tier="$2"
-  case "$tier" in 1) tier1_restart "$svc";; 2) tier2_reap_restart "$svc";; *) tier3_reboot;; esac
+  case "$tier" in
+    1) tier1_restart "$svc" ;;
+    2) tier2_reap_restart "$svc" ;;
+    *) # Tier 3+: reboot backstop. If suppressed/deferred (no action taken), cycle the tier
+       # counter back to 0 so the next sweep re-enters at Tier-1/2 (spec: back off to Tier-1/2
+       # forever — don't loop a suppressed reboot or log a bogus "still wedged after Tier 3").
+       if ! tier3_reboot; then wint "$RUNTIME_DIR/tier_$svc" 0; return; fi ;;
+  esac
   sleep "$RECHECK_DELAY"
   if probe "$svc"; then warn "$svc: recovered after Tier $tier"; reset_service "$svc"; wint "$STATE_DIR/reboot_count" 0
   else warn "$svc: still wedged after Tier $tier; will escalate next cycle"; fi

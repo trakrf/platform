@@ -1,5 +1,7 @@
 [Unit]
 Description=TrakRF rootlessport forward watchdog (mosquitto + timescaledb)
+# Deliberately no Wants=/After= on the monitored services: the watchdog MUST run even when
+# they are down or wedged (that's its job). The 3-fail threshold absorbs a slow first-boot start.
 
 [Service]
 Type=oneshot
