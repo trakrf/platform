@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import { LiveReadsFeed } from './LiveReadsFeed';
 import { useReaderFeed, type ReaderFeedState } from '@/hooks/readerfeed/useReaderFeed';
 import type { TagState } from '@/types/readerfeed';
@@ -266,5 +266,54 @@ describe('LiveReadsFeed', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /clear/i }));
     expect(reconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('Clear resets the session timer back to 00:00 (TRA-999)', () => {
+    vi.useFakeTimers();
+    try {
+      mockFeed({ tags: [tag()] });
+      render(<LiveReadsFeed />);
+
+      // The 1s tick drives the elapsed timer forward.
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(screen.getByText('00:05')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /clear/i }));
+
+      expect(screen.getByText('00:00')).toBeInTheDocument();
+      expect(screen.queryByText('00:05')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('Clear resets the EPC filter text (TRA-999)', () => {
+    mockFeed({ tags: [tag({ epc: 'ABC' }), tag({ epc: 'XYZ' })] });
+    render(<LiveReadsFeed />);
+    const filterBox = screen.getByPlaceholderText(/filter/i) as HTMLInputElement;
+
+    fireEvent.change(filterBox, { target: { value: 'abc' } });
+    expect(screen.queryByText('XYZ')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /clear/i }));
+
+    expect(filterBox.value).toBe('');
+    expect(screen.getByText('XYZ')).toBeInTheDocument();
+  });
+
+  it('Clear resets the antenna filter to All antennas (TRA-999)', () => {
+    mockFeed({ tags: [tag({ epc: 'ABC', antennaPort: 1 }), tag({ epc: 'XYZ', antennaPort: 2 })] });
+    render(<LiveReadsFeed />);
+    const antennaSelect = screen.getByLabelText('Antenna filter') as HTMLSelectElement;
+
+    fireEvent.change(antennaSelect, { target: { value: '1' } });
+    expect(screen.queryByText('XYZ')).not.toBeInTheDocument(); // antenna 2 filtered out
+
+    fireEvent.click(screen.getByRole('button', { name: /clear/i }));
+
+    expect(antennaSelect.value).toBe('');
+    expect(screen.getByText('XYZ')).toBeInTheDocument();
   });
 });
