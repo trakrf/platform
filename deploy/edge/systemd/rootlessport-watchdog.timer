@@ -1,0 +1,10 @@
+[Unit]
+Description=Probe demo-box host forwards every 30s (TRA-989)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

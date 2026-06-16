@@ -1,0 +1,6 @@
+[Unit]
+Description=TrakRF rootlessport forward watchdog (mosquitto + timescaledb)
+
+[Service]
+Type=oneshot
+ExecStart=/srv/trakrf/scripts/rootlessport-watchdog.sh
