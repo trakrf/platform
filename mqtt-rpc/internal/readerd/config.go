@@ -72,8 +72,17 @@ func parseCloudServer(data []byte, serverID, certDir string) (BrokerConfig, erro
 		}
 
 		scheme := "mqtt"
+		// CA cert only applies to a TLS broker that names an explicit cert file.
+		// A plaintext broker (enableSSL=false — e.g. the demo-box local Mosquitto)
+		// has no TLS, and a TLS broker with no serverCertFile uses the system root
+		// pool; in both cases CACertPath stays empty so the daemon does not try to
+		// load a (bogus) cert path and fatal at startup.
+		caCertPath := ""
 		if e.EnableSSL {
 			scheme = "mqtts"
+			if e.ServerCertFile != "" {
+				caCertPath = filepath.Join(certDir, e.ServerID, e.ServerCertFile)
+			}
 		}
 		u := &url.URL{
 			Scheme: scheme,
@@ -85,7 +94,7 @@ func parseCloudServer(data []byte, serverID, certDir string) (BrokerConfig, erro
 
 		return BrokerConfig{
 			URL:         u.String(),
-			CACertPath:  filepath.Join(certDir, e.ServerID, e.ServerCertFile),
+			CACertPath:  caCertPath,
 			BaseTopic:   baseTopic,
 			RPCClientID: e.ClientID + "-rpc",
 		}, nil

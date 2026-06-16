@@ -44,6 +44,9 @@ func TestParseCloudServer_PicksByServerID(t *testing.T) {
 }
 
 func TestParseCloudServer_PlainMQTTWhenSSLDisabled(t *testing.T) {
+	// A plaintext broker (the demo-box local Mosquitto) has enableSSL=false. Even
+	// when a stale serverCertFile lingers in the entry, the daemon must NOT try to
+	// load a CA cert — there is no TLS — or it fatals at startup.
 	data := `[{"serverId":"TrakRF MQTT","type":"MQTT","path":"host","port":1883,"clientId":"c1","username":"u","password":"p","enableSSL":false,"serverCertFile":"x.pem","topic":"a/b/reads"}]`
 	bc, err := parseCloudServer([]byte(data), "TrakRF MQTT", "/certs")
 	if err != nil {
@@ -51,6 +54,25 @@ func TestParseCloudServer_PlainMQTTWhenSSLDisabled(t *testing.T) {
 	}
 	if !strings.HasPrefix(bc.URL, "mqtt://") {
 		t.Errorf("expected mqtt:// scheme, got %q", bc.URL)
+	}
+	if bc.CACertPath != "" {
+		t.Errorf("CACertPath = %q, want empty (no TLS on a plaintext broker)", bc.CACertPath)
+	}
+}
+
+func TestParseCloudServer_SSLWithoutCertFileUsesSystemRoots(t *testing.T) {
+	// SSL enabled but no serverCertFile: connect over TLS using the system root
+	// pool (empty CACertPath), not a bogus "<certDir>/<serverId>/" path.
+	data := `[{"serverId":"TrakRF MQTT","type":"MQTT","path":"host","port":8883,"clientId":"c1","username":"u","password":"p","enableSSL":true,"serverCertFile":"","topic":"a/b/reads"}]`
+	bc, err := parseCloudServer([]byte(data), "TrakRF MQTT", "/certs")
+	if err != nil {
+		t.Fatalf("parseCloudServer: %v", err)
+	}
+	if !strings.HasPrefix(bc.URL, "mqtts://") {
+		t.Errorf("expected mqtts:// scheme, got %q", bc.URL)
+	}
+	if bc.CACertPath != "" {
+		t.Errorf("CACertPath = %q, want empty (system roots)", bc.CACertPath)
 	}
 }
 

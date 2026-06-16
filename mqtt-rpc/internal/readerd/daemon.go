@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"time"
 
@@ -114,8 +115,24 @@ func (d *Daemon) Start() error {
 	// Do not wait on the connect token: with ConnectRetry it only completes once a
 	// connection succeeds, so waiting would hang on a down broker at boot.
 	d.client.Connect()
-	d.log.Info().Str("client_id", d.cfg.Broker.RPCClientID).Str("broker", d.cfg.Broker.URL).Msg("readerd connecting")
+	d.log.Info().Str("client_id", d.cfg.Broker.RPCClientID).Str("broker", redactBrokerURL(d.cfg.Broker.URL)).Msg("readerd connecting")
 	return nil
+}
+
+// redactBrokerURL masks the password in a broker URL so credentials never reach
+// the logs (the discovered CloudServer URL carries user:pass). User and host are
+// preserved for diagnostics; an unparseable URL is reported as "<redacted>".
+func redactBrokerURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "<redacted>"
+	}
+	if u.User != nil {
+		if _, hasPass := u.User.Password(); hasPass {
+			u.User = url.UserPassword(u.User.Username(), "xxxxx")
+		}
+	}
+	return u.String()
 }
 
 // Stop publishes the retained offline status (best-effort) then disconnects.
