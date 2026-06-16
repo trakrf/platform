@@ -139,11 +139,11 @@ One-time host prereqs (root), beyond the base bring-up:
 ```bash
 U=$(id -un)
 # Tier-3: allow ONLY a clean reboot
-sudo sed "s/WATCHDOG_USER/$U/" deploy/edge/systemd/trakrf-watchdog.sudoers.example \
+sudo sed "s/__TRAKRF_USER__/$U/g" deploy/edge/systemd/trakrf-watchdog.sudoers.example \
   | sudo tee /etc/sudoers.d/trakrf-watchdog >/dev/null
 sudo chmod 440 /etc/sudoers.d/trakrf-watchdog && sudo visudo -cf /etc/sudoers.d/trakrf-watchdog
 # proactive recovery on resume
-sudo sed "s/WATCHDOG_USER/$U/" deploy/edge/systemd/trakrf-resume-hook.example \
+sudo sed "s/__TRAKRF_USER__/$U/g" deploy/edge/systemd/trakrf-resume-hook.example \
   | sudo tee /usr/lib/systemd/system-sleep/trakrf-resume >/dev/null
 sudo chmod 755 /usr/lib/systemd/system-sleep/trakrf-resume
 ```

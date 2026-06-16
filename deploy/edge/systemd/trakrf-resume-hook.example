@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Install (root): cp to /usr/lib/systemd/system-sleep/trakrf-resume ; chmod 755
+# Install (root): cp to /usr/lib/systemd/system-sleep/trakrf-resume ; chmod 755 ; then set user:
+#   sudo sed -i "s/__TRAKRF_USER__/$(id -un)/g" /usr/lib/systemd/system-sleep/trakrf-resume
 # TRA-989: on resume from suspend, proactively clear any rootlessport forward wedge for the
-# lingering demo user (lid-open = de-facto power-up). Replace WATCHDOG_USER (brick: mike).
-WATCHDOG_USER=WATCHDOG_USER
+# lingering demo user (lid-open = de-facto power-up). __TRAKRF_USER__ = lingering user (brick: mike).
+WATCHDOG_USER=__TRAKRF_USER__
 case "$1/$2" in
   post/*)   # $1=post means waking back up
     uid=$(id -u "$WATCHDOG_USER") || exit 0
