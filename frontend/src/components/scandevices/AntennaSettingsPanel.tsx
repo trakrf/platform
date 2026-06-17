@@ -224,6 +224,25 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
         </div>
       )}
 
+      {/* Read Timing + the read-only RSSI gate render ABOVE the antenna rows so the
+          per-antenna sliders sit at the bottom of the panel, adjacent to the Live
+          Reads feed that follows — keeping placement controls and their feedback
+          close together. */}
+      {config && (
+        <ReadTimingSection
+          config={config}
+          enabledCount={enabledCount}
+          applying={pushing}
+          onApply={(body) => push(body, false)}
+        />
+      )}
+
+      {config?.rssi_gate_dbm != null && (
+        <p className="mt-2 mb-3 text-xs text-gray-400 dark:text-gray-500">
+          RSSI gate {config.rssi_gate_dbm} dBm (read-only)
+        </p>
+      )}
+
       <div className="space-y-2">
         {Array.from({ length: antennaCount }, (_, i) => {
           const antenna = i + 1;
@@ -246,21 +265,6 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
           );
         })}
       </div>
-
-      {config && (
-        <ReadTimingSection
-          config={config}
-          enabledCount={enabledCount}
-          applying={pushing}
-          onApply={(body) => push(body, false)}
-        />
-      )}
-
-      {config?.rssi_gate_dbm != null && (
-        <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-          RSSI gate {config.rssi_gate_dbm} dBm (read-only)
-        </p>
-      )}
     </div>
   );
 }
