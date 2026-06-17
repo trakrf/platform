@@ -53,8 +53,13 @@ export interface LiveReadsFeedProps {
 }
 
 export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFeedProps) {
+  // Show all BLE devices (TRA-926): off = the server's default beacon-only feed;
+  // on = ?adverts=all, the full pre-membership diagnostic (phones, sensors, etc.).
+  // It changes the server subscription, so toggling reconnects via the hook.
+  const [showAllAdverts, setShowAllAdverts] = useState(false);
+
   const { tags, status, error, readerCount, readRate, reconnect, clockOffsetMs } =
-    useReaderFeed(filterReaderKey);
+    useReaderFeed(filterReaderKey, showAllAdverts);
 
   // View controls (TRA-937). All client-side over the live presence map.
   const [filterText, setFilterText] = useState('');
@@ -182,6 +187,15 @@ export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFee
             />
             Split by antenna
           </label>
+          <label className="flex items-center gap-1.5 text-gray-700 dark:text-gray-300 select-none">
+            <input
+              type="checkbox"
+              checked={showAllAdverts}
+              onChange={(e) => setShowAllAdverts(e.target.checked)}
+              className="rounded border-gray-300 dark:border-gray-600"
+            />
+            Show all BLE devices
+          </label>
           <button
             type="button"
             onClick={togglePause}
@@ -226,7 +240,7 @@ export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFee
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700">
               <tr className="text-left text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-600">
-                <SortHeader label="EPC" sortKey="epc" sort={sort} onSort={toggleSort} className="py-2.5 px-3" />
+                <SortHeader label="EPC / MAC" sortKey="epc" sort={sort} onSort={toggleSort} className="py-2.5 px-3" />
                 <SortHeader label="Reader" sortKey="readerKey" sort={sort} onSort={toggleSort} className="px-3" />
                 <SortHeader label="Ant" sortKey="antennaPort" sort={sort} onSort={toggleSort} align="right" />
                 <SortHeader label="Reads" sortKey="readCount" sort={sort} onSort={toggleSort} align="right" />

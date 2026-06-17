@@ -38,7 +38,7 @@ func TestTracker_FreshSubscriberSeedIsEmpty(t *testing.T) {
 	tr := NewTracker(idleCfg())
 	defer tr.Stop()
 
-	ch, cancel := tr.Subscribe(7, "")
+	ch, cancel := tr.Subscribe(7, "", false)
 	defer cancel()
 
 	ev := recv(t, ch, time.Second)
@@ -61,7 +61,7 @@ func TestTracker_PerSessionCountsIndependent(t *testing.T) {
 	tr := NewTracker(idleCfg())
 	defer tr.Stop()
 
-	chA, cancelA := tr.Subscribe(7, "")
+	chA, cancelA := tr.Subscribe(7, "", false)
 	defer cancelA()
 	recv(t, chA, time.Second) // A seed (empty)
 
@@ -72,7 +72,7 @@ func TestTracker_PerSessionCountsIndependent(t *testing.T) {
 	}
 
 	// B joins AFTER the first read — it must not see that read in its seed.
-	chB, cancelB := tr.Subscribe(7, "")
+	chB, cancelB := tr.Subscribe(7, "", false)
 	defer cancelB()
 	seedB := recv(t, chB, time.Second)
 	var pB snapshotPayload
@@ -117,7 +117,7 @@ func TestTracker_PublishDeliversUpsert(t *testing.T) {
 	tr := NewTracker(idleCfg())
 	defer tr.Stop()
 
-	ch, cancel := tr.Subscribe(7, "")
+	ch, cancel := tr.Subscribe(7, "", false)
 	defer cancel()
 	recv(t, ch, time.Second) // drain the seed snapshot
 
@@ -140,9 +140,9 @@ func TestTracker_OrgIsolation(t *testing.T) {
 	tr := NewTracker(idleCfg())
 	defer tr.Stop()
 
-	chA, cancelA := tr.Subscribe(1, "")
+	chA, cancelA := tr.Subscribe(1, "", false)
 	defer cancelA()
-	chB, cancelB := tr.Subscribe(2, "")
+	chB, cancelB := tr.Subscribe(2, "", false)
 	defer cancelB()
 	recv(t, chA, time.Second) // drain snapshots
 	recv(t, chB, time.Second)
@@ -163,7 +163,7 @@ func TestTracker_LazyDoesNotTrackWithoutSubscribers(t *testing.T) {
 	// Reads arriving with nobody watching are not accumulated.
 	tr.Publish(7, "trakrf.id/dock-1/reads", []scanread.Read{read("EPC1", -50, 1)})
 
-	ch, cancel := tr.Subscribe(7, "")
+	ch, cancel := tr.Subscribe(7, "", false)
 	defer cancel()
 	ev := recv(t, ch, time.Second)
 	var p snapshotPayload
@@ -179,14 +179,14 @@ func TestTracker_LazyResetsAfterLastUnsubscribe(t *testing.T) {
 	tr := NewTracker(idleCfg())
 	defer tr.Stop()
 
-	ch, cancel := tr.Subscribe(7, "")
+	ch, cancel := tr.Subscribe(7, "", false)
 	recv(t, ch, time.Second) // seed snapshot (empty)
 	tr.Publish(7, "trakrf.id/dock-1/reads", []scanread.Read{read("EPC1", -50, 1)})
 	recv(t, ch, time.Second) // upsert — tag is now tracked
 
 	cancel() // last subscriber leaves → org state discarded
 
-	ch2, cancel2 := tr.Subscribe(7, "")
+	ch2, cancel2 := tr.Subscribe(7, "", false)
 	defer cancel2()
 	ev := recv(t, ch2, time.Second)
 	var p snapshotPayload
@@ -202,7 +202,7 @@ func TestTracker_ScopedSubscriberOnlySeesItsReader(t *testing.T) {
 	tr := NewTracker(idleCfg())
 	defer tr.Stop()
 
-	ch, cancel := tr.Subscribe(7, "trakrf.id/dock-1/reads") // scoped to dock-1's topic
+	ch, cancel := tr.Subscribe(7, "trakrf.id/dock-1/reads", false) // scoped to dock-1's topic
 	defer cancel()
 	recv(t, ch, time.Second) // seed
 
@@ -222,11 +222,92 @@ func TestTracker_ScopedSubscriberOnlySeesItsReader(t *testing.T) {
 	}
 }
 
+// bleRead builds a BLE-gateway read with an explicit advert classification.
+func bleRead(epc string, rssi int, advType string) scanread.Read {
+	return scanread.Read{EPC: epc, AntennaPort: 1, RSSI: rssi, BLE: &scanread.BLEAdvert{Type: advType}}
+}
+
+// TRA-926: the default session keeps every read from a MAC that emitted at least
+// one iBeacon frame this message (including that MAC's non-iBeacon name/battery
+// frame) and drops MACs that never emit an iBeacon. An ?adverts=all session sees
+// everything. RFID reads (BLE == nil) are never filtered.
+func TestTracker_BLENoiseFilter(t *testing.T) {
+	tr := NewTracker(idleCfg())
+	defer tr.Stop()
+
+	chDef, cancelDef := tr.Subscribe(7, "", false) // beacon-only (default)
+	defer cancelDef()
+	recv(t, chDef, time.Second) // drain seed
+
+	chAll, cancelAll := tr.Subscribe(7, "", true) // unfiltered diagnostic
+	defer cancelAll()
+	recv(t, chAll, time.Second) // drain seed
+
+	reads := []scanread.Read{
+		bleRead("BEACON", -50, scanread.BLETypeIBeacon), // beacon's iBeacon frame
+		bleRead("BEACON", -55, scanread.BLETypeUnknown), // beacon's name/battery frame (same MAC)
+		bleRead("NOISE", -60, scanread.BLETypeUnknown),  // phone/headphone — never a beacon
+	}
+	tr.Publish(7, "trakrf.id/gw/reads", reads)
+
+	// Default session: BEACON upserts only, never NOISE.
+	gotBeacon := false
+	for {
+		ev := recvMaybe(t, chDef, 500*time.Millisecond)
+		if ev == nil {
+			break
+		}
+		var ts TagState
+		if err := json.Unmarshal(ev.Data, &ts); err != nil {
+			t.Fatalf("bad upsert json: %v", err)
+		}
+		if ts.EPC == "NOISE" {
+			t.Fatal("default session must not receive non-beacon NOISE")
+		}
+		if ts.EPC == "BEACON" {
+			gotBeacon = true
+		}
+	}
+	if !gotBeacon {
+		t.Fatal("default session must receive the beacon MAC's reads")
+	}
+
+	// ?adverts=all session: NOISE must appear.
+	gotNoise := false
+	for {
+		ev := recvMaybe(t, chAll, 500*time.Millisecond)
+		if ev == nil {
+			break
+		}
+		var ts TagState
+		if err := json.Unmarshal(ev.Data, &ts); err != nil {
+			t.Fatalf("bad upsert json: %v", err)
+		}
+		if ts.EPC == "NOISE" {
+			gotNoise = true
+		}
+	}
+	if !gotNoise {
+		t.Fatal("?adverts=all session must receive non-beacon reads")
+	}
+}
+
+// recvMaybe returns the next event or nil if none arrives within the window.
+func recvMaybe(t *testing.T, ch <-chan Event, within time.Duration) *Event {
+	t.Helper()
+	select {
+	case ev := <-ch:
+		return &ev
+	case <-time.After(within):
+		return nil
+	}
+}
+
 func TestTracker_CancelStopsDelivery(t *testing.T) {
 	tr := NewTracker(idleCfg())
 	defer tr.Stop()
 
-	ch, cancel := tr.Subscribe(7, "")
+	ch, cancel := tr.Subscribe(7, "", false)
 	recv(t, ch, time.Second) // snapshot
 	cancel()
 

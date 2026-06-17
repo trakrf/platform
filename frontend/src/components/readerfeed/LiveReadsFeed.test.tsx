@@ -77,14 +77,14 @@ describe('LiveReadsFeed', () => {
     mockFeed({ tags: [] });
     render(<LiveReadsFeed filterReaderKey="dock-7" />);
 
-    expect(useReaderFeed).toHaveBeenCalledWith('dock-7');
+    expect(useReaderFeed).toHaveBeenCalledWith('dock-7', false);
   });
 
   it('subscribes to the whole org feed when given no key (global page)', () => {
     mockFeed({ tags: [] });
     render(<LiveReadsFeed />);
 
-    expect(useReaderFeed).toHaveBeenCalledWith(undefined);
+    expect(useReaderFeed).toHaveBeenCalledWith(undefined, false);
   });
 
   it('hides the Readers stat and secondary RSSI columns in compact mode', () => {

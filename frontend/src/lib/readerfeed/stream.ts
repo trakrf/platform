@@ -13,13 +13,15 @@ import type { LeavePayload, PresenceEvent, SnapshotPayload, TagState } from '@/t
 export const READ_STREAM_PATH = '/reads/stream';
 
 /**
- * Build the stream URL, optionally scoping to one reader server-side. A scoped
- * panel passes its reader key so the backend never streams (or tracks) other
- * readers' reads for that session.
+ * Build the stream URL, optionally scoping to one reader server-side and/or
+ * disabling the default BLE noise filter (?adverts=all, TRA-926).
  */
-export function streamURL(baseURL: string, readerKey?: string): string {
-  const url = baseURL + READ_STREAM_PATH;
-  return readerKey ? `${url}?reader=${encodeURIComponent(readerKey)}` : url;
+export function streamURL(baseURL: string, readerKey?: string, showAllAdverts?: boolean): string {
+  const params = new URLSearchParams();
+  if (readerKey) params.set('reader', readerKey);
+  if (showAllAdverts) params.set('adverts', 'all');
+  const qs = params.toString();
+  return qs ? `${baseURL}${READ_STREAM_PATH}?${qs}` : `${baseURL}${READ_STREAM_PATH}`;
 }
 
 export interface SSEParseState {
@@ -106,6 +108,8 @@ export function openReadStream(opts: {
   baseURL: string;
   /** Scope the stream to one reader server-side; omit for the whole org feed. */
   readerKey?: string;
+  /** Disable the default BLE noise filter for this session (TRA-926). */
+  showAllAdverts?: boolean;
   getToken: () => string | null;
   onUnauthorized: () => Promise<boolean>;
   callbacks: ReadStreamCallbacks;
@@ -120,7 +124,7 @@ export function openReadStream(opts: {
       const state: SSEParseState = { buffer: '' };
       try {
         const token = opts.getToken();
-        const resp = await fetch(streamURL(opts.baseURL, opts.readerKey), {
+        const resp = await fetch(streamURL(opts.baseURL, opts.readerKey, opts.showAllAdverts), {
           headers: {
             Accept: 'text/event-stream',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),

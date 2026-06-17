@@ -23,7 +23,21 @@ describe('streamURL', () => {
   });
 
   it('appends an encoded ?reader= when scoped to a reader', () => {
-    expect(streamURL('/api/v1', 'dock 9/a')).toBe('/api/v1/reads/stream?reader=dock%209%2Fa');
+    expect(streamURL('/api/v1', 'dock 9/a')).toBe('/api/v1/reads/stream?reader=dock+9%2Fa');
+  });
+});
+
+describe('streamURL adverts param', () => {
+  it('omits adverts by default (beacon-only is the server default)', () => {
+    expect(streamURL('/api/v1')).toBe('/api/v1/reads/stream');
+  });
+  it('appends adverts=all when showing all BLE devices', () => {
+    expect(streamURL('/api/v1', undefined, true)).toBe('/api/v1/reads/stream?adverts=all');
+  });
+  it('combines reader scope and adverts=all', () => {
+    expect(streamURL('/api/v1', 'trakrf.id/gw/reads', true)).toBe(
+      '/api/v1/reads/stream?reader=trakrf.id%2Fgw%2Freads&adverts=all',
+    );
   });
 });
 
