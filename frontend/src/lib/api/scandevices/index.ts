@@ -99,18 +99,22 @@ export const scanDevicesApi = {
    * contract (TRA-993). Can 502/503 when the reader's agent is offline.
    * GET /api/v1/scan-devices/:id/reader-config
    */
-  getReaderConfig: (id: number) =>
-    apiClient.get<ReaderConfigResponse>(`/scan-devices/${id}/reader-config`),
+  getReaderConfig: (id: number, force = false) =>
+    apiClient.get<ReaderConfigResponse>(
+      `/scan-devices/${id}/reader-config${force ? '?force=true' : ''}`
+    ),
 
   /**
-   * Push a new transmit-power map to a fixed reader (applied on its next
-   * inventory cycle).
+   * Push antenna enablement + power (and/or read-timing knobs) to a fixed
+   * reader. Applied on the reader's next inventory cycle.
    * PATCH /api/v1/scan-devices/:id/reader-config
    */
-  setReaderConfig: (id: number, body: SetReaderConfigRequest) =>
-    apiClient.patch<SetReaderConfigResponse>(`/scan-devices/${id}/reader-config`, body, {
-      headers: { 'Content-Type': 'application/json' },
-    }),
+  setReaderConfig: (id: number, body: SetReaderConfigRequest, force = false) =>
+    apiClient.patch<SetReaderConfigResponse>(
+      `/scan-devices/${id}/reader-config${force ? '?force=true' : ''}`,
+      body,
+      { headers: { 'Content-Type': 'application/json' } }
+    ),
 };
 
 /**
