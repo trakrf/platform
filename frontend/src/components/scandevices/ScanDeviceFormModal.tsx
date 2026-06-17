@@ -118,10 +118,11 @@ function ScanDeviceFormModalBody({
             <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-4">
               Live Reads
             </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-              Reads off this reader only — for antenna placement and RSSI tuning.
-            </p>
-            <LiveReadsFeed filterReaderKey={readerKeyForDevice(device)} compact />
+            <LiveReadsFeed
+              filterReaderKey={readerKeyForDevice(device)}
+              compact
+              caption="Reads off this reader only — for antenna placement and RSSI tuning."
+            />
           </section>
         </>
       )}
