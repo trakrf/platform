@@ -47,11 +47,13 @@ func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, userAg
 		return s.signupWithInvitation(ctx, request, passwordHash, userAgent, ip, generateJWT)
 	}
 
-	// TRA-970: keep random visitors off non-prod sites. Self-service signup is
-	// blocked on every environment except production, local dev, and CI; the
-	// handler turns this into a 403 "go to production" response. Invitation-based
-	// signup above is intentionally exempt — invited users are explicitly allowed.
-	if !signupAllowedInEnv(os.Getenv("APP_ENV")) {
+	// TRA-970: steer casual/random visitors off non-prod sites. Self-service signup
+	// on any env except production / local dev / CI requires a deliberate non-prod
+	// acknowledgment; without it the handler returns a 403 that points the visitor
+	// to production. With it (the frontend's explicit "continue on this sandbox"
+	// opt-in) signup proceeds — this is a warn-and-steer speed bump, not a hard
+	// wall. Invitation-based signup above is exempt entirely.
+	if !signupAllowedInEnv(os.Getenv("APP_ENV")) && !request.AcknowledgeNonProd {
 		return nil, ErrSignupNotAllowed
 	}
 

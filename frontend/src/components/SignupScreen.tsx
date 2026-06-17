@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '@/stores';
-import { Eye, EyeOff, Building2, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Building2, Loader2, AlertTriangle } from 'lucide-react';
 import { handleAuthRedirect } from '@/utils/authRedirect';
 import { authApi } from '@/lib/api/auth';
 import type { InvitationInfo } from '@/lib/api/auth';
@@ -20,8 +20,22 @@ function getInviteContext(): { isInviteFlow: boolean; token: string | null } {
   return { isInviteFlow, token };
 }
 
+// TRA-970: detect a non-prod (preview/demo) deployment by hostname. Production is
+// app.trakrf.id; local dev is localhost. Anything else is a throwaway sandbox, so
+// we warn and require a deliberate opt-in before self-service signup. This is
+// cosmetic/UX only — the backend is the real enforcer of the acknowledgment.
+function isNonProdHost(): boolean {
+  const host = window.location.hostname;
+  if (host === 'app.trakrf.id') return false; // production
+  if (host === 'localhost' || host === '127.0.0.1' || host === '') return false; // local dev
+  return true; // preview, demo, or any other deployed host
+}
+
 export default function SignupScreen() {
   const { isInviteFlow, token: inviteToken } = getInviteContext();
+  // Self-service signup on a non-prod host requires a deliberate acknowledgment
+  // (TRA-970). Invitation signups are exempt — invited users are already expected.
+  const nonProd = !isInviteFlow && isNonProdHost();
 
   const [email, setEmail] = useState('');
   const [orgName, setOrgName] = useState('');
@@ -30,6 +44,7 @@ export default function SignupScreen() {
   const [website, setWebsite] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [ackNonProd, setAckNonProd] = useState(false);
   // envBlocked is set when the backend rejects self-service signup on a non-prod
   // site (TRA-970) — we swap the form for a "go to production" panel.
   const [envBlocked, setEnvBlocked] = useState(false);
@@ -40,6 +55,7 @@ export default function SignupScreen() {
     phone?: string;
     website?: string;
     password?: string;
+    ack?: string;
     general?: string;
   }>({});
   const emailInputRef = useRef<HTMLInputElement>(null);
@@ -141,8 +157,12 @@ export default function SignupScreen() {
     const phoneError = !isInviteFlow ? validatePhone(phone) : null;
     const websiteError = !isInviteFlow ? validateWebsite(website) : null;
     const passwordError = validatePassword(password);
+    // TRA-970: on a non-prod host the sandbox acknowledgment must be checked.
+    const ackError = nonProd && !ackNonProd
+      ? 'Please acknowledge this is a non-production environment'
+      : null;
 
-    if (emailError || orgNameError || nameError || phoneError || websiteError || passwordError) {
+    if (emailError || orgNameError || nameError || phoneError || websiteError || passwordError || ackError) {
       setErrors({
         email: emailError || undefined,
         orgName: orgNameError || undefined,
@@ -150,6 +170,7 @@ export default function SignupScreen() {
         phone: phoneError || undefined,
         website: websiteError || undefined,
         password: passwordError || undefined,
+        ack: ackError || undefined,
       });
       return;
     }
@@ -163,12 +184,20 @@ export default function SignupScreen() {
         toast.success(`Welcome to ${inviteInfo?.org_name || 'the organization'}!`);
         window.location.hash = '#home';
       } else {
-        // Regular signup with org name + required contact details (TRA-971)
-        await signup(email, password, orgName.trim(), undefined, {
-          name: name.trim(),
-          phone: phone.trim(),
-          website: website.trim(),
-        });
+        // Regular signup with org name + required contact details (TRA-971).
+        // On a non-prod host, pass the deliberate sandbox acknowledgment (TRA-970).
+        await signup(
+          email,
+          password,
+          orgName.trim(),
+          undefined,
+          {
+            name: name.trim(),
+            phone: phone.trim(),
+            website: website.trim(),
+          },
+          nonProd ? ackNonProd : undefined
+        );
         handleAuthRedirect();
       }
     } catch (err: unknown) {
@@ -277,6 +306,26 @@ export default function SignupScreen() {
                 <p className="text-blue-200 text-sm">Joining organization</p>
                 <p className="text-white font-medium">{inviteInfo.org_name}</p>
                 <p className="text-blue-400 text-xs capitalize">as {inviteInfo.role}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Non-prod sandbox warning (TRA-970) */}
+        {nonProd && (
+          <div className="bg-amber-900/30 border border-amber-700 rounded-lg p-4 mb-6">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-amber-200 text-sm font-medium">Non-production environment</p>
+                <p className="text-amber-300/80 text-xs mt-1">
+                  This is a preview/test sandbox — data may be wiped at any time. For a real
+                  account,{' '}
+                  <a href="https://app.trakrf.id" className="underline hover:text-amber-200">
+                    sign up at app.trakrf.id
+                  </a>
+                  .
+                </p>
               </div>
             </div>
           </div>
@@ -444,6 +493,29 @@ export default function SignupScreen() {
             </div>
             {errors.password && <p className="text-red-400 text-sm mt-1">{errors.password}</p>}
           </div>
+
+          {/* Non-prod acknowledgment (TRA-970) - deliberate opt-in to the sandbox */}
+          {nonProd && (
+            <div>
+              <label htmlFor="ackNonProd" className="flex items-start gap-2 cursor-pointer">
+                <input
+                  id="ackNonProd"
+                  type="checkbox"
+                  checked={ackNonProd}
+                  onChange={(e) => {
+                    setAckNonProd(e.target.checked);
+                    if (e.target.checked) setErrors((prev) => ({ ...prev, ack: undefined }));
+                  }}
+                  className="mt-1 h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
+                  disabled={isLoading}
+                />
+                <span className="text-sm text-gray-300">
+                  I understand this is a non-production test environment and my data may be wiped.
+                </span>
+              </label>
+              {errors.ack && <p className="text-red-400 text-sm mt-1">{errors.ack}</p>}
+            </div>
+          )}
 
           {/* General error */}
           {errors.general && (

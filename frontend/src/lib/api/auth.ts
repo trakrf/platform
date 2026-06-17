@@ -9,6 +9,8 @@ export interface SignupRequest {
   name?: string;
   phone?: string;
   website?: string;
+  // TRA-970: deliberate opt-in to sign up on a non-prod (preview/demo) sandbox.
+  acknowledge_non_prod?: boolean;
   invitation_token?: string;
 }
 

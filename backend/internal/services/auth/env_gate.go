@@ -3,8 +3,12 @@ package auth
 import "errors"
 
 // ErrSignupNotAllowed is returned by Signup when self-service (non-invitation)
-// signup is blocked on the current environment (TRA-970). The handler maps it to
-// a 403 "go to production" response. Invitation-based signup is never gated by it.
+// signup is attempted on a non-prod environment WITHOUT an explicit non-prod
+// acknowledgment (TRA-970). The handler maps it to a 403 that steers the visitor
+// to production; the frontend then offers a deliberate "continue on this sandbox"
+// opt-in (SignupRequest.AcknowledgeNonProd) which bypasses this. Invitation-based
+// signup is never gated by it. This is a warn-and-steer speed bump, not a security
+// boundary — a determined user can acknowledge and proceed by design.
 var ErrSignupNotAllowed = errors.New("signup_not_allowed")
 
 // signupAllowedEnvs is an allowlist of APP_ENV values where self-service signup

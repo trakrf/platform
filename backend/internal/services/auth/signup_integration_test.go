@@ -148,3 +148,32 @@ func TestSignup_NonProdEnv_Blocked(t *testing.T) {
 	).Scan(&count))
 	assert.Equal(t, 0, count, "blocked signup must not create a user")
 }
+
+// TRA-970: a deliberate non-prod acknowledgment (AcknowledgeNonProd) lets signup
+// proceed on a non-prod env — the warn-and-steer gate is a speed bump, not a wall.
+func TestSignup_NonProdEnv_AckProceeds(t *testing.T) {
+	t.Setenv("JWT_SECRET", "signup-ack-test")
+	t.Setenv("APP_ENV", "preview")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	ctx := context.Background()
+
+	svc := NewService(pool, store, nil)
+	stubJWT := func(int, string, *int) (string, error) { return "stub-token", nil }
+	stubHash := func(pw string) (string, error) { return "hashed-" + pw, nil }
+
+	resp, err := svc.Signup(ctx, authmodels.SignupRequest{
+		Email:              "ack-signup@example.com",
+		Password:           "s3cret!!",
+		OrgName:            "Ack Org",
+		Name:               "Yes Please",
+		Phone:              "555-0001",
+		Website:            "ack.example.com",
+		AcknowledgeNonProd: true,
+	}, "", "", stubHash, stubJWT)
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "Yes Please", resp.User.Name)
+}

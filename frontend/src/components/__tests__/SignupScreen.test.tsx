@@ -164,7 +164,8 @@ describe('SignupScreen', () => {
           'password123',
           'Test Company',
           undefined,
-          expectedContact
+          expectedContact,
+          undefined // acknowledgeNonProd — undefined on prod/local (jsdom host is localhost)
         );
         expect(mockSignup).toHaveBeenCalledTimes(1);
       });
@@ -191,7 +192,8 @@ describe('SignupScreen', () => {
           'password123',
           'Trimmed Company',
           undefined,
-          expectedContact
+          expectedContact,
+          undefined
         );
       });
     });
@@ -253,6 +255,74 @@ describe('SignupScreen', () => {
 
       await waitFor(() => {
         expect(screen.getByText(/app\.trakrf\.id/i)).toBeInTheDocument();
+      });
+    });
+  });
+
+  // TRA-970: on a non-prod host (anything but app.trakrf.id / localhost) the form
+  // warns and requires a deliberate sandbox acknowledgment before submitting.
+  describe('Non-prod sandbox', () => {
+    let originalLocation: Location;
+
+    beforeEach(() => {
+      originalLocation = window.location;
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        writable: true,
+        value: { hostname: 'app.preview.trakrf.id', hash: '' },
+      });
+    });
+
+    afterEach(() => {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        writable: true,
+        value: originalLocation,
+      });
+    });
+
+    const fillAll = () => {
+      fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'test@example.com' } });
+      fireEvent.change(screen.getByLabelText(/organization name/i), { target: { value: 'Test Company' } });
+      fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'password123' } });
+      fireEvent.change(screen.getByLabelText(/your name/i), { target: { value: 'Jane Doe' } });
+      fireEvent.change(screen.getByLabelText(/company website/i), { target: { value: 'acme.com' } });
+      fireEvent.change(screen.getByLabelText(/phone/i), { target: { value: '555-1234' } });
+    };
+
+    it('shows the non-production warning banner', () => {
+      render(<SignupScreen />);
+      expect(screen.getByText(/non-production environment/i)).toBeInTheDocument();
+    });
+
+    it('blocks submit until the sandbox acknowledgment is checked', async () => {
+      mockSignup.mockResolvedValue(undefined);
+      render(<SignupScreen />);
+      fillAll();
+      fireEvent.click(screen.getByRole('button', { name: /sign up/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/acknowledge this is a non-production/i)).toBeInTheDocument();
+      });
+      expect(mockSignup).not.toHaveBeenCalled();
+    });
+
+    it('passes acknowledgeNonProd=true once acknowledged', async () => {
+      mockSignup.mockResolvedValue(undefined);
+      render(<SignupScreen />);
+      fillAll();
+      fireEvent.click(screen.getByLabelText(/non-production test environment/i));
+      fireEvent.click(screen.getByRole('button', { name: /sign up/i }));
+
+      await waitFor(() => {
+        expect(mockSignup).toHaveBeenCalledWith(
+          'test@example.com',
+          'password123',
+          'Test Company',
+          undefined,
+          { name: 'Jane Doe', phone: '555-1234', website: 'acme.com' },
+          true
+        );
       });
     });
   });

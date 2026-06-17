@@ -30,7 +30,8 @@ interface AuthState {
     password: string,
     orgName?: string,
     invitationToken?: string,
-    contact?: { name: string; phone: string; website: string }
+    contact?: { name: string; phone: string; website: string },
+    acknowledgeNonProd?: boolean
   ) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
@@ -147,7 +148,8 @@ export const useAuthStore = create<AuthState>()(
           password: string,
           orgName?: string,
           invitationToken?: string,
-          contact?: { name: string; phone: string; website: string }
+          contact?: { name: string; phone: string; website: string },
+          acknowledgeNonProd?: boolean
         ) => {
           set({ isLoading: true, error: null });
           try {
@@ -158,6 +160,7 @@ export const useAuthStore = create<AuthState>()(
               name: contact?.name,
               phone: contact?.phone,
               website: contact?.website,
+              acknowledge_non_prod: acknowledgeNonProd,
               invitation_token: invitationToken,
             });
             const { access_token, refresh_token, user } = response.data.data;
