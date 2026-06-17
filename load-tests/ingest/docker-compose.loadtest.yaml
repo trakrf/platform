@@ -1,0 +1,28 @@
+# Ingestion load-test overlay (TRA-994). Self-contained so default `just dev`
+# stays pristine. Run with:
+#   docker compose -f docker-compose.yaml -f load-tests/ingest/docker-compose.loadtest.yaml up -d
+# Adds a plaintext anonymous broker and points the backend's ingest subscriber
+# at it (NOT preview). See load-tests/ingest/README.md.
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./load-tests/ingest/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: unless-stopped
+
+  backend:
+    environment:
+      # env=dev defaults LOG_LEVEL=debug (TRA-974); the per-message "ingest
+      # message processed" log would dominate under the firehose and skew the
+      # measurement. warn isolates ingest/DB cost. (LOG_LEVEL is the real knob.)
+      LOG_LEVEL: warn
+      # Subscribe to the LOCAL broker (plaintext, anonymous) — the reader
+      # firehose lands here, NOT preview.
+      MQTT_URL: mqtt://mosquitto:1883
+      MQTT_CLIENT_ID: trakrf-loadtest
+    depends_on:
+      mosquitto:
+        condition: service_started
