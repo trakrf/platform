@@ -202,8 +202,14 @@ func (c *Client) call(ctx context.Context, base, method string, params any) (rea
 	}
 }
 
-// rpcErr converts a frame's error object to a Go error.
+// rpcErr converts a frame's error object to a Go error. A CodeReaderBusy frame
+// becomes a typed *readerrpc.BusyError so the HTTP layer can map it to a 409.
 func rpcErr(method string, e *readerrpc.RPCError) error {
+	if e.Code == readerrpc.CodeReaderBusy {
+		var d readerrpc.ReaderBusyData
+		_ = json.Unmarshal(e.Data, &d)
+		return &readerrpc.BusyError{HeldBy: d.HeldBy}
+	}
 	return fmt.Errorf("readercontrol: %s: reader error %d: %s", method, e.Code, e.Message)
 }
 
@@ -223,14 +229,15 @@ func (c *Client) GetCapabilities(ctx context.Context, base string) (readerrpc.Ca
 	return caps, nil
 }
 
-// GetConfig reads the reader's current configuration.
-func (c *Client) GetConfig(ctx context.Context, base string) (readerrpc.ReaderConfig, error) {
-	resp, err := c.call(ctx, base, readerrpc.MethodGetConfig, nil)
+// GetOperProfile reads the reader's current configuration. force force-logs-out a
+// held single session first.
+func (c *Client) GetOperProfile(ctx context.Context, base string, force bool) (readerrpc.ReaderConfig, error) {
+	resp, err := c.call(ctx, base, readerrpc.MethodGetOperProfile, readerrpc.OperProfileParams{Force: force})
 	if err != nil {
 		return readerrpc.ReaderConfig{}, err
 	}
 	if resp.Error != nil {
-		return readerrpc.ReaderConfig{}, rpcErr(readerrpc.MethodGetConfig, resp.Error)
+		return readerrpc.ReaderConfig{}, rpcErr(readerrpc.MethodGetOperProfile, resp.Error)
 	}
 	var cfg readerrpc.ReaderConfig
 	if err := json.Unmarshal(resp.Result, &cfg); err != nil {
@@ -239,14 +246,15 @@ func (c *Client) GetConfig(ctx context.Context, base string) (readerrpc.ReaderCo
 	return cfg, nil
 }
 
-// SetConfig applies a (partial) configuration to the reader.
-func (c *Client) SetConfig(ctx context.Context, base string, cfg readerrpc.ReaderConfig) (readerrpc.SetConfigResult, error) {
-	resp, err := c.call(ctx, base, readerrpc.MethodSetConfig, cfg)
+// SetOperProfile applies a (partial) configuration to the reader. force
+// force-logs-out a held single session first.
+func (c *Client) SetOperProfile(ctx context.Context, base string, cfg readerrpc.ReaderConfig, force bool) (readerrpc.SetConfigResult, error) {
+	resp, err := c.call(ctx, base, readerrpc.MethodSetOperProfile, readerrpc.SetOperProfileParams{ReaderConfig: cfg, Force: force})
 	if err != nil {
 		return readerrpc.SetConfigResult{}, err
 	}
 	if resp.Error != nil {
-		return readerrpc.SetConfigResult{}, rpcErr(readerrpc.MethodSetConfig, resp.Error)
+		return readerrpc.SetConfigResult{}, rpcErr(readerrpc.MethodSetOperProfile, resp.Error)
 	}
 	var res readerrpc.SetConfigResult
 	if err := json.Unmarshal(resp.Result, &res); err != nil {

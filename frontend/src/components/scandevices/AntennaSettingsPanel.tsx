@@ -1,7 +1,8 @@
-// AntennaSettingsPanel — consolidated per-antenna reader settings (TRA-995).
-// Renders capabilities.antennas rows; each row joins a scan_point (by
-// antenna_port) for location + enable with the live reader config for power.
-// Replaces the old stacked ScanPointsPanel + AntennaPowerPanel.
+// AntennaSettingsPanel — per-antenna reader settings as a LIVE FACADE over the
+// reader (TRA-1007). Enablement + power are read from / written to the reader via
+// reader-config (the reader is the source of truth); scan_points hold only the
+// platform-owned capture-point → location mapping. Golden-config knobs (dwell,
+// dedup, RSSI gate, antenna differentiation) are shown read-only.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -13,8 +14,11 @@ import {
 } from '@/hooks/scandevices';
 import { useLocations } from '@/hooks/locations/useLocations';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
+import { parseReaderBusy } from '@/hooks/scandevices/useReaderConfig';
+import type { AntennaConfig, SetReaderConfigRequest } from '@/types/scandevices';
 import type { Location } from '@/types/locations';
 import { AntennaRow } from './AntennaRow';
+import { ReadTimingSection } from './ReadTimingSection';
 
 const STEP = 0.5;
 const DEBOUNCE_MS = 2000;
@@ -29,7 +33,7 @@ function locationLabel(l: Location): string {
 }
 
 export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
-  const { capabilities, config, isLoading, error } = useReaderConfig(deviceId);
+  const { capabilities, config, isLoading, error, busy, retryWithForce } = useReaderConfig(deviceId);
   const { setConfig } = useSetReaderConfig(deviceId);
   const { scanPoints } = useScanPoints(deviceId);
   const { create, update } = useScanPointMutations(deviceId);
@@ -39,64 +43,96 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
   const max = capabilities?.tx_power.max_dbm ?? 0;
   const antennaCount = capabilities?.antennas ?? 0;
 
-  // --- power: local state + ~2s debounce, lifted from AntennaPowerPanel -----
-  const [values, setValues] = useState<Record<number, number>>({});
-  const valuesRef = useRef<Record<number, number>>({});
+  // Live antenna state (enabled + power) keyed by antenna number, seeded from the
+  // reader's config. Local edits debounce-flush the whole array back to the reader.
+  const [enabled, setEnabled] = useState<Record<number, boolean>>({});
+  const [power, setPower] = useState<Record<number, number>>({});
+  const enabledRef = useRef<Record<number, boolean>>({});
+  const powerRef = useRef<Record<number, number>>({});
   const [applied, setApplied] = useState<string | null>(null);
-  // `pushing` spans the whole pending-push window — the ~2s debounce AND the
-  // in-flight RPC — so the corner spinner reflects "changes not yet on the
-  // reader" the moment a slider moves.
   const [pushing, setPushing] = useState(false);
+  const [pendingForceBody, setPendingForceBody] = useState<SetReaderConfigRequest | null>(null);
+  const [busyHeldBy, setBusyHeldBy] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!capabilities) return;
-    const seeded = config?.tx_power_dbm ?? [];
-    const byAntenna = new Map<number, number>();
-    for (const tp of seeded) byAntenna.set(tp.antenna, tp.power);
-    setValues((prev) => {
-      const next = { ...prev };
-      for (let a = 1; a <= capabilities.antennas; a++) {
-        if (next[a] === undefined) next[a] = byAntenna.get(a) ?? capabilities.tx_power.max_dbm;
-      }
-      valuesRef.current = next;
-      return next;
-    });
+    const byAntenna = new Map<number, AntennaConfig>();
+    for (const ac of config?.antennas ?? []) byAntenna.set(ac.antenna, ac);
+    const nextEnabled: Record<number, boolean> = {};
+    const nextPower: Record<number, number> = {};
+    for (let a = 1; a <= capabilities.antennas; a++) {
+      const ac = byAntenna.get(a);
+      nextEnabled[a] = ac?.enabled ?? false;
+      nextPower[a] = ac?.power_dbm ?? capabilities.tx_power.max_dbm;
+    }
+    enabledRef.current = nextEnabled;
+    powerRef.current = nextPower;
+    setEnabled(nextEnabled);
+    setPower(nextPower);
   }, [capabilities, config]);
 
-  // valuesRef solves value-staleness for the debounced flush; capabilities is
-  // stable for the edit-session lifetime, so closing over it here is safe.
-  const flush = () => {
-    if (!capabilities) return;
-    const tx_power_dbm = Array.from({ length: capabilities.antennas }, (_, i) => {
+  const buildBody = (): SetReaderConfigRequest => ({
+    antennas: Array.from({ length: capabilities?.antennas ?? 0 }, (_, i) => {
       const antenna = i + 1;
-      return { antenna, power: valuesRef.current[antenna] ?? capabilities.tx_power.max_dbm };
-    });
-    setConfig({ tx_power_dbm })
+      return {
+        antenna,
+        enabled: enabledRef.current[antenna] ?? false,
+        power_dbm: powerRef.current[antenna] ?? max,
+      };
+    }),
+  });
+
+  const enabledCount = Object.values(enabled).filter(Boolean).length;
+
+  const push = (body: SetReaderConfigRequest, force: boolean) => {
+    setPushing(true);
+    setConfig({ body, force })
       .then((res) => {
-        toast.success('Power update sent');
+        toast.success('Reader config sent');
         setApplied(res.applied);
+        setPendingForceBody(null);
+        setBusyHeldBy(null);
       })
-      .catch((e) => toast.error(getApiErrorMessage(e, 'Failed to send power update')))
+      .catch((e) => {
+        const b = parseReaderBusy(e);
+        if (b) {
+          setPendingForceBody(body); // offer to claim the session and re-apply this change
+          setBusyHeldBy(b.held_by);
+          toast.error(`Reader web session busy (held by ${b.held_by})`);
+        } else {
+          toast.error(getApiErrorMessage(e, 'Failed to send reader config'));
+        }
+      })
       .finally(() => setPushing(false));
+  };
+
+  const flush = () => {
+    if (!capabilities) { setPushing(false); return; }
+    push(buildBody(), false);
   };
 
   const onPowerChange = (antenna: number, raw: number) => {
     if (isNaN(raw)) return;
     const v = Math.min(max, Math.max(min, Math.round(raw / STEP) * STEP));
-    valuesRef.current = { ...valuesRef.current, [antenna]: v };
-    setValues((prev) => ({ ...prev, [antenna]: v }));
+    powerRef.current = { ...powerRef.current, [antenna]: v };
+    setPower((prev) => ({ ...prev, [antenna]: v }));
     setPushing(true);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(flush, DEBOUNCE_MS);
   };
 
+  const onToggleEnabled = async (antenna: number, next: boolean) => {
+    enabledRef.current = { ...enabledRef.current, [antenna]: next };
+    setEnabled((prev) => ({ ...prev, [antenna]: next }));
+    push(buildBody(), false);
+  };
+
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
-  // --- scan_point join (by antenna_port) + lazy create/update --------------
+  // --- scan_point join (LOCATION ONLY) -------------------------------------
   const pointByPort = useMemo(() => {
     const m = new Map<number, (typeof scanPoints)[number]>();
-    // First scan_point wins per antenna_port (the fixed-N model assumes ≤1).
     for (const sp of scanPoints) {
       if (sp.antenna_port != null && !m.has(sp.antenna_port)) m.set(sp.antenna_port, sp);
     }
@@ -123,18 +159,25 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
     }
   };
 
-  const setEnabled = async (antenna: number, next: boolean) => {
-    const sp = pointByPort.get(antenna);
-    if (sp) {
-      await update({ id: sp.id, updates: { is_active: next } });
-    } else if (next) {
-      await create({ antenna_port: antenna, name: `Antenna ${antenna}`, location_id: null, is_active: true });
-    }
-    // next === false with no scan_point: already effectively disabled — no-op.
-  };
-
   if (isLoading) {
     return <p className="text-sm text-gray-500 dark:text-gray-400">Loading reader config…</p>;
+  }
+
+  if (busy) {
+    return (
+      <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/30 px-4 py-3 text-sm">
+        <p className="text-amber-800 dark:text-amber-200">
+          Reader web session busy (held by {busy.held_by}). Force logout to claim it?
+        </p>
+        <button
+          type="button"
+          onClick={retryWithForce}
+          className="mt-2 rounded bg-amber-600 px-3 py-1 text-white hover:bg-amber-700"
+        >
+          Claim session
+        </button>
+      </div>
+    );
   }
 
   if (error || !capabilities) {
@@ -166,6 +209,40 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
         </div>
       </div>
 
+      {pendingForceBody && (
+        <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/30 px-3 py-2 text-sm">
+          <span className="text-amber-800 dark:text-amber-200">
+            Reader web session busy{busyHeldBy ? ` (held by ${busyHeldBy})` : ''} — change not applied. Force logout to claim it?
+          </span>
+          <button
+            type="button"
+            onClick={() => push(pendingForceBody, true)}
+            className="ml-2 rounded bg-amber-600 px-2 py-0.5 text-white hover:bg-amber-700"
+          >
+            Claim session
+          </button>
+        </div>
+      )}
+
+      {/* Read Timing + the read-only RSSI gate render ABOVE the antenna rows so the
+          per-antenna sliders sit at the bottom of the panel, adjacent to the Live
+          Reads feed that follows — keeping placement controls and their feedback
+          close together. */}
+      {config && (
+        <ReadTimingSection
+          config={config}
+          enabledCount={enabledCount}
+          applying={pushing}
+          onApply={(body) => push(body, false)}
+        />
+      )}
+
+      {config?.rssi_gate_dbm != null && (
+        <p className="mt-2 mb-3 text-xs text-gray-400 dark:text-gray-500">
+          RSSI gate {config.rssi_gate_dbm} dBm (read-only)
+        </p>
+      )}
+
       <div className="space-y-2">
         {Array.from({ length: antennaCount }, (_, i) => {
           const antenna = i + 1;
@@ -174,15 +251,15 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
             <AntennaRow
               key={antenna}
               antenna={antenna}
-              enabled={sp?.is_active ?? false}
+              enabled={enabled[antenna] ?? false}
               locationId={sp?.location_id ?? null}
               locationOptions={locationOptions}
-              power={values[antenna] ?? max}
+              power={power[antenna] ?? max}
               min={min}
               max={max}
               step={STEP}
               onPowerChange={(raw) => onPowerChange(antenna, raw)}
-              onToggleEnabled={(next) => setEnabled(antenna, next)}
+              onToggleEnabled={(next) => onToggleEnabled(antenna, next)}
               onSetLocation={(raw) => setLocation(antenna, raw)}
             />
           );

@@ -19,8 +19,8 @@ const ContractVersion = 1
 // implemented today; the remaining methods are reserved for future use.
 const (
 	MethodGetCapabilities = "Reader.GetCapabilities"
-	MethodGetConfig       = "Reader.GetConfig"
-	MethodSetConfig       = "Reader.SetConfig"
+	MethodGetOperProfile  = "Reader.GetOperProfile"
+	MethodSetOperProfile  = "Reader.SetOperProfile"
 	MethodGetStatus       = "Reader.GetStatus"
 
 	// Reserved for future use.
@@ -39,6 +39,10 @@ const (
 	CodeInternal       = -32603
 )
 
+// CodeReaderBusy signals the reader's single root session is held by another
+// client. It is outside the JSON-RPC reserved range (-32768..-32000).
+const CodeReaderBusy = -33001
+
 // Request is an inbound JSON-RPC request frame. Src names the topic the caller
 // expects the response to be published to (Shelly-style correlation).
 type Request struct {
@@ -50,8 +54,9 @@ type Request struct {
 
 // RPCError is the error object of an error response frame.
 type RPCError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	Code    int             `json:"code"`
+	Message string          `json:"message"`
+	Data    json.RawMessage `json:"data,omitempty"`
 }
 
 // Response is an outbound JSON-RPC response frame. Exactly one of Result or
@@ -103,3 +108,35 @@ func NewError(req Request, code int, msg string) Response {
 
 // Marshal encodes a response frame.
 func (r Response) Marshal() ([]byte, error) { return json.Marshal(r) }
+
+// ReaderBusyData is the error data for CodeReaderBusy.
+type ReaderBusyData struct {
+	HeldBy string `json:"held_by,omitempty"`
+}
+
+// BusyError is the typed error both sides use for the CS463 single-session lock.
+// The on-reader adapter returns it (the daemon serializes it to a CodeReaderBusy
+// frame); the cloud client reconstructs it from that frame so the HTTP layer can
+// map it to a 409.
+type BusyError struct{ HeldBy string }
+
+func (e *BusyError) Error() string {
+	if e.HeldBy != "" {
+		return "reader busy (held by " + e.HeldBy + ")"
+	}
+	return "reader busy"
+}
+
+// NewBusyError builds a CodeReaderBusy error response carrying the holder IP.
+func NewBusyError(req Request, heldBy string) Response {
+	data, _ := json.Marshal(ReaderBusyData{HeldBy: heldBy})
+	return Response{
+		ID:  req.ID,
+		Dst: req.Src,
+		Error: &RPCError{
+			Code:    CodeReaderBusy,
+			Message: "reader busy",
+			Data:    data,
+		},
+	}
+}

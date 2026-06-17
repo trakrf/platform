@@ -9,23 +9,25 @@ import (
 )
 
 func TestParseRequestRoundTrip(t *testing.T) {
-	raw := []byte(`{"id":42,"src":"trakrf-cloud/req-7f3a","method":"Reader.SetConfig","params":{"tx_power_dbm":[{"antenna":1,"power":24.5}]}}`)
+	raw := []byte(`{"id":42,"src":"trakrf-cloud/req-7f3a","method":"Reader.SetOperProfile","params":{"antennas":[{"antenna":1,"enabled":true,"power_dbm":24.5}],"force":true}}`)
 
 	req, err := ParseRequest(raw)
 	require.NoError(t, err)
 	assert.Equal(t, 42, req.ID)
 	assert.Equal(t, "trakrf-cloud/req-7f3a", req.Src)
-	assert.Equal(t, MethodSetConfig, req.Method)
+	assert.Equal(t, MethodSetOperProfile, req.Method)
 
-	var cfg ReaderConfig
-	require.NoError(t, json.Unmarshal(req.Params, &cfg))
-	require.Len(t, cfg.TxPowerDBm, 1)
-	assert.Equal(t, 1, cfg.TxPowerDBm[0].Antenna)
-	assert.Equal(t, 24.5, cfg.TxPowerDBm[0].Power)
+	var p SetOperProfileParams
+	require.NoError(t, json.Unmarshal(req.Params, &p))
+	assert.True(t, p.Force)
+	require.Len(t, p.Antennas, 1)
+	assert.Equal(t, 1, p.Antennas[0].Antenna)
+	assert.True(t, p.Antennas[0].Enabled)
+	assert.Equal(t, 24.5, p.Antennas[0].PowerDBm)
 }
 
 func TestNewResult(t *testing.T) {
-	req := Request{ID: 42, Src: "trakrf-cloud/req-7f3a", Method: MethodSetConfig}
+	req := Request{ID: 42, Src: "trakrf-cloud/req-7f3a", Method: MethodSetOperProfile}
 
 	resp, err := NewResult(req, SetConfigResult{Applied: AppliedPendingReload})
 	require.NoError(t, err)
@@ -38,6 +40,36 @@ func TestNewResult(t *testing.T) {
 	assert.Contains(t, string(b), `"applied":"pending_reload"`)
 	assert.Contains(t, string(b), `"dst":"trakrf-cloud/req-7f3a"`)
 	assert.Contains(t, string(b), `"id":42`)
+}
+
+func TestNewBusyError(t *testing.T) {
+	req := Request{ID: 7, Src: "trakrf-cloud/req-1"}
+	resp := NewBusyError(req, "192.168.50.203")
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, CodeReaderBusy, resp.Error.Code)
+	var d ReaderBusyData
+	require.NoError(t, json.Unmarshal(resp.Error.Data, &d))
+	assert.Equal(t, "192.168.50.203", d.HeldBy)
+}
+
+func TestReaderConfigGoldenKnobsRoundTrip(t *testing.T) {
+	dwell, dedup, rssi := 500, 500, -80
+	diff := true
+	cfg := ReaderConfig{
+		Antennas:               []AntennaConfig{{Antenna: 1, Enabled: true, PowerDBm: 30}},
+		DwellMs:                &dwell,
+		DedupWindowMs:          &dedup,
+		RSSIGateDBm:            &rssi,
+		AntennaDifferentiation: &diff,
+	}
+	b, err := json.Marshal(cfg)
+	require.NoError(t, err)
+	var got ReaderConfig
+	require.NoError(t, json.Unmarshal(b, &got))
+	require.NotNil(t, got.DwellMs)
+	assert.Equal(t, 500, *got.DwellMs)
+	require.NotNil(t, got.AntennaDifferentiation)
+	assert.True(t, *got.AntennaDifferentiation)
 }
 
 func TestNewError(t *testing.T) {

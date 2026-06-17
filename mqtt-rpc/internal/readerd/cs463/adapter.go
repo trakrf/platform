@@ -3,6 +3,7 @@ package cs463
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,6 +19,9 @@ type readerOps interface {
 	Logout(ctx context.Context, session string) error
 	ForceLogout(ctx context.Context) error
 	GetActiveProfile(ctx context.Context, session string) (Profile, error)
+	ListEvent(ctx context.Context, session string) (map[string]EntityRow, error)
+	ListTriggeringLogic(ctx context.Context, session string) (map[string]EntityRow, error)
+	ModEvent(ctx context.Context, session string, p url.Values) error
 	LoginServlet(ctx context.Context) error
 	LogoutServlet(ctx context.Context) error
 	SetProfilePower(ctx context.Context, profileID string, antennaCount int, enabledPorts []int, powers map[int]float64, profileFields map[string]string) error
@@ -38,7 +42,7 @@ type AdapterConfig struct {
 // reconcileOps is the slice of reader operations the golden-config reconcile needs:
 // the entity list/add/mod surface plus the session lifecycle and event re-arm. The
 // transport *Client satisfies it; the adapter holds it separately from readerOps so
-// SetConfig's fake does not have to implement the whole entity surface.
+// SetOperProfile's fake does not have to implement the whole entity surface.
 type reconcileOps interface {
 	entityOps
 	Login(ctx context.Context) (session, holderIP string, err error)
@@ -64,7 +68,7 @@ var _ readerOps = (*Client)(nil)
 
 // NewAdapter builds a CS463 adapter over the given reader operations. When ops also
 // satisfies reconcileOps (the real *Client does), the adapter can run the golden
-// config reconcile; SetConfig-only fakes that do not are simply not reconcilable.
+// config reconcile; SetOperProfile-only fakes that do not are simply not reconcilable.
 func NewAdapter(ops readerOps, cfg AdapterConfig) *Adapter {
 	a := &Adapter{ops: ops, cfg: cfg}
 	if r, ok := ops.(reconcileOps); ok {
@@ -75,10 +79,10 @@ func NewAdapter(ops readerOps, cfg AdapterConfig) *Adapter {
 
 // Reconcile converges the reader to the golden TrakRF mqtt-rpc entities and starts
 // inventory. It runs in a single /API login window (all entity writes are /API,
-// unlike the SetConfig servlet path): verify the pre-created CloudServer + Operation
+// unlike the SetOperProfile servlet path): verify the pre-created CloudServer + Operation
 // Profile exist, list-then-add-or-mod the four owned entities, then re-arm the golden
 // event. A safe function-level defer Logout is fine here precisely because no servlet
-// form login is taken inside this window (contrast SetConfig's three-phase dance).
+// form login is taken inside this window (contrast SetOperProfile's three-phase dance).
 //
 // The event is re-armed UNCONDITIONALLY (not only when config changed) — a defensive
 // measure, because the CS463 does not RELIABLY auto-start inventory: an event with
@@ -127,10 +131,10 @@ func (a *Adapter) Reconcile(ctx context.Context) error {
 // ensureProfile creates the golden Operation Profile if it is absent, with a default
 // antenna-1-only @ DefaultProfileTxPowerDBm config (and dwell=golden on every slot).
 // If the profile already exists it is LEFT UNTOUCHED — the operator owns its antenna/
-// TX-power tuning via Reader.SetConfig; the daemon never clobbers it. Creation needs
-// the servlet to actually enable the antenna (setOperProfile can't on this firmware),
-// so this runs its own /API-then-servlet session sequence (each released before the
-// next, per the single-session lock).
+// TX-power tuning via Reader.SetOperProfile; the daemon never clobbers it. Creation
+// needs the servlet to actually enable the antenna (setOperProfile can't on this
+// firmware), so this runs its own /API-then-servlet session sequence (each released
+// before the next, per the single-session lock).
 func (a *Adapter) ensureProfile(ctx context.Context) error {
 	// Phase A (/API): does our profile already exist?
 	session, holderIP, err := a.ops.Login(ctx)
@@ -181,8 +185,8 @@ func (a *Adapter) GetCapabilities(ctx context.Context) (readerrpc.Capabilities, 
 		},
 		Supports: []string{
 			readerrpc.MethodGetCapabilities,
-			readerrpc.MethodGetConfig,
-			readerrpc.MethodSetConfig,
+			readerrpc.MethodGetOperProfile,
+			readerrpc.MethodSetOperProfile,
 			readerrpc.MethodGetStatus,
 		},
 		Unsupported: []string{
@@ -194,15 +198,13 @@ func (a *Adapter) GetCapabilities(ctx context.Context) (readerrpc.Capabilities, 
 	}, nil
 }
 
-// GetConfig reads the active profile and maps its per-port powers into the
-// neutral config, sorted by antenna.
-func (a *Adapter) GetConfig(ctx context.Context) (readerrpc.ReaderConfig, error) {
-	session, holderIP, err := a.ops.Login(ctx)
+// GetOperProfile reads the active profile and the golden event/trigger entities,
+// mapping per-antenna enablement + power and the read-only golden knobs into the
+// neutral config. force force-logs-out a held single session first.
+func (a *Adapter) GetOperProfile(ctx context.Context, force bool) (readerrpc.ReaderConfig, error) {
+	session, err := a.login(ctx, force)
 	if err != nil {
 		return readerrpc.ReaderConfig{}, err
-	}
-	if session == "" {
-		return readerrpc.ReaderConfig{}, busyErr(holderIP)
 	}
 	defer func() { _ = a.ops.Logout(ctx, session) }()
 
@@ -210,97 +212,152 @@ func (a *Adapter) GetConfig(ctx context.Context) (readerrpc.ReaderConfig, error)
 	if err != nil {
 		return readerrpc.ReaderConfig{}, err
 	}
-	return readerrpc.ReaderConfig{TxPowerDBm: sortedPowers(prof.Powers)}, nil
-}
 
-// SetConfig validates, applies, re-arms, and verifies a power change. It is a
-// read-modify-write against the active profile and returns pending_reload: the
-// new configuration takes effect on the next inventory cycle.
-func (a *Adapter) SetConfig(ctx context.Context, cfg readerrpc.ReaderConfig) (readerrpc.SetConfigResult, error) {
-	// Validate the full request BEFORE touching the reader.
-	for _, ap := range cfg.TxPowerDBm {
-		if ap.Power < MinPowerDBm || ap.Power > MaxPowerDBm {
-			return readerrpc.SetConfigResult{}, fmt.Errorf(
-				"cs463: tx power %.1f dBm for antenna %d out of range [%.1f, %.1f]",
-				ap.Power, ap.Antenna, MinPowerDBm, MaxPowerDBm)
+	cfg := readerrpc.ReaderConfig{Antennas: antennaConfigs(prof, a.cfg.AntennaCount)}
+	if dwell, ok := firstDwellMs(prof.Attrs, a.cfg.AntennaCount); ok {
+		cfg.DwellMs = &dwell
+	}
+	if events, err := a.ops.ListEvent(ctx, session); err == nil {
+		if row, ok := events[NameEvent]; ok {
+			if v, ok := atoiOK(row["duplicateEliminationWindow"]); ok {
+				cfg.DedupWindowMs = &v
+			}
+			if raw := row["antennaDifferentiation"]; raw != "" {
+				b := strings.EqualFold(raw, "true")
+				cfg.AntennaDifferentiation = &b
+			}
 		}
 	}
-
-	// The CS463 permits only ONE root login at a time, and the /API session_id and
-	// the web-UI (JSESSIONID cookie) session BOTH consume that single slot. The
-	// servlet write authenticates via the cookie, NOT the /API session, and an
-	// /API session being held blocks the form login. So the three phases below are
-	// strictly sequenced and each releases its session before the next phase opens
-	// one. Do NOT introduce a function-level `defer Logout` that holds the /API
-	// session across the Phase B form login (that is the bug this fixes).
-
-	// --- Phase A: read the active profile via /API, then release the slot. ---
-	session, holderIP, err := a.ops.Login(ctx)
-	if err != nil {
-		return readerrpc.SetConfigResult{}, err
+	if logics, err := a.ops.ListTriggeringLogic(ctx, session); err == nil {
+		if row, ok := logics[NameTrigger]; ok {
+			if v, ok := atoiOK(row["logic"]); ok {
+				cfg.RSSIGateDBm = &v
+			}
+		}
 	}
-	if session == "" {
-		return readerrpc.SetConfigResult{}, busyErr(holderIP)
+	return cfg, nil
+}
+
+// SetOperProfile applies a (partial) reader config: per-antenna enablement +
+// power and reader-wide dwell via the servlet RMW; the event read-timing knobs
+// dedup/antDiff via modEvent. A nil/empty field is left unchanged. It returns
+// pending_reload (effective next inventory cycle). force force-logs-out a held
+// single session first.
+//
+// The CS463 permits only ONE root login at a time; the /API session_id and the
+// web-UI cookie session both consume that slot, so phases are strictly sequenced
+// and each releases its session before the next opens one. Do NOT hold the /API
+// session across the Phase B form login.
+func (a *Adapter) SetOperProfile(ctx context.Context, cfg readerrpc.ReaderConfig, force bool) (readerrpc.SetConfigResult, error) {
+	for _, ac := range cfg.Antennas {
+		if ac.Enabled && (ac.PowerDBm < MinPowerDBm || ac.PowerDBm > MaxPowerDBm) {
+			return readerrpc.SetConfigResult{}, fmt.Errorf(
+				"cs463: tx power %.1f dBm for antenna %d out of range [%.1f, %.1f]",
+				ac.PowerDBm, ac.Antenna, MinPowerDBm, MaxPowerDBm)
+		}
+	}
+	if cfg.DwellMs != nil && *cfg.DwellMs <= 0 {
+		return readerrpc.SetConfigResult{}, fmt.Errorf("cs463: dwell_ms must be > 0")
+	}
+	if cfg.DedupWindowMs != nil && *cfg.DedupWindowMs <= 0 {
+		return readerrpc.SetConfigResult{}, fmt.Errorf("cs463: dedup_window_ms must be > 0")
 	}
 
-	prof, err := a.ops.GetActiveProfile(ctx, session)
-	if err != nil {
+	needProfile := len(cfg.Antennas) > 0 || cfg.DwellMs != nil
+	needEvent := cfg.DedupWindowMs != nil || cfg.AntennaDifferentiation != nil
+	if !needProfile && !needEvent {
+		return readerrpc.SetConfigResult{}, fmt.Errorf("cs463: SetOperProfile: nothing to set")
+	}
+
+	var enabledPorts []int
+
+	if needProfile {
+		// --- Phase A: read the active profile via /API, then release the slot. ---
+		session, err := a.login(ctx, force)
+		if err != nil {
+			return readerrpc.SetConfigResult{}, err
+		}
+		prof, err := a.ops.GetActiveProfile(ctx, session)
+		if err != nil {
+			_ = a.ops.Logout(ctx, session)
+			return readerrpc.SetConfigResult{}, err
+		}
 		_ = a.ops.Logout(ctx, session)
-		return readerrpc.SetConfigResult{}, err
-	}
-	// Release the /API session BEFORE the form login (single-session lock).
-	_ = a.ops.Logout(ctx, session)
 
-	enabledPorts := parseAntennaPorts(prof.Attrs["antenna_port"])
+		// Merge requested enablement + power over the reader's current profile.
+		enabled := make(map[int]bool)
+		for _, p := range parseAntennaPorts(prof.Attrs["antenna_port"]) {
+			enabled[p] = true
+		}
+		powers := make(map[int]float64, a.cfg.AntennaCount)
+		for port, pw := range prof.Powers {
+			powers[port] = pw
+		}
+		for _, ac := range cfg.Antennas {
+			enabled[ac.Antenna] = ac.Enabled
+			powers[ac.Antenna] = ac.PowerDBm
+		}
+		enabledPorts = sortedEnabledPorts(enabled)
 
-	// Merge: start from current powers, override with the requested antennas.
-	powers := make(map[int]float64, a.cfg.AntennaCount)
-	for port, pw := range prof.Powers {
-		powers[port] = pw
-	}
-	for _, ap := range cfg.TxPowerDBm {
-		powers[ap.Antenna] = ap.Power
-	}
+		// Dwell is applied uniformly to all ports via the servlet's profileFields
+		// (SetProfilePower sources dwell from dwellTime{port}); clone so we don't
+		// mutate the read profile.
+		fields := prof.Attrs
+		if cfg.DwellMs != nil {
+			fields = cloneAttrs(prof.Attrs)
+			for port := 1; port <= a.cfg.AntennaCount; port++ {
+				fields["dwellTime"+strconv.Itoa(port)] = strconv.Itoa(*cfg.DwellMs)
+			}
+		}
 
-	// --- Phase B: write the profile via the web servlet (cookie auth), then
-	// release the web session so the Phase C /API login can take the slot. ---
-	if err := a.ops.LoginServlet(ctx); err != nil {
-		return readerrpc.SetConfigResult{}, fmt.Errorf("cs463: servlet form login: %w", err)
-	}
-	if err := a.ops.SetProfilePower(ctx, prof.ID, a.cfg.AntennaCount, enabledPorts, powers, prof.Attrs); err != nil {
+		// --- Phase B: write via the web servlet (cookie auth), then release. ---
+		if err := a.ops.LoginServlet(ctx); err != nil {
+			return readerrpc.SetConfigResult{}, fmt.Errorf("cs463: servlet form login: %w", err)
+		}
+		if err := a.ops.SetProfilePower(ctx, prof.ID, a.cfg.AntennaCount, enabledPorts, powers, fields); err != nil {
+			_ = a.ops.LogoutServlet(ctx)
+			return readerrpc.SetConfigResult{}, err
+		}
 		_ = a.ops.LogoutServlet(ctx)
-		return readerrpc.SetConfigResult{}, err
 	}
-	// Release the web session BEFORE the second /API login (single-session lock).
-	_ = a.ops.LogoutServlet(ctx)
 
-	// --- Phase C: verify the write, then re-arm the inventory event, via /API. ---
-	session, holderIP, err = a.ops.Login(ctx)
+	// --- Phase C (/API): verify profile write, push event knobs, re-arm. ---
+	session, err := a.login(ctx, force)
 	if err != nil {
 		return readerrpc.SetConfigResult{}, err
 	}
-	if session == "" {
-		return readerrpc.SetConfigResult{}, busyErr(holderIP)
+	if needProfile {
+		after, err := a.ops.GetActiveProfile(ctx, session)
+		if err != nil {
+			_ = a.ops.Logout(ctx, session)
+			return readerrpc.SetConfigResult{}, fmt.Errorf("cs463: verify re-read: %w", err)
+		}
+		gotPorts := parseAntennaPorts(after.Attrs["antenna_port"])
+		if !sameInts(gotPorts, enabledPorts) {
+			_ = a.ops.Logout(ctx, session)
+			return readerrpc.SetConfigResult{}, fmt.Errorf(
+				"cs463: antenna enablement not applied (wanted %v, reader has %v) — refusing to report success",
+				enabledPorts, gotPorts)
+		}
 	}
-
-	// Verify the write did not wipe antenna enablement (#494 guard) BEFORE the
-	// re-arm: the servlet can silently clear antenna_port, and we must read while
-	// the profile is still active — the event re-arm briefly de-activates it during
-	// the inventory reload (a post-re-arm read races that window and finds no
-	// active profile).
-	after, err := a.ops.GetActiveProfile(ctx, session)
-	if err != nil {
-		_ = a.ops.Logout(ctx, session)
-		return readerrpc.SetConfigResult{}, fmt.Errorf("cs463: verify re-read: %w", err)
+	if needEvent {
+		// modEvent re-writes the golden event with the customer's dedup/antDiff
+		// overrides (other event fields stay golden — the daemon owns the event
+		// identity). The golden reconcile no longer re-asserts these two fields, so
+		// the edit survives a daemon restart (TRA-1002 coexistence).
+		p := goldenEventParams()
+		if cfg.DedupWindowMs != nil {
+			p.Set("duplicateEliminationWindow", strconv.Itoa(*cfg.DedupWindowMs))
+		}
+		if cfg.AntennaDifferentiation != nil {
+			p.Set("antennaDifferentiation", strconv.FormatBool(*cfg.AntennaDifferentiation))
+		}
+		if err := a.ops.ModEvent(ctx, session, p); err != nil {
+			_ = a.ops.Logout(ctx, session)
+			return readerrpc.SetConfigResult{}, fmt.Errorf("cs463: write event knobs: %w", err)
+		}
 	}
-	if after.Attrs["antenna_port"] != prof.Attrs["antenna_port"] {
-		_ = a.ops.Logout(ctx, session)
-		return readerrpc.SetConfigResult{}, fmt.Errorf(
-			"cs463: antenna enablement changed after write (was %q, now %q) — refusing to report success",
-			prof.Attrs["antenna_port"], after.Attrs["antenna_port"])
-	}
-
-	// Re-arm the inventory event so reading resumes on the new profile.
+	// Re-arm the inventory event so changes take effect on the next cycle.
 	if err := a.ops.EnableEvent(ctx, session, a.cfg.EventID, false); err != nil {
 		_ = a.ops.Logout(ctx, session)
 		return readerrpc.SetConfigResult{}, fmt.Errorf("cs463: re-arm disable: %w", err)
@@ -343,22 +400,118 @@ func (a *Adapter) GetStatus(ctx context.Context) (readerrpc.Status, error) {
 // --- helpers --------------------------------------------------------------
 
 func busyErr(holderIP string) error {
-	if holderIP != "" {
-		return fmt.Errorf("cs463: reader is in use by %s", holderIP)
-	}
-	return fmt.Errorf("cs463: reader is in use")
+	return &readerrpc.BusyError{HeldBy: holderIP}
 }
 
-// sortedPowers converts a port->dBm map into AntennaPower entries sorted by port.
-func sortedPowers(powers map[int]float64) []readerrpc.AntennaPower {
-	if len(powers) == 0 {
-		return nil
+// login opens an /API session, force-logging-out a held session first when force
+// is set. On a busy reader without force it returns a *readerrpc.BusyError.
+func (a *Adapter) login(ctx context.Context, force bool) (string, error) {
+	session, holderIP, err := a.ops.Login(ctx)
+	if err != nil {
+		return "", err
 	}
-	out := make([]readerrpc.AntennaPower, 0, len(powers))
-	for port, pw := range powers {
-		out = append(out, readerrpc.AntennaPower{Antenna: port, Power: pw})
+	if session != "" {
+		return session, nil
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Antenna < out[j].Antenna })
+	if !force {
+		return "", busyErr(holderIP)
+	}
+	if err := a.ops.ForceLogout(ctx); err != nil {
+		return "", fmt.Errorf("cs463: force logout: %w", err)
+	}
+	session, holderIP, err = a.ops.Login(ctx)
+	if err != nil {
+		return "", err
+	}
+	if session == "" {
+		return "", busyErr(holderIP)
+	}
+	return session, nil
+}
+
+// antennaConfigs builds per-antenna enabled+power for ports 1..count, sorted by
+// antenna. Enablement is driven by the profile's antenna_port set; power from the
+// profile's per-port powers (0 when absent).
+func antennaConfigs(prof Profile, count int) []readerrpc.AntennaConfig {
+	enabled := make(map[int]bool)
+	for _, p := range parseAntennaPorts(prof.Attrs["antenna_port"]) {
+		enabled[p] = true
+	}
+	if count <= 0 {
+		for p := range prof.Powers {
+			if p > count {
+				count = p
+			}
+		}
+		for p := range enabled {
+			if p > count {
+				count = p
+			}
+		}
+	}
+	out := make([]readerrpc.AntennaConfig, 0, count)
+	for port := 1; port <= count; port++ {
+		out = append(out, readerrpc.AntennaConfig{
+			Antenna:  port,
+			Enabled:  enabled[port],
+			PowerDBm: prof.Powers[port],
+		})
+	}
+	return out
+}
+
+// firstDwellMs returns the dwellTime of the lowest port that has one (golden sets
+// all slots equal, so the first is representative).
+func firstDwellMs(attrs map[string]string, count int) (int, bool) {
+	if count <= 0 {
+		count = 16
+	}
+	for port := 1; port <= count; port++ {
+		if v, ok := attrs["dwellTime"+strconv.Itoa(port)]; ok {
+			if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+				return n, true
+			}
+		}
+	}
+	return 0, false
+}
+
+func atoiOK(s string) (int, bool) {
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
+func sortedEnabledPorts(enabled map[int]bool) []int {
+	out := []int{}
+	for port, on := range enabled {
+		if on {
+			out = append(out, port)
+		}
+	}
+	sort.Ints(out)
+	return out
+}
+
+func sameInts(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func cloneAttrs(m map[string]string) map[string]string {
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
 	return out
 }
 

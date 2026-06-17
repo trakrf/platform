@@ -164,6 +164,29 @@ func (s *Storage) UpdateScanPoint(ctx context.Context, orgID, id int, req scanpo
 	return &p, nil
 }
 
+// SetScanPointActiveByPorts mirrors the reader's enabled antenna set onto the
+// device's scan_points: is_active = true for ports in enabledPorts, false for the
+// rest. This is the cloud-side reflection of the reader's live antenna_port (the
+// reader is the source of truth; is_active is a denormalized mirror, gating
+// nothing in ingestion). Best-effort: callers may ignore the error.
+func (s *Storage) SetScanPointActiveByPorts(ctx context.Context, orgID, scanDeviceID int, enabledPorts []int) error {
+	if enabledPorts == nil {
+		enabledPorts = []int{}
+	}
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		_, e := tx.Exec(ctx, `
+			UPDATE trakrf.scan_points
+			   SET is_active = (antenna_port = ANY($3)), updated_at = NOW()
+			 WHERE org_id = $1 AND scan_device_id = $2 AND deleted_at IS NULL`,
+			orgID, scanDeviceID, enabledPorts)
+		return e
+	})
+	if err != nil {
+		return fmt.Errorf("failed to reconcile scan point active flags: %w", err)
+	}
+	return nil
+}
+
 // DeleteScanPoint soft-deletes the point. Returns false if none existed.
 func (s *Storage) DeleteScanPoint(ctx context.Context, orgID, id int) (bool, error) {
 	var rowsAffected int64

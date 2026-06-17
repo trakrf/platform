@@ -144,14 +144,20 @@ export interface ReaderCapabilities {
   unsupported: string[];
 }
 
-/** One antenna's transmit power, in dBm. antenna is 1-based. */
-export interface AntennaPower {
+/** One antenna's enablement + transmit power. antenna is 1-based. */
+export interface AntennaConfig {
   antenna: number;
-  power: number;
+  enabled: boolean;
+  power_dbm: number;
 }
 
 export interface ReaderConfig {
-  tx_power_dbm?: AntennaPower[];
+  antennas?: AntennaConfig[];
+  // read-only golden-config knobs (populated on GET; ignored on PATCH)
+  dwell_ms?: number;
+  dedup_window_ms?: number;
+  rssi_gate_dbm?: number;
+  antenna_differentiation?: boolean;
   region?: string;
   session?: number;
   q?: number;
@@ -167,8 +173,19 @@ export interface ReaderConfigResponse {
   data: ReaderConfigData;
 }
 
+// A PATCH body is a partial ReaderConfig: send `antennas` for enablement/power,
+// and/or the read-timing knobs. Omitted fields are left unchanged on the reader.
+// rssi_gate_dbm is NOT settable (read-only).
 export interface SetReaderConfigRequest {
-  tx_power_dbm: AntennaPower[];
+  antennas?: AntennaConfig[];
+  dwell_ms?: number;
+  dedup_window_ms?: number;
+  antenna_differentiation?: boolean;
+}
+
+/** Typed busy state parsed from a 409 reader_busy response. */
+export interface ReaderBusy {
+  held_by: string;
 }
 
 export interface SetReaderConfigResult {
