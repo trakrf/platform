@@ -6,13 +6,18 @@ import (
 	"testing"
 )
 
-// fakeReco implements entityOps with in-memory rows and write counters.
+// fakeReco implements reconcileOps (entityOps + session lifecycle + event re-arm)
+// with in-memory rows and write counters.
 type fakeReco struct {
 	rows     map[string]map[string]EntityRow // entity kind -> id -> row
 	servers  map[string]EntityRow
 	profiles map[string]bool
 	adds     map[string]int
 	mods     map[string]int
+
+	// session lifecycle / re-arm tracking (for Adapter.Reconcile tests)
+	holderIP  string
+	enableSeq []bool // EnableEvent enable flags in call order
 }
 
 func newFakeReco() *fakeReco {
@@ -63,6 +68,18 @@ func (f *fakeReco) totalWrites() int {
 		n += v
 	}
 	return n
+}
+
+func (f *fakeReco) Login(ctx context.Context) (string, string, error) {
+	if f.holderIP != "" {
+		return "", f.holderIP, nil
+	}
+	return "sess1", "", nil
+}
+func (f *fakeReco) Logout(ctx context.Context, s string) error { return nil }
+func (f *fakeReco) EnableEvent(ctx context.Context, s, eventID string, enable bool) error {
+	f.enableSeq = append(f.enableSeq, enable)
+	return nil
 }
 
 func (f *fakeReco) ListServer(ctx context.Context, s string) (map[string]EntityRow, error) {
@@ -172,5 +189,61 @@ func TestVerifyServerAndProfile(t *testing.T) {
 	delete(noProfile.profiles, NameProfile)
 	if err := verifyServerAndProfile(context.Background(), "sid", noProfile); err == nil {
 		t.Error("missing profile must fail verify")
+	}
+}
+
+func TestAdapterReconcileNoOpDoesNotRearm(t *testing.T) {
+	f := newMatchingFake(2) // converged: no drift
+	a := &Adapter{cfg: AdapterConfig{AntennaCount: 2, EventID: "ignored"}, rec: f}
+	if err := a.Reconcile(context.Background()); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if f.totalWrites() != 0 {
+		t.Fatalf("no-op reconcile must not write, got %d", f.totalWrites())
+	}
+	if len(f.enableSeq) != 0 {
+		t.Fatalf("no-op reconcile must NOT re-arm the event, got enableSeq=%v", f.enableSeq)
+	}
+}
+
+func TestAdapterReconcileRearmsWhenChanged(t *testing.T) {
+	f := newMatchingFake(2)
+	f.rows["event"][NameEvent]["duplicateEliminationWindow"] = "5000" // drift -> mod
+	a := &Adapter{cfg: AdapterConfig{AntennaCount: 2, EventID: "ignored"}, rec: f}
+	if err := a.Reconcile(context.Background()); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	// re-arm = disable then enable, on the golden event.
+	if len(f.enableSeq) != 2 || f.enableSeq[0] != false || f.enableSeq[1] != true {
+		t.Fatalf("changed reconcile must re-arm (disable, enable); got %v", f.enableSeq)
+	}
+}
+
+func TestAdapterReconcileFailsOnMissingServer(t *testing.T) {
+	f := newMatchingFake(2)
+	delete(f.servers, NameMQTTServer)
+	a := &Adapter{cfg: AdapterConfig{AntennaCount: 2}, rec: f}
+	if err := a.Reconcile(context.Background()); err == nil {
+		t.Fatal("reconcile must fail when the pre-created CloudServer is absent")
+	}
+	if f.totalWrites() != 0 {
+		t.Fatalf("must not write entities when verify fails, got %d", f.totalWrites())
+	}
+}
+
+func TestAdapterReconcileBusyReader(t *testing.T) {
+	f := newMatchingFake(2)
+	f.holderIP = "192.168.50.9"
+	a := &Adapter{cfg: AdapterConfig{AntennaCount: 2}, rec: f}
+	if err := a.Reconcile(context.Background()); err == nil {
+		t.Fatal("reconcile must fail when the reader is busy (single-session lock)")
+	}
+}
+
+func TestAdapterReconcileUnsupportedOps(t *testing.T) {
+	// an adapter whose ops do not satisfy reconcileOps cannot reconcile.
+	a := &Adapter{cfg: AdapterConfig{AntennaCount: 2}}
+	if err := a.Reconcile(context.Background()); err == nil {
+		t.Fatal("reconcile must error when rec is nil")
 	}
 }

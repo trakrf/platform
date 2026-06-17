@@ -34,10 +34,24 @@ type AdapterConfig struct {
 	EventID string
 }
 
+// reconcileOps is the slice of reader operations the golden-config reconcile needs:
+// the entity list/add/mod surface plus the session lifecycle and event re-arm. The
+// transport *Client satisfies it; the adapter holds it separately from readerOps so
+// SetConfig's fake does not have to implement the whole entity surface.
+type reconcileOps interface {
+	entityOps
+	Login(ctx context.Context) (session, holderIP string, err error)
+	Logout(ctx context.Context, session string) error
+	EnableEvent(ctx context.Context, session, eventID string, enable bool) error
+}
+
+var _ reconcileOps = (*Client)(nil)
+
 // Adapter implements readerd.Adapter for the CSL CS463 by mapping the neutral
 // readerrpc contract onto the reader's HTTP/servlet operations.
 type Adapter struct {
 	ops readerOps
+	rec reconcileOps // set when ops also satisfies reconcileOps (the real *Client)
 	cfg AdapterConfig
 }
 
@@ -47,9 +61,55 @@ type Adapter struct {
 // once the daemon imports this package.)
 var _ readerOps = (*Client)(nil)
 
-// NewAdapter builds a CS463 adapter over the given reader operations.
+// NewAdapter builds a CS463 adapter over the given reader operations. When ops also
+// satisfies reconcileOps (the real *Client does), the adapter can run the golden
+// config reconcile; SetConfig-only fakes that do not are simply not reconcilable.
 func NewAdapter(ops readerOps, cfg AdapterConfig) *Adapter {
-	return &Adapter{ops: ops, cfg: cfg}
+	a := &Adapter{ops: ops, cfg: cfg}
+	if r, ok := ops.(reconcileOps); ok {
+		a.rec = r
+	}
+	return a
+}
+
+// Reconcile converges the reader to the golden TrakRF mqtt-rpc entities. It runs in
+// a single /API login window (all entity writes are /API, unlike the SetConfig
+// servlet path): verify the pre-created CloudServer + Operation Profile exist,
+// list-then-add-or-mod the four owned entities, and re-arm the golden event ONLY if
+// something changed (so a no-op reconcile never interrupts inventory). A safe
+// function-level defer Logout is fine here precisely because no servlet form login
+// is taken inside this window (contrast SetConfig's three-phase dance).
+func (a *Adapter) Reconcile(ctx context.Context) error {
+	if a.rec == nil {
+		return fmt.Errorf("cs463: reconcile not supported by these reader ops")
+	}
+	session, holderIP, err := a.rec.Login(ctx)
+	if err != nil {
+		return err
+	}
+	if session == "" {
+		return busyErr(holderIP)
+	}
+	defer func() { _ = a.rec.Logout(ctx, session) }()
+
+	if err := verifyServerAndProfile(ctx, session, a.rec); err != nil {
+		return err
+	}
+	changed, err := reconcileGolden(ctx, session, a.rec, a.cfg.AntennaCount)
+	if err != nil {
+		return err
+	}
+	if !changed {
+		return nil
+	}
+	// Re-arm the golden event so inventory reloads on the new config.
+	if err := a.rec.EnableEvent(ctx, session, NameEvent, false); err != nil {
+		return fmt.Errorf("cs463: reconcile re-arm disable: %w", err)
+	}
+	if err := a.rec.EnableEvent(ctx, session, NameEvent, true); err != nil {
+		return fmt.Errorf("cs463: reconcile re-arm enable: %w", err)
+	}
+	return nil
 }
 
 // GetCapabilities reports the static CS463 control surface. No reader round-trip.
