@@ -89,3 +89,58 @@ This was run live on `cs463-212` through the preview broker
 (see PR #495). The Go unit tests in this module cover the adapter, servlet
 encoding, single-session auth sequencing, and the wipe guard against fakes; the
 live test covers the wire + the firmware behavior the fakes can't.
+
+---
+
+## Golden-config reconcile (TRA-1002)
+
+On startup the daemon **converges the reader to the golden `TrakRF mqtt-rpc`-named
+entities** — the exact ingest wiring validated in TRA-994 — so every reader provably
+has what ingest needs, idempotently and safe to re-run. The golden definitions are
+owned as code (`internal/readerd/cs463/golden.go`); reconcile is list-then-add-or-mod.
+
+### Owned entities (all `TrakRF mqtt-rpc`-prefixed — the name *is* the ownership claim)
+| Entity | Name | Reconciled |
+|---|---|---|
+| MQTT Server (CloudServer) | `TrakRF mqtt-rpc MQTT Server` | **No — pre-create out-of-band**, referenced by name |
+| Operation Profile | `TrakRF mqtt-rpc Profile` | **Verify-exists** (fail if absent); antenna/TX-power stay with `SetConfig` |
+| Data Format | `TrakRF mqtt-rpc Data Format` | Yes — trimmed JSON, numeric RSSI (`RSSI_Number`, parser PR #502) |
+| Trigger | `TrakRF mqtt-rpc Trigger` | Yes — `Read Any Tags`, all antennas |
+| Resultant Action | `TrakRF mqtt-rpc Action` | Yes — MQTT → server + format |
+| Event | `TrakRF mqtt-rpc Event` | Yes — dedup=500ms, antennaDifferentiation=on, enable=on |
+
+Reads/verify use `/API list*`; writes use `/API add*`/`mod*`. The write transport is
+pluggable per entity (the `entitySpec` seam) so any entity can flip to the servlet
+path if a firmware proves an `/API` write unreliable — **no firmware floor is
+required**. Reconcile re-arms the golden event **only when something changed**, so a
+no-op reconcile (routine restart) never interrupts inventory.
+
+### Commissioning prerequisites (done in the same SSH session that installs the daemon)
+1. Pre-create the `TrakRF mqtt-rpc MQTT Server` CloudServer entry (broker host/port/
+   TLS/creds + the platform `scan_device.publish_topic`). The daemon reads it for its
+   own broker connection and references it by name.
+2. Pre-create the `TrakRF mqtt-rpc Profile` operation profile (antenna enablement + TX
+   power; the daemon only verifies it exists and leaves those to `Reader.SetConfig`).
+3. Existing readers provisioned under the old `TrakRF MQTT` name must set
+   `READERD_CLOUDSERVER_ID` until migrated (the default is now the golden name).
+
+### Config
+- `READERD_RECONCILE` — `true` (default) runs reconcile on startup; `false` pins config.
+- `READERD_CLOUDSERVER_ID` — defaults to `TrakRF mqtt-rpc MQTT Server`.
+
+### Bench-verification checklist (cs463-212 — the remaining merge gate)
+The Go unit tests cover parsing, drift detection, the reconcile decision table, the
+single-session re-arm gating, and the dwell-clobber fix against fakes. The following
+need real hardware (the fakes can't cover firmware behavior):
+- [ ] **Per-entity write transport:** confirm `/API add*`/`mod*` works on a *clean*
+      reader for Data Format, Trigger, Resultant Action, Event (only `modEvent` /
+      `addDataFormat` were exercised in TRA-994); flip any flaky entity to servlet.
+- [ ] **Tighten read-side diffs against captured `list*`:** verify `actionDrift`
+      (action_mode/transport casing) and `dataFormatDrift` (field ordering) against a
+      real `listResultantAction` / `listDataFormat` from the reader.
+- [ ] **Reconcile lifecycle:** clean-reader create (all four add); converged-reader
+      no-op (zero writes, no re-arm); drift correction (targeted `mod*` + re-arm).
+- [ ] **End-to-end:** reads flow on the golden chain after a fresh commission; dwell
+      stays at golden after a `SetConfig` TX-power change (no 2000 regression).
+- [ ] **Partial-failure policy:** current behavior aborts on first entity error
+      (logged, non-fatal to RPC). Revisit if bench shows a need for best-effort-continue.
