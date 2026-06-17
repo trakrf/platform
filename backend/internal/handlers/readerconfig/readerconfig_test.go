@@ -49,6 +49,7 @@ func TestValidateTxPower(t *testing.T) {
 		{"min edge", readerrpc.ReaderConfig{Antennas: []readerrpc.AntennaConfig{ac(10, true)}}, false},
 		{"max edge", readerrpc.ReaderConfig{Antennas: []readerrpc.AntennaConfig{ac(31.5, true)}}, false},
 		{"under min (enabled)", readerrpc.ReaderConfig{Antennas: []readerrpc.AntennaConfig{ac(5, true)}}, true},
+		{"negative (enabled)", readerrpc.ReaderConfig{Antennas: []readerrpc.AntennaConfig{{Antenna: 2, Enabled: true, PowerDBm: -1}}}, true},
 		{"over max (enabled)", readerrpc.ReaderConfig{Antennas: []readerrpc.AntennaConfig{ac(32, true)}}, true},
 		{"out of range but disabled is ok", readerrpc.ReaderConfig{Antennas: []readerrpc.AntennaConfig{ac(0, false)}}, false},
 	}
@@ -67,22 +68,41 @@ func TestValidateTxPower(t *testing.T) {
 
 // fakeRPC is a stand-in RPCClient used to confirm the interface is satisfiable
 // by a fake (so serve can inject a nil interface) and to exercise typed wrappers.
+//
+// Per-method error fields (capsErr, getErr, setErr) take precedence over the
+// shared err field when non-nil, so GetCapabilities can succeed while
+// GetOperProfile/SetOperProfile return a BusyError (busy→409 coverage).
+// Existing tests that only set err continue to work unchanged.
 type fakeRPC struct {
 	caps    readerrpc.Capabilities
 	cfg     readerrpc.ReaderConfig
 	setRes  readerrpc.SetConfigResult
 	lastSet readerrpc.ReaderConfig
-	err     error
+	// shared fallback error — used by any method whose per-method field is nil
+	err error
+	// per-method overrides; non-nil takes precedence over err
+	capsErr error
+	getErr  error
+	setErr  error
 }
 
 func (f *fakeRPC) GetCapabilities(_ context.Context, _ string) (readerrpc.Capabilities, error) {
+	if f.capsErr != nil {
+		return f.caps, f.capsErr
+	}
 	return f.caps, f.err
 }
 func (f *fakeRPC) GetOperProfile(_ context.Context, _ string, _ bool) (readerrpc.ReaderConfig, error) {
+	if f.getErr != nil {
+		return f.cfg, f.getErr
+	}
 	return f.cfg, f.err
 }
 func (f *fakeRPC) SetOperProfile(_ context.Context, _ string, cfg readerrpc.ReaderConfig, _ bool) (readerrpc.SetConfigResult, error) {
 	f.lastSet = cfg
+	if f.setErr != nil {
+		return f.setRes, f.setErr
+	}
 	return f.setRes, f.err
 }
 
