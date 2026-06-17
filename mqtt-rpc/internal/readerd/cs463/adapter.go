@@ -21,6 +21,7 @@ type readerOps interface {
 	LoginServlet(ctx context.Context) error
 	LogoutServlet(ctx context.Context) error
 	SetProfilePower(ctx context.Context, profileID string, antennaCount int, enabledPorts []int, powers map[int]float64, profileFields map[string]string) error
+	CreateProfile(ctx context.Context, session, profileID string, txPowerDBm float64) error
 	EnableEvent(ctx context.Context, session, eventID string, enable bool) error
 }
 
@@ -91,6 +92,13 @@ func (a *Adapter) Reconcile(ctx context.Context) error {
 	if a.rec == nil {
 		return fmt.Errorf("cs463: reconcile not supported by these reader ops")
 	}
+	// Ensure our Operation Profile exists (create-if-absent with an antenna-1 default)
+	// (a.ops is always set by NewAdapter alongside a.rec.)
+	// in its own session dance before the entity reconcile.
+	if err := a.ensureProfile(ctx); err != nil {
+		return err
+	}
+
 	session, holderIP, err := a.rec.Login(ctx)
 	if err != nil {
 		return err
@@ -100,7 +108,7 @@ func (a *Adapter) Reconcile(ctx context.Context) error {
 	}
 	defer func() { _ = a.rec.Logout(ctx, session) }()
 
-	if err := verifyServerAndProfile(ctx, session, a.rec); err != nil {
+	if err := verifyServer(ctx, session, a.rec); err != nil {
 		return err
 	}
 	if _, err := reconcileGolden(ctx, session, a.rec, a.cfg.AntennaCount); err != nil {
@@ -112,6 +120,50 @@ func (a *Adapter) Reconcile(ctx context.Context) error {
 	}
 	if err := a.rec.EnableEvent(ctx, session, NameEvent, true); err != nil {
 		return fmt.Errorf("cs463: reconcile re-arm enable: %w", err)
+	}
+	return nil
+}
+
+// ensureProfile creates the golden Operation Profile if it is absent, with a default
+// antenna-1-only @ DefaultProfileTxPowerDBm config (and dwell=golden on every slot).
+// If the profile already exists it is LEFT UNTOUCHED — the operator owns its antenna/
+// TX-power tuning via Reader.SetConfig; the daemon never clobbers it. Creation needs
+// the servlet to actually enable the antenna (setOperProfile can't on this firmware),
+// so this runs its own /API-then-servlet session sequence (each released before the
+// next, per the single-session lock).
+func (a *Adapter) ensureProfile(ctx context.Context) error {
+	// Phase A (/API): does our profile already exist?
+	session, holderIP, err := a.ops.Login(ctx)
+	if err != nil {
+		return err
+	}
+	if session == "" {
+		return busyErr(holderIP)
+	}
+	profiles, err := a.rec.ListProfileIDs(ctx, session)
+	if err != nil {
+		_ = a.ops.Logout(ctx, session)
+		return fmt.Errorf("cs463: list profiles: %w", err)
+	}
+	if profiles[NameProfile] {
+		_ = a.ops.Logout(ctx, session) // exists — hands off (operator owns tuning)
+		return nil
+	}
+	if err := a.ops.CreateProfile(ctx, session, NameProfile, DefaultProfileTxPowerDBm); err != nil {
+		_ = a.ops.Logout(ctx, session)
+		return fmt.Errorf("cs463: create profile: %w", err)
+	}
+	_ = a.ops.Logout(ctx, session) // release /API before the servlet login
+
+	// Phase B (servlet): actually enable antenna 1 (setOperProfile cannot).
+	if err := a.ops.LoginServlet(ctx); err != nil {
+		return fmt.Errorf("cs463: servlet login for profile: %w", err)
+	}
+	err = a.ops.SetProfilePower(ctx, NameProfile, a.cfg.AntennaCount,
+		[]int{1}, map[int]float64{1: DefaultProfileTxPowerDBm}, map[string]string{})
+	_ = a.ops.LogoutServlet(ctx)
+	if err != nil {
+		return fmt.Errorf("cs463: enable antenna 1 on profile: %w", err)
 	}
 	return nil
 }

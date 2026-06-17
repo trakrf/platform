@@ -13,12 +13,11 @@ import (
 )
 
 // Entity names (spaces, exact — referenced verbatim across entities and by config).
-// All TrakRF mqtt-rpc-prefixed so the name is the ownership claim. The Operation
-// Profile is owned too but is a PRE-CREATED prereq (verify-exists, not daemon-created):
-// /API setOperProfile cannot enable antennas on this firmware, so the operator creates
-// `TrakRF mqtt-rpc Profile` once by cloning a stock profile (which carries enabled
-// antennas), leaving the stock `Default Profile` untouched. Per-reader antenna/TX-power
-// tuning is applied to our profile via Reader.SetConfig (servlet).
+// All TrakRF mqtt-rpc-prefixed so the name is the ownership claim. The daemon CREATES
+// the Operation Profile too (Adapter.ensureProfile: setOperProfile + servlet to enable
+// antenna 1 — /API alone can't enable antennas), with an antenna-1 default, but only if
+// absent — an existing one is left untouched so operator Reader.SetConfig tuning
+// survives. Only the MQTT Server stays hand-crafted (broker secret + TLS cert).
 const (
 	NameMQTTServer = "TrakRF mqtt-rpc MQTT Server"
 	NameProfile    = "TrakRF mqtt-rpc Profile"

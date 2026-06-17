@@ -103,7 +103,7 @@ owned as code (`internal/readerd/cs463/golden.go`); reconcile is list-then-add-o
 | Entity | Name | Reconciled |
 |---|---|---|
 | MQTT Server (CloudServer) | `TrakRF mqtt-rpc MQTT Server` | **No — hand-crafted out-of-band** (needs broker creds + TLS cert), referenced by name |
-| Operation Profile | `TrakRF mqtt-rpc Profile` | **No — hand-crafted out-of-band** (clone a stock profile so it has antennas enabled — `setOperProfile` can't enable them); verify-exists; per-reader antenna/TX-power via `SetConfig` |
+| Operation Profile | `TrakRF mqtt-rpc Profile` | **Create-if-absent** — daemon creates it (`setOperProfile` + servlet) with an **antenna-1-only @ 30 dBm** default (dwell 500 on every slot); **left untouched if it already exists** so operator `SetConfig` tuning survives |
 | Data Format | `TrakRF mqtt-rpc Data Format` | Yes — trimmed JSON, numeric RSSI (`RSSI_Number`, parser PR #502) |
 | Trigger | `TrakRF mqtt-rpc Trigger` | Yes — reader-side RSSI gate (`≥ -80 dBm` knob), all antennas |
 | Resultant Action | `TrakRF mqtt-rpc Action` | Yes — MQTT → server + format |
@@ -130,10 +130,10 @@ an already-reading reader should gate the re-arm on whether config changed.)
    host/port/TLS/creds + the platform `scan_device.publish_topic`) plus `setServerCertificate`
    to upload the broker CA cert. The daemon reads it for its own broker connection and the
    golden chain references it by name.
-2. Hand-craft the `TrakRF mqtt-rpc Profile` operation profile by **cloning a stock profile**
-   (so it has antennas enabled — `setOperProfile` cannot enable them on this firmware). The
-   daemon only verifies it exists; the golden chain references it. Tune antennas/TX-power
-   per-reader afterward via `Reader.SetConfig`. Leave the stock `Default Profile` untouched.
+2. **No profile to create** — the daemon creates `TrakRF mqtt-rpc Profile` itself on first
+   reconcile (antenna-1-only @ 30 dBm default, dwell 500 on every slot), then leaves it
+   alone. Tune antennas/TX-power per-reader afterward via `Reader.SetConfig`. The stock
+   `Default Profile` is never touched.
 3. Existing readers provisioned under the old `TrakRF MQTT` name must set
    `READERD_CLOUDSERVER_ID` until migrated (the default is now the golden name).
 

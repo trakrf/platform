@@ -68,22 +68,17 @@ func specsFor(r entityOps, antennaCount int) []entitySpec {
 	}
 }
 
-// verifyServerAndProfile fails (loudly) if the pre-created CloudServer or Operation
-// Profile the golden chain references is absent. The daemon does not create these.
-func verifyServerAndProfile(ctx context.Context, session string, r entityOps) error {
+// verifyServer fails (loudly) if the hand-crafted CloudServer the golden chain
+// references is absent. The server is the one prereq the daemon cannot create (it
+// needs the broker secret + TLS cert). The Operation Profile, by contrast, IS created
+// by the daemon (see Adapter.ensureProfile), so it is not verified here.
+func verifyServer(ctx context.Context, session string, r entityOps) error {
 	servers, err := r.ListServer(ctx, session)
 	if err != nil {
 		return fmt.Errorf("cs463: reconcile listServer: %w", err)
 	}
 	if _, ok := servers[NameMQTTServer]; !ok {
-		return fmt.Errorf("cs463: required CloudServer %q not found — pre-create it before commissioning (TRA-1002)", NameMQTTServer)
-	}
-	profiles, err := r.ListProfileIDs(ctx, session)
-	if err != nil {
-		return fmt.Errorf("cs463: reconcile list profiles: %w", err)
-	}
-	if !profiles[NameProfile] {
-		return fmt.Errorf("cs463: required operation profile %q not found — pre-create it before commissioning (TRA-1002)", NameProfile)
+		return fmt.Errorf("cs463: required CloudServer %q not found — hand-craft it before commissioning (TRA-1002)", NameMQTTServer)
 	}
 	return nil
 }

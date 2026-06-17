@@ -95,20 +95,15 @@ func TestLiveReconcile(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("create golden server: %v", err)
 		}
-		// Pre-create our own profile (verify-exists prereq). setOperProfile can't
-		// enable antennas (footgun) but the profile only needs to EXIST for the
-		// reconcile-logic test; a real commission clones a stock profile's antennas.
-		if err := c.writeEntity(ctx, s, "setOperProfile", url.Values{
-			"profile_id": {NameProfile}, "linkProfile": {"1"}, "populationEst": {"50"},
-			"sessionNo": {"0"}, "target": {"2"}, "queryAlgorithm": {"DynamicQ"},
-			"reflectedPowerThreshold": {"24"}, "tagModel": {"ANY"}, "antenna_port": {"1,2"},
-			"transmitPower": {"16.0"}, "dwellTime1": {"500"}, "dwellTime2": {"500"},
-		}); err != nil {
+		// Pre-create our profile so the direct reconcileGolden calls below (which
+		// reference it from the Event) have it. In production the daemon creates it
+		// itself via ensureProfile; here we just need the entry to exist.
+		if err := c.CreateProfile(ctx, s, NameProfile, DefaultProfileTxPowerDBm); err != nil {
 			t.Fatalf("create golden profile: %v", err)
 		}
 
-		if err := verifyServerAndProfile(ctx, s, c); err != nil {
-			t.Fatalf("verifyServerAndProfile should pass with prereqs present: %v", err)
+		if err := verifyServer(ctx, s, c); err != nil {
+			t.Fatalf("verifyServer should pass with the server present: %v", err)
 		}
 
 		// 1. create path

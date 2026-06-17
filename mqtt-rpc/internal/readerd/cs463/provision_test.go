@@ -18,6 +18,10 @@ type fakeReco struct {
 	// session lifecycle / re-arm tracking (for Adapter.Reconcile tests)
 	holderIP  string
 	enableSeq []bool // EnableEvent enable flags in call order
+
+	// profile-create tracking (for ensureProfile tests)
+	createProfileCalls int
+	servletPorts       []int // enabledPorts passed to SetProfilePower
 }
 
 func newFakeReco() *fakeReco {
@@ -81,6 +85,23 @@ func (f *fakeReco) Login(ctx context.Context) (string, string, error) {
 func (f *fakeReco) Logout(ctx context.Context, s string) error { return nil }
 func (f *fakeReco) EnableEvent(ctx context.Context, s, eventID string, enable bool) error {
 	f.enableSeq = append(f.enableSeq, enable)
+	return nil
+}
+
+// --- readerOps methods (so *fakeReco can also be the Adapter's a.ops for ensureProfile) ---
+func (f *fakeReco) ForceLogout(ctx context.Context) error { return nil }
+func (f *fakeReco) GetActiveProfile(ctx context.Context, s string) (Profile, error) {
+	return Profile{ID: NameProfile}, nil
+}
+func (f *fakeReco) LoginServlet(ctx context.Context) error  { return nil }
+func (f *fakeReco) LogoutServlet(ctx context.Context) error { return nil }
+func (f *fakeReco) SetProfilePower(ctx context.Context, profileID string, antennaCount int, enabledPorts []int, powers map[int]float64, profileFields map[string]string) error {
+	f.servletPorts = enabledPorts
+	return nil
+}
+func (f *fakeReco) CreateProfile(ctx context.Context, s, profileID string, txPowerDBm float64) error {
+	f.createProfileCalls++
+	f.profiles[profileID] = true // now it exists
 	return nil
 }
 
@@ -177,20 +198,41 @@ func TestReconcileModsOnDrift(t *testing.T) {
 	}
 }
 
-func TestVerifyServerAndProfile(t *testing.T) {
+func TestVerifyServer(t *testing.T) {
 	f := newMatchingFake(2)
-	if err := verifyServerAndProfile(context.Background(), "sid", f); err != nil {
-		t.Fatalf("present server+profile must verify, got %v", err)
+	if err := verifyServer(context.Background(), "sid", f); err != nil {
+		t.Fatalf("present server must verify, got %v", err)
 	}
 	noServer := newMatchingFake(2)
 	delete(noServer.servers, NameMQTTServer)
-	if err := verifyServerAndProfile(context.Background(), "sid", noServer); err == nil {
+	if err := verifyServer(context.Background(), "sid", noServer); err == nil {
 		t.Error("missing CloudServer must fail verify")
 	}
-	noProfile := newMatchingFake(2)
-	delete(noProfile.profiles, NameProfile)
-	if err := verifyServerAndProfile(context.Background(), "sid", noProfile); err == nil {
-		t.Error("missing profile must fail verify")
+}
+
+func TestEnsureProfileCreatesWhenAbsent(t *testing.T) {
+	f := newMatchingFake(2)
+	delete(f.profiles, NameProfile) // profile absent -> daemon creates it
+	a := &Adapter{cfg: AdapterConfig{AntennaCount: 4}, rec: f, ops: f}
+	if err := a.ensureProfile(context.Background()); err != nil {
+		t.Fatalf("ensureProfile: %v", err)
+	}
+	if f.createProfileCalls != 1 {
+		t.Fatalf("absent profile must be created once, got %d", f.createProfileCalls)
+	}
+	if len(f.servletPorts) != 1 || f.servletPorts[0] != 1 {
+		t.Fatalf("created profile must enable antenna 1 via servlet, got ports %v", f.servletPorts)
+	}
+}
+
+func TestEnsureProfileHandsOffWhenPresent(t *testing.T) {
+	f := newMatchingFake(2) // profile present
+	a := &Adapter{cfg: AdapterConfig{AntennaCount: 4}, rec: f, ops: f}
+	if err := a.ensureProfile(context.Background()); err != nil {
+		t.Fatalf("ensureProfile: %v", err)
+	}
+	if f.createProfileCalls != 0 || f.servletPorts != nil {
+		t.Fatalf("existing profile must be left untouched, got creates=%d servletPorts=%v", f.createProfileCalls, f.servletPorts)
 	}
 }
 
@@ -198,7 +240,7 @@ func TestAdapterReconcileNoOpStillRearms(t *testing.T) {
 	// Even a converged (no-drift) reconcile must re-arm: the CS463 does not reliably
 	// auto-start inventory, so the daemon arms defensively on every startup.
 	f := newMatchingFake(2) // converged: no drift
-	a := &Adapter{cfg: AdapterConfig{AntennaCount: 2, EventID: "ignored"}, rec: f}
+	a := &Adapter{cfg: AdapterConfig{AntennaCount: 2, EventID: "ignored"}, rec: f, ops: f}
 	if err := a.Reconcile(context.Background()); err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -213,7 +255,7 @@ func TestAdapterReconcileNoOpStillRearms(t *testing.T) {
 func TestAdapterReconcileRearmsWhenChanged(t *testing.T) {
 	f := newMatchingFake(2)
 	f.rows["event"][NameEvent]["duplicateEliminationWindow"] = "5000" // drift -> mod
-	a := &Adapter{cfg: AdapterConfig{AntennaCount: 2, EventID: "ignored"}, rec: f}
+	a := &Adapter{cfg: AdapterConfig{AntennaCount: 2, EventID: "ignored"}, rec: f, ops: f}
 	if err := a.Reconcile(context.Background()); err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -226,9 +268,9 @@ func TestAdapterReconcileRearmsWhenChanged(t *testing.T) {
 func TestAdapterReconcileFailsOnMissingServer(t *testing.T) {
 	f := newMatchingFake(2)
 	delete(f.servers, NameMQTTServer)
-	a := &Adapter{cfg: AdapterConfig{AntennaCount: 2}, rec: f}
+	a := &Adapter{cfg: AdapterConfig{AntennaCount: 2}, rec: f, ops: f}
 	if err := a.Reconcile(context.Background()); err == nil {
-		t.Fatal("reconcile must fail when the pre-created CloudServer is absent")
+		t.Fatal("reconcile must fail when the hand-crafted CloudServer is absent")
 	}
 	if f.totalWrites() != 0 {
 		t.Fatalf("must not write entities when verify fails, got %d", f.totalWrites())
@@ -238,7 +280,7 @@ func TestAdapterReconcileFailsOnMissingServer(t *testing.T) {
 func TestAdapterReconcileBusyReader(t *testing.T) {
 	f := newMatchingFake(2)
 	f.holderIP = "192.168.50.9"
-	a := &Adapter{cfg: AdapterConfig{AntennaCount: 2}, rec: f}
+	a := &Adapter{cfg: AdapterConfig{AntennaCount: 2}, rec: f, ops: f}
 	if err := a.Reconcile(context.Background()); err == nil {
 		t.Fatal("reconcile must fail when the reader is busy (single-session lock)")
 	}
