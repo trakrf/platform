@@ -63,10 +63,10 @@ func TestGoldenDataFormatTrimmedNumeric(t *testing.T) {
 
 func TestDataFormatDrift(t *testing.T) {
 	matching := EntityRow{
-		"format":        "JSON",
-		"field1":        "SequenceNumber", "label1": "sequenceNumber",
-		"field2":        "NumberOfTags", "label2": "numberOfTags",
-		"field3":        "TagDataList", "label3": "tags",
+		"format": "JSON",
+		"field1": "SequenceNumber", "label1": "sequenceNumber",
+		"field2": "NumberOfTags", "label2": "numberOfTags",
+		"field3": "TagDataList", "label3": "tags",
 		"tagDataField1": "EPC", "tagDataLabel1": "epc",
 		"tagDataField2": "TimeStampOfRead", "tagDataLabel2": "timeStampOfRead",
 		"tagDataField3": "AntennaPort_Number", "tagDataLabel3": "antennaPort",
