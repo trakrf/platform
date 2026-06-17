@@ -12,12 +12,17 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/rs/zerolog"
 
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerd"
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerd/cs463"
 )
+
+// reconcileTimeout bounds the startup golden-config reconcile (a handful of /API
+// round-trips against the reader's localhost interface).
+const reconcileTimeout = 30 * time.Second
 
 // version is overridable via -ldflags "-X main.version=...".
 var version = "dev"
@@ -48,6 +53,19 @@ func main() {
 		AntennaCount: cfg.AntennaCount,
 		EventID:      cfg.EventID,
 	})
+
+	// Converge the reader to the golden TrakRF mqtt-rpc config before serving RPC.
+	// Non-fatal: a failed reconcile (e.g. reader busy, or the pre-created CloudServer
+	// /profile missing) is logged loudly but the daemon still serves the RPC channel.
+	if cfg.Reconcile {
+		rctx, cancel := context.WithTimeout(ctx, reconcileTimeout)
+		if err := adapter.Reconcile(rctx); err != nil {
+			logger.Error().Err(err).Msg("golden-config reconcile failed; serving RPC anyway")
+		} else {
+			logger.Info().Msg("golden-config reconcile complete")
+		}
+		cancel()
+	}
 
 	d := readerd.New(cfg, adapter, &logger)
 	if err := d.Start(); err != nil {
