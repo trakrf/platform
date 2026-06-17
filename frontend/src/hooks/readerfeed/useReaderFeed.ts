@@ -50,6 +50,8 @@ export interface ReaderFeedState {
  * reader; omit it for the whole org. The SSE stream is always the full org feed
  * — filtering is a presentation concern, so the scoped panel and the global page
  * share one stream and one reducer.
+ * @param filterReaderKey - optional reader key to filter the view to a single reader
+ * @param showAllAdverts - when true, disables the server-side BLE noise filter for this session (?adverts=all).
  */
 export function useReaderFeed(filterReaderKey?: string, showAllAdverts = false): ReaderFeedState {
   const [tagMap, setTagMap] = useState<Map<string, TagState>>(new Map());

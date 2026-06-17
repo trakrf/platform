@@ -6,12 +6,15 @@ package scanread
 
 import "time"
 
-// Read is one tag observation emitted by a parser, pre-membership.
+// Read is one parsed tag observation. The scan_point it belongs to is resolved
+// downstream (storage.PersistReads) from the device the topic routed to plus
+// AntennaPort — there is no device-reported capture-point string anymore
+// (TRA-956). AntennaPort defaults to 1 for single-antenna devices.
 type Read struct {
 	EPC             string
 	AntennaPort     int
 	RSSI            int
-	ReaderTimestamp time.Time
+	ReaderTimestamp time.Time // informational only; server time is authoritative
 	// BLE is the decoded BLE advertisement classification for this read, set by
 	// BLE-gateway parsers (GL-S10, MK107). It is nil for RFID reads (CS463) and
 	// is consumed ONLY by the Live Reads noise filter (TRA-926) — membership,

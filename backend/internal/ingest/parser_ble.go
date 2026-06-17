@@ -10,7 +10,7 @@ import (
 // iBeacon manufacturer-data prefix: Apple company id 0x004C (little-endian on the
 // wire: 0x4C 0x00), then the iBeacon type 0x02 and length 0x15 (21 bytes of
 // UUID+major+minor+txpower).
-const iBeaconDataLen = 25 // company(2)+type(1)+len(1)+uuid(16)+major(2)+minor(2)+tx(1)
+const iBeaconDataLen = 25 // company(2)+type(1)+len(1)+uuid(16)+major(2)+minor(2)+tx(1); requires the trailing TX-power byte per spec, so payloads missing it classify as unknown
 
 // decodeBLEAdvert classifies a GL-S10 raw advertisement (hex-encoded BLE AD
 // structures) as an iBeacon or unknown. It walks length-prefixed AD structures

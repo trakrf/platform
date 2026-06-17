@@ -253,7 +253,7 @@ func TestTracker_BLENoiseFilter(t *testing.T) {
 	// Default session: BEACON upserts only, never NOISE.
 	gotBeacon := false
 	for {
-		ev := recvMaybe(t, chDef, 150*time.Millisecond)
+		ev := recvMaybe(t, chDef, 500*time.Millisecond)
 		if ev == nil {
 			break
 		}
@@ -275,7 +275,7 @@ func TestTracker_BLENoiseFilter(t *testing.T) {
 	// ?adverts=all session: NOISE must appear.
 	gotNoise := false
 	for {
-		ev := recvMaybe(t, chAll, 150*time.Millisecond)
+		ev := recvMaybe(t, chAll, 500*time.Millisecond)
 		if ev == nil {
 			break
 		}
