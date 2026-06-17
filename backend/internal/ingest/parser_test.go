@@ -221,6 +221,22 @@ func TestParseMK107_RealCapture(t *testing.T) {
 		}
 	}
 	assert.True(t, foundIBeacon, "iBeacon entry parsed by MAC like any other read")
+
+	// TRA-926: field-based classification. The pre-decoded iBeacon entry
+	// (12F534BA0D99) carries its uuid/major/minor; the fob F95BC0EC4E56 appears
+	// only as a type:0 "Unknown" (Notify) frame in this window.
+	for _, r := range reads {
+		require.NotNil(t, r.BLE, "every MK107 read carries a BLE advert")
+		switch r.EPC {
+		case "12F534BA0D99":
+			assert.Equal(t, scanread.BLETypeIBeacon, r.BLE.Type)
+			assert.Equal(t, "2686F39CBADA4658854AA62E7E5E8B8D", r.BLE.UUID)
+			assert.Equal(t, uint16(1), r.BLE.Major)
+			assert.Equal(t, uint16(0), r.BLE.Minor)
+		case "F95BC0EC4E56":
+			assert.Equal(t, scanread.BLETypeUnknown, r.BLE.Type)
+		}
+	}
 }
 
 // Status/heartbeat frames (msg_id 3003) carry an object `data`, not the scan
