@@ -128,26 +128,29 @@ no-op reconcile (routine restart) never interrupts inventory.
 - `READERD_RECONCILE` — `true` (default) runs reconcile on startup; `false` pins config.
 - `READERD_CLOUDSERVER_ID` — defaults to `TrakRF mqtt-rpc MQTT Server`.
 
-### Bench verification (cs463-212, 2026-06-17)
+### Bench verification (cs463-212, 2026-06-17) — VALIDATED on live hardware
 Unit tests cover parsing, drift, the reconcile decision table, re-arm gating, and the
-dwell fix against fakes. Validated against the **live reader**:
+dwell fix against fakes. The full path was then run against the **live reader** (the
+guarded `TestLiveReconcile`, `CS463_LIVE=1`), additive and self-restoring:
 - [x] **Read parsing** — all five `list*` + `getOperProfile` parse correctly; real
       captures pinned as CI fixtures (`testdata/cs463-212_*.xml`, `realcapture_test.go`).
 - [x] **Read-side diffs match reality** — `eventDrift`/`actionDrift`/`dataFormatDrift`/
       `triggerDrift` read the exact live attr names/casing; `action_mode` comes back as
       the human form `"Low Latency Alert to Server"`; golden Data Format is field-identical
       to the live `TrakRF-data-format`.
-- [x] **`/API` write contract** — `add`/`mod`/`list`/`del` round-trips succeed on
-      hardware for **Data Format** and the RSSI-gate **Trigger** with our exact golden
-      params (`setOperProfile`'s footgun does not extend to event-engine entities).
+- [x] **`/API` write contract** — all four entity `add`/`mod`/`list`/`del` succeed on
+      hardware with our exact golden params (`setOperProfile`'s footgun does not extend
+      to event-engine entities).
+- [x] **Full reconcile lifecycle** (real `reconcileGolden`/`Adapter.Reconcile` driving
+      the reader): create → `changed=true` + all four present, no drift; second run →
+      `changed=false` (idempotent no-op); injected dedup drift → `changed=true` + event
+      reconciled back to 500; `verifyServerAndProfile` passes with prereqs / fails loudly
+      without.
+- [x] **Live config never disturbed** — the active profile (`TrakRF`) and the live `MQTT`
+      event stayed put throughout; teardown removed every created entity (0 leftovers).
 
-Remaining (needs a clean reader / live demo window — not run to avoid disrupting the
-live rig's event/inventory):
-- [ ] `addResultantAction` + `addEvent` round-trip (same `/API` command family, contract
-      proven above; not exercised because the Action/Event reference the pre-created
-      golden server/profile and the Event is `enable=true`/active).
-- [ ] **Full commission on a clean reader:** all four `add`; converged no-op (zero
-      writes, no re-arm); drift `mod*` + re-arm; end-to-end reads on the golden chain;
-      dwell stays golden after a `SetConfig` TX-power change.
-- [ ] **Partial-failure policy:** aborts on first entity error (logged, non-fatal to
-      RPC). Revisit if the bench shows a need for best-effort-continue.
+To re-run on a reader: `CS463_LIVE=1 CS463_IP=… CS463_WEB_PASS=… go test ./internal/readerd/cs463/ -run TestLiveReconcile`.
+
+Open (non-blocking): **partial-failure policy** — reconcile aborts on first entity
+error (logged, non-fatal to RPC); revisit if a real reader ever needs
+best-effort-continue.
