@@ -7,9 +7,34 @@ package cs463
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 )
+
+// ErrMissingCloudServer is the sentinel for the one PERMANENT commissioning
+// prerequisite: the golden CloudServer (NameMQTTServer) must be hand-crafted on
+// the reader before the daemon can build the golden chain. The daemon fatal-exits
+// on this (errors.Is) — unlike transient reconcile errors (reader busy, broker
+// down, GlassFish booting), which are served-and-retried. The naming is
+// deliberately exact/opinionated; see MissingCloudServerError for the operator hint.
+var ErrMissingCloudServer = errors.New("cs463: required golden CloudServer not found")
+
+// MissingCloudServerError reports the missing golden CloudServer plus the
+// server_ids actually present on the reader, so a near-miss (typo / extra spaces,
+// e.g. "TrakRF mqtt-rpc MQTT   Server") is obvious in the fatal log. It satisfies
+// errors.Is(err, ErrMissingCloudServer).
+type MissingCloudServerError struct {
+	Want    string
+	Present []string
+}
+
+func (e *MissingCloudServerError) Error() string {
+	return fmt.Sprintf("cs463: required CloudServer %q not found — hand-craft it before commissioning (TRA-1002); CloudServers present: %v", e.Want, e.Present)
+}
+
+func (e *MissingCloudServerError) Is(target error) bool { return target == ErrMissingCloudServer }
 
 // entityOps is the slice of reader operations the reconcile needs. *Client
 // satisfies it; tests inject a fake.
@@ -78,7 +103,12 @@ func verifyServer(ctx context.Context, session string, r entityOps) error {
 		return fmt.Errorf("cs463: reconcile listServer: %w", err)
 	}
 	if _, ok := servers[NameMQTTServer]; !ok {
-		return fmt.Errorf("cs463: required CloudServer %q not found — hand-craft it before commissioning (TRA-1002)", NameMQTTServer)
+		present := make([]string, 0, len(servers))
+		for id := range servers {
+			present = append(present, id)
+		}
+		sort.Strings(present)
+		return &MissingCloudServerError{Want: NameMQTTServer, Present: present}
 	}
 	return nil
 }

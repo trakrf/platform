@@ -2,7 +2,9 @@ package cs463
 
 import (
 	"context"
+	"errors"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -224,8 +226,18 @@ func TestVerifyServer(t *testing.T) {
 	}
 	noServer := newMatchingFake(2)
 	delete(noServer.servers, NameMQTTServer)
-	if err := verifyServer(context.Background(), "sid", noServer); err == nil {
-		t.Error("missing CloudServer must fail verify")
+	// A near-miss (triple-space typo) must NOT satisfy the exact match, and must be
+	// surfaced in the error so the operator spots it.
+	noServer.servers["TrakRF mqtt-rpc MQTT   Server"] = EntityRow{"server_id": "TrakRF mqtt-rpc MQTT   Server"}
+	err := verifyServer(context.Background(), "sid", noServer)
+	if err == nil {
+		t.Fatal("missing CloudServer must fail verify")
+	}
+	if !errors.Is(err, ErrMissingCloudServer) {
+		t.Errorf("missing CloudServer must satisfy errors.Is(ErrMissingCloudServer); got %v", err)
+	}
+	if !strings.Contains(err.Error(), "TrakRF mqtt-rpc MQTT   Server") {
+		t.Errorf("error must list present CloudServers (the near-miss) for operator hint; got %v", err)
 	}
 }
 
