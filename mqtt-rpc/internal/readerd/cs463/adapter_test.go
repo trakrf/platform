@@ -100,6 +100,11 @@ func (f *fakeOps) SetProfilePower(ctx context.Context, profileID string, antenna
 	return f.setErr
 }
 
+func (f *fakeOps) CreateProfile(ctx context.Context, session, profileID string, txPowerDBm float64) error {
+	f.callOrder = append(f.callOrder, "CreateProfile")
+	return nil
+}
+
 func (f *fakeOps) EnableEvent(ctx context.Context, session, eventID string, enable bool) error {
 	if enable {
 		f.callOrder = append(f.callOrder, "EnableEvent(true)")

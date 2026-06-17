@@ -17,8 +17,12 @@ const (
 	defaultCloudServerFile = "/opt/EmbeddedGlassFish/config/CloudServer"
 	defaultEventListFile   = "/opt/EmbeddedGlassFish/config/EventListCS463"
 	defaultCertDir         = "/opt/EmbeddedGlassFish/cert/CloudServer"
-	defaultCloudServerID   = "TrakRF MQTT"
-	defaultAntennaCount    = 4
+	// defaultCloudServerID matches cs463.NameMQTTServer — the daemon both reads its
+	// broker config from this pre-created entry and references it by name in the
+	// golden chain. Existing readers provisioned under the old "TrakRF MQTT" name
+	// must set READERD_CLOUDSERVER_ID until migrated.
+	defaultCloudServerID = "TrakRF mqtt-rpc MQTT Server"
+	defaultAntennaCount  = 4
 )
 
 // BrokerConfig describes how the daemon connects to the MQTT broker for the RPC
@@ -35,6 +39,8 @@ type Config struct {
 	Broker       BrokerConfig
 	EventID      string
 	AntennaCount int
+	// Reconcile, when true (default), runs the golden-config reconcile on startup.
+	Reconcile bool
 }
 
 // cloudServerEntry mirrors one object in the reader's CloudServer config array.
@@ -172,6 +178,16 @@ func LoadConfig() (Config, error) {
 			return Config{}, fmt.Errorf("readerd: invalid READERD_ANTENNA_COUNT %q: %w", v, err)
 		}
 		cfg.AntennaCount = n
+	}
+
+	// Reconcile golden config on startup (default on).
+	cfg.Reconcile = true
+	if v := os.Getenv("READERD_RECONCILE"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("readerd: invalid READERD_RECONCILE %q: %w", v, err)
+		}
+		cfg.Reconcile = b
 	}
 
 	return cfg, nil

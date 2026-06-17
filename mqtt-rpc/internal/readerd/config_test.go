@@ -106,3 +106,44 @@ func TestParseEnabledEvent_NoneEnabled(t *testing.T) {
 		t.Fatal("expected error when no event enabled")
 	}
 }
+
+// brokerEnv sets the direct-broker envs so LoadConfig skips on-reader file reads.
+func brokerEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("READERD_BROKER_URL", "mqtts://u:p@host:8883")
+	t.Setenv("READERD_CA_CERT", "/x.pem")
+	t.Setenv("READERD_BASE_TOPIC", "trakrf.id/r")
+	t.Setenv("READERD_RPC_CLIENT_ID", "r-rpc")
+	t.Setenv("READERD_EVENT_ID", "TrakRF mqtt-rpc Event")
+}
+
+func TestReconcileDefaultsOn(t *testing.T) {
+	brokerEnv(t)
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if !cfg.Reconcile {
+		t.Error("Reconcile should default on")
+	}
+}
+
+func TestReconcileCanDisable(t *testing.T) {
+	brokerEnv(t)
+	t.Setenv("READERD_RECONCILE", "false")
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Reconcile {
+		t.Error("READERD_RECONCILE=false must disable reconcile")
+	}
+}
+
+func TestReconcileInvalidErrors(t *testing.T) {
+	brokerEnv(t)
+	t.Setenv("READERD_RECONCILE", "notabool")
+	if _, err := LoadConfig(); err == nil {
+		t.Error("invalid READERD_RECONCILE must error")
+	}
+}

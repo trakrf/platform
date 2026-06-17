@@ -21,6 +21,7 @@ type readerOps interface {
 	LoginServlet(ctx context.Context) error
 	LogoutServlet(ctx context.Context) error
 	SetProfilePower(ctx context.Context, profileID string, antennaCount int, enabledPorts []int, powers map[int]float64, profileFields map[string]string) error
+	CreateProfile(ctx context.Context, session, profileID string, txPowerDBm float64) error
 	EnableEvent(ctx context.Context, session, eventID string, enable bool) error
 }
 
@@ -34,10 +35,24 @@ type AdapterConfig struct {
 	EventID string
 }
 
+// reconcileOps is the slice of reader operations the golden-config reconcile needs:
+// the entity list/add/mod surface plus the session lifecycle and event re-arm. The
+// transport *Client satisfies it; the adapter holds it separately from readerOps so
+// SetConfig's fake does not have to implement the whole entity surface.
+type reconcileOps interface {
+	entityOps
+	Login(ctx context.Context) (session, holderIP string, err error)
+	Logout(ctx context.Context, session string) error
+	EnableEvent(ctx context.Context, session, eventID string, enable bool) error
+}
+
+var _ reconcileOps = (*Client)(nil)
+
 // Adapter implements readerd.Adapter for the CSL CS463 by mapping the neutral
 // readerrpc contract onto the reader's HTTP/servlet operations.
 type Adapter struct {
 	ops readerOps
+	rec reconcileOps // set when ops also satisfies reconcileOps (the real *Client)
 	cfg AdapterConfig
 }
 
@@ -47,9 +62,110 @@ type Adapter struct {
 // once the daemon imports this package.)
 var _ readerOps = (*Client)(nil)
 
-// NewAdapter builds a CS463 adapter over the given reader operations.
+// NewAdapter builds a CS463 adapter over the given reader operations. When ops also
+// satisfies reconcileOps (the real *Client does), the adapter can run the golden
+// config reconcile; SetConfig-only fakes that do not are simply not reconcilable.
 func NewAdapter(ops readerOps, cfg AdapterConfig) *Adapter {
-	return &Adapter{ops: ops, cfg: cfg}
+	a := &Adapter{ops: ops, cfg: cfg}
+	if r, ok := ops.(reconcileOps); ok {
+		a.rec = r
+	}
+	return a
+}
+
+// Reconcile converges the reader to the golden TrakRF mqtt-rpc entities and starts
+// inventory. It runs in a single /API login window (all entity writes are /API,
+// unlike the SetConfig servlet path): verify the pre-created CloudServer + Operation
+// Profile exist, list-then-add-or-mod the four owned entities, then re-arm the golden
+// event. A safe function-level defer Logout is fine here precisely because no servlet
+// form login is taken inside this window (contrast SetConfig's three-phase dance).
+//
+// The event is re-armed UNCONDITIONALLY (not only when config changed) — a defensive
+// measure, because the CS463 does not RELIABLY auto-start inventory: an event with
+// enable=true in config sometimes publishes nothing until a disable→enable cycle kicks
+// the inventory engine (operator-confirmed "faith cure"; a bare enable(true) is a
+// no-op). A clean boot often does auto-start, but the daemon can't tell, so it arms on
+// every startup to guarantee reads. Cost is one inventory cycle if reads were already
+// flowing. (A future on-demand Reader.Reconcile RPC run against an already-reading
+// reader should gate the re-arm on whether config changed, to avoid that blip.)
+func (a *Adapter) Reconcile(ctx context.Context) error {
+	if a.rec == nil {
+		return fmt.Errorf("cs463: reconcile not supported by these reader ops")
+	}
+	// Ensure our Operation Profile exists (create-if-absent with an antenna-1 default)
+	// (a.ops is always set by NewAdapter alongside a.rec.)
+	// in its own session dance before the entity reconcile.
+	if err := a.ensureProfile(ctx); err != nil {
+		return err
+	}
+
+	session, holderIP, err := a.rec.Login(ctx)
+	if err != nil {
+		return err
+	}
+	if session == "" {
+		return busyErr(holderIP)
+	}
+	defer func() { _ = a.rec.Logout(ctx, session) }()
+
+	if err := verifyServer(ctx, session, a.rec); err != nil {
+		return err
+	}
+	if _, err := reconcileGolden(ctx, session, a.rec, a.cfg.AntennaCount); err != nil {
+		return err
+	}
+	// Always re-arm: start (or restart) inventory on the golden event.
+	if err := a.rec.EnableEvent(ctx, session, NameEvent, false); err != nil {
+		return fmt.Errorf("cs463: reconcile re-arm disable: %w", err)
+	}
+	if err := a.rec.EnableEvent(ctx, session, NameEvent, true); err != nil {
+		return fmt.Errorf("cs463: reconcile re-arm enable: %w", err)
+	}
+	return nil
+}
+
+// ensureProfile creates the golden Operation Profile if it is absent, with a default
+// antenna-1-only @ DefaultProfileTxPowerDBm config (and dwell=golden on every slot).
+// If the profile already exists it is LEFT UNTOUCHED — the operator owns its antenna/
+// TX-power tuning via Reader.SetConfig; the daemon never clobbers it. Creation needs
+// the servlet to actually enable the antenna (setOperProfile can't on this firmware),
+// so this runs its own /API-then-servlet session sequence (each released before the
+// next, per the single-session lock).
+func (a *Adapter) ensureProfile(ctx context.Context) error {
+	// Phase A (/API): does our profile already exist?
+	session, holderIP, err := a.ops.Login(ctx)
+	if err != nil {
+		return err
+	}
+	if session == "" {
+		return busyErr(holderIP)
+	}
+	profiles, err := a.rec.ListProfileIDs(ctx, session)
+	if err != nil {
+		_ = a.ops.Logout(ctx, session)
+		return fmt.Errorf("cs463: list profiles: %w", err)
+	}
+	if profiles[NameProfile] {
+		_ = a.ops.Logout(ctx, session) // exists — hands off (operator owns tuning)
+		return nil
+	}
+	if err := a.ops.CreateProfile(ctx, session, NameProfile, DefaultProfileTxPowerDBm); err != nil {
+		_ = a.ops.Logout(ctx, session)
+		return fmt.Errorf("cs463: create profile: %w", err)
+	}
+	_ = a.ops.Logout(ctx, session) // release /API before the servlet login
+
+	// Phase B (servlet): actually enable antenna 1 (setOperProfile cannot).
+	if err := a.ops.LoginServlet(ctx); err != nil {
+		return fmt.Errorf("cs463: servlet login for profile: %w", err)
+	}
+	err = a.ops.SetProfilePower(ctx, NameProfile, a.cfg.AntennaCount,
+		[]int{1}, map[int]float64{1: DefaultProfileTxPowerDBm}, map[string]string{})
+	_ = a.ops.LogoutServlet(ctx)
+	if err != nil {
+		return fmt.Errorf("cs463: enable antenna 1 on profile: %w", err)
+	}
+	return nil
 }
 
 // GetCapabilities reports the static CS463 control surface. No reader round-trip.
