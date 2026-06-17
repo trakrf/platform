@@ -3,6 +3,7 @@ package readercontrol
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -115,12 +116,12 @@ func TestCall_Timeout(t *testing.T) {
 	}
 }
 
-func TestSetConfig_RPCErrorMapsToGoError(t *testing.T) {
+func TestSetOperProfile_RPCErrorMapsToGoError(t *testing.T) {
 	c, cp := newTestClient()
 
 	errc := make(chan error, 1)
 	go func() {
-		_, err := c.SetConfig(context.Background(), "trakrf.id/cs463-212", readerrpc.ReaderConfig{})
+		_, err := c.SetOperProfile(context.Background(), "trakrf.id/cs463-212", readerrpc.ReaderConfig{}, false)
 		errc <- err
 	}()
 
@@ -138,11 +139,11 @@ func TestSetConfig_RPCErrorMapsToGoError(t *testing.T) {
 			t.Fatalf("error %q does not carry rpc message", err.Error())
 		}
 	case <-time.After(time.Second):
-		t.Fatal("SetConfig did not return")
+		t.Fatal("SetOperProfile did not return")
 	}
 }
 
-func TestSetConfig_SuccessUnmarshalsResult(t *testing.T) {
+func TestSetOperProfile_SuccessUnmarshalsResult(t *testing.T) {
 	c, cp := newTestClient()
 
 	type result struct {
@@ -151,7 +152,7 @@ func TestSetConfig_SuccessUnmarshalsResult(t *testing.T) {
 	}
 	done := make(chan result, 1)
 	go func() {
-		res, err := c.SetConfig(context.Background(), "trakrf.id/cs463-212", readerrpc.ReaderConfig{})
+		res, err := c.SetOperProfile(context.Background(), "trakrf.id/cs463-212", readerrpc.ReaderConfig{}, false)
 		done <- result{res, err}
 	}()
 
@@ -169,7 +170,7 @@ func TestSetConfig_SuccessUnmarshalsResult(t *testing.T) {
 			t.Fatalf("applied = %q", r.res.Applied)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("SetConfig did not return")
+		t.Fatal("SetOperProfile did not return")
 	}
 }
 
@@ -213,6 +214,31 @@ func TestDeliver_UnknownIDIsDropped(t *testing.T) {
 	reply := readerrpc.Response{ID: 999, Result: json.RawMessage(`{}`)}
 	b, _ := reply.Marshal()
 	c.deliver(b) // must be a no-op
+}
+
+func TestGetOperProfile_BusyMapsToTypedError(t *testing.T) {
+	c, cp := newTestClient()
+	errc := make(chan error, 1)
+	go func() {
+		_, err := c.GetOperProfile(context.Background(), "trakrf.id/cs463-212", false)
+		errc <- err
+	}()
+	req := waitForRequest(t, cp)
+	reply := readerrpc.NewBusyError(readerrpc.Request{ID: req.ID, Src: req.Src}, "192.168.50.203")
+	b, _ := reply.Marshal()
+	c.deliver(b)
+	select {
+	case err := <-errc:
+		var be *readerrpc.BusyError
+		if !errors.As(err, &be) {
+			t.Fatalf("want *readerrpc.BusyError, got %v", err)
+		}
+		if be.HeldBy != "192.168.50.203" {
+			t.Fatalf("held_by = %q", be.HeldBy)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("GetOperProfile did not return")
+	}
 }
 
 func waitForRequest(t *testing.T, cp *capture) readerrpc.Request {

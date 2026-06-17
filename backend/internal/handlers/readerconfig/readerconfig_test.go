@@ -2,6 +2,9 @@ package readerconfig
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/trakrf/platform/backend/internal/models/scandevice"
@@ -33,19 +36,21 @@ func TestBaseTopicForDevice(t *testing.T) {
 }
 
 func TestValidateTxPower(t *testing.T) {
+	ac := func(p float64, en bool) readerrpc.AntennaConfig {
+		return readerrpc.AntennaConfig{Antenna: 1, Enabled: en, PowerDBm: p}
+	}
 	cases := []struct {
 		name    string
 		cfg     readerrpc.ReaderConfig
 		wantErr bool
 	}{
-		{"empty config ok", readerrpc.ReaderConfig{}, false},
-		{"in range", readerrpc.ReaderConfig{TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 22.5}}}, false},
-		{"min edge", readerrpc.ReaderConfig{TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 10}}}, false},
-		{"max edge", readerrpc.ReaderConfig{TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 31.5}}}, false},
-		{"under min", readerrpc.ReaderConfig{TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 5}}}, true},
-		{"over max", readerrpc.ReaderConfig{TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 32}}}, true},
-		{"negative", readerrpc.ReaderConfig{TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 2, Power: -1}}}, true},
-		{"one bad among many", readerrpc.ReaderConfig{TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 20}, {Antenna: 2, Power: 99}}}, true},
+		{"empty ok", readerrpc.ReaderConfig{}, false},
+		{"in range", readerrpc.ReaderConfig{Antennas: []readerrpc.AntennaConfig{ac(22.5, true)}}, false},
+		{"min edge", readerrpc.ReaderConfig{Antennas: []readerrpc.AntennaConfig{ac(10, true)}}, false},
+		{"max edge", readerrpc.ReaderConfig{Antennas: []readerrpc.AntennaConfig{ac(31.5, true)}}, false},
+		{"under min (enabled)", readerrpc.ReaderConfig{Antennas: []readerrpc.AntennaConfig{ac(5, true)}}, true},
+		{"over max (enabled)", readerrpc.ReaderConfig{Antennas: []readerrpc.AntennaConfig{ac(32, true)}}, true},
+		{"out of range but disabled is ok", readerrpc.ReaderConfig{Antennas: []readerrpc.AntennaConfig{ac(0, false)}}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -73,10 +78,10 @@ type fakeRPC struct {
 func (f *fakeRPC) GetCapabilities(_ context.Context, _ string) (readerrpc.Capabilities, error) {
 	return f.caps, f.err
 }
-func (f *fakeRPC) GetConfig(_ context.Context, _ string) (readerrpc.ReaderConfig, error) {
+func (f *fakeRPC) GetOperProfile(_ context.Context, _ string, _ bool) (readerrpc.ReaderConfig, error) {
 	return f.cfg, f.err
 }
-func (f *fakeRPC) SetConfig(_ context.Context, _ string, cfg readerrpc.ReaderConfig) (readerrpc.SetConfigResult, error) {
+func (f *fakeRPC) SetOperProfile(_ context.Context, _ string, cfg readerrpc.ReaderConfig, _ bool) (readerrpc.SetConfigResult, error) {
 	f.lastSet = cfg
 	return f.setRes, f.err
 }
@@ -89,5 +94,25 @@ func TestNewHandler_NilRPCIsAllowed(t *testing.T) {
 	h := NewHandler(nil, nil)
 	if h.rpc != nil {
 		t.Fatalf("expected nil rpc")
+	}
+}
+
+func TestEnabledPorts(t *testing.T) {
+	got := enabledPorts(readerrpc.ReaderConfig{Antennas: []readerrpc.AntennaConfig{
+		{Antenna: 1, Enabled: true}, {Antenna: 2, Enabled: false}, {Antenna: 3, Enabled: true},
+	}})
+	if !reflect.DeepEqual(got, []int{1, 3}) {
+		t.Fatalf("enabledPorts = %v, want [1 3]", got)
+	}
+}
+
+func TestWantForce(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/x?force=true", nil)
+	if !wantForce(r) {
+		t.Fatal("force=true not detected")
+	}
+	r2 := httptest.NewRequest(http.MethodGet, "/x", nil)
+	if wantForce(r2) {
+		t.Fatal("force should default false")
 	}
 }

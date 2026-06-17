@@ -12,6 +12,7 @@ package readerconfig
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -25,7 +26,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
 
-// Transmit-power bounds (dBm) accepted on a SetConfig — the CS463's operational
+// Transmit-power bounds (dBm) accepted on a SetOperProfile — the CS463's operational
 // range (Indy RS2000: 10.0–31.5 dBm in 0.5 dB steps). Below ~10 dBm the read zone
 // is a few inches (meaningless); 31.5 is the module max. The daemon's capabilities
 // report the same range; the reader also enforces its own cap.
@@ -38,8 +39,8 @@ const (
 // satisfies it; a nil interface means reader control is disabled (endpoints 503).
 type RPCClient interface {
 	GetCapabilities(ctx context.Context, base string) (readerrpc.Capabilities, error)
-	GetConfig(ctx context.Context, base string) (readerrpc.ReaderConfig, error)
-	SetConfig(ctx context.Context, base string, cfg readerrpc.ReaderConfig) (readerrpc.SetConfigResult, error)
+	GetOperProfile(ctx context.Context, base string, force bool) (readerrpc.ReaderConfig, error)
+	SetOperProfile(ctx context.Context, base string, cfg readerrpc.ReaderConfig, force bool) (readerrpc.SetConfigResult, error)
 }
 
 // Handler serves the reader-config endpoints.
@@ -72,15 +73,35 @@ func baseTopicForDevice(d *scandevice.ScanDevice) string {
 	return strings.TrimSuffix(*d.PublishTopic, "/reads")
 }
 
-// validateTxPower bounds-checks every per-antenna power in a config. Returns an
-// empty message on success.
+// validateTxPower bounds-checks the power of every enabled antenna in a config.
+// Returns an empty message on success.
 func validateTxPower(cfg readerrpc.ReaderConfig) string {
-	for _, ap := range cfg.TxPowerDBm {
-		if ap.Power < minTxPowerDBm || ap.Power > maxTxPowerDBm {
-			return "tx_power_dbm must be between 10 and 31.5 dBm"
+	for _, ac := range cfg.Antennas {
+		if ac.Enabled && (ac.PowerDBm < minTxPowerDBm || ac.PowerDBm > maxTxPowerDBm) {
+			return "power_dbm must be between 10 and 31.5 dBm for enabled antennas"
 		}
 	}
 	return ""
+}
+
+func wantForce(r *http.Request) bool { return r.URL.Query().Get("force") == "true" }
+
+func enabledPorts(cfg readerrpc.ReaderConfig) []int {
+	out := []int{}
+	for _, ac := range cfg.Antennas {
+		if ac.Enabled {
+			out = append(out, ac.Antenna)
+		}
+	}
+	return out
+}
+
+// respondBusy maps a reader single-session lock to a typed 409.
+func respondBusy(w http.ResponseWriter, be *readerrpc.BusyError) {
+	httputil.WriteJSON(w, http.StatusConflict, map[string]any{
+		"error":   "reader_busy",
+		"held_by": be.HeldBy,
+	})
 }
 
 // @Summary  Get a reader's live configuration
@@ -128,11 +149,20 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal, err.Error(), reqID)
 		return
 	}
-	cfg, err := h.rpc.GetConfig(r.Context(), base)
+	cfg, err := h.rpc.GetOperProfile(r.Context(), base, wantForce(r))
 	if err != nil {
+		var be *readerrpc.BusyError
+		if errors.As(err, &be) {
+			respondBusy(w, be)
+			return
+		}
 		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal, err.Error(), reqID)
 		return
 	}
+	// Best-effort: mirror the reader's live enablement onto scan_points.is_active
+	// (the reader is the source of truth; this keeps the denormalized copy honest).
+	_ = h.storage.SetScanPointActiveByPorts(r.Context(), orgID, id, enabledPorts(cfg))
+
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
 		"capabilities": caps,
 		"config":       cfg,
@@ -191,10 +221,21 @@ func (h *Handler) Set(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.rpc.SetConfig(r.Context(), base, cfg)
+	res, err := h.rpc.SetOperProfile(r.Context(), base, cfg, wantForce(r))
 	if err != nil {
+		var be *readerrpc.BusyError
+		if errors.As(err, &be) {
+			respondBusy(w, be)
+			return
+		}
 		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal, err.Error(), reqID)
 		return
+	}
+	// Only reconcile scan_points when the request actually carried enablement —
+	// a read-timing-only PATCH (dwell/dedup/antDiff, no antennas) must NOT touch
+	// is_active (enabledPorts would be empty → it would disable every point).
+	if len(cfg.Antennas) > 0 {
+		_ = h.storage.SetScanPointActiveByPorts(r.Context(), orgID, id, enabledPorts(cfg))
 	}
 	httputil.WriteJSON(w, http.StatusAccepted, map[string]any{"data": res})
 }
