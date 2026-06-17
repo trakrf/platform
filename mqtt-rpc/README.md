@@ -102,8 +102,8 @@ owned as code (`internal/readerd/cs463/golden.go`); reconcile is list-then-add-o
 ### Owned entities (all `TrakRF mqtt-rpc`-prefixed — the name *is* the ownership claim)
 | Entity | Name | Reconciled |
 |---|---|---|
-| MQTT Server (CloudServer) | `TrakRF mqtt-rpc MQTT Server` | **No — pre-create out-of-band**, referenced by name |
-| Operation Profile | `TrakRF mqtt-rpc Profile` | **Verify-exists** (fail if absent); antenna/TX-power stay with `SetConfig` |
+| MQTT Server (CloudServer) | `TrakRF mqtt-rpc MQTT Server` | **No — hand-crafted out-of-band** (needs broker creds + TLS cert), referenced by name |
+| Operation Profile | stock `Default Profile` | **No — the golden chain rides on the stock CSL profile** (already has antennas enabled, sidestepping the `setOperProfile` no-antenna footgun); verify-exists; per-reader antenna/TX-power via `SetConfig` |
 | Data Format | `TrakRF mqtt-rpc Data Format` | Yes — trimmed JSON, numeric RSSI (`RSSI_Number`, parser PR #502) |
 | Trigger | `TrakRF mqtt-rpc Trigger` | Yes — reader-side RSSI gate (`≥ -80 dBm` knob), all antennas |
 | Resultant Action | `TrakRF mqtt-rpc Action` | Yes — MQTT → server + format |
@@ -116,13 +116,18 @@ required**. Reconcile re-arms the golden event **only when something changed**, 
 no-op reconcile (routine restart) never interrupts inventory.
 
 ### Commissioning prerequisites (done in the same SSH session that installs the daemon)
-1. Pre-create the `TrakRF mqtt-rpc MQTT Server` CloudServer entry (broker host/port/
-   TLS/creds + the platform `scan_device.publish_topic`). The daemon reads it for its
-   own broker connection and references it by name.
-2. Pre-create the `TrakRF mqtt-rpc Profile` operation profile (antenna enablement + TX
-   power; the daemon only verifies it exists and leaves those to `Reader.SetConfig`).
+1. Hand-craft the `TrakRF mqtt-rpc MQTT Server` CloudServer entry — `setServerID` (broker
+   host/port/TLS/creds + the platform `scan_device.publish_topic`) plus `setServerCertificate`
+   to upload the broker CA cert. The daemon reads it for its own broker connection and the
+   golden chain references it by name.
+2. No profile to create — the golden chain references the stock `Default Profile` (present on
+   every CS463, antennas enabled). The daemon only verifies it exists. Tune antennas/TX-power
+   per-reader afterward via `Reader.SetConfig`.
 3. Existing readers provisioned under the old `TrakRF MQTT` name must set
    `READERD_CLOUDSERVER_ID` until migrated (the default is now the golden name).
+
+Enabling the golden event makes `Default Profile` the active profile (the reader's
+activation mechanism); on reboot the reader activates the enabled event's profile.
 
 ### Config
 - `READERD_RECONCILE` — `true` (default) runs reconcile on startup; `false` pins config.
@@ -146,8 +151,14 @@ guarded `TestLiveReconcile`, `CS463_LIVE=1`), additive and self-restoring:
       `changed=false` (idempotent no-op); injected dedup drift → `changed=true` + event
       reconciled back to 500; `verifyServerAndProfile` passes with prereqs / fails loudly
       without.
-- [x] **Live config never disturbed** — the active profile (`TrakRF`) and the live `MQTT`
-      event stayed put throughout; teardown removed every created entity (0 leftovers).
+- [x] **End-to-end commission + reboot** — cs463-212 was stripped to stock (all
+      non-`Example*` entities removed), the golden MQTT Server hand-crafted (`setServerID`
+      + `setServerCertificate` → real preview broker), and the daemon's real
+      `Adapter.Reconcile` stood up the golden chain on the stock `Default Profile`. After a
+      **reboot** the reader came back **self-sufficient off the golden set alone**: active
+      profile `Default Profile`, all five golden entities present, golden event enabled,
+      both firmware + daemon MQTT clients reconnected to preview — zero dependency on any
+      deleted old entity.
 
 To re-run on a reader: `CS463_LIVE=1 CS463_IP=… CS463_WEB_PASS=… go test ./internal/readerd/cs463/ -run TestLiveReconcile`.
 
