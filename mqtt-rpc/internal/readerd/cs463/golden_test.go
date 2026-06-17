@@ -36,15 +36,32 @@ func TestEventDrift(t *testing.T) {
 	if eventDrift(matching) {
 		t.Error("no drift expected when row matches golden")
 	}
-	drifted := cloneRow(matching)
-	drifted["duplicateEliminationWindow"] = "5000"
-	if !eventDrift(drifted) {
-		t.Error("drift expected when dedup window differs")
+	// dedup/antDiff changes are customer-editable (TRA-1003): must NOT report drift.
+	dedupChanged := cloneRow(matching)
+	dedupChanged["duplicateEliminationWindow"] = "5000"
+	if eventDrift(dedupChanged) {
+		t.Error("no drift expected when only dedup window differs (customer-editable knob)")
 	}
-	off := cloneRow(matching)
-	off["antennaDifferentiation"] = "false"
-	if !eventDrift(off) {
-		t.Error("drift expected when antennaDifferentiation differs")
+	antDiffChanged := cloneRow(matching)
+	antDiffChanged["antennaDifferentiation"] = "false"
+	if eventDrift(antDiffChanged) {
+		t.Error("no drift expected when only antennaDifferentiation differs (customer-editable knob)")
+	}
+	// structural field changes must still report drift.
+	wrongProfile := cloneRow(matching)
+	wrongProfile["operProfile_id"] = "SomeOtherProfile"
+	if !eventDrift(wrongProfile) {
+		t.Error("drift expected when operProfile_id differs")
+	}
+	wrongTrigger := cloneRow(matching)
+	wrongTrigger["triggering_logic"] = "SomeOtherTrigger"
+	if !eventDrift(wrongTrigger) {
+		t.Error("drift expected when triggering_logic differs")
+	}
+	disabled := cloneRow(matching)
+	disabled["enable"] = "false"
+	if !eventDrift(disabled) {
+		t.Error("drift expected when enable=false")
 	}
 }
 

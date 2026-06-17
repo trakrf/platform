@@ -128,13 +128,16 @@ func goldenEventParams() url.Values {
 
 // --- drift detection: compare a list* row (verbatim attr keys) to golden -------
 
+// eventDrift reports STRUCTURAL drift of the golden event. It deliberately does
+// NOT compare duplicateEliminationWindow or antennaDifferentiation: those are
+// customer-editable read-timing knobs (TRA-1003), owned by Reader.SetOperProfile,
+// so the daemon must not revert them on reconcile. The event is still created with
+// golden defaults for those fields when absent (goldenEventParams / AddEvent).
 func eventDrift(cur EntityRow) bool {
 	return cur["operProfile_id"] != NameProfile ||
 		cur["triggering_logic"] != NameTrigger ||
 		cur["resultant_action"] != NameAction ||
 		cur["exclusivity"] != "Non-exclusive" ||
-		cur["duplicateEliminationWindow"] != strconv.Itoa(GoldenDedupMs) ||
-		!strings.EqualFold(cur["antennaDifferentiation"], "true") ||
 		!strings.EqualFold(cur["enable"], "true")
 }
 

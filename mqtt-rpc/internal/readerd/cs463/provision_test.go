@@ -184,8 +184,9 @@ func TestReconcileNoOpWhenMatches(t *testing.T) {
 }
 
 func TestReconcileModsOnDrift(t *testing.T) {
+	// Structural drift (wrong operProfile_id) must trigger a mod.
 	f := newMatchingFake(2)
-	f.rows["event"][NameEvent]["duplicateEliminationWindow"] = "5000" // drift
+	f.rows["event"][NameEvent]["operProfile_id"] = "SomeOtherProfile" // structural drift
 	changed, err := reconcileGolden(context.Background(), "sid", f, 2)
 	if err != nil || !changed {
 		t.Fatalf("want changed=true, got changed=%v err=%v", changed, err)
@@ -195,6 +196,24 @@ func TestReconcileModsOnDrift(t *testing.T) {
 	}
 	if f.totalWrites() != 1 {
 		t.Fatalf("only the drifted event should be written, got %d total", f.totalWrites())
+	}
+}
+
+func TestReconcileNoOpWhenOnlyDedupOrAntDiffDiffers(t *testing.T) {
+	// dedup/antDiff are customer-editable (TRA-1003): reconcile must NOT
+	// revert them on restart (they are not structural drift).
+	f := newMatchingFake(2)
+	f.rows["event"][NameEvent]["duplicateEliminationWindow"] = "5000"
+	f.rows["event"][NameEvent]["antennaDifferentiation"] = "false"
+	changed, err := reconcileGolden(context.Background(), "sid", f, 2)
+	if err != nil {
+		t.Fatalf("reconcileGolden: %v", err)
+	}
+	if changed {
+		t.Error("dedup/antDiff change must NOT trigger a reconcile write (customer-editable knobs)")
+	}
+	if f.mods["event"] != 0 {
+		t.Errorf("expected zero event mods, got %d", f.mods["event"])
 	}
 }
 
@@ -254,7 +273,7 @@ func TestAdapterReconcileNoOpStillRearms(t *testing.T) {
 
 func TestAdapterReconcileRearmsWhenChanged(t *testing.T) {
 	f := newMatchingFake(2)
-	f.rows["event"][NameEvent]["duplicateEliminationWindow"] = "5000" // drift -> mod
+	f.rows["event"][NameEvent]["operProfile_id"] = "SomeOtherProfile" // structural drift -> mod
 	a := &Adapter{cfg: AdapterConfig{AntennaCount: 2, EventID: "ignored"}, rec: f, ops: f}
 	if err := a.Reconcile(context.Background()); err != nil {
 		t.Fatalf("Reconcile: %v", err)

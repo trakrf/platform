@@ -16,7 +16,7 @@ import (
 // family provides one implementation (cs463.Adapter is the first).
 type Adapter interface {
 	GetCapabilities(ctx context.Context) (readerrpc.Capabilities, error)
-	GetConfig(ctx context.Context) (readerrpc.ReaderConfig, error)
-	SetConfig(ctx context.Context, cfg readerrpc.ReaderConfig) (readerrpc.SetConfigResult, error)
+	GetOperProfile(ctx context.Context, force bool) (readerrpc.ReaderConfig, error)
+	SetOperProfile(ctx context.Context, cfg readerrpc.ReaderConfig, force bool) (readerrpc.SetConfigResult, error)
 	GetStatus(ctx context.Context) (readerrpc.Status, error)
 }
