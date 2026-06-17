@@ -6,12 +6,14 @@ package cs463
 //	CS463_LIVE=1 CS463_IP=192.168.50.212 CS463_WEB_PASS=… \
 //	  go test ./internal/readerd/cs463/ -run TestLiveReconcile -v
 //
-// It is fully additive and self-restoring: it only ever creates/deletes
-// TrakRF mqtt-rpc-named entities (+ a dummy localhost golden server so the active
-// golden event never publishes to a real broker), and asserts the live config
-// (the MQTT event + active profile) is untouched throughout. Teardown deletes every
-// entity it made. Each /API session is exclusive (the CS463 single-session lock), so
-// the test never holds a session across Adapter.Reconcile (which opens its own).
+// It only ever creates/deletes TrakRF mqtt-rpc-named entities (+ a dummy localhost
+// golden server so the active golden event never publishes to a real broker); it
+// never touches the stock "Default Profile" the golden chain rides on. NOTE: enabling
+// the golden event activates its referenced profile (Default Profile), so this test
+// DOES switch the active profile — run it on a reader you are commissioning, not one
+// you need left on another profile. Teardown deletes every entity it made. Each /API
+// session is exclusive (the CS463 single-session lock), so the test never holds a
+// session across Adapter.Reconcile (which opens its own).
 
 import (
 	"context"
@@ -38,13 +40,14 @@ func newLiveClient(t *testing.T) *Client {
 // before delete.").
 func delGolden(ctx context.Context, c *Client, session string) {
 	_ = c.EnableEvent(ctx, session, NameEvent, false)
+	// NOTE: never delete NameProfile — the golden chain rides on the stock
+	// "Default Profile", which must not be removed.
 	dels := []struct{ cmd, key, id string }{
 		{"delEvent", "event_id", NameEvent},
 		{"delResultantAction", "action_id", NameAction},
 		{"delTriggeringLogic", "logic_id", NameTrigger},
 		{"delDataFormat", "data_format_id", NameDataFormat},
 		{"delServerID", "server_id", NameMQTTServer}, // note: delServerID, not delServer
-		{"delOperProfile", "profile_id", NameProfile},
 	}
 	for _, d := range dels {
 		_ = c.writeEntity(ctx, session, d.cmd, url.Values{d.key: {d.id}})
@@ -71,14 +74,12 @@ func TestLiveReconcile(t *testing.T) {
 		fn(s)
 	}
 
-	var liveActiveID string
 	withSession(func(s string) {
 		p, err := c.GetActiveProfile(ctx, s)
 		if err != nil {
 			t.Fatalf("read active profile: %v", err)
 		}
-		liveActiveID = p.ID
-		t.Logf("live active profile = %q (must stay active throughout)", liveActiveID)
+		t.Logf("active profile before = %q (golden event will activate %q)", p.ID, NameProfile)
 		delGolden(ctx, c, s) // clean start
 	})
 	defer func() { withSession(func(s string) { delGolden(ctx, c, s) }) }() // restore
@@ -95,14 +96,8 @@ func TestLiveReconcile(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("create golden server: %v", err)
 		}
-		if err := c.writeEntity(ctx, s, "setOperProfile", url.Values{
-			"profile_id": {NameProfile}, "linkProfile": {"1"}, "populationEst": {"50"},
-			"sessionNo": {"0"}, "target": {"2"}, "queryAlgorithm": {"DynamicQ"},
-			"reflectedPowerThreshold": {"24"}, "tagModel": {"ANY"}, "antenna_port": {"1,2"},
-			"transmitPower": {"30.0"}, "dwellTime1": {"500"}, "dwellTime2": {"500"},
-		}); err != nil {
-			t.Fatalf("create golden profile: %v", err)
-		}
+		// No profile creation: the golden chain rides on the stock NameProfile
+		// ("Default Profile"), which exists on any CS463 and carries enabled antennas.
 
 		if err := verifyServerAndProfile(ctx, s, c); err != nil {
 			t.Fatalf("verifyServerAndProfile should pass with prereqs present: %v", err)
@@ -117,7 +112,10 @@ func TestLiveReconcile(t *testing.T) {
 			t.Fatal("first reconcile must report changed=true (created the four entities)")
 		}
 		assertGoldenPresentNoDrift(t, ctx, c, s, antennas)
-		assertLiveUntouched(t, ctx, c, s, liveActiveID)
+		// the golden event references NameProfile and is enabled -> it must now be active
+		if active, _ := c.GetActiveProfile(ctx, s); active.ID != NameProfile {
+			t.Fatalf("golden event should have activated %q; active=%q", NameProfile, active.ID)
+		}
 
 		// 2. idempotent no-op
 		changed, err = reconcileGolden(ctx, s, c, antennas)
@@ -153,11 +151,7 @@ func TestLiveReconcile(t *testing.T) {
 	if err := a.Reconcile(ctx); err != nil {
 		t.Fatalf("Adapter.Reconcile (converged): %v", err)
 	}
-
-	withSession(func(s string) {
-		assertLiveUntouched(t, ctx, c, s, liveActiveID)
-	})
-	t.Log("live reconcile validated: create, idempotent no-op, drift correction, adapter path; live config intact")
+	t.Log("live reconcile validated: create, idempotent no-op, drift correction, adapter path")
 }
 
 func assertGoldenPresentNoDrift(t *testing.T, ctx context.Context, c *Client, session string, antennas int) {
@@ -177,19 +171,5 @@ func assertGoldenPresentNoDrift(t *testing.T, ctx context.Context, c *Client, se
 	evs, _ := c.ListEvent(ctx, session)
 	if r, ok := evs[NameEvent]; !ok || eventDrift(r) {
 		t.Errorf("event missing or drifted after create: ok=%v row=%v", ok, r)
-	}
-}
-
-func assertLiveUntouched(t *testing.T, ctx context.Context, c *Client, session, wantActiveID string) {
-	t.Helper()
-	active, err := c.GetActiveProfile(ctx, session)
-	if err != nil {
-		t.Fatalf("re-read active profile: %v", err)
-	}
-	if active.ID != wantActiveID {
-		t.Fatalf("active profile changed to %q (was %q) — golden reconcile disturbed live reads!", active.ID, wantActiveID)
-	}
-	if evs, _ := c.ListEvent(ctx, session); evs["MQTT"]["enable"] == "false" {
-		t.Fatal("live MQTT event was disabled by the test")
 	}
 }

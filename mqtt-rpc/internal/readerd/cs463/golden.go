@@ -13,9 +13,15 @@ import (
 )
 
 // Entity names (spaces, exact — referenced verbatim across entities and by config).
+// The four daemon-owned entities carry the TrakRF mqtt-rpc prefix (the name is the
+// ownership claim). The golden chain RIDES ON the stock CSL "Default Profile" rather
+// than a daemon-created profile: /API setOperProfile cannot enable antennas on this
+// firmware, and the stock profile already has antennas enabled — so the daemon
+// references it and never fights the antenna-enablement footgun. Per-reader antenna/
+// TX-power tuning is applied to that profile via Reader.SetConfig (servlet).
 const (
 	NameMQTTServer = "TrakRF mqtt-rpc MQTT Server"
-	NameProfile    = "TrakRF mqtt-rpc Profile"
+	NameProfile    = "Default Profile" // stock CSL profile the golden chain rides on
 	NameDataFormat = "TrakRF mqtt-rpc Data Format"
 	NameTrigger    = "TrakRF mqtt-rpc Trigger"
 	NameAction     = "TrakRF mqtt-rpc Action"

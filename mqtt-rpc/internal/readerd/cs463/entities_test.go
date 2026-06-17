@@ -39,7 +39,7 @@ const listEventBody = `<?xml version="1.0" ?><CSL><Command>listEvent</Command><E
 	`enable="true" event_id="TrakRF mqtt-rpc Event" exclusivity="Non-exclusive" ` +
 	`inventoryDisablingAction="NONE" inventoryDisablingTrigger="Never Stop" ` +
 	`inventoryEnablingAction="NONE" inventoryEnablingTrigger="Always On" ` +
-	`operProfile_id="TrakRF mqtt-rpc Profile" resultant_action="TrakRF mqtt-rpc Action" ` +
+	`operProfile_id="Default Profile" resultant_action="TrakRF mqtt-rpc Action" ` +
 	`triggering_logic="TrakRF mqtt-rpc Trigger"/></EventList></CSL>`
 
 const listTriggerBody = `<?xml version="1.0" ?><CSL><Command>listTriggeringLogic</Command><TriggeringLogic>` +
