@@ -14,40 +14,28 @@ import type { Location } from '@/types/locations';
 
 vi.mock('@/hooks/scandevices');
 vi.mock('@/hooks/locations/useLocations');
-vi.mock('react-hot-toast', () => ({
-  default: { success: vi.fn(), error: vi.fn() },
-}));
+vi.mock('react-hot-toast', () => ({ default: { success: vi.fn(), error: vi.fn() } }));
 
 const setConfig = vi.fn(() => Promise.resolve({ applied: 'pending_reload' }));
 const create = vi.fn(() => Promise.resolve({} as ScanPoint));
 const update = vi.fn(() => Promise.resolve({} as ScanPoint));
+const retryWithForce = vi.fn();
 
 const caps = (over: Partial<ReaderCapabilities> = {}): ReaderCapabilities => ({
-  contract_version: '1.0',
+  contract_version: '1',
   reader_model: 'CSL CS463',
   antennas: 4,
   tx_power: { min_dbm: 10, max_dbm: 31.5, per_antenna: true },
-  supports: ['tx_power_dbm'],
+  supports: ['Reader.GetOperProfile', 'Reader.SetOperProfile'],
   unsupported: [],
   ...over,
 });
 
 const point = (over: Partial<ScanPoint>): ScanPoint => ({
-  id: 1,
-  org_id: 1,
-  scan_device_id: 10,
-  location_id: null,
-  name: 'Antenna 1',
-  antenna_port: 1,
-  description: '',
-  metadata: {},
-  valid_from: '2024-01-01T00:00:00Z',
-  valid_to: null,
-  is_active: true,
-  created_at: '2024-01-01T00:00:00Z',
-  updated_at: null,
-  deleted_at: null,
-  ...over,
+  id: 1, org_id: 1, scan_device_id: 10, location_id: null, name: 'Antenna 1',
+  antenna_port: 1, description: '', metadata: {}, valid_from: '2024-01-01T00:00:00Z',
+  valid_to: null, is_active: true, created_at: '2024-01-01T00:00:00Z', updated_at: null,
+  deleted_at: null, ...over,
 });
 
 const location = (over: Partial<Location>): Location =>
@@ -58,36 +46,27 @@ interface ReaderState {
   config: ReaderConfig | undefined;
   isLoading: boolean;
   error: unknown;
+  busy: { held_by: string } | null;
+  retryWithForce: () => void;
 }
 const readerState: ReaderState = {
-  capabilities: undefined,
-  config: undefined,
-  isLoading: false,
-  error: null,
+  capabilities: undefined, config: undefined, isLoading: false, error: null,
+  busy: null, retryWithForce,
 };
 
-function setup(opts: {
-  scanPoints?: ScanPoint[];
-  locations?: Location[];
-}) {
+function setup(opts: { scanPoints?: ScanPoint[]; locations?: Location[] }) {
   vi.mocked(useReaderConfig).mockReturnValue(readerState as ReturnType<typeof useReaderConfig>);
   vi.mocked(useSetReaderConfig).mockReturnValue({
-    setConfig,
-    isSetting: false,
-    error: null,
+    setConfig, isSetting: false, error: null,
   } as unknown as ReturnType<typeof useSetReaderConfig>);
   vi.mocked(useScanPoints).mockReturnValue({
-    scanPoints: opts.scanPoints ?? [],
-    isLoading: false,
+    scanPoints: opts.scanPoints ?? [], isLoading: false,
   } as unknown as ReturnType<typeof useScanPoints>);
   vi.mocked(useScanPointMutations).mockReturnValue({
-    create,
-    update,
-    delete: vi.fn(),
+    create, update, delete: vi.fn(),
   } as unknown as ReturnType<typeof useScanPointMutations>);
   vi.mocked(useLocations).mockReturnValue({
-    locations: opts.locations ?? [],
-    isLoading: false,
+    locations: opts.locations ?? [], isLoading: false,
   } as unknown as ReturnType<typeof useLocations>);
 }
 
@@ -98,6 +77,7 @@ describe('AntennaSettingsPanel', () => {
     readerState.config = undefined;
     readerState.isLoading = false;
     readerState.error = null;
+    readerState.busy = null;
   });
   afterEach(() => cleanup());
 
@@ -117,156 +97,119 @@ describe('AntennaSettingsPanel', () => {
 
   it('renders exactly capabilities.antennas rows', () => {
     readerState.capabilities = caps({ antennas: 4 });
-    readerState.config = {};
+    readerState.config = { antennas: [] };
     setup({});
     render(<AntennaSettingsPanel deviceId={10} />);
     expect(screen.getAllByRole('slider')).toHaveLength(4);
-    expect(screen.getByText('CSL CS463')).toBeInTheDocument();
   });
 
-  it('seeds power from config.tx_power_dbm, defaulting absent antennas to max', () => {
+  it('reflects enablement + power from config.antennas (NOT scan points)', () => {
     readerState.capabilities = caps({ antennas: 2 });
-    readerState.config = { tx_power_dbm: [{ antenna: 1, power: 20 }] };
-    setup({});
-    render(<AntennaSettingsPanel deviceId={10} />);
-    expect(screen.getByText('20.0 dBm')).toBeInTheDocument();
-    expect(screen.getByText('31.5 dBm')).toBeInTheDocument();
-  });
-
-  it('reflects a scan point as enabled with its location selected', () => {
-    readerState.capabilities = caps({ antennas: 2 });
-    readerState.config = {};
-    setup({
-      scanPoints: [point({ id: 7, antenna_port: 1, location_id: 100, is_active: true })],
-      locations: [location({ id: 100, name: 'Receiving' })],
-    });
+    readerState.config = {
+      antennas: [
+        { antenna: 1, enabled: true, power_dbm: 20 },
+        { antenna: 2, enabled: false, power_dbm: 31.5 },
+      ],
+    };
+    // scan point says antenna 2 is_active=true, but the reader is the source of truth.
+    setup({ scanPoints: [point({ antenna_port: 2, is_active: true })] });
     render(<AntennaSettingsPanel deviceId={10} />);
     expect(screen.getByLabelText(/enable antenna 1/i)).toBeChecked();
     expect(screen.getByLabelText(/enable antenna 2/i)).not.toBeChecked();
-    // locationLabel() renders "Receiving (receiving)" when name !== external_key.
-    expect(screen.getByText(/Receiving/)).toBeInTheDocument();
+    expect(screen.getByText('20.0 dBm')).toBeInTheDocument();
   });
 
-  it('debounces a slider change ~2s then pushes the full tx_power_dbm map', async () => {
+  it('toggling an antenna pushes the full antennas[] to reader-config (not scan points)', async () => {
+    readerState.capabilities = caps({ antennas: 2 });
+    readerState.config = {
+      antennas: [
+        { antenna: 1, enabled: true, power_dbm: 20 },
+        { antenna: 2, enabled: false, power_dbm: 25 },
+      ],
+    };
+    setup({});
+    render(<AntennaSettingsPanel deviceId={10} />);
+
+    fireEvent.click(screen.getByLabelText(/enable antenna 2/i)); // off -> on
+    await act(async () => {});
+
+    expect(setConfig).toHaveBeenCalledWith({
+      body: {
+        antennas: [
+          { antenna: 1, enabled: true, power_dbm: 20 },
+          { antenna: 2, enabled: true, power_dbm: 25 },
+        ],
+      },
+      force: false,
+    });
+    expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('debounces a slider change then pushes the full antennas[]', async () => {
     vi.useFakeTimers();
     readerState.capabilities = caps({ antennas: 2 });
     readerState.config = {
-      tx_power_dbm: [{ antenna: 1, power: 20 }, { antenna: 2, power: 25 }],
+      antennas: [
+        { antenna: 1, enabled: true, power_dbm: 20 },
+        { antenna: 2, enabled: true, power_dbm: 25 },
+      ],
     };
     setup({});
     render(<AntennaSettingsPanel deviceId={10} />);
 
     fireEvent.change(screen.getAllByRole('slider')[0], { target: { value: '15' } });
     expect(setConfig).not.toHaveBeenCalled();
+    await act(async () => { vi.advanceTimersByTime(2000); });
 
-    await act(async () => {
-      vi.advanceTimersByTime(2000);
-    });
-
-    expect(setConfig).toHaveBeenCalledTimes(1);
-    expect(setConfig.mock.calls[0][0]).toEqual({
-      tx_power_dbm: [
-        { antenna: 1, power: 15 },
-        { antenna: 2, power: 25 },
-      ],
+    expect(setConfig).toHaveBeenCalledWith({
+      body: {
+        antennas: [
+          { antenna: 1, enabled: true, power_dbm: 15 },
+          { antenna: 2, enabled: true, power_dbm: 25 },
+        ],
+      },
+      force: false,
     });
     vi.useRealTimers();
   });
 
-  it('shows the pending_reload note after a successful push', async () => {
+  it('renders the Read Timing section seeded from config and the read-only RSSI gate', () => {
     readerState.capabilities = caps({ antennas: 1 });
-    readerState.config = { tx_power_dbm: [{ antenna: 1, power: 20 }] };
+    readerState.config = {
+      antennas: [{ antenna: 1, enabled: true, power_dbm: 30 }],
+      dwell_ms: 500, dedup_window_ms: 500, rssi_gate_dbm: -80, antenna_differentiation: true,
+    };
     setup({});
     render(<AntennaSettingsPanel deviceId={10} />);
-
-    await act(async () => {
-      fireEvent.change(screen.getByRole('slider'), { target: { value: '18' } });
-    });
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 2100));
-    });
-
-    expect(setConfig).toHaveBeenCalled();
-    expect(screen.getByText(/next inventory cycle/i)).toBeInTheDocument();
+    // Read Timing inputs are present (detailed editing behaviour is covered in
+    // ReadTimingSection.test.tsx); the read-only RSSI gate shows its value.
+    expect(screen.getByLabelText(/dwell/i)).toHaveValue(500);
+    expect(screen.getByLabelText(/dedup/i)).toHaveValue(500);
+    expect(screen.getByText(/-80/)).toBeInTheDocument();
   });
 
-  it('shows a saving indicator while a power change is pending (before the debounce flushes)', () => {
-    vi.useFakeTimers();
-    readerState.capabilities = caps({ antennas: 1 });
-    readerState.config = { tx_power_dbm: [{ antenna: 1, power: 20 }] };
+  it('shows a busy banner with the holder IP and a force-retry button', () => {
+    readerState.capabilities = undefined;
+    readerState.busy = { held_by: '192.168.50.203' };
     setup({});
     render(<AntennaSettingsPanel deviceId={10} />);
-
-    fireEvent.change(screen.getByRole('slider'), { target: { value: '15' } });
-
-    expect(screen.getByText(/saving/i)).toBeInTheDocument();
-    expect(setConfig).not.toHaveBeenCalled();
-    vi.useRealTimers();
+    expect(screen.getByText(/192\.168\.50\.203/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /force logout/i }));
+    expect(retryWithForce).toHaveBeenCalled();
   });
 
-  it('updates an existing scan point when its location changes', async () => {
+  it('still uses scan points for location', async () => {
     readerState.capabilities = caps({ antennas: 1 });
-    readerState.config = {};
+    readerState.config = { antennas: [{ antenna: 1, enabled: true, power_dbm: 30 }] };
     setup({
-      scanPoints: [point({ id: 7, antenna_port: 1, location_id: null, is_active: true })],
+      scanPoints: [point({ id: 7, antenna_port: 1, location_id: null })],
       locations: [location({ id: 100, name: 'Receiving' })],
     });
     render(<AntennaSettingsPanel deviceId={10} />);
-
-    fireEvent.click(screen.getByLabelText(/antenna 1 location/i)); // enter edit mode
-    fireEvent.change(screen.getByLabelText(/antenna 1 location/i), {
-      target: { value: '100' },
-    });
-
+    fireEvent.click(screen.getByLabelText(/antenna 1 location/i));
+    fireEvent.change(screen.getByLabelText(/antenna 1 location/i), { target: { value: '100' } });
     await act(async () => {});
     expect(update).toHaveBeenCalledWith({ id: 7, updates: { location_id: 100 } });
-    expect(create).not.toHaveBeenCalled();
-  });
-
-  it('lazily creates an enabled scan point when location set on an antenna with none', async () => {
-    readerState.capabilities = caps({ antennas: 1 });
-    readerState.config = {};
-    setup({ scanPoints: [], locations: [location({ id: 100, name: 'Receiving' })] });
-    render(<AntennaSettingsPanel deviceId={10} />);
-
-    fireEvent.click(screen.getByLabelText(/antenna 1 location/i));
-    fireEvent.change(screen.getByLabelText(/antenna 1 location/i), {
-      target: { value: '100' },
-    });
-
-    await act(async () => {});
-    expect(create).toHaveBeenCalledWith({
-      antenna_port: 1,
-      name: 'Antenna 1',
-      location_id: 100,
-      is_active: true,
-    });
-  });
-
-  it('disables via update on an existing scan point', async () => {
-    readerState.capabilities = caps({ antennas: 1 });
-    readerState.config = {};
-    setup({ scanPoints: [point({ id: 7, antenna_port: 1, is_active: true })] });
-    render(<AntennaSettingsPanel deviceId={10} />);
-
-    fireEvent.click(screen.getByLabelText(/enable antenna 1/i)); // checked -> unchecked
-    await act(async () => {});
-    expect(update).toHaveBeenCalledWith({ id: 7, updates: { is_active: false } });
-  });
-
-  it('lazily creates an enabled scan point when enabling an antenna with none', async () => {
-    readerState.capabilities = caps({ antennas: 1 });
-    readerState.config = {};
-    setup({ scanPoints: [] });
-    render(<AntennaSettingsPanel deviceId={10} />);
-
-    fireEvent.click(screen.getByLabelText(/enable antenna 1/i)); // unchecked -> checked
-    await act(async () => {});
-    expect(create).toHaveBeenCalledWith({
-      antenna_port: 1,
-      name: 'Antenna 1',
-      location_id: null,
-      is_active: true,
-    });
   });
 });
