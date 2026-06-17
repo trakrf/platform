@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/trakrf/platform/backend/internal/models/scandevice"
+	"github.com/trakrf/platform/backend/internal/models/scanread"
 )
 
 func loadFixture(t *testing.T, name string) []byte {
@@ -117,6 +118,32 @@ func TestParseGLS10_RealCapture(t *testing.T) {
 	}
 	assert.Equal(t, 2, matches, "asset tag broadcasts two ads -> two reads")
 	assert.True(t, foundNotify, "named advertisement parsed with ms timestamp")
+
+	// TRA-926: each read now carries a decoded BLE advert. The fob F95BC0EC4E56
+	// emits two frames this window — a "Notify" name frame (unknown) and an
+	// iBeacon frame (UUID D5004A48…, major 2000, minor 1000). 125C7DFC8D11 is a
+	// second iBeacon (UUID 2686…). Apple non-iBeacon ads (e.g. EB09B8F51BBC) are
+	// unknown.
+	var fobIBeacon, fobUnknown bool
+	for _, r := range reads {
+		require.NotNil(t, r.BLE, "every GL-S10 read carries a BLE advert")
+		if r.EPC == "F95BC0EC4E56" {
+			switch r.BLE.Type {
+			case scanread.BLETypeIBeacon:
+				fobIBeacon = true
+				assert.Equal(t, "D5004A48E56F4A39A48401869770118C", r.BLE.UUID)
+				assert.Equal(t, uint16(2000), r.BLE.Major)
+				assert.Equal(t, uint16(1000), r.BLE.Minor)
+			case scanread.BLETypeUnknown:
+				fobUnknown = true
+			}
+		}
+		if r.EPC == "EB09B8F51BBC" {
+			assert.Equal(t, scanread.BLETypeUnknown, r.BLE.Type, "Apple non-iBeacon ad")
+		}
+	}
+	assert.True(t, fobIBeacon, "fob emits an iBeacon frame")
+	assert.True(t, fobUnknown, "fob also emits a non-iBeacon name frame")
 }
 
 func TestParseGLS10_Empty(t *testing.T) {
@@ -194,6 +221,22 @@ func TestParseMK107_RealCapture(t *testing.T) {
 		}
 	}
 	assert.True(t, foundIBeacon, "iBeacon entry parsed by MAC like any other read")
+
+	// TRA-926: field-based classification. The pre-decoded iBeacon entry
+	// (12F534BA0D99) carries its uuid/major/minor; the fob F95BC0EC4E56 appears
+	// only as a type:0 "Unknown" (Notify) frame in this window.
+	for _, r := range reads {
+		require.NotNil(t, r.BLE, "every MK107 read carries a BLE advert")
+		switch r.EPC {
+		case "12F534BA0D99":
+			assert.Equal(t, scanread.BLETypeIBeacon, r.BLE.Type)
+			assert.Equal(t, "2686F39CBADA4658854AA62E7E5E8B8D", r.BLE.UUID)
+			assert.Equal(t, uint16(1), r.BLE.Major)
+			assert.Equal(t, uint16(0), r.BLE.Minor)
+		case "F95BC0EC4E56":
+			assert.Equal(t, scanread.BLETypeUnknown, r.BLE.Type)
+		}
+	}
 }
 
 // Status/heartbeat frames (msg_id 3003) carry an object `data`, not the scan
