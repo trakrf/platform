@@ -199,6 +199,48 @@ describe('AntennaSettingsPanel', () => {
     expect(retryWithForce).toHaveBeenCalled();
   });
 
+  it('mid-edit SET-busy shows inline banner and force-retry re-calls setConfig with force:true', async () => {
+    const busyErr = {
+      response: { status: 409, data: { error: 'reader_busy', held_by: '192.168.50.203' } },
+    };
+    setConfig
+      .mockRejectedValueOnce(busyErr)
+      .mockResolvedValueOnce({ applied: 'pending_reload' });
+
+    readerState.capabilities = caps({ antennas: 2 });
+    readerState.config = {
+      antennas: [
+        { antenna: 1, enabled: true, power_dbm: 20 },
+        { antenna: 2, enabled: false, power_dbm: 25 },
+      ],
+    };
+    setup({});
+    render(<AntennaSettingsPanel deviceId={10} />);
+
+    // trigger a toggle — first call will reject with busy
+    fireEvent.click(screen.getByLabelText(/enable antenna 2/i));
+    await act(async () => {});
+
+    // inline busy banner must be visible
+    expect(screen.getByText(/reader busy.*change not applied/i)).toBeInTheDocument();
+    const forceBtn = screen.getByRole('button', { name: /force logout & retry/i });
+
+    // click force-retry — second call must include force: true and the same body
+    fireEvent.click(forceBtn);
+    await act(async () => {});
+
+    expect(setConfig).toHaveBeenCalledTimes(2);
+    expect(setConfig).toHaveBeenLastCalledWith({
+      body: {
+        antennas: [
+          { antenna: 1, enabled: true, power_dbm: 20 },
+          { antenna: 2, enabled: true, power_dbm: 25 },
+        ],
+      },
+      force: true,
+    });
+  });
+
   it('still uses scan points for location', async () => {
     readerState.capabilities = caps({ antennas: 1 });
     readerState.config = { antennas: [{ antenna: 1, enabled: true, power_dbm: 30 }] };

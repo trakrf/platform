@@ -105,7 +105,7 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
   };
 
   const flush = () => {
-    if (!capabilities) return;
+    if (!capabilities) { setPushing(false); return; }
     push(buildBody(), false);
   };
 
