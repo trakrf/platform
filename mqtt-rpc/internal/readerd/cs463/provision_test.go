@@ -195,8 +195,8 @@ func TestVerifyServerAndProfile(t *testing.T) {
 }
 
 func TestAdapterReconcileNoOpStillRearms(t *testing.T) {
-	// Even a converged (no-drift) reconcile must re-arm: the CS463 does not auto-start
-	// inventory after a reboot/restart, and the daemon starts after every reader boot.
+	// Even a converged (no-drift) reconcile must re-arm: the CS463 does not reliably
+	// auto-start inventory, so the daemon arms defensively on every startup.
 	f := newMatchingFake(2) // converged: no drift
 	a := &Adapter{cfg: AdapterConfig{AntennaCount: 2, EventID: "ignored"}, rec: f}
 	if err := a.Reconcile(context.Background()); err != nil {

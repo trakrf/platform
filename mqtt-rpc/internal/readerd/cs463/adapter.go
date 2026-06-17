@@ -79,14 +79,14 @@ func NewAdapter(ops readerOps, cfg AdapterConfig) *Adapter {
 // event. A safe function-level defer Logout is fine here precisely because no servlet
 // form login is taken inside this window (contrast SetConfig's three-phase dance).
 //
-// The event is re-armed UNCONDITIONALLY (not only when config changed). The CS463
-// does NOT auto-start inventory after a reboot/restart: an event with enable=true in
-// config still publishes nothing until a disable→enable cycle kicks the inventory
-// engine (verified on cs463-212 — 0 reads post-reboot until re-armed; a bare
-// enable(true) is a no-op). Since the daemon starts after every reader boot, it must
-// arm here on every startup. (A future on-demand Reader.Reconcile RPC run against an
-// already-reading reader should gate the re-arm on whether config changed, to avoid
-// the one-cycle inventory interruption — but startup must always arm.)
+// The event is re-armed UNCONDITIONALLY (not only when config changed) — a defensive
+// measure, because the CS463 does not RELIABLY auto-start inventory: an event with
+// enable=true in config sometimes publishes nothing until a disable→enable cycle kicks
+// the inventory engine (operator-confirmed "faith cure"; a bare enable(true) is a
+// no-op). A clean boot often does auto-start, but the daemon can't tell, so it arms on
+// every startup to guarantee reads. Cost is one inventory cycle if reads were already
+// flowing. (A future on-demand Reader.Reconcile RPC run against an already-reading
+// reader should gate the re-arm on whether config changed, to avoid that blip.)
 func (a *Adapter) Reconcile(ctx context.Context) error {
 	if a.rec == nil {
 		return fmt.Errorf("cs463: reconcile not supported by these reader ops")

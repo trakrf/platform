@@ -117,12 +117,13 @@ disable or modify the foreign entity.
 Reads/verify use `/API list*`; writes use `/API add*`/`mod*`. The write transport is
 pluggable per entity (the `entitySpec` seam) so any entity can flip to the servlet
 path if a firmware proves an `/API` write unreliable — **no firmware floor is
-required**. Reconcile **always re-arms** (disable→enable) the golden event on startup:
-the CS463 does NOT auto-start inventory after a reboot — an event with `enable=true` in
-config publishes nothing until a disable→enable cycle kicks the engine (a bare
-`enable(true)` is a no-op). So a no-op reconcile after a power-cycle still starts reads.
-(A future on-demand `Reader.Reconcile` RPC against an already-reading reader should gate
-the re-arm on whether config changed, to avoid the one-cycle interruption.)
+required**. Reconcile **always re-arms** (disable→enable) the golden event on startup,
+defensively: the CS463 doesn't *reliably* auto-start inventory — an event with
+`enable=true` sometimes publishes nothing until a disable→enable cycle kicks the engine
+(operator-confirmed; a bare `enable(true)` is a no-op). A clean boot often auto-starts,
+but the daemon can't tell, so it always arms to guarantee reads (cost: one inventory
+cycle if reads were already flowing). (A future on-demand `Reader.Reconcile` RPC against
+an already-reading reader should gate the re-arm on whether config changed.)
 
 ### Commissioning prerequisites (done in the same SSH session that installs the daemon)
 1. Hand-craft the `TrakRF mqtt-rpc MQTT Server` CloudServer entry — `setServerID` (broker
