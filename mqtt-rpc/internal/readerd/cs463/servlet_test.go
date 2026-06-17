@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -253,5 +254,52 @@ func TestSetProfilePower_MissingPowerFallsBack(t *testing.T) {
 	// ports 3,4 default to 30.0
 	if tp[2] != "30.0" || tp[3] != "30.0" {
 		t.Fatalf("transmitpower[] fallback = %v, want [30.0 30.0] for ports 3,4", tp[2:])
+	}
+}
+
+// TestSetProfilePowerMissingDwellUsesGoldenNot2000 pins the TRA-994 regression
+// fix: when the reader's profile read omits dwellTime<port> for a port, the write
+// must emit the golden dwell, never the old hardcoded 2000 (which decoupled dwell
+// from dedup and caused 4x redundant reads/visit). A TX-power slider change is a
+// read-modify-write servlet POST, so this guards the slider path too.
+func TestSetProfilePowerMissingDwellUsesGoldenNot2000(t *testing.T) {
+	f := newFakeServlet(200, "<html>Successful!</html>")
+	defer f.close()
+
+	// profileFields WITHOUT any dwellTime keys (reader omitted them).
+	fields := map[string]string{"profile_id": NameProfile}
+	err := f.client().SetProfilePower(context.Background(), NameProfile, 4,
+		[]int{1, 2}, map[int]float64{1: 30, 2: 22.5}, fields)
+	if err != nil {
+		t.Fatalf("SetProfilePower: %v", err)
+	}
+	dw := positionalValues(f.gotRawBody, "dwelltime[]")
+	if len(dw) != 4 {
+		t.Fatalf("dwelltime[] count = %d, want 4 (%v)", len(dw), dw)
+	}
+	want := strconv.Itoa(GoldenDwellMs)
+	for i, v := range dw {
+		if v == "2000" {
+			t.Fatalf("dwelltime[%d]=2000 (clobbered); want golden %s", i, want)
+		}
+		if v != want {
+			t.Fatalf("dwelltime[%d]=%s, want golden %s", i, v, want)
+		}
+	}
+}
+
+// TestSetProfilePowerPresentDwellPreserved confirms a present current dwell is
+// still carried through verbatim (not overwritten by golden).
+func TestSetProfilePowerPresentDwellPreserved(t *testing.T) {
+	f := newFakeServlet(200, "<html>Successful!</html>")
+	defer f.close()
+	err := f.client().SetProfilePower(context.Background(), "TrakRF", 4,
+		[]int{1, 2}, map[int]float64{1: 30, 2: 30}, sampleProfileFields())
+	if err != nil {
+		t.Fatalf("SetProfilePower: %v", err)
+	}
+	dw := positionalValues(f.gotRawBody, "dwelltime[]")
+	if dw[0] != "600" || dw[1] != "600" {
+		t.Fatalf("present dwell must be preserved; got %v, want first two 600", dw)
 	}
 }
