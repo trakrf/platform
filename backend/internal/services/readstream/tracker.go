@@ -69,7 +69,10 @@ type subscriber struct {
 	ch        chan Event
 	orgID     int
 	readerKey string // scope to one reader; "" = whole org feed
-	store     *store
+	// showAllAdverts disables the default BLE noise filter for this session
+	// (?adverts=all): it then sees every read, including non-beacon BLE noise.
+	showAllAdverts bool
+	store          *store
 
 	readTotal int64     // reads folded in since the last rate refresh
 	rateSince time.Time // start of the current rate window
@@ -176,12 +179,14 @@ func (t *Tracker) Stop() {
 // (done outside the lock). The SSE handler exits on its request context instead;
 // map removal stops further sends and the buffered channel is GC'd.
 // readerKey scopes the session to a single reader ("" = whole org feed).
-func (t *Tracker) Subscribe(orgID int, readerKey string) (<-chan Event, func()) {
+// showAllAdverts disables the BLE noise filter (?adverts=all).
+func (t *Tracker) Subscribe(orgID int, readerKey string, showAllAdverts bool) (<-chan Event, func()) {
 	s := &subscriber{
-		ch:        make(chan Event, clientBuffer),
-		orgID:     orgID,
-		readerKey: readerKey,
-		store:     newStore(t.cfg.TTL, t.cfg.Coalesce),
+		ch:             make(chan Event, clientBuffer),
+		orgID:          orgID,
+		readerKey:      readerKey,
+		showAllAdverts: showAllAdverts,
+		store:          newStore(t.cfg.TTL, t.cfg.Coalesce),
 	}
 
 	t.mu.Lock()
@@ -232,6 +237,22 @@ func (t *Tracker) Publish(orgID int, topic string, reads []scanread.Read) {
 	key := topic
 	now := t.now()
 
+	// Device-level iBeacon keep (TRA-926): a MAC that emits at least one iBeacon
+	// frame this message is treated as a beacon, so the default Live Reads filter
+	// keeps every read from it (including its name/battery frame) and drops MACs
+	// that never emit an iBeacon. This is a per-message rule — a beacon that sends
+	// only its battery frame in some window is absent until a window where it
+	// emits iBeacon, which the 30s presence window smooths over.
+	var beaconMACs map[string]struct{}
+	for _, r := range reads {
+		if r.BLE != nil && r.BLE.Type == scanread.BLETypeIBeacon {
+			if beaconMACs == nil {
+				beaconMACs = make(map[string]struct{})
+			}
+			beaconMACs[r.EPC] = struct{}{}
+		}
+	}
+
 	t.mu.Lock()
 	var out []delivery
 	for s := range t.subs[orgID] {
@@ -241,10 +262,19 @@ func (t *Tracker) Publish(orgID int, topic string, reads []scanread.Read) {
 			continue
 		}
 		var evs []orgEvent
+		var kept int
 		for _, r := range reads {
+			// Default sessions drop BLE reads from non-beacon MACs. RFID reads
+			// (BLE == nil) are never filtered; ?adverts=all sessions see everything.
+			if !s.showAllAdverts && r.BLE != nil {
+				if _, ok := beaconMACs[r.EPC]; !ok {
+					continue
+				}
+			}
 			evs = append(evs, s.store.ingest(orgID, key, r, now)...)
+			kept++
 		}
-		s.readTotal += int64(len(reads))
+		s.readTotal += int64(kept) // read-rate counts only what this session sees
 		if s.rateSince.IsZero() {
 			s.rateSince = now
 		}

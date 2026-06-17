@@ -69,7 +69,7 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 
 	// Optional ?reader=<key> scopes the stream to one reader server-side, so a
 	// scoped panel never receives (or tracks) other readers' reads.
-	ch, cancel := h.tracker.Subscribe(orgID, r.URL.Query().Get("reader"))
+	ch, cancel := h.tracker.Subscribe(orgID, r.URL.Query().Get("reader"), r.URL.Query().Get("adverts") == "all")
 	defer cancel()
 
 	hb := time.NewTicker(heartbeatInterval)
