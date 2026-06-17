@@ -105,7 +105,7 @@ owned as code (`internal/readerd/cs463/golden.go`); reconcile is list-then-add-o
 | MQTT Server (CloudServer) | `TrakRF mqtt-rpc MQTT Server` | **No — pre-create out-of-band**, referenced by name |
 | Operation Profile | `TrakRF mqtt-rpc Profile` | **Verify-exists** (fail if absent); antenna/TX-power stay with `SetConfig` |
 | Data Format | `TrakRF mqtt-rpc Data Format` | Yes — trimmed JSON, numeric RSSI (`RSSI_Number`, parser PR #502) |
-| Trigger | `TrakRF mqtt-rpc Trigger` | Yes — `Read Any Tags`, all antennas |
+| Trigger | `TrakRF mqtt-rpc Trigger` | Yes — reader-side RSSI gate (`≥ -80 dBm` knob), all antennas |
 | Resultant Action | `TrakRF mqtt-rpc Action` | Yes — MQTT → server + format |
 | Event | `TrakRF mqtt-rpc Event` | Yes — dedup=500ms, antennaDifferentiation=on, enable=on |
 
@@ -128,19 +128,26 @@ no-op reconcile (routine restart) never interrupts inventory.
 - `READERD_RECONCILE` — `true` (default) runs reconcile on startup; `false` pins config.
 - `READERD_CLOUDSERVER_ID` — defaults to `TrakRF mqtt-rpc MQTT Server`.
 
-### Bench-verification checklist (cs463-212 — the remaining merge gate)
-The Go unit tests cover parsing, drift detection, the reconcile decision table, the
-single-session re-arm gating, and the dwell-clobber fix against fakes. The following
-need real hardware (the fakes can't cover firmware behavior):
-- [ ] **Per-entity write transport:** confirm `/API add*`/`mod*` works on a *clean*
-      reader for Data Format, Trigger, Resultant Action, Event (only `modEvent` /
-      `addDataFormat` were exercised in TRA-994); flip any flaky entity to servlet.
-- [ ] **Tighten read-side diffs against captured `list*`:** verify `actionDrift`
-      (action_mode/transport casing) and `dataFormatDrift` (field ordering) against a
-      real `listResultantAction` / `listDataFormat` from the reader.
-- [ ] **Reconcile lifecycle:** clean-reader create (all four add); converged-reader
-      no-op (zero writes, no re-arm); drift correction (targeted `mod*` + re-arm).
-- [ ] **End-to-end:** reads flow on the golden chain after a fresh commission; dwell
-      stays at golden after a `SetConfig` TX-power change (no 2000 regression).
-- [ ] **Partial-failure policy:** current behavior aborts on first entity error
-      (logged, non-fatal to RPC). Revisit if bench shows a need for best-effort-continue.
+### Bench verification (cs463-212, 2026-06-17)
+Unit tests cover parsing, drift, the reconcile decision table, re-arm gating, and the
+dwell fix against fakes. Validated against the **live reader**:
+- [x] **Read parsing** — all five `list*` + `getOperProfile` parse correctly; real
+      captures pinned as CI fixtures (`testdata/cs463-212_*.xml`, `realcapture_test.go`).
+- [x] **Read-side diffs match reality** — `eventDrift`/`actionDrift`/`dataFormatDrift`/
+      `triggerDrift` read the exact live attr names/casing; `action_mode` comes back as
+      the human form `"Low Latency Alert to Server"`; golden Data Format is field-identical
+      to the live `TrakRF-data-format`.
+- [x] **`/API` write contract** — `add`/`mod`/`list`/`del` round-trips succeed on
+      hardware for **Data Format** and the RSSI-gate **Trigger** with our exact golden
+      params (`setOperProfile`'s footgun does not extend to event-engine entities).
+
+Remaining (needs a clean reader / live demo window — not run to avoid disrupting the
+live rig's event/inventory):
+- [ ] `addResultantAction` + `addEvent` round-trip (same `/API` command family, contract
+      proven above; not exercised because the Action/Event reference the pre-created
+      golden server/profile and the Event is `enable=true`/active).
+- [ ] **Full commission on a clean reader:** all four `add`; converged no-op (zero
+      writes, no re-arm); drift `mod*` + re-arm; end-to-end reads on the golden chain;
+      dwell stays golden after a `SetConfig` TX-power change.
+- [ ] **Partial-failure policy:** aborts on first entity error (logged, non-fatal to
+      RPC). Revisit if the bench shows a need for best-effort-continue.

@@ -46,7 +46,9 @@ func newMatchingFake(antennaCount int) *fakeReco {
 		"tagDataField3": "AntennaPort_Number", "tagDataLabel3": "antennaPort",
 		"tagDataField4": "RSSI_Number", "tagDataLabel4": "rssi",
 	}
-	f.rows["trigger"][NameTrigger] = EntityRow{"mode": triggerModeReadAny, "capture_point": "12"}
+	f.rows["trigger"][NameTrigger] = EntityRow{
+		"mode": triggerModeRSSIGate, "logic": "-80", "capture_point": "12",
+	}
 	f.rows["action"][NameAction] = EntityRow{
 		"server_id": NameMQTTServer, "data_format_id": NameDataFormat,
 		"transport": "MQTT", "action_mode": actionModeLowLat,

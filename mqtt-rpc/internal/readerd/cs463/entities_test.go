@@ -43,8 +43,8 @@ const listEventBody = `<?xml version="1.0" ?><CSL><Command>listEvent</Command><E
 	`triggering_logic="TrakRF mqtt-rpc Trigger"/></EventList></CSL>`
 
 const listTriggerBody = `<?xml version="1.0" ?><CSL><Command>listTriggeringLogic</Command><TriggeringLogic>` +
-	`<logic capture_point="12" desc="" logic="" logic_id="TrakRF mqtt-rpc Trigger" ` +
-	`mode="Read Any Tags (any ID, 1 trigger per tag)" referenceTagId="" state_mode=""/>` +
+	`<logic capturePoint="1,2" capture_point="12" desc="" logic="-80" logic_id="TrakRF mqtt-rpc Trigger" ` +
+	`mode="Trigger if RSSI larger than or equal to" referenceTagId="" state_mode=""/>` +
 	`</TriggeringLogic></CSL>`
 
 const listActionBody = `<?xml version="1.0" ?><CSL><Command>listResultantAction</Command><ResultantActionList>` +
@@ -89,7 +89,8 @@ func TestListTriggeringLogicParsesAttrs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rows[NameTrigger]["capture_point"] != "12" || rows[NameTrigger]["mode"] != "Read Any Tags (any ID, 1 trigger per tag)" {
+	if rows[NameTrigger]["capture_point"] != "12" || rows[NameTrigger]["logic"] != "-80" ||
+		rows[NameTrigger]["mode"] != "Trigger if RSSI larger than or equal to" {
 		t.Fatalf("bad trigger row: %v", rows)
 	}
 }

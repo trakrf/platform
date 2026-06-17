@@ -27,10 +27,16 @@ const (
 const (
 	GoldenDedupMs = 500
 	GoldenDwellMs = 500
+	// GoldenTriggerRSSIDBm is the reader-side RSSI gate on the golden trigger: the
+	// event only fires (publishes) for reads at or above this RSSI, trimming truly
+	// weak reads BEFORE the publish path (the TRA-994 bottleneck). It is a documented
+	// knob, well below the platform geofence gate (~-65) so it never starves presence.
+	// Matches the bench-validated cs463-212 trigger.
+	GoldenTriggerRSSIDBm = -80
 
-	triggerModeReadAny = "Read Any Tags (any ID, 1 trigger per tag)"
-	actionModeLowLat   = "Low Latency Alert to Server"
-	managedDesc        = "Managed by TrakRF mqtt-rpc daemon — do not edit"
+	triggerModeRSSIGate = "Trigger if RSSI larger than or equal to"
+	actionModeLowLat    = "Low Latency Alert to Server"
+	managedDesc         = "Managed by TrakRF mqtt-rpc daemon — do not edit"
 )
 
 // goldenDataFields are the top-level (field/label) pairs of the trimmed format:
@@ -83,7 +89,8 @@ func goldenTriggerParams(antennaCount int) url.Values {
 	p := url.Values{}
 	p.Set("logic_id", NameTrigger)
 	p.Set("desc", managedDesc)
-	p.Set("mode", triggerModeReadAny)
+	p.Set("mode", triggerModeRSSIGate)
+	p.Set("logic", strconv.Itoa(GoldenTriggerRSSIDBm)) // RSSI threshold value
 	p.Set("capturePoint", capturePointCSV(antennaCount))
 	return p
 }
@@ -127,9 +134,11 @@ func eventDrift(cur EntityRow) bool {
 }
 
 func triggerDrift(cur EntityRow, antennaCount int) bool {
-	// list returns capture_point concatenated ("12"); add takes "1,2" — normalize.
+	// list returns capture_point concatenated ("1234"); add takes "1,2,3,4" — normalize.
 	wantCP := strings.ReplaceAll(capturePointCSV(antennaCount), ",", "")
-	return cur["mode"] != triggerModeReadAny || cur["capture_point"] != wantCP
+	return cur["mode"] != triggerModeRSSIGate ||
+		cur["logic"] != strconv.Itoa(GoldenTriggerRSSIDBm) ||
+		cur["capture_point"] != wantCP
 }
 
 func actionDrift(cur EntityRow) bool {

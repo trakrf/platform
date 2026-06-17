@@ -88,13 +88,40 @@ func TestDataFormatDrift(t *testing.T) {
 	}
 }
 
-func TestTriggerDriftNormalizesCapturePoint(t *testing.T) {
-	// list returns capture_point concatenated ("12"); golden builds "1,2".
-	matching := EntityRow{"mode": "Read Any Tags (any ID, 1 trigger per tag)", "capture_point": "12"}
-	if triggerDrift(matching, 2) {
-		t.Error("no drift expected when mode + capture_point match (normalized)")
+func TestGoldenTriggerParams(t *testing.T) {
+	p := goldenTriggerParams(4)
+	if p.Get("mode") != "Trigger if RSSI larger than or equal to" {
+		t.Errorf("trigger mode = %q, want RSSI gate", p.Get("mode"))
 	}
-	if !triggerDrift(EntityRow{"mode": "Read Any Tags (any ID, 1 trigger per tag)", "capture_point": "1"}, 2) {
+	if p.Get("logic") != "-80" {
+		t.Errorf("trigger logic (RSSI threshold) = %q, want -80", p.Get("logic"))
+	}
+	if p.Get("capturePoint") != "1,2,3,4" {
+		t.Errorf("capturePoint = %q, want 1,2,3,4", p.Get("capturePoint"))
+	}
+}
+
+func TestTriggerDrift(t *testing.T) {
+	// list returns capture_point concatenated ("1234"); golden builds "1,2,3,4".
+	matching := EntityRow{
+		"mode": "Trigger if RSSI larger than or equal to", "logic": "-80", "capture_point": "1234",
+	}
+	if triggerDrift(matching, 4) {
+		t.Error("no drift expected when mode + threshold + capture_point match (normalized)")
+	}
+	wrongMode := cloneRow(matching)
+	wrongMode["mode"] = "Read Any Tags (any ID, 1 trigger per tag)"
+	if !triggerDrift(wrongMode, 4) {
+		t.Error("drift expected when trigger mode differs")
+	}
+	wrongThresh := cloneRow(matching)
+	wrongThresh["logic"] = "-65"
+	if !triggerDrift(wrongThresh, 4) {
+		t.Error("drift expected when RSSI threshold differs")
+	}
+	missingAnt := cloneRow(matching)
+	missingAnt["capture_point"] = "123"
+	if !triggerDrift(missingAnt, 4) {
 		t.Error("drift expected when capture_point misses an antenna")
 	}
 }
