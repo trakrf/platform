@@ -52,6 +52,7 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
   const [applied, setApplied] = useState<string | null>(null);
   const [pushing, setPushing] = useState(false);
   const [pendingForceBody, setPendingForceBody] = useState<SetReaderConfigRequest | null>(null);
+  const [busyHeldBy, setBusyHeldBy] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -91,12 +92,14 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
         toast.success('Reader config sent');
         setApplied(res.applied);
         setPendingForceBody(null);
+        setBusyHeldBy(null);
       })
       .catch((e) => {
         const b = parseReaderBusy(e);
         if (b) {
-          setPendingForceBody(body); // offer force-retry of this exact change
-          toast.error(`Reader in use by ${b.held_by}`);
+          setPendingForceBody(body); // offer to claim the session and re-apply this change
+          setBusyHeldBy(b.held_by);
+          toast.error(`Reader web session busy (held by ${b.held_by})`);
         } else {
           toast.error(getApiErrorMessage(e, 'Failed to send reader config'));
         }
@@ -164,14 +167,14 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
     return (
       <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/30 px-4 py-3 text-sm">
         <p className="text-amber-800 dark:text-amber-200">
-          Reader in use by {busy.held_by} — its web UI may be open.
+          Reader web session busy (held by {busy.held_by}). Force logout to claim it?
         </p>
         <button
           type="button"
           onClick={retryWithForce}
           className="mt-2 rounded bg-amber-600 px-3 py-1 text-white hover:bg-amber-700"
         >
-          Force logout &amp; retry
+          Claim session
         </button>
       </div>
     );
@@ -208,13 +211,15 @@ export function AntennaSettingsPanel({ deviceId }: AntennaSettingsPanelProps) {
 
       {pendingForceBody && (
         <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/30 px-3 py-2 text-sm">
-          <span className="text-amber-800 dark:text-amber-200">Reader busy — change not applied.</span>
+          <span className="text-amber-800 dark:text-amber-200">
+            Reader web session busy{busyHeldBy ? ` (held by ${busyHeldBy})` : ''} — change not applied. Force logout to claim it?
+          </span>
           <button
             type="button"
             onClick={() => push(pendingForceBody, true)}
             className="ml-2 rounded bg-amber-600 px-2 py-0.5 text-white hover:bg-amber-700"
           >
-            Force logout &amp; retry
+            Claim session
           </button>
         </div>
       )}

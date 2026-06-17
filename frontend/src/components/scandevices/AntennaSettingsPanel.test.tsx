@@ -195,7 +195,7 @@ describe('AntennaSettingsPanel', () => {
     setup({});
     render(<AntennaSettingsPanel deviceId={10} />);
     expect(screen.getByText(/192\.168\.50\.203/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /force logout/i }));
+    fireEvent.click(screen.getByRole('button', { name: /claim session/i }));
     expect(retryWithForce).toHaveBeenCalled();
   });
 
@@ -222,8 +222,8 @@ describe('AntennaSettingsPanel', () => {
     await act(async () => {});
 
     // inline busy banner must be visible
-    expect(screen.getByText(/reader busy.*change not applied/i)).toBeInTheDocument();
-    const forceBtn = screen.getByRole('button', { name: /force logout & retry/i });
+    expect(screen.getByText(/web session busy.*change not applied/i)).toBeInTheDocument();
+    const forceBtn = screen.getByRole('button', { name: /claim session/i });
 
     // click force-retry — second call must include force: true and the same body
     fireEvent.click(forceBtn);
