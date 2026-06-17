@@ -69,6 +69,24 @@ func TestParseCS463_LenientRSSI(t *testing.T) {
 	assert.Equal(t, "CC", reads[2].EPC)
 }
 
+// TRA-994: the golden TrakRF-data-format emits rssi as a numeric (RSSI_Number)
+// rather than a quoted string, matching the type the backend stores. The parser
+// must accept BOTH so the format can roll out per-reader without a flag day, and
+// stay lenient on a bad numeric (NaN-ish handled as 0).
+func TestParseCS463_NumericRSSI(t *testing.T) {
+	payload := []byte(`{"tags":[
+		{"epc":"AA","antennaPort":1,"rssi":-55},
+		{"epc":"BB","antennaPort":2,"rssi":-70.4},
+		{"epc":"CC","antennaPort":1,"rssi":0}
+	]}`)
+	reads, err := Parse(scandevice.DeviceTypeCS463, payload)
+	require.NoError(t, err)
+	require.Len(t, reads, 3)
+	assert.Equal(t, -55, reads[0].RSSI)
+	assert.Equal(t, -70, reads[1].RSSI) // -70.4 rounds to -70
+	assert.Equal(t, 0, reads[2].RSSI)
+}
+
 // gls10_read.json is a real GL-S10 BLE gateway message captured from preview
 // (device C4DEE229A176, org "Organized Chaos") on 2026-06-05: 42 BLE devices
 // seen in one window. Every dev_list entry becomes a read (no filtering); the
