@@ -6,14 +6,14 @@ package cs463
 //	CS463_LIVE=1 CS463_IP=192.168.50.212 CS463_WEB_PASS=… \
 //	  go test ./internal/readerd/cs463/ -run TestLiveReconcile -v
 //
-// It only ever creates/deletes TrakRF mqtt-rpc-named entities (+ a dummy localhost
-// golden server so the active golden event never publishes to a real broker); it
-// never touches the stock "Default Profile" the golden chain rides on. NOTE: enabling
-// the golden event activates its referenced profile (Default Profile), so this test
-// DOES switch the active profile — run it on a reader you are commissioning, not one
-// you need left on another profile. Teardown deletes every entity it made. Each /API
-// session is exclusive (the CS463 single-session lock), so the test never holds a
-// session across Adapter.Reconcile (which opens its own).
+// It ONLY ever creates/deletes TrakRF mqtt-rpc-named entities (+ a dummy localhost
+// golden server so the active golden event never publishes to a real broker) — never
+// stock/Default/Example entities. NOTE: enabling the golden event activates its
+// referenced profile (TrakRF mqtt-rpc Profile), so this test DOES switch the active
+// profile — run it on a reader you are commissioning, not one you need left on another
+// profile. Teardown deletes every entity it made. Each /API session is exclusive (the
+// CS463 single-session lock), so the test never holds a session across
+// Adapter.Reconcile (which opens its own).
 
 import (
 	"context"
@@ -40,14 +40,13 @@ func newLiveClient(t *testing.T) *Client {
 // before delete.").
 func delGolden(ctx context.Context, c *Client, session string) {
 	_ = c.EnableEvent(ctx, session, NameEvent, false)
-	// NOTE: never delete NameProfile — the golden chain rides on the stock
-	// "Default Profile", which must not be removed.
 	dels := []struct{ cmd, key, id string }{
 		{"delEvent", "event_id", NameEvent},
 		{"delResultantAction", "action_id", NameAction},
 		{"delTriggeringLogic", "logic_id", NameTrigger},
 		{"delDataFormat", "data_format_id", NameDataFormat},
-		{"delServerID", "server_id", NameMQTTServer}, // note: delServerID, not delServer
+		{"delServerID", "server_id", NameMQTTServer},  // note: delServerID, not delServer
+		{"delOperProfile", "profile_id", NameProfile}, // our own profile (not stock Default)
 	}
 	for _, d := range dels {
 		_ = c.writeEntity(ctx, session, d.cmd, url.Values{d.key: {d.id}})
@@ -96,8 +95,17 @@ func TestLiveReconcile(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("create golden server: %v", err)
 		}
-		// No profile creation: the golden chain rides on the stock NameProfile
-		// ("Default Profile"), which exists on any CS463 and carries enabled antennas.
+		// Pre-create our own profile (verify-exists prereq). setOperProfile can't
+		// enable antennas (footgun) but the profile only needs to EXIST for the
+		// reconcile-logic test; a real commission clones a stock profile's antennas.
+		if err := c.writeEntity(ctx, s, "setOperProfile", url.Values{
+			"profile_id": {NameProfile}, "linkProfile": {"1"}, "populationEst": {"50"},
+			"sessionNo": {"0"}, "target": {"2"}, "queryAlgorithm": {"DynamicQ"},
+			"reflectedPowerThreshold": {"24"}, "tagModel": {"ANY"}, "antenna_port": {"1,2"},
+			"transmitPower": {"16.0"}, "dwellTime1": {"500"}, "dwellTime2": {"500"},
+		}); err != nil {
+			t.Fatalf("create golden profile: %v", err)
+		}
 
 		if err := verifyServerAndProfile(ctx, s, c); err != nil {
 			t.Fatalf("verifyServerAndProfile should pass with prereqs present: %v", err)
@@ -146,7 +154,7 @@ func TestLiveReconcile(t *testing.T) {
 	})
 
 	// --- 4. full Adapter.Reconcile path on its OWN session (verify + reconcile +
-	// conditional re-arm). Converged now, so expect a clean no-op. ---
+	// unconditional re-arm). Converged now, so no entity writes, but it still re-arms. ---
 	a := NewAdapter(c, AdapterConfig{AntennaCount: antennas, EventID: NameEvent})
 	if err := a.Reconcile(ctx); err != nil {
 		t.Fatalf("Adapter.Reconcile (converged): %v", err)

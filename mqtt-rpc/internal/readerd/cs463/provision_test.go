@@ -194,17 +194,19 @@ func TestVerifyServerAndProfile(t *testing.T) {
 	}
 }
 
-func TestAdapterReconcileNoOpDoesNotRearm(t *testing.T) {
+func TestAdapterReconcileNoOpStillRearms(t *testing.T) {
+	// Even a converged (no-drift) reconcile must re-arm: the CS463 does not auto-start
+	// inventory after a reboot/restart, and the daemon starts after every reader boot.
 	f := newMatchingFake(2) // converged: no drift
 	a := &Adapter{cfg: AdapterConfig{AntennaCount: 2, EventID: "ignored"}, rec: f}
 	if err := a.Reconcile(context.Background()); err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
 	if f.totalWrites() != 0 {
-		t.Fatalf("no-op reconcile must not write, got %d", f.totalWrites())
+		t.Fatalf("no-op reconcile must not write entities, got %d", f.totalWrites())
 	}
-	if len(f.enableSeq) != 0 {
-		t.Fatalf("no-op reconcile must NOT re-arm the event, got enableSeq=%v", f.enableSeq)
+	if len(f.enableSeq) != 2 || f.enableSeq[0] != false || f.enableSeq[1] != true {
+		t.Fatalf("startup reconcile must always re-arm (disable, enable); got %v", f.enableSeq)
 	}
 }
 

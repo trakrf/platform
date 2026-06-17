@@ -72,13 +72,21 @@ func NewAdapter(ops readerOps, cfg AdapterConfig) *Adapter {
 	return a
 }
 
-// Reconcile converges the reader to the golden TrakRF mqtt-rpc entities. It runs in
-// a single /API login window (all entity writes are /API, unlike the SetConfig
-// servlet path): verify the pre-created CloudServer + Operation Profile exist,
-// list-then-add-or-mod the four owned entities, and re-arm the golden event ONLY if
-// something changed (so a no-op reconcile never interrupts inventory). A safe
-// function-level defer Logout is fine here precisely because no servlet form login
-// is taken inside this window (contrast SetConfig's three-phase dance).
+// Reconcile converges the reader to the golden TrakRF mqtt-rpc entities and starts
+// inventory. It runs in a single /API login window (all entity writes are /API,
+// unlike the SetConfig servlet path): verify the pre-created CloudServer + Operation
+// Profile exist, list-then-add-or-mod the four owned entities, then re-arm the golden
+// event. A safe function-level defer Logout is fine here precisely because no servlet
+// form login is taken inside this window (contrast SetConfig's three-phase dance).
+//
+// The event is re-armed UNCONDITIONALLY (not only when config changed). The CS463
+// does NOT auto-start inventory after a reboot/restart: an event with enable=true in
+// config still publishes nothing until a disable→enable cycle kicks the inventory
+// engine (verified on cs463-212 — 0 reads post-reboot until re-armed; a bare
+// enable(true) is a no-op). Since the daemon starts after every reader boot, it must
+// arm here on every startup. (A future on-demand Reader.Reconcile RPC run against an
+// already-reading reader should gate the re-arm on whether config changed, to avoid
+// the one-cycle inventory interruption — but startup must always arm.)
 func (a *Adapter) Reconcile(ctx context.Context) error {
 	if a.rec == nil {
 		return fmt.Errorf("cs463: reconcile not supported by these reader ops")
@@ -95,14 +103,10 @@ func (a *Adapter) Reconcile(ctx context.Context) error {
 	if err := verifyServerAndProfile(ctx, session, a.rec); err != nil {
 		return err
 	}
-	changed, err := reconcileGolden(ctx, session, a.rec, a.cfg.AntennaCount)
-	if err != nil {
+	if _, err := reconcileGolden(ctx, session, a.rec, a.cfg.AntennaCount); err != nil {
 		return err
 	}
-	if !changed {
-		return nil
-	}
-	// Re-arm the golden event so inventory reloads on the new config.
+	// Always re-arm: start (or restart) inventory on the golden event.
 	if err := a.rec.EnableEvent(ctx, session, NameEvent, false); err != nil {
 		return fmt.Errorf("cs463: reconcile re-arm disable: %w", err)
 	}

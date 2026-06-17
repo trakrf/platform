@@ -103,31 +103,42 @@ owned as code (`internal/readerd/cs463/golden.go`); reconcile is list-then-add-o
 | Entity | Name | Reconciled |
 |---|---|---|
 | MQTT Server (CloudServer) | `TrakRF mqtt-rpc MQTT Server` | **No — hand-crafted out-of-band** (needs broker creds + TLS cert), referenced by name |
-| Operation Profile | stock `Default Profile` | **No — the golden chain rides on the stock CSL profile** (already has antennas enabled, sidestepping the `setOperProfile` no-antenna footgun); verify-exists; per-reader antenna/TX-power via `SetConfig` |
+| Operation Profile | `TrakRF mqtt-rpc Profile` | **No — hand-crafted out-of-band** (clone a stock profile so it has antennas enabled — `setOperProfile` can't enable them); verify-exists; per-reader antenna/TX-power via `SetConfig` |
 | Data Format | `TrakRF mqtt-rpc Data Format` | Yes — trimmed JSON, numeric RSSI (`RSSI_Number`, parser PR #502) |
 | Trigger | `TrakRF mqtt-rpc Trigger` | Yes — reader-side RSSI gate (`≥ -80 dBm` knob), all antennas |
 | Resultant Action | `TrakRF mqtt-rpc Action` | Yes — MQTT → server + format |
 | Event | `TrakRF mqtt-rpc Event` | Yes — dedup=500ms, antennaDifferentiation=on, enable=on |
 
+**Ownership boundary: the daemon mutates ONLY `TrakRF mqtt-rpc *` entities** — never
+stock/`Default`/`Example` entities. For a conflict it cannot own (e.g. another enabled
+MQTT-publishing event that would double-publish), it *warns the operator*, it does not
+disable or modify the foreign entity.
+
 Reads/verify use `/API list*`; writes use `/API add*`/`mod*`. The write transport is
 pluggable per entity (the `entitySpec` seam) so any entity can flip to the servlet
 path if a firmware proves an `/API` write unreliable — **no firmware floor is
-required**. Reconcile re-arms the golden event **only when something changed**, so a
-no-op reconcile (routine restart) never interrupts inventory.
+required**. Reconcile **always re-arms** (disable→enable) the golden event on startup:
+the CS463 does NOT auto-start inventory after a reboot — an event with `enable=true` in
+config publishes nothing until a disable→enable cycle kicks the engine (a bare
+`enable(true)` is a no-op). So a no-op reconcile after a power-cycle still starts reads.
+(A future on-demand `Reader.Reconcile` RPC against an already-reading reader should gate
+the re-arm on whether config changed, to avoid the one-cycle interruption.)
 
 ### Commissioning prerequisites (done in the same SSH session that installs the daemon)
 1. Hand-craft the `TrakRF mqtt-rpc MQTT Server` CloudServer entry — `setServerID` (broker
    host/port/TLS/creds + the platform `scan_device.publish_topic`) plus `setServerCertificate`
    to upload the broker CA cert. The daemon reads it for its own broker connection and the
    golden chain references it by name.
-2. No profile to create — the golden chain references the stock `Default Profile` (present on
-   every CS463, antennas enabled). The daemon only verifies it exists. Tune antennas/TX-power
-   per-reader afterward via `Reader.SetConfig`.
+2. Hand-craft the `TrakRF mqtt-rpc Profile` operation profile by **cloning a stock profile**
+   (so it has antennas enabled — `setOperProfile` cannot enable them on this firmware). The
+   daemon only verifies it exists; the golden chain references it. Tune antennas/TX-power
+   per-reader afterward via `Reader.SetConfig`. Leave the stock `Default Profile` untouched.
 3. Existing readers provisioned under the old `TrakRF MQTT` name must set
    `READERD_CLOUDSERVER_ID` until migrated (the default is now the golden name).
 
-Enabling the golden event makes `Default Profile` the active profile (the reader's
-activation mechanism); on reboot the reader activates the enabled event's profile.
+Enabling the golden event makes `TrakRF mqtt-rpc Profile` the active profile (the reader's
+activation mechanism); on reboot the reader activates the enabled event's profile, but
+inventory still needs the startup re-arm (above) to begin publishing.
 
 ### Config
 - `READERD_RECONCILE` — `true` (default) runs reconcile on startup; `false` pins config.
