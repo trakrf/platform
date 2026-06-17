@@ -37,7 +37,11 @@ const (
 	AuthSignupEmailExists        = "Email already exists"
 	AuthSignupOrgIdentifierTaken = "Organization identifier already taken"
 	AuthSignupFailed             = "Failed to signup"
-	AuthLoginFailed              = "Failed to login"
+	// AuthSignupEnvBlocked is returned (403) when self-service signup is blocked
+	// on a non-prod environment (TRA-970). Random visitors are redirected to the
+	// production site; explicitly-invited users are unaffected.
+	AuthSignupEnvBlocked = "Self-service signup isn't available on this site. Please sign up at https://app.trakrf.id"
+	AuthLoginFailed      = "Failed to login"
 )
 
 // Password reset error messages

@@ -4,6 +4,11 @@ export interface SignupRequest {
   email: string;
   password: string;
   org_name?: string;
+  // TRA-971: contact details required for self-service signup (omitted for the
+  // invitation flow, which joins an existing org).
+  name?: string;
+  phone?: string;
+  website?: string;
   invitation_token?: string;
 }
 

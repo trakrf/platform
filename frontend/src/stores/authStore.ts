@@ -25,7 +25,13 @@ interface AuthState {
 
   // Actions
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, orgName?: string, invitationToken?: string) => Promise<void>;
+  signup: (
+    email: string,
+    password: string,
+    orgName?: string,
+    invitationToken?: string,
+    contact?: { name: string; phone: string; website: string }
+  ) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
   initialize: () => void;
@@ -136,13 +142,22 @@ export const useAuthStore = create<AuthState>()(
         },
 
         // Signup action
-        signup: async (email: string, password: string, orgName?: string, invitationToken?: string) => {
+        signup: async (
+          email: string,
+          password: string,
+          orgName?: string,
+          invitationToken?: string,
+          contact?: { name: string; phone: string; website: string }
+        ) => {
           set({ isLoading: true, error: null });
           try {
             const response = await authApi.signup({
               email,
               password,
               org_name: orgName,
+              name: contact?.name,
+              phone: contact?.phone,
+              website: contact?.website,
               invitation_token: invitationToken,
             });
             const { access_token, refresh_token, user } = response.data.data;

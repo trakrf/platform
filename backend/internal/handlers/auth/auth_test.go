@@ -110,6 +110,28 @@ func TestSignup_MalformedBody_StableDetail(t *testing.T) {
 		"must not leak encoding/json internals")
 }
 
+// TestSignup_EnvBlocked_Returns403 verifies that the service's ErrSignupNotAllowed
+// (self-service signup blocked on a non-prod site, TRA-970) maps to a 403 with the
+// stable go-to-production detail. The request body is fully valid so it passes
+// validation and reaches the service.
+func TestSignup_EnvBlocked_Returns403(t *testing.T) {
+	handler := newTestHandler(&stubAuthService{signupErr: authservice.ErrSignupNotAllowed})
+
+	body := `{"email":"new@example.com","password":"password123","org_name":"Acme","name":"Jane Doe","phone":"555-1234","website":"acme.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/signup", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.Signup(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+
+	var resp errorBody
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Contains(t, resp.Error.Detail, "app.trakrf.id",
+		"403 detail must point the visitor to the production site")
+}
+
 // TestSignup_BadBody_FieldsEnvelope verifies that validator errors produce
 // the fields[] envelope with snake_case field names and mapped codes.
 func TestSignup_BadBody_FieldsEnvelope(t *testing.T) {
@@ -151,6 +173,33 @@ func TestSignup_BadBody_FieldsEnvelope(t *testing.T) {
 		assert.NotContains(t, f.Field, "Password",
 			"field name must be JSON tag, not Go struct name")
 	}
+}
+
+// TestSignup_MissingContactFields_Rejected verifies that self-service signup
+// (no invitation_token) requires name, phone, and website (TRA-971). A body with
+// email/password/org_name but no contact fields must 400 with all three flagged.
+func TestSignup_MissingContactFields_Rejected(t *testing.T) {
+	handler := newTestHandler(&stubAuthService{})
+
+	body := `{"email":"new@example.com","password":"password123","org_name":"Acme"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/signup", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.Signup(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var resp errorBody
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+
+	flagged := make(map[string]bool)
+	for _, f := range resp.Error.Fields {
+		flagged[f.Field] = true
+	}
+	assert.True(t, flagged["name"], "name must be required for self-service signup")
+	assert.True(t, flagged["phone"], "phone must be required for self-service signup")
+	assert.True(t, flagged["website"], "website must be required for self-service signup")
 }
 
 // TestLogin_WrongPassword_Respond401 verifies that a wrong-password service

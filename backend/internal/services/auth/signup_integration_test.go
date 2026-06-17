@@ -61,3 +61,90 @@ func TestSignup_SelfService_SetsOneMonthTrial(t *testing.T) {
 	assert.True(t, expiresAt.Before(maxExpiry),
 		"subscription_expires_at %v should be before %v (32d from after)", expiresAt, maxExpiry)
 }
+
+// TRA-971: self-service signup must persist the contact person's name + phone on
+// the user, the company website on the org, and seed owner_user_id to the creating
+// user (the org owner).
+func TestSignup_SelfService_PersistsContactAndOwner(t *testing.T) {
+	t.Setenv("JWT_SECRET", "signup-contact-test")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	ctx := context.Background()
+
+	svc := NewService(pool, store, nil)
+	stubJWT := func(int, string, *int) (string, error) { return "stub-token", nil }
+	stubHash := func(pw string) (string, error) { return "hashed-" + pw, nil }
+
+	resp, err := svc.Signup(ctx, authmodels.SignupRequest{
+		Email:    "contact-signup@example.com",
+		Password: "s3cret!!",
+		OrgName:  "Contact Org",
+		Name:     "Jane Operator",
+		Phone:    "+1-555-0100",
+		Website:  "contact-org.example.com",
+	}, "", "", stubHash, stubJWT)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	userID := resp.User.ID
+	assert.Equal(t, "Jane Operator", resp.User.Name, "response user name must be the contact name, not the email")
+
+	var (
+		userName    string
+		userPhone   *string
+		orgWebsite  *string
+		ownerUserID *int64
+		orgID       int64
+	)
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT u.name, u.phone, o.id, o.website, o.owner_user_id
+		FROM trakrf.users u
+		JOIN trakrf.org_users ou ON ou.user_id = u.id
+		JOIN trakrf.organizations o ON o.id = ou.org_id
+		WHERE u.id = $1
+	`, userID).Scan(&userName, &userPhone, &orgID, &orgWebsite, &ownerUserID))
+
+	assert.Equal(t, "Jane Operator", userName)
+	require.NotNil(t, userPhone)
+	assert.Equal(t, "+1-555-0100", *userPhone)
+	require.NotNil(t, orgWebsite)
+	assert.Equal(t, "contact-org.example.com", *orgWebsite)
+	require.NotNil(t, ownerUserID, "owner_user_id must be seeded at signup")
+	assert.Equal(t, int64(userID), *ownerUserID, "owner_user_id must point at the creating user")
+}
+
+// TRA-970: on a non-prod deployed environment, self-service signup is blocked
+// with ErrSignupNotAllowed before any rows are written. The allowed-env path is
+// already exercised by the other signup integration tests (APP_ENV unset).
+func TestSignup_NonProdEnv_Blocked(t *testing.T) {
+	t.Setenv("JWT_SECRET", "signup-envgate-test")
+	t.Setenv("APP_ENV", "preview")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	ctx := context.Background()
+
+	svc := NewService(pool, store, nil)
+	stubJWT := func(int, string, *int) (string, error) { return "stub-token", nil }
+	stubHash := func(pw string) (string, error) { return "hashed-" + pw, nil }
+
+	resp, err := svc.Signup(ctx, authmodels.SignupRequest{
+		Email:    "blocked-signup@example.com",
+		Password: "s3cret!!",
+		OrgName:  "Blocked Org",
+		Name:     "Nope",
+		Phone:    "555-9999",
+		Website:  "nope.example.com",
+	}, "", "", stubHash, stubJWT)
+
+	require.ErrorIs(t, err, ErrSignupNotAllowed)
+	assert.Nil(t, resp)
+
+	// No user row should have been created.
+	var count int
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT count(*) FROM trakrf.users WHERE email = $1`, "blocked-signup@example.com",
+	).Scan(&count))
+	assert.Equal(t, 0, count, "blocked signup must not create a user")
+}

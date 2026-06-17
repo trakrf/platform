@@ -134,7 +134,16 @@ describe('SignupScreen', () => {
   });
 
   describe('Form Submission', () => {
-    it('should call signup with email, password, and org name', async () => {
+    // TRA-971: self-service signup now also requires name, company website, and
+    // phone. fillContactFields populates them so submit reaches the signup call.
+    const fillContactFields = () => {
+      fireEvent.change(screen.getByLabelText(/your name/i), { target: { value: 'Jane Doe' } });
+      fireEvent.change(screen.getByLabelText(/company website/i), { target: { value: 'acme.com' } });
+      fireEvent.change(screen.getByLabelText(/phone/i), { target: { value: '555-1234' } });
+    };
+    const expectedContact = { name: 'Jane Doe', phone: '555-1234', website: 'acme.com' };
+
+    it('should call signup with email, password, org name, and contact details', async () => {
       mockSignup.mockResolvedValue(undefined);
       render(<SignupScreen />);
 
@@ -146,10 +155,17 @@ describe('SignupScreen', () => {
       fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
       fireEvent.change(orgNameInput, { target: { value: 'Test Company' } });
       fireEvent.change(passwordInput, { target: { value: 'password123' } });
+      fillContactFields();
       fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(mockSignup).toHaveBeenCalledWith('test@example.com', 'password123', 'Test Company');
+        expect(mockSignup).toHaveBeenCalledWith(
+          'test@example.com',
+          'password123',
+          'Test Company',
+          undefined,
+          expectedContact
+        );
         expect(mockSignup).toHaveBeenCalledTimes(1);
       });
     });
@@ -166,10 +182,17 @@ describe('SignupScreen', () => {
       fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
       fireEvent.change(orgNameInput, { target: { value: '  Trimmed Company  ' } });
       fireEvent.change(passwordInput, { target: { value: 'password123' } });
+      fillContactFields();
       fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(mockSignup).toHaveBeenCalledWith('test@example.com', 'password123', 'Trimmed Company');
+        expect(mockSignup).toHaveBeenCalledWith(
+          'test@example.com',
+          'password123',
+          'Trimmed Company',
+          undefined,
+          expectedContact
+        );
       });
     });
 
@@ -185,6 +208,7 @@ describe('SignupScreen', () => {
       fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
       fireEvent.change(orgNameInput, { target: { value: 'Test Company' } });
       fireEvent.change(passwordInput, { target: { value: 'password123' } });
+      fillContactFields();
       fireEvent.click(submitButton);
 
       await waitFor(() => {
@@ -208,10 +232,27 @@ describe('SignupScreen', () => {
       fireEvent.change(emailInput, { target: { value: 'existing@example.com' } });
       fireEvent.change(orgNameInput, { target: { value: 'Test Company' } });
       fireEvent.change(passwordInput, { target: { value: 'password123' } });
+      fillContactFields();
       fireEvent.click(submitButton);
 
       await waitFor(() => {
         expect(screen.getByText(errorMessage)).toBeInTheDocument();
+      });
+    });
+
+    it('should show the go-to-production panel on a 403 (non-prod env block)', async () => {
+      // TRA-970: backend returns 403 on non-prod self-service signup.
+      mockSignup.mockRejectedValue({ response: { status: 403 } });
+      render(<SignupScreen />);
+
+      fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'test@example.com' } });
+      fireEvent.change(screen.getByLabelText(/organization name/i), { target: { value: 'Test Company' } });
+      fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'password123' } });
+      fillContactFields();
+      fireEvent.click(screen.getByRole('button', { name: /sign up/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/app\.trakrf\.id/i)).toBeInTheDocument();
       });
     });
   });

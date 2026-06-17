@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -46,6 +47,14 @@ func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, userAg
 		return s.signupWithInvitation(ctx, request, passwordHash, userAgent, ip, generateJWT)
 	}
 
+	// TRA-970: keep random visitors off non-prod sites. Self-service signup is
+	// blocked on every environment except production, local dev, and CI; the
+	// handler turns this into a 403 "go to production" response. Invitation-based
+	// signup above is intentionally exempt — invited users are explicitly allowed.
+	if !signupAllowedInEnv(os.Getenv("APP_ENV")) {
+		return nil, ErrSignupNotAllowed
+	}
+
 	// Standard signup: create user + personal org
 	orgName := strings.TrimSpace(request.OrgName)
 	orgIdentifier := slugifyOrgName(orgName)
@@ -56,13 +65,15 @@ func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, userAg
 	}
 	defer tx.Rollback(ctx)
 
+	// TRA-971: persist the contact person's real name and phone (self-service
+	// signup requires them). Previously name was a copy of the email.
 	var usr user.User
 	userQuery := `
-		INSERT INTO trakrf.users (email, name, password_hash)
-		VALUES ($1, $2, $3)
+		INSERT INTO trakrf.users (email, name, phone, password_hash)
+		VALUES ($1, $2, $3, $4)
 		RETURNING id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at
 	`
-	err = tx.QueryRow(ctx, userQuery, request.Email, request.Email, passwordHash).Scan(
+	err = tx.QueryRow(ctx, userQuery, request.Email, request.Name, request.Phone, passwordHash).Scan(
 		&usr.ID, &usr.Email, &usr.Name, &usr.PasswordHash, &usr.LastLoginAt,
 		&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt)
 	if err != nil {
@@ -75,13 +86,17 @@ func (s *Service) Signup(ctx context.Context, request auth.SignupRequest, userAg
 	// Create organization with user-provided name and a 1-month trial expiry.
 	// Invitation-based signup (signupWithInvitation) and internal CreateOrgWithAdmin
 	// leave subscription_expires_at NULL (perpetual). Only this self-service path sets it.
+	//
+	// TRA-971: also persist the company website and seed owner_user_id to the
+	// creating user (the org owner). owner_user_id is immutable in v1; the full
+	// transfer/reassign lifecycle is TRA-1004.
 	var org organization.Organization
 	orgQuery := `
-		INSERT INTO trakrf.organizations (name, identifier, subscription_expires_at)
-		VALUES ($1, $2, now() + interval '1 month')
+		INSERT INTO trakrf.organizations (name, identifier, website, owner_user_id, subscription_expires_at)
+		VALUES ($1, $2, $3, $4, now() + interval '1 month')
 		RETURNING id, name, identifier, metadata, valid_from, valid_to, is_active, created_at, updated_at, subscription_expires_at
 	`
-	err = tx.QueryRow(ctx, orgQuery, orgName, orgIdentifier).Scan(
+	err = tx.QueryRow(ctx, orgQuery, orgName, orgIdentifier, request.Website, usr.ID).Scan(
 		&org.ID, &org.Name, &org.Identifier, &org.Metadata,
 		&org.ValidFrom, &org.ValidTo, &org.IsActive,
 		&org.CreatedAt, &org.UpdatedAt, &org.SubscriptionExpiresAt)
