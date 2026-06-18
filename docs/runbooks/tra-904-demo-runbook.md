@@ -67,6 +67,63 @@ enable Ant 2/3 and set each to **Doorway 1** as well.
 
 ---
 
+## Physical wiring (as shipped)
+
+Shipped **pre-wired into the surge protector** — venue setup is "plug the surge
+strip into the wall, optionally the orange cable into the house router." CS463 is
+mains-powered via its power block (no PoE injector); GL-S10 is USB-powered off the
+surge strip's charging port; the alarm light/siren is on the Shelly Plug's switched
+outlet.
+
+```mermaid
+flowchart TB
+  wall([Wall outlet])
+  surge["Surge protector<br/>(power strip + USB ports)"]
+  slate{{"GL.iNet Slate (router)"}}
+  hp["HP server (the box)"]
+  cs463["CS463 reader"]
+  mk107["Moko MK107"]
+  gls10["GL-S10 gateway"]
+  shelly["Shelly Plug Gen4"]
+  siren["Alarm light / siren"]
+  laptop([Laptop])
+  inet([House router / Internet])
+
+  %% POWER (thick arrows)
+  wall ==>|plug THIS into the wall| surge
+  surge ==>|power block| hp
+  surge ==>|power block| cs463
+  surge ==>|direct| mk107
+  surge ==>|direct| shelly
+  surge ==>|power| slate
+  surge ==>|red USB cable| gls10
+  shelly ==>|switched power| siren
+
+  %% WIRED LAN (color-coded cables)
+  slate ---|white cable| hp
+  slate ---|purple cable| cs463
+  slate ---|orange cable - WAN, optional| inet
+
+  %% WIRELESS
+  slate -. WiFi .- laptop
+  slate -. WiFi .- gls10
+  slate -. WiFi .- mk107
+  slate -. WiFi .- shelly
+
+  classDef power fill:#fff7ed,stroke:#fb923c;
+  class surge,siren power;
+  linkStyle 6 stroke:#ef4444,stroke-width:2px;
+  linkStyle 8 stroke:#9ca3af,stroke-width:3px;
+  linkStyle 9 stroke:#a855f7,stroke-width:3px;
+  linkStyle 10 stroke:#f97316,stroke-width:3px;
+```
+
+LAN cable colors: **white** = Slate↔box · **purple** = Slate↔CS463 · **orange** =
+Slate WAN↔house internet (optional). MK107 / GL-S10 / Shelly reach the Slate over
+WiFi. Thick arrows = power; dotted = WiFi.
+
+---
+
 ## 0. The demo in one breath
 
 A registered, tagged monitor carried through the doorway makes the CS463 read it

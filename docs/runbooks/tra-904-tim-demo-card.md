@@ -13,23 +13,66 @@ and the **app in your browser** (`https://app.demo.trakrf.id`). That's it.
 
 ---
 
-## A. Set up the gear (plug it in)  — ~5 min, do once per venue
+## A. Set up the gear — it ships pre-wired
 
-Everything talks to each other over the little travel router; you don't configure
-anything. Just give each piece power and let it boot.
+The kit shipped with **everything already plugged into the surge protector** and
+all the network cables connected. Your normal setup is tiny:
 
-1. **Router (GL.iNet "Slate"):** plug in power. Wait for its WiFi to come up.
-2. **The box (small HP computer):** plug in power and the network cable to the
-   router. Press the power button. Give it **~2 minutes** to start up.
-3. **Reader (CS463) + antennas:** set your **2–3 antennas** at the doorway, each
-   aimed *across* the opening (not down the hall). Connect each antenna cable to
-   the reader, plug the reader into the router's network and into power. It's slow
-   to boot — **~2 min**. (Mike has already told the app which antenna covers the
-   door, so you just place and plug.)
-4. **Strobe (Shelly):** plug it in near the door. That's the alarm.
-5. Pour a coffee. Everything is booting. **Do not unplug anything mid-demo.**
+1. Set the pieces roughly in place — the **2–3 antennas at the doorway** (each aimed
+   *across* the opening, not down the hall), the strobe near the door.
+2. **Plug the surge protector into a wall outlet.** Everything powers on together.
+3. *(Optional — only if the venue has wired internet)* plug the **orange** cable
+   into the house router. The demo works fine without it.
+4. Wait **~2 minutes** for the box and reader to boot. **Don't unplug anything.**
 
-> ✳️ If Mike pre-set the placement and taped marks on the floor, just match them.
+Here's how it's all connected, in case a cable comes loose or you need to repack:
+
+```mermaid
+flowchart TB
+  wall([Wall outlet])
+  surge["Surge protector<br/>(power strip + USB ports)"]
+  slate{{"GL.iNet Slate (router)"}}
+  hp["HP server (the box)"]
+  cs463["CS463 reader"]
+  mk107["Moko MK107"]
+  gls10["GL-S10 gateway"]
+  shelly["Shelly Plug Gen4"]
+  siren["Alarm light / siren"]
+  laptop([Your laptop])
+  inet([House router / Internet])
+
+  %% POWER (thick arrows)
+  wall ==>|plug THIS into the wall| surge
+  surge ==>|power block| hp
+  surge ==>|power block| cs463
+  surge ==>|direct| mk107
+  surge ==>|direct| shelly
+  surge ==>|power| slate
+  surge ==>|red USB cable| gls10
+  shelly ==>|switched power| siren
+
+  %% WIRED LAN (color-coded cables)
+  slate ---|white cable| hp
+  slate ---|purple cable| cs463
+  slate ---|orange cable - WAN, optional| inet
+
+  %% WIRELESS
+  slate -. WiFi .- laptop
+  slate -. WiFi .- gls10
+  slate -. WiFi .- mk107
+  slate -. WiFi .- shelly
+
+  classDef power fill:#fff7ed,stroke:#fb923c;
+  class surge,siren power;
+  linkStyle 6 stroke:#ef4444,stroke-width:2px;
+  linkStyle 8 stroke:#9ca3af,stroke-width:3px;
+  linkStyle 9 stroke:#a855f7,stroke-width:3px;
+  linkStyle 10 stroke:#f97316,stroke-width:3px;
+```
+
+**Cable colors:** white = router ↔ box · purple = router ↔ reader · orange =
+router ↔ house internet (optional). **Thick arrows = power; dotted = WiFi.** The
+alarm light/siren plugs into the **Shelly Plug**, so the Shelly switches its power.
 
 ---
 
