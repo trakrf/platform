@@ -303,3 +303,30 @@ func TestSetProfilePowerPresentDwellPreserved(t *testing.T) {
 		t.Fatalf("present dwell must be preserved; got %v, want first two 600", dw)
 	}
 }
+
+// TestSetProfilePowerExtraBankWordCountAtLeastOne pins TRA-1014: the CS463
+// Multi-Bank Inventory validation requires the extra-bank word count >= 1 even
+// when the extra banks are disabled (type=none). A 0 blocks saving the Operation
+// Profile entirely (and risks "no tag return"). The golden config never uses
+// extra banks, so the servlet write must emit 1 — and must NOT carry through a 0
+// from the reader's current profile.
+func TestSetProfilePowerExtraBankWordCountAtLeastOne(t *testing.T) {
+	f := newFakeServlet(200, "<html>Successful!</html>")
+	defer f.close()
+
+	fields := sampleProfileFields()
+	fields["firstExtraBankLength"] = "0"  // as a real reader profile carries it
+	fields["secondExtraBankLength"] = "0"
+
+	err := f.client().SetProfilePower(context.Background(), NameProfile, 4,
+		[]int{1}, map[int]float64{1: 30}, fields)
+	if err != nil {
+		t.Fatalf("SetProfilePower: %v", err)
+	}
+	if got := f.gotForm.Get("firstextrabanklength"); got != "1" {
+		t.Fatalf("firstextrabanklength = %q, want 1 (Multi-Bank validation requires >=1)", got)
+	}
+	if got := f.gotForm.Get("secondextrabanklength"); got != "1" {
+		t.Fatalf("secondextrabanklength = %q, want 1 (Multi-Bank validation requires >=1)", got)
+	}
+}
