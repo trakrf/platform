@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -59,9 +60,10 @@ func NewHandler(service *authservice.Service, store *storage.Storage) *Handler {
 // @Tags auth,internal
 // @Accept json
 // @Produce json
-// @Param request body auth.SignupRequest true "Signup request (email and password only)"
+// @Param request body auth.SignupRequest true "Signup request (self-service requires email, password, org_name, name, phone, website; invitation-based requires only email, password, invitation_token)"
 // @Success 201 {object} map[string]any "data: auth.SignupResponse"
 // @Failure 400 {object} errors.ErrorResponse "Validation error"
+// @Failure 403 {object} errors.ErrorResponse "Self-service signup not available on this environment"
 // @Failure 409 {object} errors.ErrorResponse "Email already exists"
 // @Failure 415 {object} errors.ErrorResponse "unsupported_media_type"
 // @Failure 500 {object} errors.ErrorResponse "Internal server error"
@@ -81,6 +83,13 @@ func (handler *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 	response, err := handler.service.Signup(r.Context(), request, r.UserAgent(), clientIP(r), password.Hash, jwt.Generate)
 	if err != nil {
 		errMsg := err.Error()
+		// TRA-970: self-service signup blocked on a non-prod site → 403 go-to-prod.
+		if stderrors.Is(err, authservice.ErrSignupNotAllowed) {
+			httputil.WriteJSONError(w, r, http.StatusForbidden, errors.ErrForbidden,
+				apierrors.AuthSignupEnvBlocked, middleware.GetRequestID(r.Context()))
+
+			return
+		}
 		if strings.Contains(errMsg, "email already exists") {
 			httputil.WriteJSONError(w, r, http.StatusConflict, errors.ErrConflict,
 				apierrors.AuthSignupEmailExists, middleware.GetRequestID(r.Context()))

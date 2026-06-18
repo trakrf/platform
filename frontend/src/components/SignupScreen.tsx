@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '@/stores';
-import { Eye, EyeOff, Building2, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Building2, Loader2, AlertTriangle } from 'lucide-react';
 import { handleAuthRedirect } from '@/utils/authRedirect';
 import { authApi } from '@/lib/api/auth';
 import type { InvitationInfo } from '@/lib/api/auth';
@@ -20,17 +20,42 @@ function getInviteContext(): { isInviteFlow: boolean; token: string | null } {
   return { isInviteFlow, token };
 }
 
+// TRA-970: detect a non-prod (preview/demo) deployment by hostname. Production is
+// app.trakrf.id; local dev is localhost. Anything else is a throwaway sandbox, so
+// we warn and require a deliberate opt-in before self-service signup. This is
+// cosmetic/UX only — the backend is the real enforcer of the acknowledgment.
+function isNonProdHost(): boolean {
+  const host = window.location.hostname;
+  if (host === 'app.trakrf.id') return false; // production
+  if (host === 'localhost' || host === '127.0.0.1' || host === '') return false; // local dev
+  return true; // preview, demo, or any other deployed host
+}
+
 export default function SignupScreen() {
   const { isInviteFlow, token: inviteToken } = getInviteContext();
+  // Self-service signup on a non-prod host requires a deliberate acknowledgment
+  // (TRA-970). Invitation signups are exempt — invited users are already expected.
+  const nonProd = !isInviteFlow && isNonProdHost();
 
   const [email, setEmail] = useState('');
   const [orgName, setOrgName] = useState('');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [website, setWebsite] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [ackNonProd, setAckNonProd] = useState(false);
+  // envBlocked is set when the backend rejects self-service signup on a non-prod
+  // site (TRA-970) — we swap the form for a "go to production" panel.
+  const [envBlocked, setEnvBlocked] = useState(false);
   const [errors, setErrors] = useState<{
     email?: string;
     orgName?: string;
+    name?: string;
+    phone?: string;
+    website?: string;
     password?: string;
+    ack?: string;
     general?: string;
   }>({});
   const emailInputRef = useRef<HTMLInputElement>(null);
@@ -93,22 +118,59 @@ export default function SignupScreen() {
     return null;
   };
 
+  // TRA-971: contact details required for self-service signup. Kept deliberately
+  // loose (no strict phone/URL format) to avoid demo-day friction; the backend is
+  // the source of truth for required-ness.
+  const validateName = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return 'Your name is required';
+    if (trimmed.length > 255) return 'Name must be 255 characters or less';
+    return null;
+  };
+
+  const validatePhone = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return 'Phone is required';
+    if (trimmed.length < 3) return 'Phone must be at least 3 characters';
+    if (trimmed.length > 50) return 'Phone must be 50 characters or less';
+    return null;
+  };
+
+  const validateWebsite = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return 'Company website is required';
+    if (trimmed.length < 3) return 'Website must be at least 3 characters';
+    if (trimmed.length > 255) return 'Website must be 255 characters or less';
+    return null;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Clear previous errors
     setErrors({});
 
-    // Validate fields - orgName only required when NOT in invite flow
+    // Validate fields - orgName + contact details only required when NOT in invite flow
     const emailError = validateEmail(email);
     const orgNameError = !isInviteFlow ? validateOrgName(orgName) : null;
+    const nameError = !isInviteFlow ? validateName(name) : null;
+    const phoneError = !isInviteFlow ? validatePhone(phone) : null;
+    const websiteError = !isInviteFlow ? validateWebsite(website) : null;
     const passwordError = validatePassword(password);
+    // TRA-970: on a non-prod host the sandbox acknowledgment must be checked.
+    const ackError = nonProd && !ackNonProd
+      ? 'Please acknowledge this is a non-production environment'
+      : null;
 
-    if (emailError || orgNameError || passwordError) {
+    if (emailError || orgNameError || nameError || phoneError || websiteError || passwordError || ackError) {
       setErrors({
         email: emailError || undefined,
         orgName: orgNameError || undefined,
+        name: nameError || undefined,
+        phone: phoneError || undefined,
+        website: websiteError || undefined,
         password: passwordError || undefined,
+        ack: ackError || undefined,
       });
       return;
     }
@@ -122,11 +184,31 @@ export default function SignupScreen() {
         toast.success(`Welcome to ${inviteInfo?.org_name || 'the organization'}!`);
         window.location.hash = '#home';
       } else {
-        // Regular signup with org name
-        await signup(email, password, orgName.trim());
+        // Regular signup with org name + required contact details (TRA-971).
+        // On a non-prod host, pass the deliberate sandbox acknowledgment (TRA-970).
+        await signup(
+          email,
+          password,
+          orgName.trim(),
+          undefined,
+          {
+            name: name.trim(),
+            phone: phone.trim(),
+            website: website.trim(),
+          },
+          nonProd ? ackNonProd : undefined
+        );
         handleAuthRedirect();
       }
     } catch (err: unknown) {
+      // TRA-970: a 403 means self-service signup is blocked on this (non-prod)
+      // site. Swap the form for a dedicated "go to production" panel.
+      const status = (err as { response?: { status?: number } }).response?.status;
+      if (status === 403 && !isInviteFlow) {
+        setEnvBlocked(true);
+        return;
+      }
+
       // Extract error message from RFC 7807 Problem Details format
       const data = (err as { response?: { data?: Record<string, unknown> } }).response?.data;
       const errorObj = (data?.error as Record<string, unknown>) || data;
@@ -187,6 +269,27 @@ export default function SignupScreen() {
     );
   }
 
+  // Non-prod self-service signup is blocked (TRA-970): point the visitor to prod.
+  if (envBlocked) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+        <div className="bg-gray-800 p-8 rounded-lg w-full max-w-md text-center">
+          <h1 className="text-2xl font-semibold text-white mb-4">Sign up on TrakRF</h1>
+          <p className="text-gray-400 mb-6">
+            Self-service signup isn&apos;t available on this site. Create your account on the
+            production app.
+          </p>
+          <a
+            href="https://app.trakrf.id"
+            className="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
+          >
+            Go to app.trakrf.id
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
       <div className="bg-gray-800 p-8 rounded-lg w-full max-w-md">
@@ -203,6 +306,26 @@ export default function SignupScreen() {
                 <p className="text-blue-200 text-sm">Joining organization</p>
                 <p className="text-white font-medium">{inviteInfo.org_name}</p>
                 <p className="text-blue-400 text-xs capitalize">as {inviteInfo.role}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Non-prod sandbox warning (TRA-970) */}
+        {nonProd && (
+          <div className="bg-amber-900/30 border border-amber-700 rounded-lg p-4 mb-6">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-amber-200 text-sm font-medium">Non-production environment</p>
+                <p className="text-amber-300/80 text-xs mt-1">
+                  This is a preview/test sandbox — data may be wiped at any time. For a real
+                  account,{' '}
+                  <a href="https://app.trakrf.id" className="underline hover:text-amber-200">
+                    sign up at app.trakrf.id
+                  </a>
+                  .
+                </p>
               </div>
             </div>
           </div>
@@ -239,6 +362,30 @@ export default function SignupScreen() {
             )}
           </div>
 
+          {/* Contact name input - ONLY show when NOT in invite flow (TRA-971) */}
+          {!isInviteFlow && (
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-2">
+                Your Name
+              </label>
+              <input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={() => {
+                  if (!name.trim()) return;
+                  const error = validateName(name);
+                  if (error) setErrors((prev) => ({ ...prev, name: error }));
+                }}
+                className="w-full px-4 py-2 border border-gray-600 bg-gray-700 text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                disabled={isLoading}
+                placeholder="Jane Doe"
+              />
+              {errors.name && <p className="text-red-400 text-sm mt-1">{errors.name}</p>}
+            </div>
+          )}
+
           {/* Organization name input - ONLY show when NOT in invite flow */}
           {!isInviteFlow && (
             <div>
@@ -264,6 +411,54 @@ export default function SignupScreen() {
                 If your company is already using TrakRF, ask your admin for an invite instead of
                 creating a new organization.
               </p>
+            </div>
+          )}
+
+          {/* Company website - ONLY show when NOT in invite flow (TRA-971) */}
+          {!isInviteFlow && (
+            <div>
+              <label htmlFor="website" className="block text-sm font-medium text-gray-300 mb-2">
+                Company Website
+              </label>
+              <input
+                id="website"
+                type="text"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                onBlur={() => {
+                  if (!website.trim()) return;
+                  const error = validateWebsite(website);
+                  if (error) setErrors((prev) => ({ ...prev, website: error }));
+                }}
+                className="w-full px-4 py-2 border border-gray-600 bg-gray-700 text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                disabled={isLoading}
+                placeholder="acme.com"
+              />
+              {errors.website && <p className="text-red-400 text-sm mt-1">{errors.website}</p>}
+            </div>
+          )}
+
+          {/* Phone - ONLY show when NOT in invite flow (TRA-971) */}
+          {!isInviteFlow && (
+            <div>
+              <label htmlFor="phone" className="block text-sm font-medium text-gray-300 mb-2">
+                Phone
+              </label>
+              <input
+                id="phone"
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                onBlur={() => {
+                  if (!phone.trim()) return;
+                  const error = validatePhone(phone);
+                  if (error) setErrors((prev) => ({ ...prev, phone: error }));
+                }}
+                className="w-full px-4 py-2 border border-gray-600 bg-gray-700 text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                disabled={isLoading}
+                placeholder="+1 555 123 4567"
+              />
+              {errors.phone && <p className="text-red-400 text-sm mt-1">{errors.phone}</p>}
             </div>
           )}
 
@@ -298,6 +493,29 @@ export default function SignupScreen() {
             </div>
             {errors.password && <p className="text-red-400 text-sm mt-1">{errors.password}</p>}
           </div>
+
+          {/* Non-prod acknowledgment (TRA-970) - deliberate opt-in to the sandbox */}
+          {nonProd && (
+            <div>
+              <label htmlFor="ackNonProd" className="flex items-start gap-2 cursor-pointer">
+                <input
+                  id="ackNonProd"
+                  type="checkbox"
+                  checked={ackNonProd}
+                  onChange={(e) => {
+                    setAckNonProd(e.target.checked);
+                    if (e.target.checked) setErrors((prev) => ({ ...prev, ack: undefined }));
+                  }}
+                  className="mt-1 h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
+                  disabled={isLoading}
+                />
+                <span className="text-sm text-gray-300">
+                  I understand this is a non-production test environment and my data may be wiped.
+                </span>
+              </label>
+              {errors.ack && <p className="text-red-400 text-sm mt-1">{errors.ack}</p>}
+            </div>
+          )}
 
           {/* General error */}
           {errors.general && (

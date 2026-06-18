@@ -3,12 +3,22 @@ package auth
 import "github.com/trakrf/platform/backend/internal/models/user"
 
 // SignupRequest for POST /api/v1/auth/signup
-// OrgName is required only when InvitationToken is not provided
+//
+// OrgName and the contact fields (Name, Phone, Website) are required only for
+// self-service signup — i.e. when InvitationToken is not provided. Invitation-
+// based signup joins an existing org and supplies none of them (TRA-971).
 type SignupRequest struct {
 	Email           string  `json:"email" validate:"required,email"`
 	Password        string  `json:"password" validate:"required,min=8"`
 	OrgName         string  `json:"org_name" validate:"required_without=InvitationToken,omitempty,min=2,max=100"`
-	InvitationToken *string `json:"invitation_token,omitempty"`
+	Name            string  `json:"name" validate:"required_without=InvitationToken,omitempty,min=1,max=255"`
+	Phone           string  `json:"phone" validate:"required_without=InvitationToken,omitempty,min=3,max=50"`
+	Website         string  `json:"website" validate:"required_without=InvitationToken,omitempty,min=3,max=255"`
+	// AcknowledgeNonProd lets a caller deliberately opt into self-service signup on
+	// a non-prod environment (TRA-970). It is not a security control — it is a
+	// "you meant to do this on a throwaway sandbox" speed bump. Ignored on prod.
+	AcknowledgeNonProd bool    `json:"acknowledge_non_prod,omitempty"`
+	InvitationToken    *string `json:"invitation_token,omitempty"`
 }
 
 // LoginRequest for POST /api/v1/auth/login
