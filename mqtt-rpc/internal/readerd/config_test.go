@@ -1,6 +1,8 @@
 package readerd
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -115,6 +117,76 @@ func brokerEnv(t *testing.T) {
 	t.Setenv("READERD_BASE_TOPIC", "trakrf.id/r")
 	t.Setenv("READERD_RPC_CLIENT_ID", "r-rpc")
 	t.Setenv("READERD_EVENT_ID", "TrakRF mqtt-rpc Event")
+}
+
+// directBrokerEnv sets the direct-broker envs (so LoadConfig skips the on-reader
+// CloudServer read) but leaves READERD_EVENT_ID UNSET, so EventID derivation goes
+// through the EventList file path.
+func directBrokerEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("READERD_BROKER_URL", "mqtts://u:p@host:8883")
+	t.Setenv("READERD_CA_CERT", "/x.pem")
+	t.Setenv("READERD_BASE_TOPIC", "trakrf.id/r")
+	t.Setenv("READERD_RPC_CLIENT_ID", "r-rpc")
+}
+
+// writeEventList writes a temp EventList file and points READERD_EVENTLIST_FILE at it.
+func writeEventList(t *testing.T, body string) {
+	t.Helper()
+	evFile := filepath.Join(t.TempDir(), "EventList")
+	if err := os.WriteFile(evFile, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("READERD_EVENTLIST_FILE", evFile)
+}
+
+func TestEventID_FallsBackToGoldenWhenNoneEnabledAndReconcileOn(t *testing.T) {
+	// From-scratch reader: all events deleted, so the EventList has no enabled
+	// event. The startup reconcile is about to create+arm the golden event, so
+	// LoadConfig must fall back to the golden event name rather than fataling
+	// before reconcile can run.
+	directBrokerEnv(t)
+	writeEventList(t, `[{"eventId":"MQTT","enable":false}]`)
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.EventID != defaultEventID {
+		t.Errorf("EventID = %q, want golden fallback %q", cfg.EventID, defaultEventID)
+	}
+}
+
+func TestEventID_FallsBackWhenEventListEmptyAndReconcileOn(t *testing.T) {
+	// An empty array is what a fully-wiped reader's EventList looks like.
+	directBrokerEnv(t)
+	writeEventList(t, `[]`)
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.EventID != defaultEventID {
+		t.Errorf("EventID = %q, want golden fallback %q", cfg.EventID, defaultEventID)
+	}
+}
+
+func TestEventID_NoneEnabledReconcileOffStillErrors(t *testing.T) {
+	// Without reconcile nothing creates the golden event, so the missing-event
+	// error still stands — don't paper over it.
+	directBrokerEnv(t)
+	t.Setenv("READERD_RECONCILE", "false")
+	writeEventList(t, `[{"eventId":"MQTT","enable":false}]`)
+	if _, err := LoadConfig(); err == nil {
+		t.Error("no enabled event with reconcile off must still error")
+	}
+}
+
+func TestEventID_MalformedEventListStillErrors(t *testing.T) {
+	// A corrupt EventList file is a real fault — never silently fall back to golden.
+	directBrokerEnv(t)
+	writeEventList(t, `not json`)
+	if _, err := LoadConfig(); err == nil {
+		t.Error("malformed EventList must error even with reconcile on")
+	}
 }
 
 func TestReconcileDefaultsOn(t *testing.T) {

@@ -2,6 +2,7 @@ package readerd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -22,8 +23,17 @@ const (
 	// golden chain. Existing readers provisioned under the old "TrakRF MQTT" name
 	// must set READERD_CLOUDSERVER_ID until migrated.
 	defaultCloudServerID = "TrakRF mqtt-rpc MQTT Server"
-	defaultAntennaCount  = 4
+	// defaultEventID matches cs463.NameEvent — the golden event the startup
+	// reconcile creates and arms. Used as the EventID fallback when a from-scratch
+	// reader's EventList has no enabled event yet (see LoadConfig).
+	defaultEventID      = "TrakRF mqtt-rpc Event"
+	defaultAntennaCount = 4
 )
+
+// errNoEnabledEvent is returned by parseEnabledEvent when the EventList parses but
+// contains no enabled event. LoadConfig treats this as recoverable (falls back to
+// the golden event when reconcile is on) — distinct from a malformed-file error.
+var errNoEnabledEvent = errors.New("readerd: no enabled event in EventList")
 
 // BrokerConfig describes how the daemon connects to the MQTT broker for the RPC
 // control channel.
@@ -121,7 +131,7 @@ func parseEnabledEvent(data []byte) (string, error) {
 			return e.EventID, nil
 		}
 	}
-	return "", fmt.Errorf("readerd: no enabled event in EventList")
+	return "", errNoEnabledEvent
 }
 
 // LoadConfig builds the daemon Config from environment variables, falling back to
@@ -154,7 +164,23 @@ func LoadConfig() (Config, error) {
 		cfg.Broker = bc
 	}
 
-	// EventID: explicit env wins; else the enabled event in the EventList.
+	// Reconcile golden config on startup (default on). Determined before EventID
+	// because the EventID fallback depends on whether reconcile will run.
+	cfg.Reconcile = true
+	if v := os.Getenv("READERD_RECONCILE"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("readerd: invalid READERD_RECONCILE %q: %w", v, err)
+		}
+		cfg.Reconcile = b
+	}
+
+	// EventID: explicit env wins; else the enabled event in the EventList. On a
+	// from-scratch reader (all events deleted) the EventList has no enabled event
+	// yet, but the startup reconcile is about to create+arm the golden event — so
+	// fall back to its name rather than fataling before reconcile can run. Without
+	// reconcile nothing creates the event, so the missing-event error still stands;
+	// a malformed EventList is always fatal (never silently papered over).
 	if ev := os.Getenv("READERD_EVENT_ID"); ev != "" {
 		cfg.EventID = ev
 	} else {
@@ -164,7 +190,10 @@ func LoadConfig() (Config, error) {
 			return Config{}, fmt.Errorf("readerd: read EventList file: %w", err)
 		}
 		ev, err := parseEnabledEvent(data)
-		if err != nil {
+		switch {
+		case errors.Is(err, errNoEnabledEvent) && cfg.Reconcile:
+			ev = defaultEventID
+		case err != nil:
 			return Config{}, err
 		}
 		cfg.EventID = ev
@@ -178,16 +207,6 @@ func LoadConfig() (Config, error) {
 			return Config{}, fmt.Errorf("readerd: invalid READERD_ANTENNA_COUNT %q: %w", v, err)
 		}
 		cfg.AntennaCount = n
-	}
-
-	// Reconcile golden config on startup (default on).
-	cfg.Reconcile = true
-	if v := os.Getenv("READERD_RECONCILE"); v != "" {
-		b, err := strconv.ParseBool(v)
-		if err != nil {
-			return Config{}, fmt.Errorf("readerd: invalid READERD_RECONCILE %q: %w", v, err)
-		}
-		cfg.Reconcile = b
 	}
 
 	return cfg, nil
