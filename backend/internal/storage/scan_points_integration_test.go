@@ -157,3 +157,46 @@ func TestScanPoint_ClearLocation(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, updated.LocationID, "ClearLocationID detaches the zone")
 }
+
+func TestSetScanPointActiveByPorts(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	dev, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
+		Name: "Reader", Type: scandevice.DeviceTypeCS463,
+	})
+	require.NoError(t, err)
+
+	// auto-creates antenna port 1; delete it so we can control the full set
+	pts, err := db.Store.ListScanPointsByDevice(ctx, orgID, dev.ID)
+	require.NoError(t, err)
+	for _, p := range pts {
+		_, err = db.Store.DeleteScanPoint(ctx, orgID, p.ID)
+		require.NoError(t, err)
+	}
+
+	mk := func(port int, active bool) {
+		_, err := db.Store.CreateScanPoint(ctx, orgID, dev.ID, scanpoint.CreateScanPointRequest{
+			Name: "Antenna", AntennaPort: &port, IsActive: &active,
+		})
+		require.NoError(t, err, "create sp %d", port)
+	}
+	mk(1, false)
+	mk(2, true)
+	mk(3, true)
+
+	require.NoError(t, db.Store.SetScanPointActiveByPorts(ctx, orgID, dev.ID, []int{1, 2}))
+
+	result, err := db.Store.ListScanPointsByDevice(ctx, orgID, dev.ID)
+	require.NoError(t, err)
+	got := map[int]bool{}
+	for _, p := range result {
+		if p.AntennaPort != nil {
+			got[*p.AntennaPort] = p.IsActive
+		}
+	}
+	if !got[1] || !got[2] || got[3] {
+		t.Errorf("is_active mirror = %v, want {1:true,2:true,3:false}", got)
+	}
+}

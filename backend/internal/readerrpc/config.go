@@ -1,20 +1,52 @@
 package readerrpc
 
-// AntennaPower is the transmit power for a single antenna port.
-type AntennaPower struct {
-	Antenna int     `json:"antenna"`
-	Power   float64 `json:"power"`
+// AntennaConfig is the enablement + transmit power for a single antenna port. It
+// is the per-antenna unit of both GetOperProfile (current state) and
+// SetOperProfile (desired state).
+type AntennaConfig struct {
+	Antenna  int     `json:"antenna"`
+	Enabled  bool    `json:"enabled"`
+	PowerDBm float64 `json:"power_dbm"`
 }
 
-// ReaderConfig is the readable/settable reader configuration. Pointer fields are
-// optional: on a SetConfig request a nil field means "leave unchanged", enabling
-// partial updates.
+// ReaderConfig is the readable/settable reader configuration.
+//
+// Antennas carries per-antenna enablement + power. On a SetOperProfile request a
+// nil/empty Antennas means "leave unchanged"; entries present are merged over the
+// reader's current profile.
+//
+// DwellMs/DedupWindowMs/AntennaDifferentiation are editable read-timing knobs
+// (TRA-1003): GetOperProfile populates them and SetOperProfile writes them (dwell
+// via the servlet RMW applied to all ports; dedup/antDiff via modEvent). A nil
+// field on a SetOperProfile request means "leave unchanged". RSSIGateDBm is
+// READ-ONLY (populated on GET, ignored on SET; TRA-1002 owns it).
+// Region/Session/Q/Target are reserved.
 type ReaderConfig struct {
-	TxPowerDBm []AntennaPower `json:"tx_power_dbm,omitempty"`
-	Region     *string        `json:"region,omitempty"`
-	Session    *int           `json:"session,omitempty"`
-	Q          *int           `json:"q,omitempty"`
-	Target     *int           `json:"target,omitempty"`
+	Antennas []AntennaConfig `json:"antennas,omitempty"`
+
+	DwellMs                *int  `json:"dwell_ms,omitempty"`
+	DedupWindowMs          *int  `json:"dedup_window_ms,omitempty"`
+	RSSIGateDBm            *int  `json:"rssi_gate_dbm,omitempty"`
+	AntennaDifferentiation *bool `json:"antenna_differentiation,omitempty"`
+
+	Region  *string `json:"region,omitempty"`
+	Session *int    `json:"session,omitempty"`
+	Q       *int    `json:"q,omitempty"`
+	Target  *int    `json:"target,omitempty"`
+}
+
+// OperProfileParams are the params for Reader.GetOperProfile. Force requests a
+// force-logout-then-proceed when the reader's single root session is held by
+// another client (see BusyError).
+type OperProfileParams struct {
+	Force bool `json:"force,omitempty"`
+}
+
+// SetOperProfileParams are the params for Reader.SetOperProfile: the desired
+// config (flattened) plus the force flag.
+type SetOperProfileParams struct {
+	ReaderConfig
+	Force bool `json:"force,omitempty"`
 }
 
 // TxPowerCap describes the transmit-power capabilities of a reader.
@@ -24,8 +56,7 @@ type TxPowerCap struct {
 	PerAntenna bool    `json:"per_antenna"`
 }
 
-// Capabilities is the response to Reader.GetCapabilities, describing what a
-// reader supports.
+// Capabilities is the response to Reader.GetCapabilities.
 type Capabilities struct {
 	ContractVersion int        `json:"contract_version"`
 	ReaderModel     string     `json:"reader_model"`
@@ -35,16 +66,14 @@ type Capabilities struct {
 	Unsupported     []string   `json:"unsupported"`
 }
 
-// Status is the response to Reader.GetStatus and the payload published on the
-// status topic.
+// Status is the response to Reader.GetStatus and the status-topic payload.
 type Status struct {
 	Online        bool   `json:"online"`
 	Reading       bool   `json:"reading"`
 	ActiveProfile string `json:"active_profile,omitempty"`
 }
 
-// SetConfigResult is the response to Reader.SetConfig. Applied reports whether
-// the change took effect immediately or is pending a reload.
+// SetConfigResult is the response to Reader.SetOperProfile.
 type SetConfigResult struct {
 	Applied     string `json:"applied"`
 	EffectiveAt string `json:"effective_at,omitempty"`

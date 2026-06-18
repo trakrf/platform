@@ -11,8 +11,7 @@ import (
 
 // glS10Payload is the GL-S10 BLE gateway message shape (verified against live
 // preview traffic 2026-06-05). The gateway reports every BLE advertisement it
-// heard in a scan window; each dev_list entry becomes one read. EPC filtering
-// (e.g. iBeacon/Eddystone only) is intentionally deferred — see TRA-925.
+// heard in a scan window; each dev_list entry becomes one read.
 type glS10Payload struct {
 	DevBLEMac string       `json:"dev_ble_mac"`
 	DevList   []glS10Entry `json:"dev_list"`
@@ -22,6 +21,7 @@ type glS10Entry struct {
 	MAC  string `json:"mac"`
 	RSSI int    `json:"rssi"` // already dBm; absent -> 0
 	TS   int64  `json:"ts"`   // milliseconds since epoch (CS463 uses microseconds)
+	AD   string `json:"ad"`   // raw advertisement hex; decoded for the Live Reads filter (TRA-926)
 }
 
 // parseGLS10 decodes a GL-S10 BLE gateway message into one read per detected
@@ -47,6 +47,9 @@ func parseGLS10(payload []byte) ([]scanread.Read, error) {
 			AntennaPort:     1,
 			RSSI:            e.RSSI,
 			ReaderTimestamp: time.UnixMilli(e.TS).UTC(),
+			// Classify the advertisement for the Live-Reads noise filter (TRA-926).
+			// Never affects membership/asset_scans, which ignore BLE.
+			BLE: decodeBLEAdvert(e.AD),
 		})
 	}
 	return reads, nil

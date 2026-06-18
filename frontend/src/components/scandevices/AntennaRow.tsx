@@ -1,7 +1,7 @@
 // AntennaRow — one antenna's row in the consolidated reader settings panel
-// (TRA-995). Presentational: enable toggle (→ scan_point is_active), antenna
-// number, click-to-edit location (→ scan_point location_id), and a power slider
-// (→ reader-config tx_power_dbm). The orchestrator owns all persistence.
+// (TRA-1007). Presentational: enable toggle (→ reader-config antennas[].enabled),
+// antenna number, click-to-edit location (→ scan_point location_id), and a power
+// slider (→ reader-config antennas[].power_dbm). The orchestrator owns all persistence.
 import { InlineEditCell } from '@/components/shared/InlineEditCell';
 
 export interface AntennaRowProps {

@@ -14,13 +14,15 @@ import (
 // its HTML response on a successful "Modify" submit.
 const successMarker = "Successful!"
 
-// defaultPowerDBm / defaultDwellMs are used when a port's value is absent from
-// the caller-supplied maps. The adapter is expected to pass a full positional
-// power set (one per port); these are a safety net only.
-const (
-	defaultPowerDBm = 30.0
-	defaultDwellMs  = "2000"
-)
+// defaultPowerDBm is used when a port's power is absent from the caller-supplied
+// maps. The adapter is expected to pass a full positional power set (one per port);
+// this is a safety net only.
+//
+// Dwell deliberately has NO 2000 ms fallback: it is a golden param coupled to the
+// dedup window (TRA-994), and a hardcoded 2000 silently decoupled it (4x redundant
+// reads/visit) whenever the reader omitted dwellTime<port>. Missing dwell falls
+// back to GoldenDwellMs (golden.go), never 2000.
+const defaultPowerDBm = 30.0
 
 // SetProfilePower writes an operation profile via the reader's web-UI servlet
 // POST /OperationProfileDetail. The /API setOperProfile cannot set antenna
@@ -91,7 +93,8 @@ func (c *Client) SetProfilePower(ctx context.Context, profileID string, antennaC
 		// transmitpower[]=30.0), avoiding any servlet-side numeric-format quirk.
 		form.Add("transmitpower[]", strconv.FormatFloat(pw, 'f', 1, 64))
 
-		dwell := defaultDwellMs
+		// Source dwell: carried-through current value, else golden — never 2000.
+		dwell := strconv.Itoa(GoldenDwellMs)
 		if v, dok := profileFields["dwellTime"+strconv.Itoa(port)]; dok && v != "" {
 			dwell = v
 		}

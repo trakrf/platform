@@ -3,8 +3,9 @@ package cs463
 import (
 	"context"
 	"errors"
+	"net/url"
 	"reflect"
-	"strings"
+	"strconv"
 	"testing"
 
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
@@ -36,6 +37,11 @@ type fakeOps struct {
 	setFields    map[string]string
 	enableSeq    []bool
 
+	// new fields for GetOperProfile / SetOperProfile
+	events    map[string]EntityRow
+	logics    map[string]EntityRow
+	modEvents []url.Values // recorded ModEvent calls
+
 	// callOrder records method names in the order they were invoked, used to
 	// assert LoginServlet runs before SetProfilePower.
 	callOrder []string
@@ -64,6 +70,7 @@ func (f *fakeOps) Logout(ctx context.Context, session string) error {
 
 func (f *fakeOps) ForceLogout(ctx context.Context) error {
 	f.forced = true
+	f.holderIP = "" // a forced logout frees the held session
 	return nil
 }
 
@@ -100,6 +107,11 @@ func (f *fakeOps) SetProfilePower(ctx context.Context, profileID string, antenna
 	return f.setErr
 }
 
+func (f *fakeOps) CreateProfile(ctx context.Context, session, profileID string, txPowerDBm float64) error {
+	f.callOrder = append(f.callOrder, "CreateProfile")
+	return nil
+}
+
 func (f *fakeOps) EnableEvent(ctx context.Context, session, eventID string, enable bool) error {
 	if enable {
 		f.callOrder = append(f.callOrder, "EnableEvent(true)")
@@ -108,6 +120,20 @@ func (f *fakeOps) EnableEvent(ctx context.Context, session, eventID string, enab
 	}
 	f.enableSeq = append(f.enableSeq, enable)
 	return f.enableEr
+}
+
+func (f *fakeOps) ListEvent(ctx context.Context, session string) (map[string]EntityRow, error) {
+	return f.events, nil
+}
+
+func (f *fakeOps) ListTriggeringLogic(ctx context.Context, session string) (map[string]EntityRow, error) {
+	return f.logics, nil
+}
+
+func (f *fakeOps) ModEvent(ctx context.Context, session string, p url.Values) error {
+	f.callOrder = append(f.callOrder, "ModEvent")
+	f.modEvents = append(f.modEvents, p)
+	return nil
 }
 
 func profile(id, antennaPort string, powers map[int]float64) Profile {
@@ -139,8 +165,8 @@ func TestGetCapabilities(t *testing.T) {
 	}
 	wantSupports := []string{
 		readerrpc.MethodGetCapabilities,
-		readerrpc.MethodGetConfig,
-		readerrpc.MethodSetConfig,
+		readerrpc.MethodGetOperProfile,
+		readerrpc.MethodSetOperProfile,
 		readerrpc.MethodGetStatus,
 	}
 	if !reflect.DeepEqual(caps.Supports, wantSupports) {
@@ -157,107 +183,246 @@ func TestGetCapabilities(t *testing.T) {
 	}
 }
 
-func TestGetConfig_MapsPowersSorted(t *testing.T) {
-	f := &fakeOps{profiles: []Profile{
-		profile("TrakRF", "1,2", map[int]float64{3: 0.0, 1: 30.0, 2: 22.5, 4: 0.0}),
-	}}
+func TestGetOperProfile_MapsAntennasAndKnobs(t *testing.T) {
+	prof := Profile{
+		ID:     "TrakRF",
+		Attrs:  map[string]string{"profile_id": "TrakRF", "antenna_port": "1,2", "active": "true", "dwellTime1": "500"},
+		Powers: map[int]float64{1: 30.0, 2: 22.5, 3: 0.0, 4: 0.0},
+	}
+	f := &fakeOps{
+		profiles: []Profile{prof},
+		events:   map[string]EntityRow{NameEvent: {"duplicateEliminationWindow": "500", "antennaDifferentiation": "true"}},
+		logics:   map[string]EntityRow{NameTrigger: {"logic": "-80"}},
+	}
 	a := newAdapter(f)
-	cfg, err := a.GetConfig(context.Background())
+	cfg, err := a.GetOperProfile(context.Background(), false)
 	if err != nil {
-		t.Fatalf("GetConfig: %v", err)
+		t.Fatalf("GetOperProfile: %v", err)
 	}
-	want := []readerrpc.AntennaPower{
-		{Antenna: 1, Power: 30.0},
-		{Antenna: 2, Power: 22.5},
-		{Antenna: 3, Power: 0.0},
-		{Antenna: 4, Power: 0.0},
+	want := []readerrpc.AntennaConfig{
+		{Antenna: 1, Enabled: true, PowerDBm: 30.0},
+		{Antenna: 2, Enabled: true, PowerDBm: 22.5},
+		{Antenna: 3, Enabled: false, PowerDBm: 0.0},
+		{Antenna: 4, Enabled: false, PowerDBm: 0.0},
 	}
-	if !reflect.DeepEqual(cfg.TxPowerDBm, want) {
-		t.Errorf("tx power = %+v, want %+v", cfg.TxPowerDBm, want)
+	if !reflect.DeepEqual(cfg.Antennas, want) {
+		t.Errorf("antennas = %+v, want %+v", cfg.Antennas, want)
+	}
+	if cfg.DwellMs == nil || *cfg.DwellMs != 500 {
+		t.Errorf("dwell = %v, want 500", cfg.DwellMs)
+	}
+	if cfg.DedupWindowMs == nil || *cfg.DedupWindowMs != 500 {
+		t.Errorf("dedup = %v, want 500", cfg.DedupWindowMs)
+	}
+	if cfg.RSSIGateDBm == nil || *cfg.RSSIGateDBm != -80 {
+		t.Errorf("rssi gate = %v, want -80", cfg.RSSIGateDBm)
+	}
+	if cfg.AntennaDifferentiation == nil || !*cfg.AntennaDifferentiation {
+		t.Errorf("antenna differentiation = %v, want true", cfg.AntennaDifferentiation)
 	}
 	if !f.loggedOut {
 		t.Error("expected logout")
 	}
 }
 
-func TestSetConfig_HappyPath(t *testing.T) {
-	// active profile: ports 1,2 enabled, powers 1=30,2=22.5,3=0,4=0
-	p := profile("TrakRF", "1,2", map[int]float64{1: 30.0, 2: 22.5, 3: 0.0, 4: 0.0})
-	f := &fakeOps{profiles: []Profile{p, p}} // 2nd read unchanged -> verify passes
+func TestGetOperProfile_BusyWithoutForce(t *testing.T) {
+	f := &fakeOps{holderIP: "192.168.50.203", profiles: []Profile{profile("TrakRF", "1,2", nil)}}
+	a := newAdapter(f)
+	_, err := a.GetOperProfile(context.Background(), false)
+	var be *readerrpc.BusyError
+	if !errors.As(err, &be) {
+		t.Fatalf("want *readerrpc.BusyError, got %v", err)
+	}
+	if be.HeldBy != "192.168.50.203" {
+		t.Errorf("held_by = %q", be.HeldBy)
+	}
+	if f.forced {
+		t.Error("must NOT force without force flag")
+	}
+}
+
+func TestGetOperProfile_ForceClearsBusy(t *testing.T) {
+	f := &fakeOps{holderIP: "192.168.50.203", profiles: []Profile{profile("TrakRF", "1,2", map[int]float64{1: 30})}}
+	a := newAdapter(f)
+	_, err := a.GetOperProfile(context.Background(), true)
+	if err != nil {
+		t.Fatalf("GetOperProfile(force): %v", err)
+	}
+	if !f.forced {
+		t.Error("expected ForceLogout on force")
+	}
+}
+
+func TestSetOperProfile_PushesEnablement(t *testing.T) {
+	// active: ports 1,2 enabled; request enables 1,2,3 and sets powers.
+	before := profile("TrakRF", "1,2", map[int]float64{1: 30.0, 2: 22.5, 3: 0.0, 4: 0.0})
+	after := profile("TrakRF", "1,2,3", map[int]float64{1: 25.0, 2: 22.5, 3: 28.0, 4: 0.0})
+	f := &fakeOps{profiles: []Profile{before, after}}
 	a := newAdapter(f)
 
-	res, err := a.SetConfig(context.Background(), readerrpc.ReaderConfig{
-		TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 25.0}},
-	})
+	res, err := a.SetOperProfile(context.Background(), readerrpc.ReaderConfig{
+		Antennas: []readerrpc.AntennaConfig{
+			{Antenna: 1, Enabled: true, PowerDBm: 25.0},
+			{Antenna: 2, Enabled: true, PowerDBm: 22.5},
+			{Antenna: 3, Enabled: true, PowerDBm: 28.0},
+		},
+	}, false)
 	if err != nil {
-		t.Fatalf("SetConfig: %v", err)
+		t.Fatalf("SetOperProfile: %v", err)
 	}
 	if res.Applied != readerrpc.AppliedPendingReload {
-		t.Errorf("applied = %q, want %q", res.Applied, readerrpc.AppliedPendingReload)
+		t.Errorf("applied = %q", res.Applied)
 	}
-	if res.EffectiveAt != "next_inventory_cycle" {
-		t.Errorf("effective_at = %q", res.EffectiveAt)
+	if !reflect.DeepEqual(f.setPorts, []int{1, 2, 3}) {
+		t.Errorf("enabled ports = %v, want [1 2 3]", f.setPorts)
 	}
-	if f.setProfileID != "TrakRF" {
-		t.Errorf("set profile id = %q", f.setProfileID)
-	}
-	if !reflect.DeepEqual(f.setPorts, []int{1, 2}) {
-		t.Errorf("enabled ports = %v, want [1 2]", f.setPorts)
-	}
-	// merged: port 1 overridden to 25, rest from current
-	wantPowers := map[int]float64{1: 25.0, 2: 22.5, 3: 0.0, 4: 0.0}
+	wantPowers := map[int]float64{1: 25.0, 2: 22.5, 3: 28.0, 4: 0.0}
 	if !reflect.DeepEqual(f.setPowers, wantPowers) {
 		t.Errorf("powers = %v, want %v", f.setPowers, wantPowers)
 	}
-	// re-arm: disable THEN enable
 	if !reflect.DeepEqual(f.enableSeq, []bool{false, true}) {
-		t.Errorf("enable sequence = %v, want [false true]", f.enableSeq)
-	}
-	if !f.loggedOut {
-		t.Error("expected logout")
+		t.Errorf("re-arm = %v, want [false true]", f.enableSeq)
 	}
 }
 
-func TestSetConfig_LoginServletBeforeWrite(t *testing.T) {
+func TestSetOperProfile_DisableAntenna(t *testing.T) {
+	before := profile("TrakRF", "1,2", map[int]float64{1: 30.0, 2: 22.5, 3: 0.0, 4: 0.0})
+	after := profile("TrakRF", "1", map[int]float64{1: 30.0})
+	f := &fakeOps{profiles: []Profile{before, after}}
+	a := newAdapter(f)
+
+	if _, err := a.SetOperProfile(context.Background(), readerrpc.ReaderConfig{
+		Antennas: []readerrpc.AntennaConfig{
+			{Antenna: 1, Enabled: true, PowerDBm: 30.0},
+			{Antenna: 2, Enabled: false, PowerDBm: 22.5},
+		},
+	}, false); err != nil {
+		t.Fatalf("SetOperProfile: %v", err)
+	}
+	if !reflect.DeepEqual(f.setPorts, []int{1}) {
+		t.Errorf("enabled ports = %v, want [1]", f.setPorts)
+	}
+}
+
+func TestSetOperProfile_VerifyMismatchFails(t *testing.T) {
+	before := profile("TrakRF", "1,2", map[int]float64{1: 30.0, 2: 22.5})
+	after := profile("TrakRF", "", map[int]float64{1: 25.0}) // servlet wiped antenna_port
+	f := &fakeOps{profiles: []Profile{before, after}}
+	a := newAdapter(f)
+	_, err := a.SetOperProfile(context.Background(), readerrpc.ReaderConfig{
+		Antennas: []readerrpc.AntennaConfig{{Antenna: 1, Enabled: true, PowerDBm: 25.0}, {Antenna: 2, Enabled: true, PowerDBm: 22.5}},
+	}, false)
+	if err == nil {
+		t.Fatal("expected verify-mismatch error")
+	}
+	if f.setProfileID == "" {
+		t.Error("guard fires AFTER the write")
+	}
+}
+
+func TestSetOperProfile_OutOfRange(t *testing.T) {
+	p := profile("TrakRF", "1,2", map[int]float64{1: 30.0})
+	f := &fakeOps{profiles: []Profile{p, p}}
+	a := newAdapter(f)
+	_, err := a.SetOperProfile(context.Background(), readerrpc.ReaderConfig{
+		Antennas: []readerrpc.AntennaConfig{{Antenna: 1, Enabled: true, PowerDBm: 99.0}},
+	}, false)
+	if err == nil {
+		t.Fatal("expected out-of-range error")
+	}
+	if f.getCalls != 0 || f.setProfileID != "" {
+		t.Error("must validate before any reader call/write")
+	}
+}
+
+func TestSetOperProfile_Busy(t *testing.T) {
+	f := &fakeOps{holderIP: "192.168.50.203", profiles: []Profile{profile("TrakRF", "1,2", nil)}}
+	a := newAdapter(f)
+	_, err := a.SetOperProfile(context.Background(), readerrpc.ReaderConfig{
+		Antennas: []readerrpc.AntennaConfig{{Antenna: 1, Enabled: true, PowerDBm: 25.0}},
+	}, false)
+	var be *readerrpc.BusyError
+	if !errors.As(err, &be) {
+		t.Fatalf("want *readerrpc.BusyError, got %v", err)
+	}
+	if f.setProfileID != "" {
+		t.Error("must not write while busy")
+	}
+}
+
+func TestSetOperProfile_DwellAppliedToAllPorts(t *testing.T) {
+	// dwell change only (no antennas, no event): servlet RMW preserves enablement,
+	// sets dwellTime{1..N} to the requested value via profileFields.
 	p := profile("TrakRF", "1,2", map[int]float64{1: 30.0, 2: 22.5, 3: 0.0, 4: 0.0})
 	f := &fakeOps{profiles: []Profile{p, p}}
 	a := newAdapter(f)
-
-	if _, err := a.SetConfig(context.Background(), readerrpc.ReaderConfig{
-		TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 25.0}},
-	}); err != nil {
-		t.Fatalf("SetConfig: %v", err)
+	dwell := 400
+	if _, err := a.SetOperProfile(context.Background(), readerrpc.ReaderConfig{DwellMs: &dwell}, false); err != nil {
+		t.Fatalf("SetOperProfile(dwell): %v", err)
 	}
-
-	// LoginServlet must be called, and must precede the servlet write.
-	li, si := -1, -1
-	for i, m := range f.callOrder {
-		if m == "LoginServlet" && li == -1 {
-			li = i
-		}
-		if m == "SetProfilePower" && si == -1 {
-			si = i
+	for port := 1; port <= 4; port++ {
+		if got := f.setFields["dwellTime"+strconv.Itoa(port)]; got != "400" {
+			t.Errorf("dwellTime%d = %q, want 400", port, got)
 		}
 	}
-	if li == -1 {
-		t.Fatalf("LoginServlet was never called (order=%v)", f.callOrder)
+	// enablement unchanged (RMW preserves current antenna_port set).
+	if !reflect.DeepEqual(f.setPorts, []int{1, 2}) {
+		t.Errorf("enabled ports = %v, want [1 2]", f.setPorts)
 	}
-	if si == -1 || li >= si {
-		t.Fatalf("LoginServlet must run before SetProfilePower (order=%v)", f.callOrder)
+	// no event write for a dwell-only change.
+	if len(f.modEvents) != 0 {
+		t.Errorf("unexpected ModEvent calls: %v", f.modEvents)
 	}
 }
 
-func TestSetConfig_PhaseSequencingReleasesSessions(t *testing.T) {
+func TestSetOperProfile_EventKnobsOnly(t *testing.T) {
+	// dedup/antDiff change only: no servlet write, modEvent carries the overrides,
+	// event re-armed.
+	f := &fakeOps{} // no profile read needed for an event-only change
+	a := newAdapter(f)
+	dedup := 750
+	diff := false
+	if _, err := a.SetOperProfile(context.Background(), readerrpc.ReaderConfig{
+		DedupWindowMs: &dedup, AntennaDifferentiation: &diff,
+	}, false); err != nil {
+		t.Fatalf("SetOperProfile(event): %v", err)
+	}
+	if f.setProfileID != "" {
+		t.Error("must NOT do a servlet profile write for an event-only change")
+	}
+	if len(f.modEvents) != 1 {
+		t.Fatalf("want 1 ModEvent, got %d", len(f.modEvents))
+	}
+	if got := f.modEvents[0].Get("duplicateEliminationWindow"); got != "750" {
+		t.Errorf("dedup = %q, want 750", got)
+	}
+	if got := f.modEvents[0].Get("antennaDifferentiation"); got != "false" {
+		t.Errorf("antDiff = %q, want false", got)
+	}
+	if !reflect.DeepEqual(f.enableSeq, []bool{false, true}) {
+		t.Errorf("re-arm = %v, want [false true]", f.enableSeq)
+	}
+}
+
+func TestSetOperProfile_NothingToSet(t *testing.T) {
+	f := &fakeOps{}
+	a := newAdapter(f)
+	if _, err := a.SetOperProfile(context.Background(), readerrpc.ReaderConfig{}, false); err == nil {
+		t.Fatal("expected error when no settable fields provided")
+	}
+}
+
+func TestSetOperProfile_PhaseSequencingReleasesSessions(t *testing.T) {
 	// The CS463 single-session lock requires: /API session released BEFORE the
 	// servlet form login, and the web session released BEFORE the 2nd /API login.
-	p := profile("TrakRF", "1,2", map[int]float64{1: 30.0, 2: 22.5, 3: 0.0, 4: 0.0})
+	p := profile("TrakRF", "1", map[int]float64{1: 30.0, 2: 22.5, 3: 0.0, 4: 0.0})
 	f := &fakeOps{profiles: []Profile{p, p}}
 	a := newAdapter(f)
 
-	if _, err := a.SetConfig(context.Background(), readerrpc.ReaderConfig{
-		TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 25.0}},
-	}); err != nil {
-		t.Fatalf("SetConfig: %v", err)
+	if _, err := a.SetOperProfile(context.Background(), readerrpc.ReaderConfig{
+		Antennas: []readerrpc.AntennaConfig{{Antenna: 1, Enabled: true, PowerDBm: 25.0}},
+	}, false); err != nil {
+		t.Fatalf("SetOperProfile: %v", err)
 	}
 
 	want := []string{
@@ -278,16 +443,45 @@ func TestSetConfig_PhaseSequencingReleasesSessions(t *testing.T) {
 	}
 }
 
-func TestSetConfig_LoginServletErrorAbortsWrite(t *testing.T) {
-	p := profile("TrakRF", "1,2", map[int]float64{1: 30.0, 2: 22.5, 3: 0.0, 4: 0.0})
+func TestSetOperProfile_LoginServletBeforeWrite(t *testing.T) {
+	p := profile("TrakRF", "1", map[int]float64{1: 30.0, 2: 22.5, 3: 0.0, 4: 0.0})
+	f := &fakeOps{profiles: []Profile{p, p}}
+	a := newAdapter(f)
+
+	if _, err := a.SetOperProfile(context.Background(), readerrpc.ReaderConfig{
+		Antennas: []readerrpc.AntennaConfig{{Antenna: 1, Enabled: true, PowerDBm: 25.0}},
+	}, false); err != nil {
+		t.Fatalf("SetOperProfile: %v", err)
+	}
+
+	// LoginServlet must be called, and must precede the servlet write.
+	li, si := -1, -1
+	for i, m := range f.callOrder {
+		if m == "LoginServlet" && li == -1 {
+			li = i
+		}
+		if m == "SetProfilePower" && si == -1 {
+			si = i
+		}
+	}
+	if li == -1 {
+		t.Fatalf("LoginServlet was never called (order=%v)", f.callOrder)
+	}
+	if si == -1 || li >= si {
+		t.Fatalf("LoginServlet must run before SetProfilePower (order=%v)", f.callOrder)
+	}
+}
+
+func TestSetOperProfile_LoginServletErrorAbortsWrite(t *testing.T) {
+	p := profile("TrakRF", "1", map[int]float64{1: 30.0, 2: 22.5, 3: 0.0, 4: 0.0})
 	f := &fakeOps{profiles: []Profile{p, p}, loginServletEr: errors.New("login html")}
 	a := newAdapter(f)
 
-	_, err := a.SetConfig(context.Background(), readerrpc.ReaderConfig{
-		TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 25.0}},
-	})
+	_, err := a.SetOperProfile(context.Background(), readerrpc.ReaderConfig{
+		Antennas: []readerrpc.AntennaConfig{{Antenna: 1, Enabled: true, PowerDBm: 25.0}},
+	}, false)
 	if err == nil {
-		t.Fatal("expected LoginServlet error to abort SetConfig")
+		t.Fatal("expected LoginServlet error to abort SetOperProfile")
 	}
 	if f.setProfileID != "" {
 		t.Error("must NOT write after LoginServlet failure")
@@ -299,63 +493,13 @@ func TestSetConfig_LoginServletErrorAbortsWrite(t *testing.T) {
 	}
 }
 
-func TestSetConfig_OutOfRange(t *testing.T) {
-	p := profile("TrakRF", "1,2", map[int]float64{1: 30.0})
-	f := &fakeOps{profiles: []Profile{p, p}}
-	a := newAdapter(f)
-
-	_, err := a.SetConfig(context.Background(), readerrpc.ReaderConfig{
-		TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 99.0}},
-	})
-	if err == nil {
-		t.Fatal("expected out-of-range error")
-	}
-	if f.getCalls != 0 || f.setProfileID != "" {
-		t.Error("must validate before any reader call/write")
-	}
-}
-
-func TestSetConfig_Busy(t *testing.T) {
-	f := &fakeOps{holderIP: "192.168.50.203", profiles: []Profile{profile("TrakRF", "1,2", nil)}}
-	a := newAdapter(f)
-	_, err := a.SetConfig(context.Background(), readerrpc.ReaderConfig{
-		TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 25.0}},
-	})
-	if err == nil {
-		t.Fatal("expected busy error")
-	}
-	if !strings.Contains(strings.ToLower(err.Error()), "use") {
-		t.Errorf("busy error should mention reader in use: %v", err)
-	}
-	if f.setProfileID != "" {
-		t.Error("must not write while busy")
-	}
-}
-
-func TestSetConfig_AntennaWipeGuard(t *testing.T) {
-	before := profile("TrakRF", "1,2", map[int]float64{1: 30.0, 2: 22.5, 3: 0.0, 4: 0.0})
-	after := profile("TrakRF", "", map[int]float64{1: 25.0}) // wiped antenna_port
-	f := &fakeOps{profiles: []Profile{before, after}}
-	a := newAdapter(f)
-
-	_, err := a.SetConfig(context.Background(), readerrpc.ReaderConfig{
-		TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 25.0}},
-	})
-	if err == nil {
-		t.Fatal("expected antenna-wipe guard error")
-	}
-	if f.setProfileID == "" {
-		t.Error("guard fires AFTER the write")
-	}
-}
-
-func TestSetConfig_PropagatesWriteError(t *testing.T) {
-	p := profile("TrakRF", "1,2", map[int]float64{1: 30.0})
+func TestSetOperProfile_PropagatesWriteError(t *testing.T) {
+	p := profile("TrakRF", "1", map[int]float64{1: 30.0})
 	f := &fakeOps{profiles: []Profile{p, p}, setErr: errors.New("servlet boom")}
 	a := newAdapter(f)
-	_, err := a.SetConfig(context.Background(), readerrpc.ReaderConfig{
-		TxPowerDBm: []readerrpc.AntennaPower{{Antenna: 1, Power: 25.0}},
-	})
+	_, err := a.SetOperProfile(context.Background(), readerrpc.ReaderConfig{
+		Antennas: []readerrpc.AntennaConfig{{Antenna: 1, Enabled: true, PowerDBm: 25.0}},
+	}, false)
 	if err == nil {
 		t.Fatal("expected write error to propagate")
 	}

@@ -9,23 +9,24 @@ import (
 )
 
 func TestParseRequestRoundTrip(t *testing.T) {
-	raw := []byte(`{"id":42,"src":"trakrf-cloud/req-7f3a","method":"Reader.SetConfig","params":{"tx_power_dbm":[{"antenna":1,"power":24.5}]}}`)
+	raw := []byte(`{"id":42,"src":"trakrf-cloud/req-7f3a","method":"Reader.SetOperProfile","params":{"antennas":[{"antenna":1,"enabled":true,"power_dbm":24.5}]}}`)
 
 	req, err := ParseRequest(raw)
 	require.NoError(t, err)
 	assert.Equal(t, 42, req.ID)
 	assert.Equal(t, "trakrf-cloud/req-7f3a", req.Src)
-	assert.Equal(t, MethodSetConfig, req.Method)
+	assert.Equal(t, MethodSetOperProfile, req.Method)
 
 	var cfg ReaderConfig
 	require.NoError(t, json.Unmarshal(req.Params, &cfg))
-	require.Len(t, cfg.TxPowerDBm, 1)
-	assert.Equal(t, 1, cfg.TxPowerDBm[0].Antenna)
-	assert.Equal(t, 24.5, cfg.TxPowerDBm[0].Power)
+	require.Len(t, cfg.Antennas, 1)
+	assert.Equal(t, 1, cfg.Antennas[0].Antenna)
+	assert.Equal(t, true, cfg.Antennas[0].Enabled)
+	assert.Equal(t, 24.5, cfg.Antennas[0].PowerDBm)
 }
 
 func TestNewResult(t *testing.T) {
-	req := Request{ID: 42, Src: "trakrf-cloud/req-7f3a", Method: MethodSetConfig}
+	req := Request{ID: 42, Src: "trakrf-cloud/req-7f3a", Method: MethodSetOperProfile}
 
 	resp, err := NewResult(req, SetConfigResult{Applied: AppliedPendingReload})
 	require.NoError(t, err)
@@ -61,4 +62,28 @@ func TestNewError(t *testing.T) {
 func TestTopicHelpers(t *testing.T) {
 	assert.Equal(t, "trakrf.id/cs463-212/rpc", RPCTopic("trakrf.id/cs463-212"))
 	assert.Equal(t, "trakrf.id/cs463-212/status", StatusTopic("trakrf.id/cs463-212"))
+}
+
+func TestNewBusyError(t *testing.T) {
+	req := Request{ID: 5, Src: "trakrf-cloud/req-xyz"}
+	resp := NewBusyError(req, "192.168.50.203")
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, CodeReaderBusy, resp.Error.Code)
+	assert.Equal(t, "reader busy", resp.Error.Message)
+
+	var d ReaderBusyData
+	require.NoError(t, json.Unmarshal(resp.Error.Data, &d))
+	assert.Equal(t, "192.168.50.203", d.HeldBy)
+
+	b, err := resp.Marshal()
+	require.NoError(t, err)
+	assert.Contains(t, string(b), `"held_by":"192.168.50.203"`)
+}
+
+func TestBusyError_Message(t *testing.T) {
+	e := &BusyError{HeldBy: "192.168.50.203"}
+	assert.Contains(t, e.Error(), "192.168.50.203")
+
+	e2 := &BusyError{}
+	assert.Equal(t, "reader busy", e2.Error())
 }

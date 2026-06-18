@@ -13,12 +13,16 @@ import (
 // ignored without error.
 const mk107ScanReport = 3004
 
+// mk107TypeIBeacon is the per-entry `type` discriminator the gateway sets when it
+// pre-decodes an advertisement as an iBeacon (0 = Unknown raw advertisement).
+const mk107TypeIBeacon = 1
+
 // mk107Payload is the MOKO MK107 Pro BLE gateway message envelope (verified
 // against live preview traffic 2026-06-08). On a scan report the gateway lists
 // every BLE advertisement it heard in a window; each data[] entry becomes one
-// read. Unlike the GL-S10 (raw ad hex), the MK107 pre-decodes iBeacons, but
-// every entry is read the same way — by its value.mac. Per-entry filtering
-// (iBeacon/Eddystone only) is intentionally deferred — see TRA-926.
+// read. Unlike the GL-S10 (raw ad hex), the MK107 pre-decodes iBeacons with
+// type/uuid/major/minor fields. Per-entry classification (iBeacon → BLEAdvert;
+// else → BLETypeUnknown) feeds the Live-Reads noise filter (TRA-926).
 type mk107Payload struct {
 	MsgID      int             `json:"msg_id"`
 	DeviceInfo mk107DeviceInfo `json:"device_info"`
@@ -32,12 +36,16 @@ type mk107DeviceInfo struct {
 }
 
 type mk107Entry struct {
+	Type  int        `json:"type"` // 0 = Unknown, 1 = iBeacon (TRA-926)
 	Value mk107Value `json:"value"`
 }
 
 type mk107Value struct {
-	MAC  string `json:"mac"`
-	RSSI int    `json:"rssi"` // already dBm; absent -> 0
+	MAC   string `json:"mac"`
+	RSSI  int    `json:"rssi"`  // already dBm; absent -> 0
+	UUID  string `json:"uuid"`  // iBeacon only (type 1)
+	Major uint16 `json:"major"` // iBeacon only
+	Minor uint16 `json:"minor"` // iBeacon only
 }
 
 // parseMK107 decodes a MK107 scan report into one read per heard advertisement.
@@ -71,10 +79,22 @@ func parseMK107(payload []byte) ([]scanread.Read, error) {
 	// variants.
 	reads := make([]scanread.Read, 0, len(entries))
 	for _, e := range entries {
+		// Classify for the Live-Reads noise filter (TRA-926). The MK107 pre-decodes
+		// iBeacons (type 1) with uuid/major/minor; everything else is unknown.
+		ble := &scanread.BLEAdvert{Type: scanread.BLETypeUnknown}
+		if e.Type == mk107TypeIBeacon {
+			ble = &scanread.BLEAdvert{
+				Type:  scanread.BLETypeIBeacon,
+				UUID:  strings.ToUpper(e.Value.UUID),
+				Major: e.Value.Major,
+				Minor: e.Value.Minor,
+			}
+		}
 		reads = append(reads, scanread.Read{
 			EPC:         strings.ToUpper(e.Value.MAC),
 			AntennaPort: 1,
 			RSSI:        e.Value.RSSI,
+			BLE:         ble,
 		})
 	}
 	return reads, nil

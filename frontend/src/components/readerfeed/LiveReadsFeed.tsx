@@ -50,11 +50,23 @@ export interface LiveReadsFeedProps {
    * and the secondary RSSI columns, and caps the table height.
    */
   compact?: boolean;
+  /**
+   * Optional one-line context, folded into the header beside the timer and
+   * connection status so it costs no extra vertical space (TRA-1010). Used by
+   * the scoped reader panel ("Reads off this reader only …"); omitted on the
+   * global page, which carries its own page-level description.
+   */
+  caption?: string;
 }
 
-export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFeedProps) {
+export function LiveReadsFeed({ filterReaderKey, compact = false, caption }: LiveReadsFeedProps) {
+  // Show all BLE devices (TRA-926): off = the server's default beacon-only feed;
+  // on = ?adverts=all, the full pre-membership diagnostic (phones, sensors, etc.).
+  // It changes the server subscription, so toggling reconnects via the hook.
+  const [showAllAdverts, setShowAllAdverts] = useState(false);
+
   const { tags, status, error, readerCount, readRate, reconnect, clockOffsetMs } =
-    useReaderFeed(filterReaderKey);
+    useReaderFeed(filterReaderKey, showAllAdverts);
 
   // View controls (TRA-937). All client-side over the live presence map.
   const [filterText, setFilterText] = useState('');
@@ -132,22 +144,21 @@ export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFee
 
   return (
     <div className={`flex flex-col gap-4 ${compact ? '' : 'h-full min-h-0'}`}>
-      <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
+      {/* One compact header line: timer · optional caption · connection status
+          (TRA-1010 — keeps the tag list and the controls above it close). */}
+      <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-300">
         <span className="font-mono tabular-nums text-gray-500 dark:text-gray-400">
           {formatElapsed(now - startedAt)}
         </span>
-        <span className="flex items-center">
+        {caption && (
+          <span className="min-w-0 flex-1 truncate text-xs text-gray-500 dark:text-gray-400">
+            {caption}
+          </span>
+        )}
+        <span className="flex items-center whitespace-nowrap ml-auto">
           <span className={`inline-block w-2.5 h-2.5 rounded-full mr-2 ${STATUS_DOT[status]}`} />
           {STATUS_LABEL[status]}
         </span>
-      </div>
-
-      {/* Coverage stat strip */}
-      <div className={`grid gap-3 ${compact ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
-        <Stat label="Tags in view" value={String(rows.length)} />
-        {!compact && <Stat label="Readers" value={String(readerCount)} />}
-        <Stat label="RSSI range" value={rssiRange} />
-        <Stat label="Read rate" value={readRate > 0 ? `${readRate.toFixed(1)}/s` : '—'} />
       </div>
 
       {status !== 'error' && (
@@ -181,6 +192,15 @@ export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFee
               className="rounded border-gray-300 dark:border-gray-600"
             />
             Split by antenna
+          </label>
+          <label className="flex items-center gap-1.5 text-gray-700 dark:text-gray-300 select-none">
+            <input
+              type="checkbox"
+              checked={showAllAdverts}
+              onChange={(e) => setShowAllAdverts(e.target.checked)}
+              className="rounded border-gray-300 dark:border-gray-600"
+            />
+            Show all BLE devices
           </label>
           <button
             type="button"
@@ -226,7 +246,7 @@ export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFee
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700">
               <tr className="text-left text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-600">
-                <SortHeader label="EPC" sortKey="epc" sort={sort} onSort={toggleSort} className="py-2.5 px-3" />
+                <SortHeader label="EPC / MAC" sortKey="epc" sort={sort} onSort={toggleSort} className="py-2.5 px-3" />
                 <SortHeader label="Reader" sortKey="readerKey" sort={sort} onSort={toggleSort} className="px-3" />
                 <SortHeader label="Ant" sortKey="antennaPort" sort={sort} onSort={toggleSort} align="right" />
                 <SortHeader label="Reads" sortKey="readCount" sort={sort} onSort={toggleSort} align="right" />
@@ -248,6 +268,15 @@ export function LiveReadsFeed({ filterReaderKey, compact = false }: LiveReadsFee
             </tbody>
           </table>
         )}
+      </div>
+
+      {/* Coverage stat strip — reference summary below the list the operator
+          watches (TRA-1010). */}
+      <div className={`grid gap-3 ${compact ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
+        <Stat label="Tags in view" value={String(rows.length)} />
+        {!compact && <Stat label="Readers" value={String(readerCount)} />}
+        <Stat label="RSSI range" value={rssiRange} />
+        <Stat label="Read rate" value={readRate > 0 ? `${readRate.toFixed(1)}/s` : '—'} />
       </div>
     </div>
   );

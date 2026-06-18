@@ -77,14 +77,14 @@ describe('LiveReadsFeed', () => {
     mockFeed({ tags: [] });
     render(<LiveReadsFeed filterReaderKey="dock-7" />);
 
-    expect(useReaderFeed).toHaveBeenCalledWith('dock-7');
+    expect(useReaderFeed).toHaveBeenCalledWith('dock-7', false);
   });
 
   it('subscribes to the whole org feed when given no key (global page)', () => {
     mockFeed({ tags: [] });
     render(<LiveReadsFeed />);
 
-    expect(useReaderFeed).toHaveBeenCalledWith(undefined);
+    expect(useReaderFeed).toHaveBeenCalledWith(undefined, false);
   });
 
   it('hides the Readers stat and secondary RSSI columns in compact mode', () => {
@@ -301,6 +301,34 @@ describe('LiveReadsFeed', () => {
 
     expect(filterBox.value).toBe('');
     expect(screen.getByText('XYZ')).toBeInTheDocument();
+  });
+
+  it('renders the coverage stats below the tag table (TRA-1010)', () => {
+    mockFeed({ tags: [tag()] });
+    const { container } = render(<LiveReadsFeed />);
+
+    const table = container.querySelector('table');
+    const statLabel = screen.getByText('Tags in view');
+    expect(table).not.toBeNull();
+    // The list is what the operator watches; the summary stats are reference and
+    // belong below it, so the table must precede the stat strip in the DOM.
+    expect(table!.compareDocumentPosition(statLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('renders an optional caption inline in the header (TRA-1010 scoped panel)', () => {
+    mockFeed({ tags: [tag()] });
+    render(<LiveReadsFeed caption="Reads off this reader only — for antenna placement and RSSI tuning." />);
+
+    expect(
+      screen.getByText('Reads off this reader only — for antenna placement and RSSI tuning.'),
+    ).toBeInTheDocument();
+  });
+
+  it('omits the caption when none is given (global page)', () => {
+    mockFeed({ tags: [tag()] });
+    render(<LiveReadsFeed />);
+
+    expect(screen.queryByText(/antenna placement and RSSI tuning/i)).not.toBeInTheDocument();
   });
 
   it('Clear resets the antenna filter to All antennas (TRA-999)', () => {

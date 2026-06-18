@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -215,12 +216,29 @@ func (d *Daemon) dispatch(ctx context.Context, req readerrpc.Request) readerrpc.
 		}
 		return d.result(req, caps)
 
-	case readerrpc.MethodGetConfig:
-		cfg, err := d.adapter.GetConfig(ctx)
+	case readerrpc.MethodGetOperProfile:
+		var p readerrpc.OperProfileParams
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return readerrpc.NewError(req, readerrpc.CodeInvalidParams, "invalid GetOperProfile params: "+err.Error())
+			}
+		}
+		cfg, err := d.adapter.GetOperProfile(ctx, p.Force)
 		if err != nil {
-			return readerrpc.NewError(req, readerrpc.CodeInternal, err.Error())
+			return d.errorResponse(req, err)
 		}
 		return d.result(req, cfg)
+
+	case readerrpc.MethodSetOperProfile:
+		var p readerrpc.SetOperProfileParams
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return readerrpc.NewError(req, readerrpc.CodeInvalidParams, "invalid SetOperProfile params: "+err.Error())
+		}
+		res, err := d.adapter.SetOperProfile(ctx, p.ReaderConfig, p.Force)
+		if err != nil {
+			return d.errorResponse(req, err)
+		}
+		return d.result(req, res)
 
 	case readerrpc.MethodGetStatus:
 		st, err := d.adapter.GetStatus(ctx)
@@ -228,17 +246,6 @@ func (d *Daemon) dispatch(ctx context.Context, req readerrpc.Request) readerrpc.
 			return readerrpc.NewError(req, readerrpc.CodeInternal, err.Error())
 		}
 		return d.result(req, st)
-
-	case readerrpc.MethodSetConfig:
-		var cfg readerrpc.ReaderConfig
-		if err := json.Unmarshal(req.Params, &cfg); err != nil {
-			return readerrpc.NewError(req, readerrpc.CodeInvalidParams, "invalid SetConfig params: "+err.Error())
-		}
-		res, err := d.adapter.SetConfig(ctx, cfg)
-		if err != nil {
-			return readerrpc.NewError(req, readerrpc.CodeInternal, err.Error())
-		}
-		return d.result(req, res)
 
 	default:
 		return readerrpc.NewError(req, readerrpc.CodeMethodNotFound, "unsupported method: "+req.Method)
@@ -252,4 +259,15 @@ func (d *Daemon) result(req readerrpc.Request, v any) readerrpc.Response {
 		return readerrpc.NewError(req, readerrpc.CodeInternal, "marshal result: "+err.Error())
 	}
 	return resp
+}
+
+// errorResponse maps an adapter error to a response frame: a *readerrpc.BusyError
+// becomes a typed CodeReaderBusy frame (holder IP in data); everything else is a
+// generic internal error.
+func (d *Daemon) errorResponse(req readerrpc.Request, err error) readerrpc.Response {
+	var be *readerrpc.BusyError
+	if errors.As(err, &be) {
+		return readerrpc.NewBusyError(req, be.HeldBy)
+	}
+	return readerrpc.NewError(req, readerrpc.CodeInternal, err.Error())
 }
