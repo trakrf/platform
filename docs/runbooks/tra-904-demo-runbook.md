@@ -1,11 +1,14 @@
-# TRA-904 — Frederick Health demo runbook (Tim-operable)
+# TRA-904 — Frederick Health demo runbook (ENGINEER / Mike version)
 
-> **Status: DRAFT for Mike + Tim review (2026-06-17).** This is a rough first
-> pass that brings the runbook up to the current system after a lot of
-> fixed-reader work landed since the seed (PR #452, 2026-06-04). Items needing a
-> decision are tagged **[REVIEW]**; items that can only be settled with the rig
-> in hand are tagged **[TUNE ON-SITE]**. The laminated one-pager at the end is
-> the thing Tim actually carries — everything above it is the reference behind it.
+> **Status: DRAFT for review (2026-06-17).** This is the **engineer** runbook —
+> it assumes shell access (podman / systemctl / SQL / curl) and is for Mike, not
+> Tim. **Tim's version is a separate file:** `tra-904-tim-demo-card.md` — app
+> surface + physical connections only, no shell. Keep them in sync.
+>
+> This is a rough first pass that brings the runbook up to the current system
+> after a lot of fixed-reader work landed since the seed (PR #452, 2026-06-04).
+> Items needing a decision are tagged **[REVIEW]**; items that can only be settled
+> with the rig in hand are tagged **[TUNE ON-SITE]**.
 >
 > Epic: [TRA-897](https://linear.app/trakrf/issue/TRA-897) · this ticket:
 > [TRA-904](https://linear.app/trakrf/issue/TRA-904). Edge box: [TRA-898](https://linear.app/trakrf/issue/TRA-898)
@@ -264,9 +267,12 @@ a cloud backend that can't reach a LAN relay over HTTP.
 
 ---
 
-## ─────────  ONE-PAGE OPERATOR CARD (laminate this)  ─────────
+## ─────────  ENGINEER QUICK CARD (Mike — has shell)  ─────────
 
-**TrakRF egress demo — Tim's card**     Box: `trakrf-demo` @ `192.168.8.10` (offline)
+> Tim's laminated card is the separate `tra-904-tim-demo-card.md`. This one has
+> shell commands and is for Mike.
+
+**TrakRF egress demo — engineer card**     Box: `trakrf-demo` @ `192.168.8.10` (offline)
 Laptop (Chrome, Secure DNS **off**) → **https://app.demo.trakrf.id**
 
 **START**
