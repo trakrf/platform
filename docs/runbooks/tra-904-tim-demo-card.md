@@ -11,6 +11,8 @@ sets off the strobe — and random tagged stuff walking by does *not*.
 You only ever touch two things: the **physical gear** (plug it in, power it on)
 and the **app in your browser** (`https://app.demo.trakrf.id`). That's it.
 
+> **WiFi:** network **`TrakRF`**, password **`trakrf.id`**.
+
 ---
 
 ## A. Set up the gear — it ships pre-wired
@@ -47,7 +49,7 @@ flowchart TB
   surge ==>|power block| cs463
   surge ==>|direct| mk107
   surge ==>|direct| shelly
-  surge ==>|power| slate
+  surge ==>|blue/black USB-C| slate
   surge ==>|red USB cable| gls10
   shelly ==>|switched power| siren
 
@@ -64,6 +66,7 @@ flowchart TB
 
   classDef power fill:#fff7ed,stroke:#fb923c;
   class surge,siren power;
+  linkStyle 5 stroke:#3b82f6,stroke-width:2px;
   linkStyle 6 stroke:#ef4444,stroke-width:2px;
   linkStyle 8 stroke:#9ca3af,stroke-width:3px;
   linkStyle 9 stroke:#a855f7,stroke-width:3px;
@@ -78,7 +81,8 @@ alarm light/siren plugs into the **Shelly Plug**, so the Shelly switches its pow
 
 ## B. Turn it on / check it's alive  — every time, before an audience
 
-1. On your **laptop**, connect WiFi to the **Slate** network.
+1. On your **laptop**, connect to the Slate WiFi — network name **`TrakRF`**,
+   password **`trakrf.id`**.
 2. Open **Chrome** and go to **`https://app.demo.trakrf.id`**. Log in.
    - *Page won't load?* Re-check laptop WiFi is on the Slate. Still nothing →
      give the box another minute, reload. Still nothing → **call Mike**.

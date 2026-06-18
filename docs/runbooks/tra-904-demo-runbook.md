@@ -95,7 +95,7 @@ flowchart TB
   surge ==>|power block| cs463
   surge ==>|direct| mk107
   surge ==>|direct| shelly
-  surge ==>|power| slate
+  surge ==>|blue/black USB-C| slate
   surge ==>|red USB cable| gls10
   shelly ==>|switched power| siren
 
@@ -112,6 +112,7 @@ flowchart TB
 
   classDef power fill:#fff7ed,stroke:#fb923c;
   class surge,siren power;
+  linkStyle 5 stroke:#3b82f6,stroke-width:2px;
   linkStyle 6 stroke:#ef4444,stroke-width:2px;
   linkStyle 8 stroke:#9ca3af,stroke-width:3px;
   linkStyle 9 stroke:#a855f7,stroke-width:3px;
@@ -257,8 +258,9 @@ curl -fsS http://127.0.0.1:8080/health        # expect: 200
 deploy/edge/smoke-test.sh                      # expect: "PASS: broker -> subscriber -> ingest proven"
 ```
 
-Then from the laptop: browse **https://app.demo.trakrf.id**, log in, open
-**Settings → Live feed**, confirm reads appear when a tag is near the antenna.
+Then from the laptop: join the Slate WiFi (SSID **`TrakRF`** / PSK **`trakrf.id`**),
+browse **https://app.demo.trakrf.id**, log in, open **Settings → Live feed**, confirm
+reads appear when a tag is near the antenna.
 
 > First-time / fresh-box bring-up (secrets, db-init, TLS cert) is **not** Tim's job
 > — that's `deploy/edge/README.md`. This runbook assumes a handed-over box.
@@ -375,7 +377,7 @@ topic prefix `{org_slug}/…`.
 > Tim's laminated card is the separate `tra-904-tim-demo-card.md`. This one has shell.
 
 **TrakRF egress demo — engineer card**     Box: `trakrf-demo` @ `192.168.8.10` (offline)
-Laptop (Chrome, Secure DNS **off**) → **https://app.demo.trakrf.id**
+WiFi **`TrakRF`** / PSK **`trakrf.id`** · Laptop (Chrome, Secure DNS **off**) → **https://app.demo.trakrf.id**
 
 **START**
 1. Power on box → wait ~1–2 min.
