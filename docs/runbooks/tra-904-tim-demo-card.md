@@ -21,9 +21,11 @@ anything. Just give each piece power and let it boot.
 1. **Router (GL.iNet "Slate"):** plug in power. Wait for its WiFi to come up.
 2. **The box (small HP computer):** plug in power and the network cable to the
    router. Press the power button. Give it **~2 minutes** to start up.
-3. **Reader (CS463) + antenna:** set the antenna at the doorway aimed *across* the
-   opening (not down the hall). Connect the antenna cable to the reader, plug the
-   reader into the router's network and into power. It's slow to boot — **~2 min**.
+3. **Reader (CS463) + antennas:** set your **2–3 antennas** at the doorway, each
+   aimed *across* the opening (not down the hall). Connect each antenna cable to
+   the reader, plug the reader into the router's network and into power. It's slow
+   to boot — **~2 min**. (Mike has already told the app which antenna covers the
+   door, so you just place and plug.)
 4. **Strobe (Shelly):** plug it in near the door. That's the alarm.
 5. Pour a coffee. Everything is booting. **Do not unplug anything mid-demo.**
 
@@ -40,11 +42,38 @@ anything. Just give each piece power and let it boot.
 3. In the app, open **Settings → Live feed**. Hold a **tagged** item near the
    doorway antenna — you should see reads pop up in the list. **Reads = the
    reader is alive.**
-4. Open **Settings → Outputs**, find the door strobe row, click **Test-fire**.
-   The strobe should flash. Click **Reset** to clear it.
+
+   ![Live feed screen](img/tra904-live-feed.png)
+
+4. Open **Settings → Outputs**, expand the door strobe, click **Test-fire**.
+   The strobe should flash; it clears itself after a few seconds (or click
+   **Reset (off)**).
+
+   ![Output device with Test-fire and Reset](img/tra904-output-config.png)
 
 ✅ **You're green when:** the page loads, Live feed shows reads, and Test-fire
 flashes the strobe. If all three work, the demo will work.
+
+---
+
+## B2. Dial in the range (transmit power)  — your tuning knob
+
+Each antenna at the door has a **transmit-power slider** in the app. More power =
+reads tags from farther away; less power = only catches tags right at the door.
+
+1. In the app, open **Settings → Readers**, click your reader to expand it. You'll
+   see a row per antenna, each with a **power slider (dBm)**.
+2. Keep **Settings → Live feed** open in another tab while you test-walk.
+3. Walk the tagged item through — including **in a bag / against your body**:
+   - Doesn't catch the concealed item? **Slide power up.**
+   - Catches tags from across the room / when just standing near? **Slide power down.**
+4. Aim for: walking *through* always fires, standing *near* doesn't. Sweet spot
+   found → leave it. (No save button — it applies live.)
+
+   ![Antenna list with transmit-power sliders](img/tra904-antennas-power.png)
+
+> This is the one setting you'll actively tune in the room. Everything else Mike
+> pre-set. If you can't find a setting that works, **call Mike**.
 
 ---
 

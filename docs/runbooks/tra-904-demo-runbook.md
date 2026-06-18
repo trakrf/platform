@@ -1,14 +1,15 @@
 # TRA-904 — Frederick Health demo runbook (ENGINEER / Mike version)
 
-> **Status: DRAFT for review (2026-06-17).** This is the **engineer** runbook —
+> **Status: DRAFT for review (2026-06-18).** This is the **engineer** runbook —
 > it assumes shell access (podman / systemctl / SQL / curl) and is for Mike, not
 > Tim. **Tim's version is a separate file:** `tra-904-tim-demo-card.md` — app
 > surface + physical connections only, no shell. Keep them in sync.
 >
-> This is a rough first pass that brings the runbook up to the current system
-> after a lot of fixed-reader work landed since the seed (PR #452, 2026-06-04).
-> Items needing a decision are tagged **[REVIEW]**; items that can only be settled
-> with the rig in hand are tagged **[TUNE ON-SITE]**.
+> Brought up to the current system after the post-seed fixed-reader work (PR #452,
+> 2026-06-04). **Config/field details below were verified against the live demo
+> box at `app.demo.trakrf.id` on 2026-06-18** (read-only walkthrough). Items that
+> can only be settled with the rig in hand are tagged **[TUNE ON-SITE]**; open
+> product decisions are tagged **[REVIEW]**.
 >
 > Epic: [TRA-897](https://linear.app/trakrf/issue/TRA-897) · this ticket:
 > [TRA-904](https://linear.app/trakrf/issue/TRA-904). Edge box: [TRA-898](https://linear.app/trakrf/issue/TRA-898)
@@ -21,129 +22,174 @@
 The seed runbook predates these — they change the words Tim sees and where he clicks:
 
 - **"Alarm Devices" → "Outputs"**, and the whole fixed-reader surface moved under
-  **Settings** (TRA-929 rename, TRA-930 nav): **Settings → Readers / Outputs / Live feed**.
-- **`is_boundary` is gone** (TRA-943). There is no "boundary scan_point" flag
-  anymore. The geofence engine resolves **location → outputs**, and each **output**
-  carries a **mode** (`egress` | `presence`). For this demo the door output is
-  **`egress`**.
-- **RSSI / age-out / auto-off are per-entity config**, not global env (TRA-955).
-  Three tiers, most specific wins: **code default → org default → per-output**.
-  Tuning the demo = setting these on the door output (or org), not a redeploy.
-- **Reader auto-provisions** (TRA-1002 daemon golden config / TRA-1015 self-bootstrap):
-  the CS463, on commission, gets a working TrakRF profile pushed to it. We mostly
-  *verify* the reader rather than hand-build its config.
-- **EPC normalization** (TRA-944): a tag registered by its short barcode value
-  (e.g. `10023`) still matches the full-width EPC the reader emits. Less foot-gun
-  when entering the armed tags.
-- Ingest matches a read to its capture point by **(reader, antenna_port)** now
-  (TRA-956), not a capturePointName string.
+  **Settings** (TRA-929 rename, TRA-930 nav). Live nav order:
+  **Settings → Readers · Live feed · Outputs · Geofence defaults**.
+- **The demo fires the Shelly over MQTT, not HTTP.** The epic originally specced
+  local HTTP, but the working box uses **`transport = MQTT (broker)`** to the
+  on-box Mosquitto (TRA-906). HTTP is still selectable as an alternative (§ Appendix).
+- **`is_boundary` is gone** (TRA-943). No "boundary scan_point" flag. The geofence
+  resolves **location → outputs**, and each **output** carries a **mode**
+  (`egress` | `presence`). The door output is **`egress`**.
+- **RSSI / age-out / auto-off / mode are per-entity config**, not global env
+  (TRA-955). Three tiers, most specific wins: **system default → org default
+  (Settings → Geofence defaults) → per-output (Outputs expander)**.
+- **Reader auto-provisions** (TRA-1002 / TRA-1015): the CS463 gets a working TrakRF
+  profile on commission. We mostly *verify* rather than hand-build it.
+- **EPC normalization** (TRA-944): a tag registered by its short barcode value still
+  matches the full-width EPC the reader emits.
+- Ingest matches a read to its capture point by **(reader, antenna_port)** (TRA-956).
+
+---
+
+## Known-good baseline (verified on the box, 2026-06-18)
+
+The box is already provisioned and **actively reading** (org slug **`trakrf-demo`**,
+build `v1.2.0-353-gb09ce98a`). Snapshot so any drift is obvious:
+
+| Thing | Value |
+|---|---|
+| Reader | **CSL CS463 Fixed Reader** · `csl_cs463` · MQTT · topic `trakrf.id/cs463-20/reads` |
+| Antennas | **Ant 1 enabled → location "Doorway 1 (DOORWAY-1)" @ 30.0 dBm**; Ant 2–4 disabled, unset |
+| Reader read-timing | Dwell 500 ms · Dedup 0 ms · Antenna differentiation **on** · RSSI gate **−80 dBm (read-only)** |
+| Power range | 10–31.5 dBm |
+| Output | **Alarm Plug** · `shelly_gen4` · **MQTT** · topic `trakrf.id/alarm-plug` · switch `0` · location **Doorway 1** |
+| Output tuning | **Mode = Egress** · **Auto-off = 3 s** · RSSI threshold blank (→ org/system default) · Age-out blank |
+| Org geofence defaults | all blank → system default (mode = system default = egress) |
+| Other readers present | Moko MK107 (`trakrf.id/mk107-23/reads`), GL-S10 (`trakrf.id/gls10-22/reads`) — BLE, not the egress demo |
+
+**Wiring is correct and live:** CS463 Ant 1 → *Doorway 1* and Alarm Plug → *Doorway 1*
+match, so a qualifying read at Ant 1 fires the strobe. For a **2–3 antenna** demo,
+enable Ant 2/3 and set each to **Doorway 1** as well.
+
+> **Grandfathered topics:** the reader/output use `trakrf.id/…`, not the
+> `trakrf-demo/…` slug root the UI now wants for *new* devices (TRA-922). **Leave
+> them — it's working.** Re-topic to `trakrf-demo/…` is a **post-demo** cleanup.
 
 ---
 
 ## 0. The demo in one breath
 
 A registered, tagged monitor carried through the doorway makes the CS463 read it
-at the door antenna; the in-box backend sees the read cross the RSSI threshold for
-an **armed** asset at an **egress** output and fires the **Shelly Gen4 strobe**
-over local HTTP within ~1s. Unregistered tags passing through do **not** fire.
-Manual reset clears the strobe between runs. The whole thing runs **offline** on
-the HP EliteDesk (`trakrf-demo`); Tim drives from his laptop on the Slate WiFi.
+at the door antenna; the in-box backend sees the read qualify for an **armed** asset
+at an **egress** output and fires the **Shelly Gen4 strobe** via the on-box MQTT
+broker within ~1s. Unregistered tags do **not** fire. Auto-off (3 s) clears the
+strobe between runs. The whole thing runs **offline** on the HP EliteDesk
+(`trakrf-demo`); Tim drives from his laptop on the Slate WiFi.
 
 ```
 CS463 (UHF) ──MQTT :1883──> Mosquitto ──> backend Go subscriber
-                                              │  raw → tag_scans → asset_scans
-                                              │  geofence eval (in-process)
-                                              └──HTTP──> Shelly Gen4 strobe
-                          all on the box (192.168.8.10), no cloud, no DB round-trip
+                                │  ▲          │  raw → tag_scans → asset_scans
+                                │  │          │  geofence eval (in-process)
+                                │  └──────────┘  publish on/off to trakrf.id/alarm-plug
+                                ▼
+                       Shelly Gen4 (subscribes to broker) → strobe
+              all on the box (192.168.8.10), no cloud, no DB round-trip, no inbound HTTP
 ```
 
-Tim's laptop → **https://app.demo.trakrf.id** (resolved by the Slate to the box).
+Tim's laptop → **https://app.demo.trakrf.id** (resolved by the Slate to the box;
+reachable off-site right now via the cloudflared tunnel during prep).
 
 ---
 
-## 1. Demo data preload  **[REVIEW — no repeatable fixture exists yet]**
+## 1. Demo data preload  **[REVIEW — no repeatable fixture yet; box is already seeded]**
 
-> **Gap to settle with Tim:** there is currently **no demo-data seed fixture**.
-> `deploy/edge/smoke-test.sh` borrows `contract_test_seed.sql` only to prove the
-> ingest path; it explicitly notes asset_scans derivation reads 0 until a real
-> scan_point + output exist. For Friday we either (a) provision once by hand via
-> the UI and rely on the box's nightly `pg_dump` backup as the "save", or (b)
-> write a small idempotent `demo-seed.sql` so a wipe/rebuild is one command.
-> **Recommendation: (a) for Friday, (b) as the immediate follow-up** so the demo
-> is truly repeatable from scratch. Decide tomorrow.
+> The box is **already provisioned by hand** (see baseline above) and backed up
+> nightly (`pg_dump` → `/srv/trakrf/backups`). There is still **no repeatable seed
+> fixture** — `deploy/edge/smoke-test.sh` only borrows `contract_test_seed.sql` to
+> prove ingest. **Recommendation:** rely on the existing provisioning + backup for
+> Friday; write a small idempotent `demo-seed.sql` as the immediate follow-up so a
+> from-scratch wipe/rebuild is one command. Decide with Tim.
 
-What has to exist for a fire (provision in this order, all at `app.demo.trakrf.id`):
+What has to exist for a fire (already true on the box; this is the rebuild order):
 
-1. **Org** — the demo org (the box is single-tenant; **[REVIEW]** confirm the org
-   name/slug Tim wants, since slug becomes the MQTT topic root, TRA-922).
-2. **Location** — the doorway location (e.g. "Main Door"). The geofence ties an
-   asset read to outputs **through the location**.
-3. **Reader (Settings → Readers)** — the CS463. Should appear / auto-provision on
-   commission (TRA-1002). Set its **location** to the doorway location. Confirm a
-   **scan_point** exists for the door antenna (antenna_port 1).
-4. **Assets + tags** — the monitors to arm. Register each asset, then add its
-   **tag** (the EPC). Short barcode value is fine (TRA-944). These armed EPCs are
-   the membership set: only these fire.
-5. **Output (Settings → Outputs)** — the Shelly strobe. **Transport = HTTP**,
-   **Base URL** = the Shelly's LAN address, **Switch ID** = `0`, **Location** =
-   the doorway location, **Mode = egress**. (Full Shelly provisioning §3.)
-6. **One "decoy" unregistered tag** to demonstrate the negative case (passerby
-   goods don't alarm). Just an EPC that is **not** registered to any asset.
-
----
-
-## 2. Geofence rule config
-
-There is no separate "rule" object — the rule **is** the wiring above plus the
-thresholds on the output:
-
-- **Who can fire:** assets that have a registered tag (membership set). Everything
-  else is ignored.
-- **Where:** the door **location** links the reader's reads to the door **output**.
-- **When:** the output's **mode = egress** fires immediately on a qualifying read.
-- **How sensitive:** **RSSI threshold** + **age-out** + **auto-off** on the output
-  (or org default). See tuning, §5.
-
-**[REVIEW]** exact field names / where each tier lives (`output_devices.metadata`
-vs org `metadata.geofence_defaults`) — I described these from the shipped tier
-model (TRA-955) but did not re-read the code for this draft. Verify before laminating.
+1. **Org** — `trakrf-demo` (single-tenant box). Slug is the topic root for *new*
+   devices; existing devices grandfathered on `trakrf.id/…`.
+2. **Location** — the doorway location (**"Doorway 1" / `DOORWAY-1`** on the box).
+   The geofence ties an asset read to outputs **through the location**.
+3. **Reader + antennas (Settings → Readers → expand the CS463).** Auto-provisions
+   on commission (TRA-1002). It's a `multi_point` device → the expander shows the
+   **Antennas & Location** panel, one row per port. For each of the **2–3 antennas**
+   at the door:
+   - **Enable** the antenna (toggle).
+   - Set its **location** (click-to-edit on the row) to **Doorway 1**. ⇒ all door
+     antennas share one location, so any fires the one output (§2).
+   - Leave **transmit power** (dBm) at a sane start (30 dBm now); Tim tunes live (§9).
+   - Disable unused ports (keeps Live feed clean).
+4. **Assets + tags** — the monitors to arm. Register each asset, then add its **tag**
+   (the EPC; short barcode value is fine, TRA-944). Armed EPCs = the membership set.
+5. **Output (Settings → Outputs).** On the box: **Alarm Plug**, **Transport = MQTT
+   (broker)**, **Command Topic = `trakrf.id/alarm-plug`**, **Switch ID = `0`**,
+   **Location = Doorway 1**, **Mode = Egress**, **Auto-off = 3 s** (§3 for the
+   device-side MQTT config).
+6. **One "decoy" unregistered tag** for the negative case — an EPC not registered
+   to any asset.
 
 ---
 
-## 3. Output (Shelly Gen4) provisioning
+## 2. Geofence rule config (verified)
 
-The edge box and the Shelly are on the **same LAN**, so the demo uses the **HTTP**
-fire path (backend → device over local HTTP). The MQTT path (TRA-906) exists for
-cloud/firewalled deployments and is documented at the end for completeness — it is
-**not** the Friday path.
+There is no separate "rule" object — the rule **is** the wiring plus the output's
+mode/thresholds:
 
-### HTTP path (the demo path)
+- **Who can fire:** assets with a registered tag (membership set). Everything else ignored.
+- **Where:** the door **location** links reads to the door **output**. With 2–3
+  antennas, **every door antenna's scan_point carries the same door location**
+  (set per-antenna, §1.3). One output at that location ⇒ any antenna's qualifying
+  read fires the one strobe.
+- **When:** the output's **Mode = Egress** ("fire on crossing, then latch") fires
+  immediately on a qualifying read.
+- **How sensitive (confirmed field locations):**
+  - **Transmit power** per antenna — `Settings → Readers → CS463 → antenna row → slider` (dBm). Tim's live knob.
+  - **RSSI threshold / Age-out / Auto-off / Mode** per output — `Settings → Outputs → expand`.
+  - **Org defaults** for the same four — `Settings → Geofence defaults`. Blank everywhere = system default.
+  - Reader-side **RSSI gate (−80 dBm) is read-only** in the reader panel — don't confuse it with the output RSSI threshold.
 
-1. Note the Shelly's local address, e.g. `http://192.168.8.66`.
-2. **Settings → Outputs → New**: **Transport = HTTP**, **Base URL** = device
-   address, **Switch ID** = relay channel (usually `0`), **Location** = the
-   doorway location, **Mode = egress**.
-3. **Test-fire** from the row — the relay pulses on→off (~2s). A **502** means the
-   backend can't reach the device (wrong network / IP / device down) — on the box
-   this is a real reachability failure, fix it before continuing.
+---
+
+## 3. Output (Shelly Gen4) provisioning — MQTT (the demo path)
+
+The box fires over the **on-box MQTT broker**: the backend publishes `on`/`off` to
+`<command_topic>/command/switch:<switch_id>` and the Shelly (subscribed to the same
+broker) actuates. No inbound HTTP to the device. HTTP is an alternative (Appendix).
+
+**App side (Settings → Outputs):** Transport **MQTT (broker)**, Command Topic
+`trakrf.id/alarm-plug` (grandfathered — leave it), Switch ID `0`, Location
+**Doorway 1**, Mode **Egress**, Auto-off **3 s**.
+
+**Device side (Shelly MQTT config — on-LAN, web UI or `MQTT.SetConfig`):** point it
+at the on-box broker, set the same **topic prefix** (`trakrf.id/alarm-plug`), enable
+MQTT control. Gen4 note (TRA-941): the backend already sends the required `src`; no
+operator action.
+
+**Validate device-side independently** (no backend — confirms device + broker + topic):
+
+```bash
+# on the box; MQPW from /srv/trakrf/secrets/.env
+mosquitto_pub -h 127.0.0.1 -p 1883 -u trakrf-mqtt -P "$MQPW" \
+  -t 'trakrf.id/alarm-plug/command/switch:0' -m on    # -m off to clear
+```
+
+If the relay clicks, the backend's publish produces the identical message.
 
 ### Auto-off / latch
+- **Auto-off = 3 s** on the box: the strobe self-clears after 3 s — good for a
+  hands-off loop. **[TUNE ON-SITE]** adjust if 3 s reads too short/long in the room.
+- For **latching** (stay on until reset), set Auto-off `0`/blank and use the
+  **Reset (off)** button in the output expander between runs.
 
-- **Auto-off** (TRA-934): set `auto_off_seconds` on the output so the strobe
-  self-clears after N seconds (device-side `toggle_after`). Good for a hands-off
-  demo loop. **[TUNE ON-SITE]** pick a duration that reads well in the room.
-- If you run **latching** instead (strobe stays on until reset), use the **Reset**
-  button on the output row between runs.
-- Gen4 note (TRA-941): the backend already sends the required `src` on the RPC;
-  no operator action — just don't be surprised the device is a Gen4.
+### Test-fire semantics (MQTT = publish-and-trust)
+A green **Test-fire** means the **broker accepted** the publish, **not** that the
+relay confirmed (MQTT is fire-and-forget). If the relay doesn't move, the device
+isn't subscribed / wrong topic prefix / not powered — check the device, not the app.
+(Contrast HTTP, where a 502 is a real reachability failure — Appendix.)
 
 ---
 
 ## 4. Cold-start checklist (edge box)
 
 On a box whose DB volume is already initialized, **a power-on self-starts the whole
-stack** (systemd linger + `Restart=always`). Tim's normal path is just: power on,
-wait ~1–2 min, verify green.
+stack** (systemd linger + `Restart=always`). Normal path: power on, wait ~1–2 min,
+verify green.
 
 **Green = all five containers up + health 200 + a synthetic read ingests.**
 
@@ -154,49 +200,44 @@ curl -fsS http://127.0.0.1:8080/health        # expect: 200
 deploy/edge/smoke-test.sh                      # expect: "PASS: broker -> subscriber -> ingest proven"
 ```
 
-Then from Tim's laptop: browse **https://app.demo.trakrf.id**, log in, open
-**Settings → Live feed** and confirm reads appear when a tag is near the antenna.
+Then from the laptop: browse **https://app.demo.trakrf.id**, log in, open
+**Settings → Live feed**, confirm reads appear when a tag is near the antenna.
 
-> First-time / fresh-box bring-up (secrets, db-init, TLS cert) is **not** Tim's
-> job — that's `deploy/edge/README.md`. This runbook assumes a box Mike has
-> already brought up and handed over.
+> First-time / fresh-box bring-up (secrets, db-init, TLS cert) is **not** Tim's job
+> — that's `deploy/edge/README.md`. This runbook assumes a handed-over box.
 
 ---
 
-## 5. Verify-green checklist (before each run / before Tim's audience walks up)
+## 5. Verify-green checklist (before each run)
 
 - [ ] `podman ps` → 5 containers **Up** (not Restarting).
 - [ ] `curl /health` → **200**.
 - [ ] **Live feed** shows reads when an armed tag is held near the door antenna.
-- [ ] **Test-fire** the door output once → strobe pulses → **Reset** it.
-- [ ] Strobe is **off / reset** (no leftover latch from a prior run).
+- [ ] **Test-fire** the Alarm Plug output once → strobe fires → it self-clears (3 s) or **Reset**.
+- [ ] Strobe is **off** (no leftover latch).
 - [ ] Armed tags are on the assets you'll carry; the **decoy** tag is on nothing.
 
 ---
 
-## 6. Walk-through choreography  **[REVIEW with Tim — this is his script]**
+## 6. Walk-through choreography  **[REVIEW with Tim — his script]**
 
-Suggested sequence (Tim refines for his audience):
-
-1. **Show normal state** — Live feed quiet, strobe off. "Nothing tagged is leaving."
-2. **The catch** — carry the registered monitor through the doorway at a normal
-   walking pace. Strobe fires within ~1s. "That monitor just walked out — caught."
-3. **Reset** — clear the strobe (auto-off or Reset button). Back to quiet.
+1. **Normal state** — Live feed quiet, strobe off. *"Nothing tagged is leaving."*
+2. **The catch** — carry the registered monitor through at walking pace. Strobe
+   fires within ~1s. *"That monitor just walked out — caught."*
+3. **Reset** — auto-off clears it (3 s); back to quiet.
 4. **The negative** — carry the **decoy** (unregistered) tag through. **No alarm.**
-   "Random tagged goods don't cry wolf — only your tracked assets."
-5. **The hard case [TUNE ON-SITE]** — concealed carry: monitor in a bag / against
-   the body. This is the real catch-rate story. Tune §5 thresholds so this fires
-   reliably; if it's marginal, set the honest 80–90% expectation (per the epic:
-   ROI is device-replacement cost, so 80–90% is already a win).
+   *"Random tagged goods don't cry wolf — only your tracked assets."*
+5. **The hard case [TUNE ON-SITE]** — concealed carry (bag / against the body). The
+   real catch-rate story. Tune §9 so this fires reliably; if marginal, set the honest
+   80–90% expectation (per the epic: ROI is device-replacement cost, so 80–90% wins).
 
 ---
 
 ## 7. Manual reset between runs
 
-- **Auto-off configured:** wait for it; nothing to do.
-- **Latching:** **Settings → Outputs → door row → Reset** (or, on the box,
-  publish device-off — see MQTT appendix).
-- If a fire seems "stuck," it's the latch, not a hang — reset clears it.
+- **Auto-off (3 s):** wait; nothing to do.
+- **Latching:** **Settings → Outputs → Alarm Plug → Reset (off)** (or `mosquitto_pub … -m off`, §3).
+- A "stuck" strobe is the latch, not a hang — reset clears it.
 
 ---
 
@@ -204,73 +245,77 @@ Suggested sequence (Tim refines for his audience):
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| No reads in Live feed | reader down / not commissioned / wrong topic | power-cycle the CS463; check `Settings → Readers` shows it; give it ~1–2 min (GlassFish boot is slow) |
-| Reads appear but **no fire** | tag not registered, wrong location wiring, RSSI too strict | confirm the asset+tag exist; output **mode=egress** at the **same location** as the reader; loosen RSSI (§5) |
-| Test-fire **502** | backend can't reach Shelly | check Shelly power/IP/LAN; ping it from the box |
-| Fires for **everything** | RSSI too loose / decoy actually registered | tighten RSSI; confirm decoy tag is unregistered |
-| Strobe won't turn off | latched | Reset on the output row |
-| Whole UI unreachable | box forward wedged / service down | `podman ps`; the rootlessport watchdog usually self-heals in ~30s; else `systemctl --user restart <svc>` |
-| Box rebooted mid-demo | power blip | it self-starts (~1–2 min); re-run §5 |
+| No reads in Live feed | reader down / not commissioned / wrong topic | power-cycle the CS463; check `Settings → Readers` lists it; wait ~1–2 min (GlassFish is slow) |
+| Reads appear but **no fire** | tag not registered, location mismatch, RSSI/power too strict | confirm asset+tag exist; output **Egress** at the **same location** as the antenna; raise power / loosen output RSSI (§9) |
+| Test-fire green but **strobe doesn't move** (MQTT) | Shelly not subscribed / wrong topic prefix / unpowered | check the device's broker connection + topic `trakrf.id/alarm-plug`; `mosquitto_pub` test (§3) |
+| Fires for **everything** | power/RSSI too loose, or decoy is actually registered | lower power / tighten output RSSI; confirm decoy tag unregistered |
+| Strobe won't turn off | latched | **Reset (off)** in the output expander |
+| Whole UI unreachable | box forward wedged / service down | `podman ps`; rootlessport watchdog self-heals in ~30s; else `systemctl --user restart <svc>` |
+| Box rebooted mid-demo | power blip | self-starts (~1–2 min); re-run §5 |
 
-Break-glass shell is over the tailnet: `systemctl --user …`, `journalctl --user -u <svc>`, `podman …`.
+Break-glass shell is over the tailnet (`systemctl --user …`, `journalctl --user -u <svc>`,
+`podman …`). The box is offline at the venue — to reach it remotely, give it uplink
+first (tether the box / Slate WAN to a phone), tailscale in, fix, then **go back
+offline before resuming** (no updates pulling mid-window).
 
 ---
 
-## 9. RSSI threshold + antenna placement tuning  **[TUNE ON-SITE — the real demo prep]**
+## 9. Antenna placement + transmit-power tuning  **[TUNE ON-SITE — the real demo prep]**
 
-This is the part that can't be written from a desk. Procedure:
+**Transmit power (per antenna, reader panel) is the primary knob** Tim works live;
+the output RSSI threshold is the engineer backstop you set once.
 
-1. Mount the antenna at the doorway; aim across the threshold, not down the hallway.
-2. Open **Settings → Live feed**, watch **RSSI** as a body carries the monitor
-   through at walking pace — normal carry, then bag/body-concealed carry.
-3. Set the output **RSSI threshold** just **below** the weakest reliable
-   concealed-carry read, and just **above** the ambient/standing-nearby reads, so
-   walking *through* fires but standing *near* does not.
-4. Set **age-out** so a single pass = one fire (no chatter), and **auto-off** to a
-   duration that reads well.
-5. Repeat until normal carry is ~100% and concealed carry is as high as the
-   placement allows.
+**Two knobs, don't confuse them:**
+- **Transmit power** (`Settings → Readers → CS463 → antenna row → slider`, dBm,
+  range 10–31.5) — how *far/strong* each antenna reads. Tim's knob.
+- **Output RSSI threshold** (`Settings → Outputs → Alarm Plug`) — how strong a read
+  must be to *count* as a fire. Engineer backstop. (Reader-side −80 dBm gate is read-only.)
 
-Starting point from prior live validation (cs463-212 rig): gate near **−65 dBm**
-at close range / lower TX power — **but treat that as a guess for this room**; the
-doorway geometry and antenna mount will move it.
+Procedure:
+1. Mount the 2–3 antennas at the doorway; aim **across** the threshold, not down the
+   hallway. Confirm each is **enabled** and carries **Doorway 1** (§1.3).
+2. Open **Settings → Live feed** (or the per-reader Live Reads inside the reader
+   expander); watch **RSSI** as a body carries the monitor through — normal, then
+   bag/body-concealed.
+3. **Raise transmit power** until concealed carry reads reliably as it crosses;
+   **lower it** if tags read from across the room / standing nearby. Balance across
+   antennas for even doorway coverage.
+4. If power alone can't separate "through" from "near," set the output **RSSI
+   threshold** just below the weakest reliable concealed read and above ambient.
+5. Set **Age-out** so a single pass = one fire (no chatter); **Auto-off** to a
+   duration that reads well (3 s now).
+6. Repeat until normal carry ~100% and concealed as high as placement allows.
 
-Record the final values here once tuned:
+Starting point (prior cs463-212 validation): RSSI gate near **−65 dBm** at close
+range with **lower TX power** — **treat as a guess for this room**; geometry,
+antenna count, and mount will move it. Box currently runs Ant 1 @ 30 dBm.
 
-- Antenna placement: _______
-- TX power: _______
+Record final values:
+- Antenna placement (×N): _______
+- TX power per antenna: A1 ____  A2 ____  A3 ____  dBm
 - Output RSSI threshold: _______  age-out: _______  auto-off: _______
 
 ---
 
-## Appendix — MQTT fire path (NOT the Friday demo; cloud/firewalled only)
+## Appendix — HTTP fire path (alternative; not the box's current config)
 
-Kept for completeness; the edge box uses HTTP (§3). The MQTT path (TRA-906) is for
-a cloud backend that can't reach a LAN relay over HTTP.
+Selectable as **Transport = HTTP (local edge)** when the backend can reach the
+Shelly directly over LAN HTTP:
+- **Base URL** = the Shelly's LAN address (e.g. `http://192.168.8.66`), **Switch ID**,
+  **Location**, **Mode**.
+- **Test-fire** is a real round-trip: green = device responded; **502 = unreachable**
+  (wrong network / IP / device down).
 
-- Broker: `mqtt.preview.gke.trakrf.id:8883` (preview) / `…prod…` (prod), TLS 1.2,
-  shared `trakrf-mqtt` creds (from the `trakrf-mosquitto-auth` secret).
-- Shelly MQTT config (web UI or `MQTT.SetConfig`): server + TLS on, **CA cert** =
-  the Let's Encrypt chain (leaf → YE2 → ISRG root) — same gotcha as the GL-S10
-  readers; topic prefix e.g. `{org_slug}/dock-strobe`; enable MQTT control.
-- Register output **Transport = MQTT**, **Command Topic** = the device prefix.
-  Backend publishes to `<command_topic>/command/switch:<switch_id>`.
-- Validate device-side independently (no backend):
-
-  ```bash
-  mosquitto_pub -h mqtt.preview.gke.trakrf.id -p 8883 --cafile <le-ca.pem> \
-    -u trakrf-mqtt -P '<pass>' \
-    -t '{org_slug}/dock-strobe/command/switch:0' -m on   # -m off to clear
-  ```
-- Test-fire semantics differ: HTTP is a real round-trip (502 = unreachable); MQTT
-  is publish-and-trust (green = broker accepted, not relay-confirmed).
+Cloud/firewalled MQTT (preview/prod, not the box): broker
+`mqtt.{preview,prod}.gke.trakrf.id:8883`, TLS 1.2, shared `trakrf-mqtt` creds; the
+Shelly must trust the Let's Encrypt CA chain (same gotcha as the GL-S10 readers);
+topic prefix `{org_slug}/…`.
 
 ---
 
 ## ─────────  ENGINEER QUICK CARD (Mike — has shell)  ─────────
 
-> Tim's laminated card is the separate `tra-904-tim-demo-card.md`. This one has
-> shell commands and is for Mike.
+> Tim's laminated card is the separate `tra-904-tim-demo-card.md`. This one has shell.
 
 **TrakRF egress demo — engineer card**     Box: `trakrf-demo` @ `192.168.8.10` (offline)
 Laptop (Chrome, Secure DNS **off**) → **https://app.demo.trakrf.id**
@@ -279,20 +324,20 @@ Laptop (Chrome, Secure DNS **off**) → **https://app.demo.trakrf.id**
 1. Power on box → wait ~1–2 min.
 2. `podman ps` → 5 containers **Up** · `curl -fsS http://127.0.0.1:8080/health` → 200
 3. App → **Settings → Live feed**: reads show when an armed tag is at the door.
-4. **Settings → Outputs → door → Test-fire** → strobe pulses → **Reset**.
+4. **Settings → Outputs → Alarm Plug → Test-fire** → strobe fires → self-clears (3 s).
 
 **RUN**
 - Carry **registered** monitor through door → **strobe fires <1s**.
-- Reset (auto-off, or Outputs → Reset).
+- Auto-off clears it (3 s), or Outputs → Reset.
 - Carry **decoy** (unregistered) tag → **no alarm** (this is the point).
 - Concealed/bag carry → catch-rate story (honest 80–90% if marginal).
 
 **IF WRONG**
 - No reads → power-cycle CS463, wait ~2 min.
-- Reads but no fire → tag registered? output **egress** + same **location**? RSSI too tight?
-- Fires for everything → RSSI too loose / decoy is registered.
-- 502 on test-fire → Shelly power/IP/LAN.
-- Strobe stuck on → it's the latch → **Reset**.
-- UI dead → wait 30s (self-heals); else break-glass shell: `systemctl --user restart <svc>`.
+- Reads but no fire → tag registered? output **Egress** + same **location (Doorway 1)**? power/RSSI too tight?
+- Test-fire green but no flash → Shelly not on broker / wrong topic → `mosquitto_pub … -t trakrf.id/alarm-plug/command/switch:0 -m on`.
+- Fires for everything → power/RSSI too loose / decoy is registered.
+- Strobe stuck on → it's the latch → **Reset (off)**.
+- UI dead → wait 30s (self-heals); else `systemctl --user restart <svc>`.
 
 **NEVER** push updates / go online during a demo window (box is offline by design).
