@@ -112,10 +112,14 @@ func (c *Client) SetProfilePower(ctx context.Context, profileID string, antennaC
 	setField(form, "tagmodel", profileFields, "tagModel", "ANY")
 	setField(form, "firstextrabanktype", profileFields, "firstExtraBankType", "none")
 	setField(form, "firstextrabankoffset", profileFields, "firstExtraBankOffset", "0")
-	setField(form, "firstextrabanklength", profileFields, "firstExtraBankLength", "0")
 	setField(form, "secondextrabanktype", profileFields, "secondExtraBankType", "none")
 	setField(form, "secondextrabankoffset", profileFields, "secondExtraBankOffset", "0")
-	setField(form, "secondextrabanklength", profileFields, "secondExtraBankLength", "0")
+	// Extra-bank word count: force 1, never carry through the reader's 0. The CS463
+	// Multi-Bank Inventory validation requires count >= 1 even when the bank is
+	// disabled (type=none) — a 0 BLOCKS saving the Operation Profile and risks "no
+	// tag return". Golden config never reads extra banks, so 1 is always correct. (TRA-1014)
+	form.Set("firstextrabanklength", "1")
+	form.Set("secondextrabanklength", "1")
 	setField(form, "minonchiprssi", profileFields, "minOnChipRSSI", "0")
 	setField(form, "maxonchiprssi", profileFields, "maxOnChipRSSI", "0")
 	setField(form, "moistavgwindow", profileFields, "moistAvgWindow", "0")
