@@ -123,6 +123,10 @@ LAN cable colors: **white** = Slate↔box · **purple** = Slate↔CS463 · **ora
 Slate WAN↔house internet (optional). MK107 / GL-S10 / Shelly reach the Slate over
 WiFi. Thick arrows = power; dotted = WiFi.
 
+As-shipped reference photo (the real rats-nest — same components as the diagram):
+
+![As-shipped demo rig](img/demo-rig-rats-nest.jpg)
+
 ---
 
 ## 0. The demo in one breath
