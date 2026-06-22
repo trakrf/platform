@@ -1,0 +1,55 @@
+# GoReleaser config for the trakrf CLI (GoReleaser v2 schema).
+# Local snapshot:  just cli release-snapshot
+# Real releases (GitHub release assets + Homebrew tap) are driven by a tagged
+# CI workflow + a tap-repo token — see README "Distribution" (follow-up wiring).
+version: 2
+
+project_name: trakrf
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: trakrf
+    main: .
+    binary: trakrf
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: trakrf
+    name_template: "trakrf_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+brews:
+  - name: trakrf
+    repository:
+      owner: trakrf
+      name: homebrew-tap
+    directory: Formula
+    homepage: "https://trakrf.id"
+    description: "Scriptable CLI for the TrakRF public REST API"
+    license: "BUSL-1.1"
+    test: |
+      system "#{bin}/trakrf --version"

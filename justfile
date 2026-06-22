@@ -18,6 +18,9 @@ frontend *args:
 backend *args:
     cd backend && just {{args}}
 
+cli *args:
+    cd cli && just {{args}}
+
 database *args:
     cd database && just {{args}}
 
@@ -34,11 +37,11 @@ alias be := backend
 # ============================================================================
 # Run checks across all workspaces
 
-lint: (frontend "lint") (backend "lint")
+lint: (frontend "lint") (backend "lint") (cli "lint")
 
-test: (frontend "test") (backend "test")
+test: (frontend "test") (backend "test") (cli "test")
 
-build: (frontend "build") (backend "build")
+build: (frontend "build") (backend "build") (cli "build")
 
 validate: lint test build
 
