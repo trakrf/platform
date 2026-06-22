@@ -1,0 +1,17 @@
+# oapi-codegen configuration — regenerate with `go generate ./api` or `just regen`.
+# Generates the typed models + net/http client from the vendored public spec.
+package: api
+output: api.gen.go
+generate:
+  models: true
+  client: true
+output-options:
+  # Skip pruning so every schema/operation in the published surface is available
+  # to the command layer even if v1 only wires a subset.
+  skip-prune: true
+  # The spec names its response schemas `GetAssetResponse`, `ListAssetsResponse`,
+  # etc. Those collide head-on with oapi-codegen's per-operation response-wrapper
+  # types (also `<OpId>Response`), which makes a single-package generation fail to
+  # compile ("redeclared in this block"). Suffix the wrappers so schema models keep
+  # their natural names and the wrappers become `ListAssetsResp`, `GetAssetResp`, …
+  response-type-suffix: Resp

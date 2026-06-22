@@ -1,0 +1,7 @@
+/bin/
+/dist/
+trakrf
+
+# Local secrets — API credentials for smoke testing. Never commit.
+.env.local
+.env*.local

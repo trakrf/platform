@@ -1,0 +1,48 @@
+# TrakRF CLI - task runner
+# Run via the repo root as `just cli <recipe>` (delegated), or directly here.
+
+set fallback := true
+
+# List recipes
+default:
+    @just --list
+
+# Regenerate the typed API client from the vendored spec
+regen:
+    go generate ./api
+
+# Re-vendor the public OpenAPI spec from docs/api, then regenerate the client.
+# Run this whenever the published API surface changes so the client tracks it.
+vendor-spec:
+    cp ../docs/api/openapi.public.yaml api/openapi.public.yaml
+    just regen
+
+# Build a local binary into ./bin
+build:
+    go build -o bin/trakrf .
+
+# Install to GOBIN
+install:
+    go install .
+
+test:
+    go test ./...
+
+vet:
+    go vet ./...
+
+fmt:
+    gofmt -w .
+
+# Fail if any file is not gofmt-clean
+fmt-check:
+    @test -z "$(gofmt -l .)" || { echo "gofmt needed:"; gofmt -l .; exit 1; }
+
+lint: vet fmt-check
+
+# Everything CI should gate on
+validate: lint test build
+
+# Cross-platform snapshot build (requires goreleaser installed)
+release-snapshot:
+    goreleaser release --snapshot --clean
