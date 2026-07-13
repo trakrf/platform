@@ -464,6 +464,13 @@ func (s *Storage) CountActiveAssetsAtLocation(ctx context.Context, orgID, locati
 	`
 	var count int
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		// Same DISTINCT ON over the asset_scans hypertable that crashes the
+		// asset-locations report under RLS; disable SkipScan here too so a
+		// location DELETE doesn't 500 for orgs with enough scan history. See
+		// disableSkipScan in reports.go.
+		if err := disableSkipScan(ctx, tx); err != nil {
+			return err
+		}
 		return tx.QueryRow(ctx, query, orgID, locationID).Scan(&count)
 	})
 	if err != nil {
