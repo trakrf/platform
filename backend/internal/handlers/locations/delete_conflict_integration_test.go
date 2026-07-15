@@ -70,9 +70,6 @@ func seedAssetAtLocation(t *testing.T, pool *pgxpool.Pool, orgID int, externalKe
 			VALUES ($1, $2, $3, $4)
 		`, time.Now().UTC(), orgID, id, *locationID)
 		require.NoError(t, err)
-		// The delete guard counts via the materialized-only asset_scan_latest
-		// CAGG (TRA-1022); refresh so the seeded scan is visible.
-		testutil.RefreshAssetScanLatest(t, pool)
 	}
 	return id
 }
@@ -224,8 +221,6 @@ func TestDeleteLocation_AssetScannedAway_DoesNotBlock(t *testing.T) {
 		VALUES ($1, $2, $3, $4)
 	`, time.Now().UTC().Add(time.Hour), orgID, assetID, locB)
 	require.NoError(t, err)
-	// Re-refresh so the CAGG reflects the later scan that moved the asset to locB.
-	testutil.RefreshAssetScanLatest(t, pool)
 
 	router := setupDeleteConflictRouter(NewHandler(store))
 

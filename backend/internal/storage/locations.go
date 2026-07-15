@@ -441,6 +441,32 @@ func (s *Storage) CountActiveChildLocations(ctx context.Context, orgID, id int) 
 	return count, nil
 }
 
+// disableSkipScan turns off TimescaleDB's SkipScan planner optimization for the
+// current transaction.
+//
+// A `SELECT DISTINCT ON (asset_id) ... ORDER BY asset_id, timestamp DESC` over
+// the asset_scans hypertable is exactly the shape SkipScan targets. Since
+// TRA-875 added an RLS policy to asset_scans, the policy qual is planned as a
+// `Result` subplan under the SkipScan node, and TimescaleDB aborts at execution
+// with "unsupported subplan type for SkipScan: Result" (SQLSTATE XX000) — a hard
+// 500 once the org has enough scan rows for the planner to choose SkipScan. It
+// surfaces only under the RLS role (trakrf-app), never as superuser, which
+// bypasses the policy that injects the Result node.
+//
+// Disabling SkipScan makes the DISTINCT ON fall back to a plain ordered index
+// scan returning identical rows. SET LOCAL scopes it to the transaction.
+//
+// TRA-1022 removed the report's use of this (it reads the asset_scan_latest
+// CAGG now); CountActiveAssetsAtLocation is the sole remaining caller, because a
+// delete-integrity guard needs live data the CAGG's materialized-only lag can't
+// give.
+func disableSkipScan(ctx context.Context, tx pgx.Tx) error {
+	if _, err := tx.Exec(ctx, "SET LOCAL timescaledb.enable_skipscan = off"); err != nil {
+		return fmt.Errorf("failed to disable skipscan: %w", err)
+	}
+	return nil
+}
+
 // CountActiveAssetsAtLocation returns the number of non-deleted assets whose
 // latest scan places them at the location. Used by DELETE /locations/{id} to
 // refuse a delete that would leave assets scanned into a soft-deleted location
@@ -450,18 +476,24 @@ func (s *Storage) CountActiveAssetsAtLocation(ctx context.Context, orgID, locati
 	// column was dropped (migration 000043). This also restores BB22 F2
 	// intent: since TRA-734 nulled current_location_id for new assets, the
 	// old column-based guard had fired for zero modern assets.
-	// TRA-1022: latest-scan-per-asset comes from the asset_scan_latest CAGG
-	// (collapsed across buckets with last()), not a DISTINCT ON over the
-	// asset_scans hypertable — so no SkipScan workaround is needed. org_id is
-	// filtered explicitly because RLS does not extend to the CAGG.
+	// TRA-799: count by latest-scan location — the assets.current_location_id
+	// column was dropped (migration 000043).
+	//
+	// Deliberately NOT moved to the asset_scan_latest CAGG (TRA-1022): that CAGG
+	// is materialized-only and lags ingestion by up to the refresh interval
+	// (~1 min). The asset-locations *report* tolerates that staleness, but this
+	// is a delete-integrity guard — it must see a scan the instant it lands, or a
+	// location an asset was just scanned into could be deleted inside the refresh
+	// window (reintroducing the BB22 F2 bug). So it reads the live hypertable and
+	// keeps the TRA-1021 disableSkipScan workaround (a bare DISTINCT ON over
+	// asset_scans under RLS crashes SkipScan). This path runs only on
+	// DELETE /locations/{id}, so its cost is not on any hot read.
 	query := `
 		WITH latest_scans AS (
-			SELECT
-				asset_id,
-				last(location_id, last_seen) AS location_id
-			FROM trakrf.asset_scan_latest
-			WHERE org_id = $1
-			GROUP BY asset_id
+			SELECT DISTINCT ON (s.asset_id) s.asset_id, s.location_id
+			FROM trakrf.asset_scans s
+			WHERE s.org_id = $1
+			ORDER BY s.asset_id, s.timestamp DESC
 		)
 		SELECT COUNT(*)
 		FROM trakrf.assets a
@@ -470,6 +502,9 @@ func (s *Storage) CountActiveAssetsAtLocation(ctx context.Context, orgID, locati
 	`
 	var count int
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		if err := disableSkipScan(ctx, tx); err != nil {
+			return err
+		}
 		return tx.QueryRow(ctx, query, orgID, locationID).Scan(&count)
 	})
 	if err != nil {
