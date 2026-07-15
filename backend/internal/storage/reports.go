@@ -50,6 +50,30 @@ func currentLocationsArgs(filter report.CurrentLocationFilter) (locIDsArg, locKe
 	return
 }
 
+// disableSkipScan turns off TimescaleDB's SkipScan planner optimization for the
+// current transaction.
+//
+// The asset-locations report resolves each asset's most-recent scan with a
+// `SELECT DISTINCT ON (asset_id) ... ORDER BY asset_id, timestamp DESC` over the
+// asset_scans hypertable — exactly the shape SkipScan targets. Since TRA-875
+// added an RLS policy to asset_scans, the policy qual is planned as a `Result`
+// subplan under the SkipScan node, and TimescaleDB 2.18 aborts at execution with
+// "unsupported subplan type for SkipScan: Result" (SQLSTATE XX000) — a hard 500
+// on every call once the org has enough scan rows for the planner to choose
+// SkipScan. It surfaces only under the RLS role (trakrf-app), never as superuser,
+// because the superuser bypasses the policy that injects the Result node.
+//
+// Disabling SkipScan makes the DISTINCT ON fall back to a plain ordered index
+// scan, which returns identical rows. SET LOCAL scopes this to the transaction
+// so no other query loses the optimization. Both the list and count queries use
+// DISTINCT ON, so both must call this.
+func disableSkipScan(ctx context.Context, tx pgx.Tx) error {
+	if _, err := tx.Exec(ctx, "SET LOCAL timescaledb.enable_skipscan = off"); err != nil {
+		return fmt.Errorf("failed to disable skipscan: %w", err)
+	}
+	return nil
+}
+
 // ListCurrentLocations returns paginated current asset locations
 func (s *Storage) ListCurrentLocations(ctx context.Context, orgID int, filter report.CurrentLocationFilter) ([]report.CurrentLocationItem, error) {
 	engine := getReportsQueryEngine()
@@ -67,6 +91,9 @@ func (s *Storage) ListCurrentLocations(ctx context.Context, orgID int, filter re
 
 	items := []report.CurrentLocationItem{}
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		if err := disableSkipScan(ctx, tx); err != nil {
+			return err
+		}
 		rows, err := tx.Query(ctx, query, orgID, locIDsArg, locKeysArg, qArg, filter.Limit, filter.Offset, filter.IncludeDeleted, assetIDsArg, assetKeysArg)
 		if err != nil {
 			return fmt.Errorf("failed to list current locations: %w", err)
@@ -133,6 +160,9 @@ func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter r
 
 	var count int
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		if err := disableSkipScan(ctx, tx); err != nil {
+			return err
+		}
 		return tx.QueryRow(ctx, query, orgID, locIDsArg, locKeysArg, qArg, filter.IncludeDeleted, assetIDsArg, assetKeysArg).Scan(&count)
 	})
 	if err != nil {
