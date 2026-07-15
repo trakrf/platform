@@ -1,0 +1,17 @@
+-- TRA-1022 (1 of 3): temporarily disable RLS on asset_scans so the next
+-- migration can create a continuous aggregate over it.
+--
+-- TimescaleDB refuses `CREATE MATERIALIZED VIEW ... WITH (timescaledb.continuous)`
+-- over a hypertable that has row-level security enabled ("cannot create
+-- continuous aggregate on hypertable with row security", verified on TS 2.26.4).
+-- The guard is DDL-only: once the CAGG is created it keeps working after RLS is
+-- re-enabled (refresh runs as the owner, which owns asset_scans and bypasses
+-- RLS; materialized reads never touch the base table at all). So we drop RLS
+-- here, create the CAGG in 000027, and re-enable RLS in 000028 — all within one
+-- `migrate up`, so asset_scans is only unprotected for the few statements
+-- between them, and only for the migrate role that runs migrations.
+--
+-- Split across three files because the CREATE cannot run in a transaction and
+-- golang-migrate runs each file as a single Exec (one implicit transaction when
+-- a file holds >1 statement); the DISABLE must be committed before the CREATE.
+ALTER TABLE trakrf.asset_scans DISABLE ROW LEVEL SECURITY;
