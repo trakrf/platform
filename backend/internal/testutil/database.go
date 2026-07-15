@@ -396,3 +396,27 @@ func CreateTestAccount(t *testing.T, pool *pgxpool.Pool) int {
 	t.Logf("✅ Created test account: %d", accountID)
 	return accountID
 }
+
+// RefreshAssetScanLatest fully refreshes the asset_scan_latest continuous
+// aggregate (TRA-1022) so it reflects rows seeded since the last refresh.
+//
+// The CAGG is materialized-only (real-time aggregation is incompatible with the
+// RLS on asset_scans), so a read sees only materialized data. In production a
+// background policy refreshes every ~30s; tests seed and query in the same
+// instant, so they must force a refresh in between or the report comes back
+// empty. Call this after seeding asset_scans and before hitting the endpoint.
+//
+// refresh_continuous_aggregate manages its own transaction and cannot run
+// inside one, so it goes through the simple protocol — pgx would otherwise wrap
+// a parameterless Exec in the extended protocol's implicit transaction. NULL,
+// NULL refreshes the whole range, including the current (incomplete) bucket that
+// the policy's end_offset would normally leave to real-time aggregation.
+func RefreshAssetScanLatest(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(),
+		"CALL refresh_continuous_aggregate('trakrf.asset_scan_latest', NULL, NULL)",
+		pgx.QueryExecModeSimpleProtocol)
+	if err != nil {
+		t.Fatalf("failed to refresh asset_scan_latest CAGG: %v", err)
+	}
+}

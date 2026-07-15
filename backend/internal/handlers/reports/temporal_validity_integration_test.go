@@ -100,6 +100,10 @@ func TestListCurrentLocations_TemporalValidity_FiltersAssetsAndLocations(t *test
 	seedScan(t, pool, orgID, effectiveAsset2, expiredLoc, now)
 	seedScan(t, pool, orgID, expiredAsset, effectiveLoc, now)
 
+	// The report reads the materialized-only asset_scan_latest CAGG (TRA-1022),
+	// so make the just-seeded scans visible before querying.
+	testutil.RefreshAssetScanLatest(t, pool)
+
 	handler := NewHandler(store)
 	router := setupTemporalReportsRouter(handler)
 

@@ -3,29 +3,11 @@ package storage
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/trakrf/platform/backend/internal/models/report"
 )
-
-// QueryEngine determines which SQL strategy to use
-type QueryEngine string
-
-const (
-	QueryEngineDistinctOn    QueryEngine = "distinct_on"
-	QueryEngineTimescaleLast QueryEngine = "timescale_last"
-)
-
-// getReportsQueryEngine returns the configured query engine
-func getReportsQueryEngine() QueryEngine {
-	engine := os.Getenv("REPORTS_QUERY_ENGINE")
-	if engine == string(QueryEngineTimescaleLast) {
-		return QueryEngineTimescaleLast
-	}
-	return QueryEngineDistinctOn // default
-}
 
 // currentLocationsArgs prepares the variadic args shared by list + count
 // queries. Each filter short-circuits to NULL when empty so the SQL
@@ -74,26 +56,22 @@ func disableSkipScan(ctx context.Context, tx pgx.Tx) error {
 	return nil
 }
 
-// ListCurrentLocations returns paginated current asset locations
+// ListCurrentLocations returns paginated current asset locations.
+//
+// Latest-scan-per-asset is resolved from the asset_scan_latest continuous
+// aggregate (TRA-1022): the CAGG holds last(location_id)/max(timestamp) per
+// time_bucket per (org_id, asset_id); the query collapses those buckets to one
+// row per asset with an outer last()/max(). This replaces the DISTINCT ON over
+// the asset_scans hypertable that TRA-1021 had to defuse with SkipScan-off.
+// org_id is filtered explicitly because RLS does not extend to the CAGG.
 func (s *Storage) ListCurrentLocations(ctx context.Context, orgID int, filter report.CurrentLocationFilter) ([]report.CurrentLocationItem, error) {
-	engine := getReportsQueryEngine()
-
 	orderBy := buildCurrentLocationsOrderBy(filter.Sorts)
-
-	var query string
-	if engine == QueryEngineTimescaleLast {
-		query = buildCurrentLocationsQueryTimescale(orderBy)
-	} else {
-		query = buildCurrentLocationsQueryDistinctOn(orderBy)
-	}
+	query := buildCurrentLocationsQuery(orderBy)
 
 	locIDsArg, locKeysArg, qArg, assetIDsArg, assetKeysArg := currentLocationsArgs(filter)
 
 	items := []report.CurrentLocationItem{}
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		if err := disableSkipScan(ctx, tx); err != nil {
-			return err
-		}
 		rows, err := tx.Query(ctx, query, orgID, locIDsArg, locKeysArg, qArg, filter.Limit, filter.Offset, filter.IncludeDeleted, assetIDsArg, assetKeysArg)
 		if err != nil {
 			return fmt.Errorf("failed to list current locations: %w", err)
@@ -131,14 +109,15 @@ func (s *Storage) ListCurrentLocations(ctx context.Context, orgID int, filter re
 
 // CountCurrentLocations returns total count for pagination
 func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter report.CurrentLocationFilter) (int, error) {
+	// Same CAGG-sourced latest_scans CTE as the list query (TRA-1022).
 	query := `
 		WITH latest_scans AS (
-			SELECT DISTINCT ON (s.asset_id)
-				s.asset_id,
-				s.location_id
-			FROM trakrf.asset_scans s
-			WHERE s.org_id = $1
-			ORDER BY s.asset_id, s.timestamp DESC
+			SELECT
+				asset_id,
+				last(location_id, last_seen) AS location_id
+			FROM trakrf.asset_scan_latest
+			WHERE org_id = $1
+			GROUP BY asset_id
 		)
 		SELECT COUNT(*)
 		FROM latest_scans ls
@@ -160,9 +139,6 @@ func (s *Storage) CountCurrentLocations(ctx context.Context, orgID int, filter r
 
 	var count int
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		if err := disableSkipScan(ctx, tx); err != nil {
-			return err
-		}
 		return tx.QueryRow(ctx, query, orgID, locIDsArg, locKeysArg, qArg, filter.IncludeDeleted, assetIDsArg, assetKeysArg).Scan(&count)
 	})
 	if err != nil {
@@ -211,52 +187,19 @@ func buildCurrentLocationsOrderBy(sorts []report.CurrentLocationSort) string {
 	return strings.Join(out, ", ")
 }
 
-func buildCurrentLocationsQueryDistinctOn(orderBy string) string {
-	return `
-		WITH latest_scans AS (
-			SELECT DISTINCT ON (s.asset_id)
-				s.asset_id,
-				s.location_id,
-				s.timestamp AS last_seen
-			FROM trakrf.asset_scans s
-			WHERE s.org_id = $1
-			ORDER BY s.asset_id, s.timestamp DESC
-		)
-		SELECT
-			a.id            AS asset_id,
-			a.name          AS asset_name,
-			a.external_key  AS asset_external_key,
-			l.id            AS location_id,
-			l.name          AS location_name,
-			l.external_key  AS location_external_key,
-			ls.last_seen,
-			a.deleted_at    AS asset_deleted_at
-		FROM latest_scans ls
-		JOIN trakrf.assets a ON a.id = ls.asset_id AND a.org_id = $1 AND ` + temporallyEffective("a") + `
-		LEFT JOIN trakrf.locations l ON l.id = ls.location_id AND l.org_id = $1 AND l.deleted_at IS NULL AND ` + temporallyEffective("l") + `
-		WHERE ($2::bigint[]  IS NULL OR l.id           = ANY($2::bigint[]))
-		  AND ($3::text[] IS NULL OR l.external_key = ANY($3::text[]))
-		  AND ($4::text IS NULL OR a.name ILIKE $4 OR a.external_key ILIKE $4
-			   OR EXISTS (
-				   SELECT 1 FROM trakrf.tags ai
-				   WHERE ai.asset_id = a.id AND ai.is_active = true AND ai.deleted_at IS NULL AND ` + temporallyEffective("ai") + ` AND ai.value ILIKE $4
-			   ))
-		  AND (a.deleted_at IS NULL OR $7::bool)
-		  AND ($8::bigint[]  IS NULL OR a.id           = ANY($8::bigint[]))
-		  AND ($9::text[] IS NULL OR a.external_key = ANY($9::text[]))
-		ORDER BY ` + orderBy + `
-		LIMIT $5 OFFSET $6
-	`
-}
-
-func buildCurrentLocationsQueryTimescale(orderBy string) string {
+// buildCurrentLocationsQuery renders the list query. The latest_scans CTE reads
+// the asset_scan_latest CAGG and collapses its per-bucket rows to one row per
+// asset (last(location_id) by newest bucket, max(last_seen)). Everything below
+// the CTE — joins, temporal-validity predicates, filters, sort, pagination — is
+// unchanged from the pre-CAGG query.
+func buildCurrentLocationsQuery(orderBy string) string {
 	return `
 		WITH latest_scans AS (
 			SELECT
 				asset_id,
-				last(location_id, timestamp) AS location_id,
-				max(timestamp) AS last_seen
-			FROM trakrf.asset_scans
+				last(location_id, last_seen) AS location_id,
+				max(last_seen)               AS last_seen
+			FROM trakrf.asset_scan_latest
 			WHERE org_id = $1
 			GROUP BY asset_id
 		)

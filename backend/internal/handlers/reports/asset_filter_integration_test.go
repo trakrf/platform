@@ -84,6 +84,9 @@ func seedThreeAssetsAtTwoLocations(t *testing.T, pool *pgxpool.Pool, orgID int) 
 	seedScan(t, pool, orgID, assets["AST-0001"], locations["LOC-A"], now.Add(-3*time.Minute))
 	seedScan(t, pool, orgID, assets["AST-0002"], locations["LOC-A"], now.Add(-2*time.Minute))
 	seedScan(t, pool, orgID, assets["AST-0003"], locations["LOC-B"], now.Add(-1*time.Minute))
+	// The report reads the materialized-only asset_scan_latest CAGG (TRA-1022),
+	// so make the just-seeded scans visible before any query.
+	testutil.RefreshAssetScanLatest(t, pool)
 	return assets, locations
 }
 
