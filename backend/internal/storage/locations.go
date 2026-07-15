@@ -450,12 +450,18 @@ func (s *Storage) CountActiveAssetsAtLocation(ctx context.Context, orgID, locati
 	// column was dropped (migration 000043). This also restores BB22 F2
 	// intent: since TRA-734 nulled current_location_id for new assets, the
 	// old column-based guard had fired for zero modern assets.
+	// TRA-1022: latest-scan-per-asset comes from the asset_scan_latest CAGG
+	// (collapsed across buckets with last()), not a DISTINCT ON over the
+	// asset_scans hypertable — so no SkipScan workaround is needed. org_id is
+	// filtered explicitly because RLS does not extend to the CAGG.
 	query := `
 		WITH latest_scans AS (
-			SELECT DISTINCT ON (s.asset_id) s.asset_id, s.location_id
-			FROM trakrf.asset_scans s
-			WHERE s.org_id = $1
-			ORDER BY s.asset_id, s.timestamp DESC
+			SELECT
+				asset_id,
+				last(location_id, last_seen) AS location_id
+			FROM trakrf.asset_scan_latest
+			WHERE org_id = $1
+			GROUP BY asset_id
 		)
 		SELECT COUNT(*)
 		FROM trakrf.assets a
@@ -464,13 +470,6 @@ func (s *Storage) CountActiveAssetsAtLocation(ctx context.Context, orgID, locati
 	`
 	var count int
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		// Same DISTINCT ON over the asset_scans hypertable that crashes the
-		// asset-locations report under RLS; disable SkipScan here too so a
-		// location DELETE doesn't 500 for orgs with enough scan history. See
-		// disableSkipScan in reports.go.
-		if err := disableSkipScan(ctx, tx); err != nil {
-			return err
-		}
 		return tx.QueryRow(ctx, query, orgID, locationID).Scan(&count)
 	})
 	if err != nil {
