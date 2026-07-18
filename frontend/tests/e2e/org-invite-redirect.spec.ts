@@ -117,7 +117,7 @@ test.describe('Redirect Flow - Token Preservation', () => {
 
     // Pre-signup invitee so post-auth-redirect path goes through #login,
     // which handleAuthRedirect loops back to accept-invite (signup auto-accepts
-    // and lands on #home, bypassing accept-invite — not this test's subject).
+    // and lands on #scan, bypassing accept-invite — not this test's subject).
     await page.goto('/');
     await clearAuthState(page);
     await page.reload({ waitUntil: 'networkidle' });

@@ -181,7 +181,7 @@ test.describe('Inventory Save Flow', () => {
 
   test('1. scan tags anonymously to discover real EPCs @hardware @critical', async () => {
     // Navigate to inventory while anonymous
-    await sharedPage.goto('/#inventory');
+    await sharedPage.goto('/#scan');
     await sharedPage.waitForTimeout(500);
 
     // Verify we're anonymous
@@ -243,8 +243,8 @@ test.describe('Inventory Save Flow', () => {
     expect(unenrichedCount).toBe(scanResult.count);
     console.log('[Test] Confirmed tags are unenriched (anonymous)');
 
-    // Navigate to home before disconnecting
-    await sharedPage.click('button[data-testid="menu-item-home"]');
+    // Navigate to settings (idle) before disconnecting
+    await sharedPage.click('button[data-testid="menu-item-settings"]');
     await sharedPage.waitForTimeout(500);
 
     // Disconnect device
@@ -271,7 +271,7 @@ test.describe('Inventory Save Flow', () => {
     }
 
     // Navigate to inventory - tags should still be in localStorage
-    await sharedPage.goto('/#inventory');
+    await sharedPage.goto('/#scan');
     await sharedPage.waitForTimeout(1000);
 
     // Wait for enrichment to happen
@@ -388,7 +388,7 @@ test.describe('Inventory Save Flow', () => {
     console.log('[Test] Logging in for org switch test...');
     await loginTestUser(sharedPage, testEmail, testPassword);
 
-    await sharedPage.goto('/#inventory');
+    await sharedPage.goto('/#scan');
     await sharedPage.waitForTimeout(1000);
 
     // Inject mock tags directly into the store
@@ -466,7 +466,7 @@ test.describe('Inventory Save Flow', () => {
     await sharedPage.reload({ waitUntil: 'networkidle' });
 
     // Navigate to inventory
-    await sharedPage.goto('/#inventory');
+    await sharedPage.goto('/#scan');
     await sharedPage.waitForTimeout(500);
 
     // Verify anonymous
@@ -506,6 +506,6 @@ test.describe('Inventory Save Flow', () => {
     const redirectPath = await sharedPage.evaluate(() => {
       return sessionStorage.getItem('redirectAfterLogin');
     });
-    expect(redirectPath).toBe('inventory');
+    expect(redirectPath).toBe('scan');
   });
 });

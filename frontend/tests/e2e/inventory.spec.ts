@@ -41,7 +41,7 @@ test.describe('Consolidated Inventory Tests', () => {
 
     // Now navigate to inventory tab after connection established
     console.log('[Inventory] Navigating to inventory tab (will trigger mode change)...');
-    await sharedPage.click('[data-testid="menu-item-inventory"]');
+    await sharedPage.click('[data-testid="menu-item-scan"]');
 
     // Wait for tab to change
     await sharedPage.waitForTimeout(500);
@@ -67,7 +67,7 @@ test.describe('Consolidated Inventory Tests', () => {
     });
 
     console.log('[Inventory] Mode change result:', modeChangeResult);
-    expect(modeChangeResult.activeTab).toBe('inventory');
+    expect(modeChangeResult.activeTab).toBe('scan');
     expect(modeChangeResult.readerMode).toBe('Inventory');
 
     // Wait for state to settle to Ready
@@ -130,10 +130,10 @@ test.describe('Consolidated Inventory Tests', () => {
   
   test.afterAll(async () => {
     if (sharedPage && connectionHealthy) {
-      console.log('[Inventory] Cleaning up - switching to home tab to power off RFID...');
+      console.log('[Inventory] Cleaning up - switching to settings tab to power off RFID...');
 
-      // Click home tab to trigger IDLE mode
-      await sharedPage.click('button[data-testid="menu-item-home"]');
+      // Click settings tab to trigger IDLE mode
+      await sharedPage.click('button[data-testid="menu-item-settings"]');
       await sharedPage.waitForTimeout(1000); // Give time for IDLE mode to activate
 
       // Verify RFID is powered off
@@ -307,7 +307,7 @@ test.describe('Consolidated Inventory Tests', () => {
       await powerSlider.fill('30');
       await sharedPage.waitForTimeout(500);
       
-      await sharedPage.goto('/?tab=inventory');
+      await sharedPage.goto('/?tab=scan');
       await sharedPage.waitForTimeout(1000);
       
       // Clear and read
@@ -332,7 +332,7 @@ test.describe('Consolidated Inventory Tests', () => {
       await powerSlider.fill('10');
       await sharedPage.waitForTimeout(500);
       
-      await sharedPage.goto('/?tab=inventory');
+      await sharedPage.goto('/?tab=scan');
       await sharedPage.waitForTimeout(1000);
       
       // Clear and read

@@ -1,7 +1,7 @@
 /**
  * Anonymous Access E2E Tests
  *
- * Verifies that Inventory, Locate, and Barcode screens are accessible
+ * Verifies that the Scan and Locate screens are accessible
  * without logging in. Regression test for TRA-177.
  */
 
@@ -16,8 +16,8 @@ test.describe('Anonymous Access', () => {
     await page.reload({ waitUntil: 'networkidle' });
   });
 
-  test('should access inventory screen without login redirect', async ({ page }) => {
-    await page.goto('/#inventory');
+  test('should access scan screen without login redirect', async ({ page }) => {
+    await page.goto('/#scan');
 
     // Wait for any potential redirects
     await page.waitForTimeout(1000);
@@ -25,7 +25,7 @@ test.describe('Anonymous Access', () => {
     // Should NOT have been redirected to login
     const url = page.url();
     expect(url).not.toContain('#login');
-    expect(url).toContain('#inventory');
+    expect(url).toContain('#scan');
   });
 
   test('should access locate screen without login redirect', async ({ page }) => {
@@ -43,16 +43,16 @@ test.describe('Anonymous Access', () => {
     await expect(page.locator('[data-testid="target-epc-display"]')).toBeVisible({ timeout: 5000 });
   });
 
-  test('should access barcode screen without login redirect', async ({ page }) => {
+  test('should redirect legacy #barcode to #scan without login redirect', async ({ page }) => {
     await page.goto('/#barcode');
 
     // Wait for any potential redirects
     await page.waitForTimeout(1000);
 
-    // Should NOT have been redirected to login
+    // Legacy hash resolves to scan, NOT to login
     const url = page.url();
     expect(url).not.toContain('#login');
-    expect(url).toContain('#barcode');
+    expect(url).toContain('#scan');
   });
 
   test('@hardware should not redirect when tags are added to store while anonymous (TRA-305)', async ({
@@ -70,12 +70,12 @@ test.describe('Anonymous Access', () => {
       }
     });
 
-    // Navigate to inventory while anonymous
-    await page.goto('/#inventory');
+    // Navigate to scan while anonymous
+    await page.goto('/#scan');
     await page.waitForTimeout(500);
 
-    // Verify we're on inventory
-    expect(page.url()).toContain('#inventory');
+    // Verify we're on scan
+    expect(page.url()).toContain('#scan');
 
     // Simulate adding tags to the store (what happens when hardware scans tags)
     // This triggers the lookup queue which previously caused 401 -> redirect
@@ -106,10 +106,10 @@ test.describe('Anonymous Access', () => {
     // Wait for the debounced lookup to potentially fire (500ms debounce + buffer)
     await page.waitForTimeout(1500);
 
-    // Should STILL be on inventory, NOT redirected to login
+    // Should STILL be on scan, NOT redirected to login
     const finalUrl = page.url();
     expect(finalUrl).not.toContain('#login');
-    expect(finalUrl).toContain('#inventory');
+    expect(finalUrl).toContain('#scan');
 
     // Verify no 401 errors occurred
     expect(errors401).toHaveLength(0);
