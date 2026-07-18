@@ -4,7 +4,7 @@
 import { create } from 'zustand';
 
 // Define tab types
-export type TabType = 'home' | 'inventory' | 'barcode' | 'settings' | 'locate' | 'help' | 'assets' | 'locations' | 'scan-devices' | 'output-devices' | 'live-reads' | 'reports' | 'reports-history' | 'mustering' | 'login' | 'signup' | 'forgot-password' | 'reset-password' | 'create-org' | 'org-members' | 'org-settings' | 'org-geofence-defaults' | 'accept-invite' | 'api-keys' | 'admin-orgs';
+export type TabType = 'home' | 'scan' | 'inventory' | 'barcode' | 'settings' | 'locate' | 'help' | 'assets' | 'locations' | 'scan-devices' | 'output-devices' | 'live-reads' | 'reports' | 'reports-history' | 'mustering' | 'login' | 'signup' | 'forgot-password' | 'reset-password' | 'create-org' | 'org-members' | 'org-settings' | 'org-geofence-defaults' | 'accept-invite' | 'api-keys' | 'admin-orgs';
 export type TabId = TabType;
 
 // Notification interface
