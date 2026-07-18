@@ -38,7 +38,7 @@ export default function CreateOrgScreen() {
     try {
       await createOrg(name);
       // Redirect to home after successful creation
-      window.location.hash = '#home';
+      window.location.hash = '#scan';
     } catch (err: unknown) {
       const data = (err as any).response?.data;
       const errorObj = data?.error || data;
@@ -62,7 +62,7 @@ export default function CreateOrgScreen() {
       <div className="bg-gray-800 p-8 rounded-lg w-full max-w-md">
         <div className="flex items-center gap-4 mb-6">
           <a
-            href="#home"
+            href="#scan"
             className="text-gray-400 hover:text-gray-300 transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />

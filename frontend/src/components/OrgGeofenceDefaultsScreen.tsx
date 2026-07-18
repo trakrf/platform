@@ -110,7 +110,7 @@ export default function OrgGeofenceDefaultsScreen() {
         <div className="bg-gray-800 p-8 rounded-lg w-full max-w-md text-center">
           <h1 className="text-2xl font-semibold text-white mb-4">No Organization Selected</h1>
           <p className="text-gray-400 mb-6">Please select an organization to configure geofence defaults.</p>
-          <a href="#home" className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300">
+          <a href="#scan" className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300">
             <ArrowLeft className="w-4 h-4" />
             Go Home
           </a>
@@ -123,7 +123,7 @@ export default function OrgGeofenceDefaultsScreen() {
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
       <div className="bg-gray-800 p-8 rounded-lg w-full max-w-md">
         <div className="flex items-center gap-4 mb-2">
-          <a href="#home" className="text-gray-400 hover:text-gray-300 transition-colors">
+          <a href="#scan" className="text-gray-400 hover:text-gray-300 transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </a>
           <h1 className="text-2xl font-semibold text-white">Geofence Defaults</h1>
