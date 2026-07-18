@@ -71,8 +71,12 @@ describe('APIKeysScreen', () => {
 
   it('create flow: POSTs and shows the key in show-once modal', async () => {
     (apiKeysApi.list as ReturnType<typeof vi.fn>).mockResolvedValue({ data: [] });
+    // Real POST /orgs/{id}/api-keys shape: an OAuth2 {client_id, client_secret}
+    // pair, no `token`. Using the live shape here is what would have caught the
+    // TRA-1019 contract drift end-to-end.
     (apiKeysApi.create as ReturnType<typeof vi.fn>).mockResolvedValue({
-      token: 'eyJNEWtoken',
+      client_id: '098b572b-1234-4abc-9def-0123456789ab',
+      client_secret: 'trakrf_7953cd9e0f1a2b3c4d5e6f7a8b9c0d1e',
       id: 99,
       name: 'x',
       scopes: ['assets:read'],
@@ -85,7 +89,11 @@ describe('APIKeysScreen', () => {
     fireEvent.change(screen.getByLabelText(/assets/i), { target: { value: 'read' } });
     fireEvent.click(screen.getByRole('button', { name: /create key/i }));
 
-    await waitFor(() => expect(screen.getByText('eyJNEWtoken')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        screen.getByText('trakrf_7953cd9e0f1a2b3c4d5e6f7a8b9c0d1e'),
+      ).toBeInTheDocument(),
+    );
     expect(apiKeysApi.create).toHaveBeenCalledWith(
       42,
       expect.objectContaining({ scopes: ['assets:read'] }),

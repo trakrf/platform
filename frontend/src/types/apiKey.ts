@@ -25,9 +25,12 @@ export interface CreateAPIKeyRequest {
 }
 
 export interface APIKeyCreateResponse {
-  token: string; // full JWT — shown once (TRA-580 C-2: renamed from `key` to avoid LLM-leak risk)
+  // OAuth2 client_credentials pair, returned once at creation (TRA-210).
+  // `client_id` is the row's jti; `client_secret` is the opaque secret shown
+  // exactly once. Both are exchanged at POST /oauth/token for an access token.
+  client_id: string;
+  client_secret: string;
   id: number;
-  jti: string;
   name: string;
   scopes: Scope[];
   created_at: string;
