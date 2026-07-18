@@ -97,10 +97,10 @@ export default function HamburgerMenu() {
         <div className="absolute right-0 top-full mt-3 w-72 rounded-2xl shadow-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 z-50" data-testid="hamburger-dropdown">
           <div className="p-4">
             <MenuItem
-              id="inventory"
-              label="Inventory"
-              isActive={activeTab === 'inventory'}
-              onClick={() => handleTabClick('inventory')}
+              id="scan"
+              label="Scan"
+              isActive={activeTab === 'scan'}
+              onClick={() => handleTabClick('scan')}
               icon={
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
@@ -119,20 +119,6 @@ export default function HamburgerMenu() {
                 </svg>
               }
             />
-            
-            {/* Temporarily hidden - barcode functionality not working
-            <MenuItem
-              id="barcode"
-              label="Barcode"
-              isActive={activeTab === 'barcode'}
-              onClick={() => handleTabClick('barcode')}
-              icon={
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                </svg>
-              }
-            />
-            */}
             
             <MenuItem
               id="settings"

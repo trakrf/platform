@@ -2,7 +2,7 @@ import React from 'react';
 import { useUIStore, useDeviceStore, useOrgStore } from '@/stores';
 import type { TabType } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
-import { Package2, Search, Settings, ScanLine, HelpCircle, Home, Package, MapPinned, BarChart3, RadioTower, Siren, Radio, SlidersHorizontal, Users } from 'lucide-react';
+import { Package2, Search, Settings, HelpCircle, Package, MapPinned, BarChart3, RadioTower, Siren, Radio, SlidersHorizontal, Users } from 'lucide-react';
 import { appVersion } from '@/version';
 
 interface NavItemProps {
@@ -162,23 +162,14 @@ export default function TabNavigation() {
       <div className="flex-1 px-6 py-4">
         <nav className="space-y-2">
           <NavItem
-            id="home"
-            label="Home"
-            isActive={activeTab === 'home'}
-            onClick={() => handleTabClick('home')}
-            icon={<Home className="w-5 h-5" />}
-            tooltip="Go to the main dashboard with quick access to all features"
-          />
-          
-          <NavItem
-            id="inventory"
-            label="Inventory"
-            isActive={activeTab === 'inventory'}
-            onClick={() => handleTabClick('inventory')}
+            id="scan"
+            label="Scan"
+            isActive={activeTab === 'scan'}
+            onClick={() => handleTabClick('scan')}
             icon={<Package2 className="w-5 h-5" />}
-            tooltip="View scanned items and check what's missing from your list"
+            tooltip="Read tags and check what's missing from your list"
           />
-          
+
           <NavItem
             id="locate"
             label="Locate"
@@ -186,15 +177,6 @@ export default function TabNavigation() {
             onClick={() => handleTabClick('locate')}
             icon={<Search className="w-5 h-5" />}
             tooltip="Find a specific item by walking around with the scanner"
-          />
-          
-          <NavItem
-            id="barcode"
-            label="Barcode"
-            isActive={activeTab === 'barcode'}
-            onClick={() => handleTabClick('barcode')}
-            icon={<ScanLine className="w-5 h-5" />}
-            tooltip="Use your phone camera to scan regular barcodes"
           />
 
           <NavItem

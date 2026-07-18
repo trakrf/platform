@@ -9,7 +9,7 @@ import { appVersion } from '@/version';
 describe('TabNavigation', () => {
   beforeEach(() => {
     // Set default store states
-    useUIStore.setState({ activeTab: 'home' });
+    useUIStore.setState({ activeTab: 'scan' });
     useDeviceStore.setState({ readerState: ReaderState.DISCONNECTED });
     // Default to no org role; device-management tests opt into a role.
     useOrgStore.setState({ currentRole: null });
@@ -22,50 +22,48 @@ describe('TabNavigation', () => {
 
   it('should render all navigation items with correct labels', () => {
     render(<TabNavigation />);
-    expect(screen.getByText('Home')).toBeInTheDocument();
-    expect(screen.getByText('Inventory')).toBeInTheDocument();
+    expect(screen.getByText('Scan')).toBeInTheDocument();
     expect(screen.getByText('Locate')).toBeInTheDocument();
-    expect(screen.getByText('Barcode')).toBeInTheDocument();
     expect(screen.getByText('Settings')).toBeInTheDocument();
     expect(screen.getByText('Help')).toBeInTheDocument();
   });
 
   it('should highlight active tab', () => {
-    useUIStore.setState({ activeTab: 'inventory' });
+    useUIStore.setState({ activeTab: 'scan' });
     render(<TabNavigation />);
-    
-    const inventoryButton = screen.getByText('Inventory').closest('button');
-    expect(inventoryButton).toHaveClass('bg-blue-600', 'text-white');
-    
-    const homeButton = screen.getByText('Home').closest('button');
-    expect(homeButton).not.toHaveClass('bg-blue-600');
+
+    const scanButton = screen.getByText('Scan').closest('button');
+    expect(scanButton).toHaveClass('bg-blue-600', 'text-white');
+
+    const settingsButton = screen.getByText('Settings').closest('button');
+    expect(settingsButton).not.toHaveClass('bg-blue-600');
   });
 
   it('should navigate when clicking nav items', () => {
     const mockSetActiveTab = vi.fn();
     useUIStore.getState().setActiveTab = mockSetActiveTab;
-    
+
     render(<TabNavigation />);
-    const inventoryButton = screen.getByText('Inventory').closest('button');
-    fireEvent.click(inventoryButton!);
-    
-    expect(mockSetActiveTab).toHaveBeenCalledWith('inventory');
+    const scanButton = screen.getByText('Scan').closest('button');
+    fireEvent.click(scanButton!);
+
+    expect(mockSetActiveTab).toHaveBeenCalledWith('scan');
   });
 
   it('should show tooltips on hover', async () => {
     render(<TabNavigation />);
-    const inventoryButton = screen.getByText('Inventory').closest('button');
-    
-    fireEvent.mouseEnter(inventoryButton!);
-    
+    const scanButton = screen.getByText('Scan').closest('button');
+
+    fireEvent.mouseEnter(scanButton!);
+
     await waitFor(() => {
-      expect(screen.getByText(/View scanned items and check what's missing/)).toBeInTheDocument();
+      expect(screen.getByText(/Read tags and check what's missing/)).toBeInTheDocument();
     });
-    
-    fireEvent.mouseLeave(inventoryButton!);
-    
+
+    fireEvent.mouseLeave(scanButton!);
+
     await waitFor(() => {
-      expect(screen.queryByText(/View scanned items and check what's missing/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Read tags and check what's missing/)).not.toBeInTheDocument();
     });
   });
 
@@ -111,10 +109,10 @@ describe('TabNavigation', () => {
     render(<TabNavigation />);
     
     // Simulate browser back button
-    const popStateEvent = new PopStateEvent('popstate', { state: { tab: 'inventory' } });
+    const popStateEvent = new PopStateEvent('popstate', { state: { tab: 'scan' } });
     window.dispatchEvent(popStateEvent);
-    
-    expect(mockSetActiveTab).toHaveBeenCalledWith('inventory');
+
+    expect(mockSetActiveTab).toHaveBeenCalledWith('scan');
   });
 
   it('should display TrakRF logo and version', () => {

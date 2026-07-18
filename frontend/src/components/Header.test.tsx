@@ -73,7 +73,7 @@ const { default: Header } = await import('./Header');
 
 describe('Header page titles', () => {
   beforeEach(() => {
-    useUIStore.setState({ activeTab: 'home' });
+    useUIStore.setState({ activeTab: 'scan' });
   });
 
   afterEach(() => {
@@ -81,8 +81,7 @@ describe('Header page titles', () => {
   });
 
   it.each([
-    ['home', 'Dashboard'],
-    ['inventory', 'Inventory'],
+    ['scan', 'Scan'],
     ['api-keys', 'API Keys'],
     ['reports-history', 'Report History'],
     ['org-members', 'Members'],
