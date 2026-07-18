@@ -35,7 +35,7 @@ interface UIActions {
 }
 
 export const useUIStore = create<UIState & UIActions>((set) => ({
-  activeTab: 'home',
+  activeTab: 'scan',
   sidebarOpen: false,
   settingsOpen: false,
   contextMenuOpen: null,

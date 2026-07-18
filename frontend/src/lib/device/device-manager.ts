@@ -48,9 +48,8 @@ export class DeviceManager {
    * Simple tab-to-mode mapping
    */
   private static readonly TAB_TO_MODE: Record<string, ReaderModeType> = {
-    'inventory': ReaderMode.INVENTORY,
+    'scan': ReaderMode.INVENTORY,
     'locate': ReaderMode.LOCATE,
-    'barcode': ReaderMode.BARCODE,
     'assets': ReaderMode.BARCODE,
     // Everything else gets IDLE
   };

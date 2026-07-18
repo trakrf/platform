@@ -5,15 +5,14 @@ import { ReaderState } from '@/worker/types/reader';
 import TabNavigation from '@/components/TabNavigation';
 import Header from '@/components/Header';
 import { Toaster } from 'react-hot-toast';
-import { LoadingScreen, InventoryLoadingScreen, LocateLoadingScreen, HelpLoadingScreen, SettingsLoadingScreen, BarcodeLoadingScreen } from '@/components/LoadingScreen';
+import { LoadingScreen, InventoryLoadingScreen, LocateLoadingScreen, HelpLoadingScreen, SettingsLoadingScreen } from '@/components/LoadingScreen';
 import { initOpenReplay, trackPageView } from '@/lib/openreplay';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { lazyWithRetry } from '@/utils/lazyWithRetry';
 import { EnvironmentBanner } from '@/components/EnvironmentBanner';
+import { DEFAULT_TAB, resolveLegacyTab, isLegacyTab } from '@/utils/tabRedirects';
 
-const HomeScreen = lazyWithRetry(() => import('@/components/HomeScreen'));
 const InventoryScreen = lazyWithRetry(() => import('@/components/InventoryScreen'));
-const BarcodeScreen = lazyWithRetry(() => import('@/components/BarcodeScreen'));
 const LocateScreen = lazyWithRetry(() => import('@/components/LocateScreen'));
 const SettingsScreen = lazyWithRetry(() => import('@/components/SettingsScreen'));
 const HelpScreen = lazyWithRetry(() => import('@/components/HelpScreen'));
@@ -37,7 +36,7 @@ const ReportsHistoryScreen = lazyWithRetry(() => import('@/components/ReportsHis
 const SuperadminOrgsScreen = lazyWithRetry(() => import('@/components/SuperadminOrgsScreen'));
 const MusteringScreen = lazyWithRetry(() => import('@/components/mustering/MusteringScreen'));
 
-const VALID_TABS: TabType[] = ['home', 'inventory', 'locate', 'barcode', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'mustering', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'org-geofence-defaults', 'accept-invite', 'api-keys', 'admin-orgs'];
+const VALID_TABS: TabType[] = ['scan', 'locate', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'mustering', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'org-geofence-defaults', 'accept-invite', 'api-keys', 'admin-orgs'];
 
 export default function App() {
   const activeTab = useUIStore((state) => state.activeTab);
@@ -82,16 +81,21 @@ export default function App() {
       useSettingsStore.getState().setTargetEPC(epc);
     }
 
-    const targetTab = tab && VALID_TABS.includes(tab as TabType)
-      ? tab as TabType
+    // Resolve retired ids (#home/#inventory/#barcode) to their successor before validating.
+    const resolvedTab = resolveLegacyTab(tab);
+
+    const targetTab = resolvedTab && VALID_TABS.includes(resolvedTab as TabType)
+      ? resolvedTab as TabType
       : isInitialLoad
-        ? 'home'
+        ? DEFAULT_TAB
         : null;
 
     if (targetTab) {
       useUIStore.getState().setActiveTab(targetTab);
 
-      if (isInitialLoad && (!tab || tab !== targetTab)) {
+      // Rewrite the URL on initial load (when it changed) OR whenever we followed
+      // a legacy redirect, so the address bar reflects the canonical #scan.
+      if ((isInitialLoad && (!tab || tab !== targetTab)) || isLegacyTab(tab)) {
         const newHash = buildHash(targetTab, queryString);
         window.history.replaceState({ tab: targetTab }, '', newHash);
       }
@@ -194,10 +198,8 @@ export default function App() {
   const renderTabContent = () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tabComponents: Record<string, React.ComponentType<any>> = {
-      home: HomeScreen,
-      inventory: InventoryScreen,
+      scan: InventoryScreen,
       locate: LocateScreen,
-      barcode: BarcodeScreen,
       assets: AssetsScreen,
       locations: LocationsScreen,
       'scan-devices': ScanDevicesScreen,
@@ -222,10 +224,8 @@ export default function App() {
     };
 
     const loadingScreens: Record<string, React.ComponentType> = {
-      home: LoadingScreen,
-      inventory: InventoryLoadingScreen,
+      scan: InventoryLoadingScreen,
       locate: LocateLoadingScreen,
-      barcode: BarcodeLoadingScreen,
       assets: LoadingScreen,
       locations: LoadingScreen,
       'scan-devices': LoadingScreen,
@@ -249,7 +249,7 @@ export default function App() {
       'admin-orgs': LoadingScreen,
     };
 
-    const Component = tabComponents[activeTab] || HomeScreen;
+    const Component = tabComponents[activeTab] || InventoryScreen;
     const LoadingComponent = loadingScreens[activeTab] || LoadingScreen;
 
     // Get token from URL for reset-password screen
