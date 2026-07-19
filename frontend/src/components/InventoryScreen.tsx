@@ -263,6 +263,11 @@ export default function InventoryScreen() {
   const handleClearInventory = useCallback(() => {
     clearTags();
     setError(null);
+    // Clear resets the location selection too: the manual/barcode pick and
+    // its scan gate, so a re-scan of the same location barcode re-applies.
+    setManualLocationId(null);
+    setManualLocationSource('user');
+    lastBarcodeLocationSeenRef.current = 0;
   }, [clearTags, setError]);
 
   const handleToggleFilter = useCallback((filter: string) => {
