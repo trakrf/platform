@@ -164,7 +164,7 @@ export function useOrgModal({ isOpen, onClose, mode, defaultTab }: UseOrgModalPr
       toast.success('Organization deleted');
       setShowDeleteModal(false);
       onClose();
-      window.location.hash = '#home';
+      window.location.hash = '#scan';
     } catch (err) {
       setSettingsError(extractErrorMessage(err, 'Failed to delete organization'));
       setShowDeleteModal(false);

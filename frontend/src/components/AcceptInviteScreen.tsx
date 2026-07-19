@@ -92,7 +92,7 @@ export default function AcceptInviteScreen({ token }: AcceptInviteScreenProps) {
             This invitation link is invalid or incomplete. Please check the link and try again.
           </p>
           <a
-            href="#home"
+            href="#scan"
             className="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
           >
             Go Home
@@ -117,7 +117,7 @@ export default function AcceptInviteScreen({ token }: AcceptInviteScreenProps) {
             You&apos;ve joined as <span className="text-white capitalize">{acceptedOrg.role}</span>.
           </p>
           <a
-            href="#home"
+            href="#scan"
             className="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
           >
             Go to Dashboard
@@ -153,7 +153,7 @@ export default function AcceptInviteScreen({ token }: AcceptInviteScreenProps) {
 
   // Handle decline - just go home
   const handleDecline = () => {
-    window.location.hash = '#home';
+    window.location.hash = '#scan';
   };
 
   // Not logged in - show loading or error (success auto-redirects to login/signup)
@@ -171,7 +171,7 @@ export default function AcceptInviteScreen({ token }: AcceptInviteScreenProps) {
             </h1>
             <p className="text-gray-400 mb-6">{inviteFetchError}</p>
             <a
-              href="#home"
+              href="#scan"
               className="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
             >
               Go Home
@@ -217,7 +217,7 @@ export default function AcceptInviteScreen({ token }: AcceptInviteScreenProps) {
           </h1>
           <p className="text-gray-400 mb-6">{inviteFetchError}</p>
           <a
-            href="#home"
+            href="#scan"
             className="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
           >
             Go to Dashboard
@@ -259,7 +259,7 @@ export default function AcceptInviteScreen({ token }: AcceptInviteScreenProps) {
               Log out and continue
             </button>
             <a
-              href="#home"
+              href="#scan"
               className="block w-full text-center bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg font-medium transition-colors"
             >
               Go to Dashboard

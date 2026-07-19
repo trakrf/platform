@@ -182,7 +182,7 @@ export default function SignupScreen() {
 
         // Success - redirect to dashboard with welcome message
         toast.success(`Welcome to ${inviteInfo?.org_name || 'the organization'}!`);
-        window.location.hash = '#home';
+        window.location.hash = '#scan';
       } else {
         // Regular signup with org name + required contact details (TRA-971).
         // On a non-prod host, pass the deliberate sandbox acknowledgment (TRA-970).
@@ -259,7 +259,7 @@ export default function SignupScreen() {
           <h1 className="text-2xl font-semibold text-white mb-4">Invalid Invitation</h1>
           <p className="text-gray-400 mb-6">{inviteFetchError}</p>
           <a
-            href="#home"
+            href="#scan"
             className="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
           >
             Go Home

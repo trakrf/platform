@@ -135,7 +135,7 @@ describe('LoginScreen', () => {
       fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(window.location.hash).toBe('#home');
+        expect(window.location.hash).toBe('#scan');
       });
     });
 

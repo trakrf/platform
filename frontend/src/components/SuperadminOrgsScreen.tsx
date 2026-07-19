@@ -67,7 +67,7 @@ export default function SuperadminOrgsScreen() {
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center gap-4 mb-6">
           <a
-            href="#home"
+            href="#scan"
             className="text-gray-400 hover:text-gray-300 transition-colors"
             aria-label="Go home"
           >

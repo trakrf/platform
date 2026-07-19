@@ -164,8 +164,8 @@ export async function connectToDevice(page: Page): Promise<void> {
             deviceStore?.getState?.()?.deviceManager;
             
           if (deviceManager && typeof deviceManager.configureForTab === 'function') {
-            console.log('[Connection] Found deviceManager, configuring for home tab (idle state)...');
-            await deviceManager.configureForTab('home');
+            console.log('[Connection] Found deviceManager, configuring for settings tab (idle state)...');
+            await deviceManager.configureForTab('settings');
             console.log('[Connection] Device configured for idle state');
           } else {
             console.warn('[Connection] Device manager not found or configureForIdle not available');

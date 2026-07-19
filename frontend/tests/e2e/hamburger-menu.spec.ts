@@ -103,15 +103,15 @@ test.describe('Hamburger Menu (Mobile)', () => {
       await sharedPage.click('[data-testid="hamburger-button"]');
       await expect(sharedPage.locator('[data-testid="hamburger-dropdown"]')).toBeVisible();
       
-      // Home should be active by default (based on the test IDs in TabNavigation)
+      // Scan should be active by default (based on the test IDs in TabNavigation)
       // Check within the dropdown container
-      const homeTab = sharedPage.locator('[data-testid="hamburger-dropdown"] [data-testid="menu-item-home"]');
-      await expect(homeTab).toBeVisible();
-      
+      const scanTab = sharedPage.locator('[data-testid="hamburger-dropdown"] [data-testid="menu-item-scan"]');
+      await expect(scanTab).toBeVisible();
+
       // Check for active state - TabNavigation uses bg-blue-600 text-white for active
-      const homeClasses = await homeTab.getAttribute('class');
-      expect(homeClasses).toContain('bg-blue-600');
-      expect(homeClasses).toContain('text-white');
+      const scanClasses = await scanTab.getAttribute('class');
+      expect(scanClasses).toContain('bg-blue-600');
+      expect(scanClasses).toContain('text-white');
       
       // Navigate to Settings - look within the dropdown
       const settingsTab = sharedPage.locator('[data-testid="hamburger-dropdown"] [data-testid="menu-item-settings"]');
@@ -128,10 +128,10 @@ test.describe('Hamburger Menu (Mobile)', () => {
       expect(settingsClasses).toContain('bg-blue-600');
       expect(settingsClasses).toContain('text-white');
       
-      // And Home should no longer be active
-      const homeTabReopened = sharedPage.locator('[data-testid="hamburger-dropdown"] [data-testid="menu-item-home"]');
-      const homeClassesAfter = await homeTabReopened.getAttribute('class');
-      expect(homeClassesAfter).not.toContain('bg-blue-600');
+      // And Scan should no longer be active
+      const scanTabReopened = sharedPage.locator('[data-testid="hamburger-dropdown"] [data-testid="menu-item-scan"]');
+      const scanClassesAfter = await scanTabReopened.getAttribute('class');
+      expect(scanClassesAfter).not.toContain('bg-blue-600');
     });
   });
   

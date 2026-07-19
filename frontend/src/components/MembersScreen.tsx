@@ -127,7 +127,7 @@ export default function MembersScreen() {
             Please select an organization to view members.
           </p>
           <a
-            href="#home"
+            href="#scan"
             className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -144,7 +144,7 @@ export default function MembersScreen() {
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
           <a
-            href="#home"
+            href="#scan"
             className="text-gray-400 hover:text-gray-300 transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />

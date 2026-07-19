@@ -125,7 +125,7 @@ export default function OrgSettingsScreen() {
       await invalidateAllOrgScopedData(queryClient);
       toast.success('Organization deleted');
       // Redirect to home
-      window.location.hash = '#home';
+      window.location.hash = '#scan';
     } catch (err: unknown) {
       const errorMessage = extractErrorMessage(err, 'Failed to delete organization');
       setError(errorMessage);
@@ -204,7 +204,7 @@ export default function OrgSettingsScreen() {
             Please select an organization to view settings.
           </p>
           <a
-            href="#home"
+            href="#scan"
             className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -221,7 +221,7 @@ export default function OrgSettingsScreen() {
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
           <a
-            href="#home"
+            href="#scan"
             className="text-gray-400 hover:text-gray-300 transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />

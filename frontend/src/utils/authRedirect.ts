@@ -4,7 +4,7 @@
  * Priority order:
  * 1. URL query params (from AcceptInviteScreen flow: #login?returnTo=...&token=...)
  * 2. sessionStorage (from ProtectedRoute flow)
- * 3. Default to home
+ * 3. Default to scan
  */
 export function handleAuthRedirect(): void {
   // Priority 1: Check URL params (from AcceptInviteScreen flow)
@@ -34,6 +34,6 @@ export function handleAuthRedirect(): void {
     return;
   }
 
-  // Priority 3: Default to home
-  window.location.hash = '#home';
+  // Priority 3: Default to scan
+  window.location.hash = '#scan';
 }

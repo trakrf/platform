@@ -257,7 +257,7 @@ export default function InventoryScreen() {
   const handleSave = useCallback(async () => {
     if (!isAuthenticated) {
       // Save current route for redirect after login (same pattern as ProtectedRoute)
-      sessionStorage.setItem('redirectAfterLogin', 'inventory');
+      sessionStorage.setItem('redirectAfterLogin', 'scan');
       window.location.hash = '#login';
       return;
     }

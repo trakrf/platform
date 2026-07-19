@@ -91,7 +91,7 @@ export async function isInventoryRunning(page: Page): Promise<boolean> {
 export async function getActiveTab(page: Page): Promise<string> {
   return await page.evaluate(() => {
     const uiStore = (window as WindowWithStores).__ZUSTAND_STORES__?.uiStore;
-    return uiStore?.getState().activeTab || 'home';
+    return uiStore?.getState().activeTab || 'scan';
   });
 }
 
@@ -115,7 +115,7 @@ export async function getDeviceDebugState(page: Page): Promise<{
       readerState: deviceState?.readerState || 0,
       triggerState: deviceState?.triggerState || false,
       inventoryRunning: tagState?.inventoryRunning || false,
-      activeTab: uiState?.activeTab || 'home',
+      activeTab: uiState?.activeTab || 'scan',
       isConnected: deviceState?.isConnected || false
     };
   });

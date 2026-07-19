@@ -71,10 +71,10 @@ test.describe('Organization CRUD', () => {
       await page.locator('button[type="submit"]').click();
 
       // Should redirect to home after successful creation
-      await page.waitForURL(/#home/, { timeout: 10000 });
+      await page.waitForURL(/#scan/, { timeout: 10000 });
 
       // Verify we're on home page
-      await expect(page).toHaveURL(/#home/);
+      await expect(page).toHaveURL(/#scan/);
     });
 
     test('should show validation error for empty name', async ({ page }) => {
@@ -122,7 +122,7 @@ test.describe('Organization CRUD', () => {
       await page.goto('/#create-org');
       await page.locator('input#name').fill(newOrgName);
       await page.locator('button[type="submit"]').click();
-      await page.waitForURL(/#home/, { timeout: 10000 });
+      await page.waitForURL(/#scan/, { timeout: 10000 });
 
       // Open the org switcher
       await openOrgSwitcher(page);
@@ -141,7 +141,7 @@ test.describe('Organization CRUD', () => {
       await page.goto('/#create-org');
       await page.locator('input#name').fill(originalName);
       await page.locator('button[type="submit"]').click();
-      await page.waitForURL(/#home/, { timeout: 10000 });
+      await page.waitForURL(/#scan/, { timeout: 10000 });
 
       // Switch to the newly created org
       await switchToOrg(page, originalName);
@@ -172,7 +172,7 @@ test.describe('Organization CRUD', () => {
       await page.goto('/#create-org');
       await page.locator('input#name').fill(orgName);
       await page.locator('button[type="submit"]').click();
-      await page.waitForURL(/#home/, { timeout: 10000 });
+      await page.waitForURL(/#scan/, { timeout: 10000 });
 
       // Switch to the newly created org
       await switchToOrg(page, orgName);
@@ -203,7 +203,7 @@ test.describe('Organization CRUD', () => {
       await page.goto('/#create-org');
       await page.locator('input#name').fill(orgName);
       await page.locator('button[type="submit"]').click();
-      await page.waitForURL(/#home/, { timeout: 10000 });
+      await page.waitForURL(/#scan/, { timeout: 10000 });
 
       // Switch to the newly created org
       await switchToOrg(page, orgName);
@@ -228,7 +228,7 @@ test.describe('Organization CRUD', () => {
       await page.goto('/#create-org');
       await page.locator('input#name').fill(orgName);
       await page.locator('button[type="submit"]').click();
-      await page.waitForURL(/#home/, { timeout: 10000 });
+      await page.waitForURL(/#scan/, { timeout: 10000 });
 
       // Switch to the newly created org
       await switchToOrg(page, orgName);
@@ -263,7 +263,7 @@ test.describe('Organization CRUD', () => {
       await page.goto('/#create-org');
       await page.locator('input#name').fill(orgName);
       await page.locator('button[type="submit"]').click();
-      await page.waitForURL(/#home/, { timeout: 10000 });
+      await page.waitForURL(/#scan/, { timeout: 10000 });
 
       // Switch to the newly created org
       await switchToOrg(page, orgName);
@@ -281,7 +281,7 @@ test.describe('Organization CRUD', () => {
       await page.locator('[data-testid="delete-org-confirm-button"]').click();
 
       // Should redirect to home after deletion
-      await page.waitForURL(/#home/, { timeout: 10000 });
+      await page.waitForURL(/#scan/, { timeout: 10000 });
 
       // The deleted org should no longer be the current org
       // (user will be switched to another org or see "no organization" state)

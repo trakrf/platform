@@ -69,10 +69,8 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
   const mockReaderState = MOCK_TESTING ? ReaderState.CONNECTED : readerState;
 
   const pageTitles = {
-    home: { title: "Dashboard", subtitle: "Choose your scanning mode to get started" },
-    inventory: { title: "Inventory", subtitle: "View and manage your scanned items" },
+    scan: { title: "Scan", subtitle: "View and manage your scanned items" },
     locate: { title: "Locate", subtitle: "Search for a specific item" },
-    barcode: { title: "Barcode Scanner", subtitle: "Scan barcodes to identify items" },
     settings: { title: "Device Setup", subtitle: "Configure your RFID reader" },
     help: { title: "Help", subtitle: "Quick answers to get you started" },
     assets: { title: "Assets", subtitle: "Manage your organization's assets" },
@@ -94,7 +92,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
 
   const handleLogout = () => {
     useAuthStore.getState().logout();
-    useUIStore.getState().setActiveTab('home');
+    useUIStore.getState().setActiveTab('scan');
   };
 
   const handleConnectClick = async () => {
@@ -163,7 +161,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
 
   const currentPage = pageTitles[activeTab as keyof typeof pageTitles] || { title: "", subtitle: "" };
 
-  const shouldShowConnectButton = activeTab !== 'home' && activeTab !== 'help';
+  const shouldShowConnectButton = activeTab !== 'help';
 
   return (
     <>

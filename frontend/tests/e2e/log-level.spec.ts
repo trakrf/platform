@@ -49,7 +49,7 @@ test.describe('Worker Log Level', () => {
     await page.waitForTimeout(500);
 
     // Navigate to inventory to trigger some worker activity
-    await page.click('[data-testid="menu-item-inventory"]');
+    await page.click('[data-testid="menu-item-scan"]');
     await page.waitForTimeout(2000);
 
     // Count DEBUG logs after setting WARN level

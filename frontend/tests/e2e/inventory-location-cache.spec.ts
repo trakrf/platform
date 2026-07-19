@@ -36,8 +36,8 @@ test.describe('Inventory location cache after in-app create (TRA-824)', () => {
     //    queryKey ['locations', orgId]. This is the pre-condition for the
     //    bug: subsequent in-app creates must invalidate this cache, otherwise
     //    a return visit to Inventory keeps showing stale data.
-    await page.locator('button[data-testid="menu-item-inventory"]').click();
-    await page.waitForURL(/#inventory/, { timeout: 5000 });
+    await page.locator('button[data-testid="menu-item-scan"]').click();
+    await page.waitForURL(/#scan/, { timeout: 5000 });
     // Wait for the location bar to settle into its empty state.
     await expect(page.getByText('No location tag detected')).toBeVisible({ timeout: 5000 });
 
@@ -57,8 +57,8 @@ test.describe('Inventory location cache after in-app create (TRA-824)', () => {
     //    stale empty cache because TanStack was never invalidated. With the
     //    fix, the cache is marked stale on create and refetchOnMount: true
     //    triggers a refetch on this mount.
-    await page.locator('button[data-testid="menu-item-inventory"]').click();
-    await page.waitForURL(/#inventory/, { timeout: 5000 });
+    await page.locator('button[data-testid="menu-item-scan"]').click();
+    await page.waitForURL(/#scan/, { timeout: 5000 });
 
     // 5. Open the manual location selector and expect the new location to be
     //    listed. With the bug the dropdown showed "No locations available".

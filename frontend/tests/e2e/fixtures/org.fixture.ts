@@ -52,7 +52,7 @@ export async function signupTestUser(
   await page.locator('input#password').fill(password);
   await page.locator('button[type="submit"]').click();
   // Wait for redirect to home after successful signup
-  await page.waitForURL(/#home/, { timeout: 10000 });
+  await page.waitForURL(/#scan/, { timeout: 10000 });
 }
 
 /**
@@ -67,7 +67,7 @@ export async function loginTestUser(
   await page.locator('input#email').fill(email);
   await page.locator('input#password').fill(password);
   await page.locator('button[type="submit"]').click();
-  await page.waitForURL(/#home/, { timeout: 10000 });
+  await page.waitForURL(/#scan/, { timeout: 10000 });
   // Wait for profile to load (org-switcher appears when profile is fetched)
   await page.waitForSelector('[data-testid="org-switcher"]', { timeout: 10000 });
 }
@@ -79,7 +79,7 @@ export async function createOrgViaUI(page: Page, name: string): Promise<void> {
   await page.goto('/#create-org');
   await page.locator('input#name').fill(name);
   await page.locator('button[type="submit"]').click();
-  await page.waitForURL(/#home/, { timeout: 10000 });
+  await page.waitForURL(/#scan/, { timeout: 10000 });
 }
 
 /**

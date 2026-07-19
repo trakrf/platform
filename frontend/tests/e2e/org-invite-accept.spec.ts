@@ -143,7 +143,7 @@ test.describe('Accept Invitation - Existing User', () => {
     await page.locator('a:has-text("Go to Dashboard")').click();
 
     // Should redirect to home
-    await page.waitForURL(/#home/, { timeout: 10000 });
+    await page.waitForURL(/#scan/, { timeout: 10000 });
   });
 
   test('user added to org with correct role', async ({ page }) => {
@@ -284,8 +284,8 @@ test.describe('Accept Invitation - New User', () => {
     await page.locator('button[type="submit"]').click();
 
     // SignupScreen.tsx calls signup(email, password, undefined, inviteToken)
-    // which accepts the invitation server-side and redirects to #home.
-    await page.waitForURL(/#home/, { timeout: 10000 });
+    // which accepts the invitation server-side and redirects to #scan.
+    await page.waitForURL(/#scan/, { timeout: 10000 });
   });
 
   test('new user can complete full invite flow', async ({ page }) => {
@@ -316,7 +316,7 @@ test.describe('Accept Invitation - New User', () => {
     await page.locator('button[type="submit"]').click();
 
     // Signup auto-accepts invitation and redirects to home
-    await page.waitForURL(/#home/, { timeout: 10000 });
+    await page.waitForURL(/#scan/, { timeout: 10000 });
 
     // Verify membership - user is now in testOrg (confirms the invitation was accepted)
     const orgs = await listOrgsViaAPI(page);

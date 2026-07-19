@@ -4,7 +4,7 @@
  * Tests BLE connection management with real CS108 hardware
  * Requires physical CS108 device via bridge server
  *
- * IMPORTANT: Connection tests must NOT navigate to Inventory, Locate, or Barcode tabs
+ * IMPORTANT: Connection tests must NOT navigate to Scan or Locate tabs
  * These tabs trigger mode changes which are heavyweight operations.
  * Only test on Home, Settings, or Help tabs to keep tests lightweight.
  */
@@ -110,8 +110,8 @@ test.describe('Connection Operations @hardware', () => {
     expect(settingsState.readerMode).toBe('Idle');
     expect(settingsState.readerState).toBe('Connected');
 
-    // Navigate back to Home
-    await sharedPage.click('button[data-testid="menu-item-home"]');
+    // Navigate back to Settings
+    await sharedPage.click('button[data-testid="menu-item-settings"]');
     await sharedPage.waitForTimeout(500);
 
     const homeState = await sharedPage.evaluate(() => {
@@ -130,11 +130,11 @@ test.describe('Connection Operations @hardware', () => {
   test('should update trigger state in store on press and release @critical', async () => {
     /**
      * Core verification: Trigger press/release updates triggerState in store
-     * Stay on Home tab to avoid mode switches
+     * Stay on Settings tab to avoid mode switches
      */
 
-    // Ensure we're on Home tab (no mode switching)
-    await sharedPage.click('button[data-testid="menu-item-home"]');
+    // Ensure we are on Settings tab (no mode switching)
+    await sharedPage.click('button[data-testid="menu-item-settings"]');
     await sharedPage.waitForTimeout(500);
 
     // Get initial trigger state

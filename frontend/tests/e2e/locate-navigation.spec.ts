@@ -40,7 +40,7 @@ test.describe('Locate Navigation Tests @hardware', () => {
 
   test('navigate from inventory: clicking locate link sets correct targetEPC', async ({ page }) => {
     // Navigate to inventory tab
-    await page.click('[data-testid="menu-item-inventory"]');
+    await page.click('[data-testid="menu-item-scan"]');
 
     // Wait for the mode switch to complete (spinner disappears or times out)
     await page.waitForTimeout(3000); // Give it time to complete mode switch
@@ -109,71 +109,7 @@ test.describe('Locate Navigation Tests @hardware', () => {
     }
   });
 
-  test('navigate from barcode: clicking locate link sets correct targetEPC', async ({ page }) => {
-    // Navigate to barcode tab
-    await page.click('[data-testid="menu-item-barcode"]');
-
-    // Wait for configuration spinner to disappear
-    await page.waitForSelector('h2:text("Configuring Reader")', { state: 'detached', timeout: 10000 });
-
-    // Now we should see the Barcode header
-    await expect(page.locator('h2').first()).toContainText('Barcode Scanner');
-
-    // Wait for mode switch
-    await page.waitForTimeout(1000);
-
-    // Add a test barcode with EPC
-    await page.evaluate(() => {
-      const { useBarcodeStore } = window as any;
-      useBarcodeStore.getState().addBarcode({
-        data: '10018',
-        type: 'Code128',
-        timestamp: Date.now()
-      });
-    });
-
-    // Wait for barcode to appear
-    await expect(page.locator('[data-testid="barcode-row"]')).toHaveCount(1);
-
-    // Click the locate link for barcode 10018
-    const locateLink = page.locator('[data-testid="barcode-row"]').first().locator('a[href*="locate"]');
-    await expect(locateLink).toHaveAttribute('href', '#locate?epc=10018');
-
-    await locateLink.click();
-
-    // Wait for configuration spinner to disappear if present
-    await page.waitForSelector('h2:text("Configuring Reader")', { state: 'detached', timeout: 10000 }).catch(() => {});
-
-    // Verify we're on the locate screen
-    await expect(page.locator('h2').first()).toContainText('Find Item');
-
-    // Verify the URL has the correct EPC parameter
-    const url = page.url();
-    expect(url).toContain('#locate?epc=10018');
-
-    // Verify the input shows the correct EPC
-    const epcInput = page.locator('[data-testid="locate-epc-input"]');
-    await expect(epcInput).toHaveValue('10018');
-
-    // Check logs to verify hardware received correct targetEPC
-    await page.waitForTimeout(500); // Let mode switch complete
-    const logs = await page.evaluate(() => window.__TEST_LOGS__);
-    const targetEPCLogs = logs.filter(log => log.includes('targetEPC'));
-
-    console.log('All targetEPC logs from barcode test:', targetEPCLogs);
-
-    // Verify the worker received the correct targetEPC
-    const locateBuildLogs = targetEPCLogs.filter(log => log.includes('Building LOCATE'));
-    const lastLocateBuild = locateBuildLogs[locateBuildLogs.length - 1];
-
-    if (lastLocateBuild) {
-      console.log('Last LOCATE build:', lastLocateBuild);
-      expect(lastLocateBuild).toContain('targetEPC: 10018');
-    }
-  });
-
   test('direct URL: navigate to #locate?epc=X sets targetEPC', async ({ page }) => {
-    // Test direct navigation with EPC in URL
     const testEpc = '10019';
 
     // Navigate directly to locate with EPC parameter

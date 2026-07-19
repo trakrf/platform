@@ -20,7 +20,7 @@ describe('handleAuthRedirect', () => {
 
     it('should redirect to home if no saved path', () => {
       handleAuthRedirect();
-      expect(window.location.hash).toBe('#home');
+      expect(window.location.hash).toBe('#scan');
     });
 
     it('should clear sessionStorage after redirect', () => {
@@ -42,7 +42,7 @@ describe('handleAuthRedirect', () => {
       sessionStorage.removeItem('redirectAfterLogin');
       handleAuthRedirect();
 
-      expect(window.location.hash).toBe('#home');
+      expect(window.location.hash).toBe('#scan');
     });
   });
 
