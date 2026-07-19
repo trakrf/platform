@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useDeviceStore, useTagStore, useSettingsStore, useAuthStore } from '@/stores';
+import { useUIStore } from '@/stores/uiStore';
 import { useAssets } from '@/hooks/assets';
 import { useLocations } from '@/hooks/locations';
 import { ReaderState } from '@/worker/types/reader';
@@ -36,6 +37,7 @@ export default function InventoryScreen() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const readerState = useDeviceStore((state) => state.readerState);
+  const scanTabMode = useUIStore((state) => state.scanTabMode);
   const tags = useTagStore((state) => state.tags);
   const clearTags = useTagStore((state) => state.clearTags);
   const sortColumn = useTagStore((state) => state.sortColumn);
@@ -313,7 +315,7 @@ export default function InventoryScreen() {
 
   return (
     <div className="h-full flex flex-col p-2 md:p-3 space-y-2">
-      <ConfigurationSpinner readerState={readerState} mode="Inventory" />
+      <ConfigurationSpinner readerState={readerState} mode={scanTabMode === 'barcode' ? 'Barcode' : 'Inventory'} />
       <BrowserSupportBanner isSupported={isBrowserSupported} readerState={readerState} />
 
       <input

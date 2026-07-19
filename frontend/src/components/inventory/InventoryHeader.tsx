@@ -2,6 +2,7 @@ import { Package2, Trash2, Upload, Volume2, VolumeX, Play, Pause, Save } from 'l
 import { ShareButton } from '@/components/ShareButton';
 import type { ExportFormat } from '@/types/export';
 import { InventorySearchBar } from './InventorySearchBar';
+import { ScanModeToggle } from './ScanModeToggle';
 import { useDeviceStore } from '@/stores';
 import { PaidGate } from '@/components/entitlement';
 
@@ -60,6 +61,7 @@ export function InventoryHeader({
             Items ({filteredCount})
           </h3>
           <div className="flex items-center space-x-1">
+            <ScanModeToggle />
             <button
               onClick={() => toggleScanButton()}
               disabled={readerState === 'Disconnected' || readerState === 'Busy' || readerState === 'Connecting'}
@@ -137,6 +139,7 @@ export function InventoryHeader({
           />
         </div>
         <div className="flex items-center space-x-2">
+          <ScanModeToggle />
           <button
             onClick={() => toggleScanButton()}
             disabled={readerState === 'Disconnected' || readerState === 'Busy' || readerState === 'Connecting'}
