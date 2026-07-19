@@ -19,6 +19,7 @@ import (
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
 	healthhandler "github.com/trakrf/platform/backend/internal/handlers/health"
 	inventoryhandler "github.com/trakrf/platform/backend/internal/handlers/inventory"
+	kitshandler "github.com/trakrf/platform/backend/internal/handlers/kits"
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
 	musteringhandler "github.com/trakrf/platform/backend/internal/handlers/mustering"
@@ -226,10 +227,12 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// TRA-978: mustering handler shares the engine, broadcaster, evaluator fan-out
 	// (for simulate), and the Live Reads feed (so simulate's RSSI reaches Locate).
 	musteringHandler := musteringhandler.NewHandler(musterEngine, musterBroadcaster, store, musterEvaluators, readBroadcaster)
+	// TRA-1032: internal kit commission/verify/lookup endpoints.
+	kitsHandler := kitshandler.NewHandler(store)
 	testHandler := testhandler.NewHandler(store)
 	log.Info().Msg("Handlers initialized")
 
-	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, testHandler, store)
+	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, testHandler, store)
 	log.Info().Msg("Routes registered")
 
 	server := &http.Server{

@@ -19,6 +19,7 @@ import (
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
 	healthhandler "github.com/trakrf/platform/backend/internal/handlers/health"
 	inventoryhandler "github.com/trakrf/platform/backend/internal/handlers/inventory"
+	kitshandler "github.com/trakrf/platform/backend/internal/handlers/kits"
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
 	musteringhandler "github.com/trakrf/platform/backend/internal/handlers/mustering"
@@ -56,6 +57,7 @@ func setupRouter(
 	frontendHandler *frontendhandler.Handler,
 	readstreamHandler *readstreamhandler.Handler,
 	musteringHandler *musteringhandler.Handler,
+	kitsHandler *kitshandler.Handler,
 	testHandler *testhandler.Handler,
 	store *storage.Storage,
 ) *chi.Mux {
@@ -169,6 +171,9 @@ func setupRouter(
 		// TRA-978: internal mustering POC surface (SSE + REST + simulate/seed).
 		// Session-auth only, NOT in the public OpenAPI spec (no paidGate).
 		musteringHandler.RegisterRoutes(r)
+		// TRA-1032: internal kit commission/verify/lookup. Writes are paid
+		// mutations and require Operator+ (scan-save precedent).
+		kitsHandler.RegisterRoutes(r, paidGate, middleware.RequireOrgOperator(store))
 
 		r.Get("/swagger/openapi.internal.json", swaggerspec.ServeJSON)
 		r.Get("/swagger/openapi.internal.yaml", swaggerspec.ServeYAML)
