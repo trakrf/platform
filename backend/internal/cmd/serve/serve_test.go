@@ -19,6 +19,7 @@ import (
 	inventoryhandler "github.com/trakrf/platform/backend/internal/handlers/inventory"
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
+	kitshandler "github.com/trakrf/platform/backend/internal/handlers/kits"
 	musteringhandler "github.com/trakrf/platform/backend/internal/handlers/mustering"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
 	outputdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/outputdevices"
@@ -63,9 +64,10 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 	musterBC := mustering.NewBroadcaster()
 	musterEngine := mustering.NewEngine(store, musterBC, logger.Get())
 	musteringHandler := musteringhandler.NewHandler(musterEngine, musterBC, store, ingest.MultiEvaluator{musterEngine}, nil)
+	kitsHandler := kitshandler.NewHandler(store)
 	testHandler := testhandler.NewHandler(store)
 
-	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, testHandler, store)
+	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, testHandler, store)
 }
 
 func TestRouterSetup(t *testing.T) {
@@ -118,6 +120,10 @@ func TestRouterRegistration(t *testing.T) {
 		{"PATCH", "/api/v1/mustering/events/1/entries/2"},
 		{"POST", "/api/v1/mustering/simulate"},
 		{"POST", "/api/v1/mustering/seed"},
+		{"GET", "/api/v1/kits"},
+		{"POST", "/api/v1/kits"},
+		{"POST", "/api/v1/kits/verify"},
+		{"GET", "/api/v1/kits/1"},
 		{"GET", "/assets/index.js"},
 		{"GET", "/favicon.ico"},
 		{"GET", "/version.json"},
