@@ -56,7 +56,7 @@ const VerifyKit: React.FC = () => {
     }
   }, [readerState, handleVerify]);
 
-  const handleNewScan = () => {
+  const handleClear = () => {
     clearTags();
     setVerifyResult(null);
     setError(null);
@@ -92,11 +92,11 @@ const VerifyKit: React.FC = () => {
           {isVerifying ? 'Verifying…' : 'Re-verify'}
         </button>
         <button
-          data-testid="kit-verify-new-scan"
-          onClick={handleNewScan}
+          data-testid="kit-verify-clear"
+          onClick={handleClear}
           className="px-4 py-2 rounded-lg font-medium text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
         >
-          New scan
+          Clear
         </button>
         <span data-testid="kit-verify-count" className="text-sm text-gray-500 dark:text-gray-400">
           {scannedCount} tag{scannedCount === 1 ? '' : 's'} scanned

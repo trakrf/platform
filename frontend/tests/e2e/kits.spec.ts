@@ -110,7 +110,7 @@ test.describe('Kit Scan Flows @hardware', () => {
 
   test('2. verify complete — all members present, green result', async () => {
     await sharedPage.click('[data-testid="kits-mode-verify"]');
-    await sharedPage.click('[data-testid="kit-verify-new-scan"]');
+    await sharedPage.click('[data-testid="kit-verify-clear"]');
 
     await seedTags(sharedPage, memberEpcs);
     await sharedPage.click('[data-testid="kit-verify"]');
@@ -123,7 +123,7 @@ test.describe('Kit Scan Flows @hardware', () => {
   test('3. verify incomplete — red banner, Locate handoff carries the EPC, way back works', async () => {
     // Scan session missing the first member
     const missingEpc = memberEpcs[0];
-    await sharedPage.click('[data-testid="kit-verify-new-scan"]');
+    await sharedPage.click('[data-testid="kit-verify-clear"]');
     await seedTags(sharedPage, memberEpcs.slice(1));
     await sharedPage.click('[data-testid="kit-verify"]');
 
