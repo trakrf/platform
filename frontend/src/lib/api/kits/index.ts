@@ -86,6 +86,19 @@ export interface VerifyResponse {
   unknown_epcs: string[];
 }
 
+export interface KitSummary {
+  id: number;
+  label: string;
+  status: 'active' | 'closed';
+  created_at: string;
+  member_count: number;
+  latest_verification: VerificationSummary | null;
+}
+
+export interface KitListResponse {
+  data: KitSummary[];
+}
+
 export const kitsApi = {
   /**
    * Commission a kit from scanned members.
@@ -94,6 +107,14 @@ export const kitsApi = {
    */
   commission: (request: CommissionRequest) =>
     apiClient.post<KitResponse>('/kits', request),
+
+  /**
+   * List kits whose active membership includes the given EPC (normalized
+   * match server-side). Returns closed kits too — filter status client-side.
+   * GET /api/v1/kits?member_epc={epc}
+   */
+  listByMemberEpc: (epc: string) =>
+    apiClient.get<KitListResponse>('/kits', { params: { member_epc: epc } }),
 
   /**
    * Dock-check verification of a scan session's EPCs.
