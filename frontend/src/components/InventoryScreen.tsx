@@ -23,6 +23,7 @@ import { InventoryStats } from '@/components/inventory/InventoryStats';
 import { InventoryTableContent } from '@/components/inventory/InventoryTableContent';
 import { InventorySettingsPanel } from '@/components/inventory/InventorySettingsPanel';
 import { LocationBar } from '@/components/inventory/LocationBar';
+import { latestBarcodeLocation } from '@/utils/barcodeLocation';
 
 export default function InventoryScreen() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -136,6 +137,19 @@ export default function InventoryScreen() {
     }
     prevDetectedIdRef.current = newId;
   }, [detectedLocation, manualLocationId]);
+
+  // TRA-1031: a scanned location barcode has no RSSI to compete on — treat
+  // it as a deliberate pick and set the location selector directly. The ref
+  // gates on lastSeenTime so classification re-renders don't re-apply an old
+  // scan the user has since manually overridden.
+  const lastBarcodeLocationSeenRef = useRef(0);
+  useEffect(() => {
+    const pick = latestBarcodeLocation(tags);
+    if (pick && pick.lastSeenTime > lastBarcodeLocationSeenRef.current) {
+      lastBarcodeLocationSeenRef.current = pick.lastSeenTime;
+      setManualLocationId(pick.locationId);
+    }
+  }, [tags]);
 
   // Resolved location = manual override OR detected
   // Includes identifier for the natural-key save API (TRA-533)
