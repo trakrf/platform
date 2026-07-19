@@ -40,9 +40,13 @@ func classifyVerification(scans []scannedEPC, memberships []kitMembership, roste
 		UnknownEPCs: []string{},
 	}
 
-	// Dedup scanned assets preserving scan order; first EPC per asset wins.
+	// Dedup scanned assets preserving scan order; first EPC per asset wins for
+	// the unexpected annotation, but every distinct matching EPC is kept so
+	// seen members can list their scanned tag values (TRA-1033).
 	seenAssetOrder := []int{}
 	firstEPC := map[int]string{}
+	matchedEPCs := map[int][]string{}
+	matchedEPCSeen := map[int]map[string]bool{}
 	unknownSeen := map[string]bool{}
 	for _, s := range scans {
 		if s.AssetID == 0 {
@@ -55,6 +59,13 @@ func classifyVerification(scans []scannedEPC, memberships []kitMembership, roste
 		if _, ok := firstEPC[s.AssetID]; !ok {
 			firstEPC[s.AssetID] = s.EPC
 			seenAssetOrder = append(seenAssetOrder, s.AssetID)
+		}
+		if matchedEPCSeen[s.AssetID] == nil {
+			matchedEPCSeen[s.AssetID] = map[string]bool{}
+		}
+		if !matchedEPCSeen[s.AssetID][s.EPC] {
+			matchedEPCSeen[s.AssetID][s.EPC] = true
+			matchedEPCs[s.AssetID] = append(matchedEPCs[s.AssetID], s.EPC)
 		}
 	}
 
@@ -96,7 +107,10 @@ func classifyVerification(scans []scannedEPC, memberships []kitMembership, roste
 		missing := []kit.VerifyMissingMember{}
 		for _, r := range rosterByKit[kitID] {
 			if scannedSet[r.AssetID] {
-				seen = append(seen, kit.VerifySeenMember{AssetID: r.AssetID, Role: r.Role, Name: r.Name})
+				seen = append(seen, kit.VerifySeenMember{
+					AssetID: r.AssetID, Role: r.Role, Name: r.Name,
+					EPCs: matchedEPCs[r.AssetID],
+				})
 			} else {
 				epcs := r.EPCs
 				if epcs == nil {

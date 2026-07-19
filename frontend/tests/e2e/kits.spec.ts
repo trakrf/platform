@@ -132,8 +132,8 @@ test.describe('Kit Scan Flows @hardware', () => {
     await expect(incomplete).toHaveCount(1, { timeout: 10000 });
     await expect(incomplete).toContainText(kitLabel);
 
-    // Tap Locate on the missing member
-    await incomplete.locator('[data-testid^="locate-missing-"]').first().click();
+    // Tap Locate on the missing member's tag row (per-tag EPC handoff)
+    await incomplete.locator(`[data-testid="kit-locate-${missingEpc}"]`).click();
 
     // Locate mode pre-armed with the missing member's EPC + return param
     await expect(sharedPage.locator('h2').first()).toContainText('Find Item');

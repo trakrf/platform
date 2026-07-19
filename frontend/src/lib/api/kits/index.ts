@@ -54,6 +54,8 @@ export interface VerifySeenMember {
   asset_id: number;
   role: string | null;
   name: string;
+  // Scanned tag values that matched this member in THIS scan (raw, deduped).
+  epcs: string[];
 }
 
 export interface VerifyMissingMember {

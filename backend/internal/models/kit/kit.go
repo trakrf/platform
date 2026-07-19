@@ -75,6 +75,9 @@ type VerifySeenMember struct {
 	AssetID int     `json:"asset_id"`
 	Role    *string `json:"role"`
 	Name    string  `json:"name"`
+	// EPCs are the scanned tag values that matched this member in THIS scan
+	// (raw as sent, deduped) — the frontend renders them per tag row (TRA-1033).
+	EPCs []string `json:"epcs"`
 }
 
 type VerifyMissingMember struct {

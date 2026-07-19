@@ -185,6 +185,10 @@ func TestClassifyVerification_DuplicateEPCsSameAsset(t *testing.T) {
 	if len(resp.Kits[0].Seen) != 1 {
 		t.Errorf("asset scanned via two tags must appear once in seen: %+v", resp.Kits[0].Seen)
 	}
+	// Both scanned tag values surface on the seen member (TRA-1033 tree view).
+	if got := resp.Kits[0].Seen[0].EPCs; len(got) != 2 || got[0] != "AAA1" || got[1] != "AAA1B" {
+		t.Errorf("seen member must list both matched EPCs in scan order, got %v", got)
+	}
 	// First-scanned EPC wins for the unexpected annotation.
 	for _, u := range resp.Unexpected {
 		if u.AssetID == 1 && u.EPC != "AAA1" {
