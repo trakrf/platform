@@ -23,3 +23,21 @@ describe('resolveModeForTab (TRA-1031)', () => {
     expect(resolveModeForTab('settings', 'rfid')).toBe(ReaderMode.IDLE);
   });
 });
+
+describe('resolveModeForTab kits view modes (TRA-1033)', () => {
+  it('kits tab in rfid mode maps to INVENTORY', () => {
+    expect(resolveModeForTab('kits', 'rfid', 'rfid')).toBe(ReaderMode.INVENTORY);
+  });
+
+  it('kits tab in barcode mode maps to BARCODE', () => {
+    expect(resolveModeForTab('kits', 'rfid', 'barcode')).toBe(ReaderMode.BARCODE);
+  });
+
+  it('kits tab ignores the Scan tab mode', () => {
+    expect(resolveModeForTab('kits', 'barcode', 'rfid')).toBe(ReaderMode.INVENTORY);
+  });
+
+  it('kits mode defaults to rfid when omitted', () => {
+    expect(resolveModeForTab('kits', 'rfid')).toBe(ReaderMode.INVENTORY);
+  });
+});

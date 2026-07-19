@@ -63,8 +63,11 @@ test.describe('Kit Scan Flows @hardware', () => {
 
   test('1. commission happy path — scan, label, save', async () => {
     await sharedPage.click('[data-testid="menu-item-kits"]');
+    await sharedPage.click('[data-testid="kits-mode-commission"]');
+    // Commission defaults to barcode mode; this test scans RFID via trigger
+    await sharedPage.click('[data-testid="kits-scan-mode-rfid"]');
 
-    // Kits tab runs the reader in Inventory mode
+    // Reader reconfigures to Inventory for the kits tab in RFID mode
     await sharedPage.waitForFunction(
       () => {
         const stores = (window as any).__ZUSTAND_STORES__;
@@ -73,7 +76,6 @@ test.describe('Kit Scan Flows @hardware', () => {
       { timeout: 10000 }
     );
 
-    await sharedPage.click('[data-testid="kits-mode-commission"]');
     await sharedPage.click('[data-testid="kit-commission-clear"]');
 
     // Scan real tags with the trigger

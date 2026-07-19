@@ -52,10 +52,17 @@ const TAB_TO_MODE: Record<string, ReaderModeType> = {
 
 /**
  * Resolve the reader mode for a tab. The Scan tab is dual-mode (TRA-1031):
- * its RFID|Barcode toggle decides between INVENTORY and BARCODE.
+ * its RFID|Barcode toggle decides between INVENTORY and BARCODE. The Kits tab
+ * is dual-mode per view (TRA-1033): commission defaults to barcode, verify to
+ * RFID — kitsScanMode is the effective mode of the active kit view.
  */
-export function resolveModeForTab(tab: string, scanTabMode: ScanTabMode): ReaderModeType {
+export function resolveModeForTab(
+  tab: string,
+  scanTabMode: ScanTabMode,
+  kitsScanMode: ScanTabMode = 'rfid'
+): ReaderModeType {
   if (tab === 'scan' && scanTabMode === 'barcode') return ReaderMode.BARCODE;
+  if (tab === 'kits' && kitsScanMode === 'barcode') return ReaderMode.BARCODE;
   return TAB_TO_MODE[tab] || ReaderMode.IDLE;
 }
 
@@ -65,6 +72,7 @@ export class DeviceManager {
   private static instance: DeviceManager | null = null;
   private settingsUnsubscribe?: () => void;
   private activeTabUnsubscribe?: () => void;
+  private kitsModeUnsubscribe?: () => void;
   private scanButtonUnsubscribe?: () => void;
 
   /**
@@ -335,15 +343,31 @@ export class DeviceManager {
     // Import UI store dynamically
     const { useUIStore } = await import('../../stores/uiStore');
     const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { useKitStore, getKitsScanMode } = await import('../../stores/kitStore');
     // UI store imported
 
     // Get initial tab
     const initialTab = useUIStore.getState().activeTab;
     // Initial tab determined
 
-    // Subscribe to activeTab AND scanTabMode changes (TRA-1031)
+    // Subscribe to activeTab AND scanTabMode changes (TRA-1031), plus the
+    // Kits tab's per-view RFID|Barcode mode (TRA-1033)
     let previousTab = initialTab;
     let previousScanMode = useUIStore.getState().scanTabMode;
+    let previousKitsMode = getKitsScanMode(useKitStore.getState());
+
+    const applyResolvedMode = async () => {
+      // URL parameters are now handled in App.tsx BEFORE tab change
+      // This ensures settings are updated before we snapshot them
+      const mode = resolveModeForTab(previousTab, previousScanMode, previousKitsMode);
+      const settings = useSettingsStore.getState();
+      await this.setMode(mode, {
+        rfid: settings.rfid,
+        barcode: settings.barcode,
+        system: settings.system
+      });
+    };
+
     this.activeTabUnsubscribe = useUIStore.subscribe(
       async (state) => {
         const { activeTab, scanTabMode } = state;
@@ -352,29 +376,25 @@ export class DeviceManager {
         if (activeTab === previousTab && scanTabMode === previousScanMode) return;
         previousTab = activeTab;
         previousScanMode = scanTabMode;
+        await applyResolvedMode();
+      }
+    );
 
-        // URL parameters are now handled in App.tsx BEFORE tab change
-        // This ensures settings are updated before we snapshot them
-        const mode = resolveModeForTab(activeTab, scanTabMode);
-        const settings = useSettingsStore.getState();
-        await this.setMode(mode, {
-          rfid: settings.rfid,
-          barcode: settings.barcode,
-          system: settings.system
-        });
+    this.kitsModeUnsubscribe = useKitStore.subscribe(
+      async (state) => {
+        const kitsMode = getKitsScanMode(state);
+        if (kitsMode === previousKitsMode) return;
+        previousKitsMode = kitsMode;
+        // Only reconfigure the reader while the Kits tab drives it
+        if (previousTab !== 'kits') return;
+        await applyResolvedMode();
       }
     );
 
     // ActiveTab subscription set up
     // URL parameters are handled in App.tsx BEFORE initial tab is set
     // Set initial mode for current tab
-    const initialMode = resolveModeForTab(initialTab, previousScanMode);
-    const settings = useSettingsStore.getState();
-    await this.setMode(initialMode, {
-      rfid: settings.rfid,
-      barcode: settings.barcode,
-      system: settings.system
-    });
+    await applyResolvedMode();
   }
 
   /**
@@ -471,6 +491,11 @@ export class DeviceManager {
       if (this.activeTabUnsubscribe) {
         this.activeTabUnsubscribe();
         this.activeTabUnsubscribe = undefined;
+      }
+
+      if (this.kitsModeUnsubscribe) {
+        this.kitsModeUnsubscribe();
+        this.kitsModeUnsubscribe = undefined;
       }
 
       if (this.scanButtonUnsubscribe) {
