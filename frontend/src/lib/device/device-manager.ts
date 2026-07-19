@@ -157,11 +157,18 @@ export class DeviceManager {
 
     // Now that we're connected, set the mode based on current activeTab
     const { useUIStore } = await import('../../stores/uiStore');
+    const { useKitStore, getKitsScanMode } = await import('../../stores/kitStore');
     const currentTab = useUIStore.getState().activeTab;
     // Current active tab at connection
 
-    // Set initial mode based on current tab (including IDLE for home/settings)
-    const mode = resolveModeForTab(currentTab, useUIStore.getState().scanTabMode);
+    // Set initial mode based on current tab (including IDLE for home/settings).
+    // Must include the kits view mode or connecting while on the Kits tab
+    // configures INVENTORY under a Barcode toggle (TRA-1033).
+    const mode = resolveModeForTab(
+      currentTab,
+      useUIStore.getState().scanTabMode,
+      getKitsScanMode(useKitStore.getState())
+    );
     // Use already imported settings from above (line 125-127)
     const currentSettings = useSettingsStore.getState();
     await DeviceManager.instance.setMode(mode, {
