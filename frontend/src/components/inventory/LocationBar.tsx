@@ -54,8 +54,12 @@ export function LocationBar({
       : null;
 
   const hasLocation = !!resolvedLocation;
-  const methodText =
-    detectionMethod === 'tag'
+  // Only describe HOW a location was picked when one is actually shown —
+  // a selection that can't resolve (e.g. locations not loaded yet) renders
+  // the empty state and no method line.
+  const methodText = !hasLocation
+    ? null
+    : detectionMethod === 'tag'
       ? 'via location tag (strongest signal)'
       : detectionMethod === 'barcode'
         ? 'via barcode scan'

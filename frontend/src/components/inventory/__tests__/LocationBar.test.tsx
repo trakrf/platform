@@ -87,6 +87,20 @@ describe('LocationBar', () => {
     expect(screen.queryByText('manually selected')).toBeNull();
   });
 
+  it('shows no method subtext when the selection cannot be resolved to a location (TRA-1031)', () => {
+    render(
+      <LocationBar
+        {...defaultProps}
+        detectionMethod="barcode"
+        selectedLocationId={999}
+      />,
+    );
+
+    expect(screen.getByText('No location tag detected')).toBeInTheDocument();
+    expect(screen.queryByText('via barcode scan')).toBeNull();
+    expect(screen.queryByText('manually selected')).toBeNull();
+  });
+
   it('shows "Change" button when location detected, "Select" when not', () => {
     // First: with detected location => "Change"
     const { unmount } = render(
