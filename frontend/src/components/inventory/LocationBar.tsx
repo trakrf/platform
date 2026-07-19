@@ -8,7 +8,7 @@ import type { Location } from '@/types/locations';
 
 interface LocationBarProps {
   detectedLocation: { id: number; name: string } | null;
-  detectionMethod: 'tag' | 'manual' | null;
+  detectionMethod: 'tag' | 'manual' | 'barcode' | null;
   selectedLocationId: number | null;
   onLocationChange: (locationId: number | null) => void;
   locations: Location[];
@@ -54,12 +54,18 @@ export function LocationBar({
       : null;
 
   const hasLocation = !!resolvedLocation;
-  const methodText =
-    detectionMethod === 'tag'
+  // Only describe HOW a location was picked when one is actually shown —
+  // a selection that can't resolve (e.g. locations not loaded yet) renders
+  // the empty state and no method line.
+  const methodText = !hasLocation
+    ? null
+    : detectionMethod === 'tag'
       ? 'via location tag (strongest signal)'
-      : detectionMethod === 'manual'
-        ? 'manually selected'
-        : null;
+      : detectionMethod === 'barcode'
+        ? 'via barcode scan'
+        : detectionMethod === 'manual'
+          ? 'manually selected'
+          : null;
 
   return (
     <div className="px-4 md:px-6 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">

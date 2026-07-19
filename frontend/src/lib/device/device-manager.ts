@@ -29,11 +29,31 @@ interface CS108WorkerAPI {
 // Import stores for direct updates
 import { useDeviceStore } from '../../stores/deviceStore';
 import { useTagStore } from '../../stores/tagStore';
-import { useBarcodeStore } from '../../stores/barcodeStore';
 import { useLocateStore } from '../../stores/locateStore';
+import type { ScanTabMode } from '../../stores/uiStore';
+import { routeBarcodeRead } from './barcode-bridge';
 
 export interface DeviceManagerConfig {
   transport?: TransportFactoryConfig;
+}
+
+/**
+ * Simple tab-to-mode mapping
+ */
+const TAB_TO_MODE: Record<string, ReaderModeType> = {
+  'scan': ReaderMode.INVENTORY,
+  'locate': ReaderMode.LOCATE,
+  'assets': ReaderMode.BARCODE,
+  // Everything else gets IDLE
+};
+
+/**
+ * Resolve the reader mode for a tab. The Scan tab is dual-mode (TRA-1031):
+ * its RFID|Barcode toggle decides between INVENTORY and BARCODE.
+ */
+export function resolveModeForTab(tab: string, scanTabMode: ScanTabMode): ReaderModeType {
+  if (tab === 'scan' && scanTabMode === 'barcode') return ReaderMode.BARCODE;
+  return TAB_TO_MODE[tab] || ReaderMode.IDLE;
 }
 
 export class DeviceManager {
@@ -43,20 +63,6 @@ export class DeviceManager {
   private settingsUnsubscribe?: () => void;
   private activeTabUnsubscribe?: () => void;
   private scanButtonUnsubscribe?: () => void;
-
-  /**
-   * Simple tab-to-mode mapping
-   */
-  private static readonly TAB_TO_MODE: Record<string, ReaderModeType> = {
-    'scan': ReaderMode.INVENTORY,
-    'locate': ReaderMode.LOCATE,
-    'assets': ReaderMode.BARCODE,
-    // Everything else gets IDLE
-  };
-
-  /**
-   * Switch to the appropriate mode for a tab
-   */
 
   /**
    * Constructor implements lifecycle = connection pattern
@@ -144,7 +150,7 @@ export class DeviceManager {
     // Current active tab at connection
 
     // Set initial mode based on current tab (including IDLE for home/settings)
-    const mode = DeviceManager.TAB_TO_MODE[currentTab] || ReaderMode.IDLE;
+    const mode = resolveModeForTab(currentTab, useUIStore.getState().scanTabMode);
     // Use already imported settings from above (line 125-127)
     const currentSettings = useSettingsStore.getState();
     await DeviceManager.instance.setMode(mode, {
@@ -245,11 +251,7 @@ export class DeviceManager {
           break;
 
         case WorkerEventType.BARCODE_READ:
-          useBarcodeStore.getState().addBarcode({
-            data: event.payload.barcode,
-            type: event.payload.symbology || 'Unknown',
-            timestamp: event.payload.timestamp ?? Date.now()
-          });
+          routeBarcodeRead(event.payload);
           break;
 
         case WorkerEventType.BATTERY_UPDATE:
@@ -336,20 +338,21 @@ export class DeviceManager {
     const initialTab = useUIStore.getState().activeTab;
     // Initial tab determined
 
-    // Subscribe to activeTab changes
+    // Subscribe to activeTab AND scanTabMode changes (TRA-1031)
     let previousTab = initialTab;
+    let previousScanMode = useUIStore.getState().scanTabMode;
     this.activeTabUnsubscribe = useUIStore.subscribe(
       async (state) => {
-        const activeTab = state.activeTab;
+        const { activeTab, scanTabMode } = state;
 
-        // Only process if tab actually changed
-        if (activeTab === previousTab) return;
+        // Only process if the resolved mode inputs actually changed
+        if (activeTab === previousTab && scanTabMode === previousScanMode) return;
         previousTab = activeTab;
+        previousScanMode = scanTabMode;
 
-        // Active tab changed
         // URL parameters are now handled in App.tsx BEFORE tab change
         // This ensures settings are updated before we snapshot them
-        const mode = DeviceManager.TAB_TO_MODE[activeTab] || ReaderMode.IDLE;
+        const mode = resolveModeForTab(activeTab, scanTabMode);
         const settings = useSettingsStore.getState();
         await this.setMode(mode, {
           rfid: settings.rfid,
@@ -362,7 +365,7 @@ export class DeviceManager {
     // ActiveTab subscription set up
     // URL parameters are handled in App.tsx BEFORE initial tab is set
     // Set initial mode for current tab
-    const initialMode = DeviceManager.TAB_TO_MODE[initialTab] || ReaderMode.IDLE;
+    const initialMode = resolveModeForTab(initialTab, previousScanMode);
     const settings = useSettingsStore.getState();
     await this.setMode(initialMode, {
       rfid: settings.rfid,

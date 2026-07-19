@@ -91,6 +91,11 @@ export function InventoryTableRow({ tag, onAssetUpdated }: InventoryTableRowProp
                 <span className="font-mono text-xs text-gray-500 dark:text-gray-400">
                   {tag.displayEpc || tag.epc}
                 </span>
+                {tag.source === 'barcode' && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 flex-shrink-0">
+                    Barcode
+                  </span>
+                )}
                 <button
                   onClick={(e) => {
                     e.preventDefault();
@@ -104,7 +109,14 @@ export function InventoryTableRow({ tag, onAssetUpdated }: InventoryTableRowProp
               </div>
             </>
           ) : (
-            <div className="font-mono text-sm text-gray-900 dark:text-gray-100">{tag.displayEpc || tag.epc}</div>
+            <div className="flex items-center gap-1.5">
+              <div className="font-mono text-sm text-gray-900 dark:text-gray-100">{tag.displayEpc || tag.epc}</div>
+              {tag.source === 'barcode' && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 flex-shrink-0">
+                  Barcode
+                </span>
+              )}
+            </div>
           )}
         </div>
 

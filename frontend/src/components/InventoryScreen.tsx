@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useDeviceStore, useTagStore, useSettingsStore, useAuthStore } from '@/stores';
+import { useUIStore } from '@/stores/uiStore';
 import { useAssets } from '@/hooks/assets';
 import { useLocations } from '@/hooks/locations';
 import { ReaderState } from '@/worker/types/reader';
@@ -22,6 +23,7 @@ import { InventoryStats } from '@/components/inventory/InventoryStats';
 import { InventoryTableContent } from '@/components/inventory/InventoryTableContent';
 import { InventorySettingsPanel } from '@/components/inventory/InventorySettingsPanel';
 import { LocationBar } from '@/components/inventory/LocationBar';
+import { latestBarcodeLocation } from '@/utils/barcodeLocation';
 
 export default function InventoryScreen() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -36,6 +38,7 @@ export default function InventoryScreen() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const readerState = useDeviceStore((state) => state.readerState);
+  const scanTabMode = useUIStore((state) => state.scanTabMode);
   const tags = useTagStore((state) => state.tags);
   const clearTags = useTagStore((state) => state.clearTags);
   const sortColumn = useTagStore((state) => state.sortColumn);
@@ -81,8 +84,16 @@ export default function InventoryScreen() {
     }
   }, [isAuthenticated, tags.length, refreshAssetEnrichment]);
 
-  // Manual location selection state
+  // Manual location selection state. A location barcode scan (TRA-1031)
+  // also lands here — it behaves like a manual pick but displays as a scan,
+  // so track where the current pick came from.
   const [manualLocationId, setManualLocationId] = useState<number | null>(null);
+  const [manualLocationSource, setManualLocationSource] = useState<'user' | 'barcode'>('user');
+
+  const handleLocationChange = useCallback((locationId: number | null) => {
+    setManualLocationId(locationId);
+    setManualLocationSource('user');
+  }, []);
 
   const sortedTags = useSortableInventory(tags, sortColumn, sortDirection);
 
@@ -135,6 +146,20 @@ export default function InventoryScreen() {
     prevDetectedIdRef.current = newId;
   }, [detectedLocation, manualLocationId]);
 
+  // TRA-1031: a scanned location barcode has no RSSI to compete on — treat
+  // it as a deliberate pick and set the location selector directly. The ref
+  // gates on lastSeenTime so classification re-renders don't re-apply an old
+  // scan the user has since manually overridden.
+  const lastBarcodeLocationSeenRef = useRef(0);
+  useEffect(() => {
+    const pick = latestBarcodeLocation(tags);
+    if (pick && pick.lastSeenTime > lastBarcodeLocationSeenRef.current) {
+      lastBarcodeLocationSeenRef.current = pick.lastSeenTime;
+      setManualLocationId(pick.locationId);
+      setManualLocationSource('barcode');
+    }
+  }, [tags]);
+
   // Resolved location = manual override OR detected
   // Includes identifier for the natural-key save API (TRA-533)
   const resolvedLocation = useMemo(() => {
@@ -147,9 +172,11 @@ export default function InventoryScreen() {
 
   // Display detection method
   const displayDetectionMethod = useMemo(() => {
-    if (manualLocationId) return 'manual' as const;
+    if (manualLocationId) {
+      return manualLocationSource === 'barcode' ? ('barcode' as const) : ('manual' as const);
+    }
     return detectionMethod;
-  }, [manualLocationId, detectionMethod]);
+  }, [manualLocationId, manualLocationSource, detectionMethod]);
 
   // Count of unique saveable assets. Multiple tags can point to the same
   // asset (multi-tag asset support), so we count distinct identifiers — one
@@ -236,6 +263,11 @@ export default function InventoryScreen() {
   const handleClearInventory = useCallback(() => {
     clearTags();
     setError(null);
+    // Clear resets the location selection too: the manual/barcode pick and
+    // its scan gate, so a re-scan of the same location barcode re-applies.
+    setManualLocationId(null);
+    setManualLocationSource('user');
+    lastBarcodeLocationSeenRef.current = 0;
   }, [clearTags, setError]);
 
   const handleToggleFilter = useCallback((filter: string) => {
@@ -313,7 +345,7 @@ export default function InventoryScreen() {
 
   return (
     <div className="h-full flex flex-col p-2 md:p-3 space-y-2">
-      <ConfigurationSpinner readerState={readerState} mode="Inventory" />
+      <ConfigurationSpinner readerState={readerState} mode={scanTabMode === 'barcode' ? 'Barcode' : 'RFID'} />
       <BrowserSupportBanner isSupported={isBrowserSupported} readerState={readerState} />
 
       <input
@@ -356,7 +388,7 @@ export default function InventoryScreen() {
           detectedLocation={detectedLocation}
           detectionMethod={displayDetectionMethod}
           selectedLocationId={manualLocationId}
-          onLocationChange={setManualLocationId}
+          onLocationChange={handleLocationChange}
           locations={locations}
           isAuthenticated={isAuthenticated}
         />

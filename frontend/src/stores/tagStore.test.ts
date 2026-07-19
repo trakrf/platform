@@ -378,3 +378,23 @@ describe('TagStore - mergeReconciliationTags', () => {
     expect(missing!.epc).toBe('10019');
   });
 });
+describe('TagStore - barcode source (TRA-1031)', () => {
+  beforeEach(() => {
+    useTagStore.setState({ tags: [], _lookupQueue: new Set(), _lookupTimer: null });
+  });
+
+  it('accepts and preserves source barcode on new tags', () => {
+    useTagStore.getState().addTag({ epc: 'BC1', count: 1, source: 'barcode' });
+    expect(useTagStore.getState().tags[0].source).toBe('barcode');
+  });
+
+  it('promoting a reconciliation stub keeps the scanning source', () => {
+    useTagStore.getState().mergeReconciliationTags([
+      { epc: 'BC2', assetIdentifier: 'A-1', count: 0, found: false },
+    ]);
+    useTagStore.getState().addTag({ epc: 'BC2', count: 1, source: 'barcode' });
+    const t = useTagStore.getState().tags.find(x => x.epc === 'BC2')!;
+    expect(t.source).toBe('barcode');
+    expect(t.reconciled).toBe(true);
+  });
+});

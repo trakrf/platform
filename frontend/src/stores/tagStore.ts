@@ -38,7 +38,7 @@ export interface TagInfo {
 
   description?: string;
   location?: string;
-  source: 'scan' | 'reconciliation' | 'rfid';
+  source: 'scan' | 'reconciliation' | 'rfid' | 'barcode';
 
   // Tag classification (TRA-312)
   type: TagType;
@@ -294,7 +294,7 @@ export const useTagStore = create<TagState>()(
           // Promote stub to scanned tag
           epc: isReconStub ? epc : existing.epc,
           displayEpc,
-          source: isReconStub ? 'rfid' as const : existing.source,
+          source: isReconStub ? (tag.source ?? 'rfid' as const) : existing.source,
           reconciled: existing.reconciled != null ? true : existing.reconciled,
           lastSeenTime: now,
           readCount: (existing.readCount || 0) + 1,
