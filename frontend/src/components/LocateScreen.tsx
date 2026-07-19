@@ -7,6 +7,8 @@ import React, { useEffect, useMemo } from 'react';
 import { useLocateStore } from '@/stores/locateStore';
 import { useDeviceStore } from '@/stores/deviceStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { useUIStore } from '@/stores/uiStore';
+import { ArrowLeft } from 'lucide-react';
 import { ReaderState } from '@/worker/types/reader';
 import { EXAMPLE_EPCS } from '@test-utils/constants';
 import { ConfigurationSpinner } from '@/components/ConfigurationSpinner';
@@ -65,6 +67,10 @@ const LocateScreen: React.FC = () => {
   // Get EPC settings from settingsStore
   const storedEPC = useSettingsStore((state) => state.rfid?.targetEPC ?? '');
   const setTargetEPC = useSettingsStore((state) => state.setTargetEPC);
+
+  // Kit verify → Locate handoff (TRA-1033): armed by #locate?...&return=kits
+  const locateReturnTab = useUIStore((state) => state.locateReturnTab);
+  const setActiveTab = useUIStore((state) => state.setActiveTab);
 
   // Local state for input field to allow typing partial values
   const [inputEPC, setInputEPC] = React.useState(storedEPC);
@@ -172,6 +178,19 @@ const LocateScreen: React.FC = () => {
     <div className="p-4 max-w-4xl mx-auto">
       {/* Configuration Spinner - Shows when reader is BUSY */}
       <ConfigurationSpinner readerState={readerState} mode="Locate" />
+
+      {locateReturnTab && (
+        <button
+          data-testid="locate-back-to-results"
+          onClick={() => {
+            setActiveTab(locateReturnTab);
+            window.history.pushState({ tab: locateReturnTab }, '', `#${locateReturnTab}`);
+          }}
+          className="mb-4 flex items-center text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
+        >
+          <ArrowLeft className="w-4 h-4 mr-1" /> Back to kit results
+        </button>
+      )}
 
       <div className="flex justify-between items-start mb-4">
         <div>
