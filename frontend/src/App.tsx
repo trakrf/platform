@@ -36,7 +36,10 @@ const ReportsHistoryScreen = lazyWithRetry(() => import('@/components/ReportsHis
 const SuperadminOrgsScreen = lazyWithRetry(() => import('@/components/SuperadminOrgsScreen'));
 const MusteringScreen = lazyWithRetry(() => import('@/components/mustering/MusteringScreen'));
 
-const VALID_TABS: TabType[] = ['scan', 'locate', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'mustering', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'org-geofence-defaults', 'accept-invite', 'api-keys', 'admin-orgs'];
+// 'mustering' is intentionally omitted until the capability gate lands (TRA-1026).
+// A direct #mustering hash falls back to the default tab. Its component wiring
+// stays in tabComponents/loadingScreens below so restoring it is a one-line add.
+const VALID_TABS: TabType[] = ['scan', 'locate', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'org-geofence-defaults', 'accept-invite', 'api-keys', 'admin-orgs'];
 
 export default function App() {
   const activeTab = useUIStore((state) => state.activeTab);
