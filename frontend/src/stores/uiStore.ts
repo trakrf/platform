@@ -4,7 +4,7 @@
 import { create } from 'zustand';
 
 // Define tab types
-export type TabType = 'scan' | 'settings' | 'locate' | 'help' | 'assets' | 'locations' | 'scan-devices' | 'output-devices' | 'live-reads' | 'reports' | 'reports-history' | 'mustering' | 'login' | 'signup' | 'forgot-password' | 'reset-password' | 'create-org' | 'org-members' | 'org-settings' | 'org-geofence-defaults' | 'accept-invite' | 'api-keys' | 'admin-orgs';
+export type TabType = 'scan' | 'settings' | 'locate' | 'kits' | 'help' | 'assets' | 'locations' | 'scan-devices' | 'output-devices' | 'live-reads' | 'reports' | 'reports-history' | 'mustering' | 'login' | 'signup' | 'forgot-password' | 'reset-password' | 'create-org' | 'org-members' | 'org-settings' | 'org-geofence-defaults' | 'accept-invite' | 'api-keys' | 'admin-orgs';
 export type TabId = TabType;
 
 // Scan tab read mode (TRA-1031). Session-local, never persisted — always
@@ -22,6 +22,9 @@ interface Notification {
 interface UIState {
   activeTab: TabId;
   scanTabMode: ScanTabMode;
+  // Where Locate's "back to results" button returns to (TRA-1033 kit
+  // handoff). Armed by a `return=` hash param, session-local.
+  locateReturnTab: TabType | null;
   sidebarOpen: boolean;
   settingsOpen: boolean;
   contextMenuOpen: string | null;
@@ -32,6 +35,7 @@ interface UIState {
 interface UIActions {
   setActiveTab: (tab: TabId) => void;
   setScanTabMode: (mode: ScanTabMode) => void;
+  setLocateReturnTab: (tab: TabType | null) => void;
   setSidebarOpen: (open: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
   setContextMenuOpen: (id: string | null) => void;
@@ -43,6 +47,7 @@ interface UIActions {
 export const useUIStore = create<UIState & UIActions>((set) => ({
   activeTab: 'scan',
   scanTabMode: 'rfid',
+  locateReturnTab: null,
   sidebarOpen: false,
   settingsOpen: false,
   contextMenuOpen: null,
@@ -51,6 +56,7 @@ export const useUIStore = create<UIState & UIActions>((set) => ({
 
   setActiveTab: (tab) => set({ activeTab: tab }),
   setScanTabMode: (mode) => set({ scanTabMode: mode }),
+  setLocateReturnTab: (tab) => set({ locateReturnTab: tab }),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setSettingsOpen: (open) => set({ settingsOpen: open }),
   setContextMenuOpen: (id) => set({ contextMenuOpen: id }),

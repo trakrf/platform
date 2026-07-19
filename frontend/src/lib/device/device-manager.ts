@@ -43,6 +43,9 @@ export interface DeviceManagerConfig {
 const TAB_TO_MODE: Record<string, ReaderModeType> = {
   'scan': ReaderMode.INVENTORY,
   'locate': ReaderMode.LOCATE,
+  // Kit flows are continuous inventory scans; tags land in tagStore with
+  // asset/location classification (TRA-1033).
+  'kits': ReaderMode.INVENTORY,
   'assets': ReaderMode.BARCODE,
   // Everything else gets IDLE
 };

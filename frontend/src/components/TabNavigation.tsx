@@ -2,7 +2,7 @@ import React from 'react';
 import { useUIStore, useDeviceStore, useOrgStore } from '@/stores';
 import type { TabType } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
-import { Package2, Search, Settings, HelpCircle, Package, MapPinned, BarChart3, RadioTower, Siren, Radio, SlidersHorizontal, Users } from 'lucide-react';
+import { Package2, Search, Settings, HelpCircle, Package, MapPinned, BarChart3, RadioTower, Siren, Radio, SlidersHorizontal, Users, Boxes } from 'lucide-react';
 import { appVersion } from '@/version';
 
 interface NavItemProps {
@@ -177,6 +177,15 @@ export default function TabNavigation() {
             onClick={() => handleTabClick('locate')}
             icon={<Search className="w-5 h-5" />}
             tooltip="Find a specific item by walking around with the scanner"
+          />
+
+          <NavItem
+            id="kits"
+            label="Kits"
+            isActive={activeTab === 'kits'}
+            onClick={() => handleTabClick('kits')}
+            icon={<Boxes className="w-5 h-5" />}
+            tooltip="Commission kits and verify them at return — catch missing or swapped items"
           />
 
           <NavItem

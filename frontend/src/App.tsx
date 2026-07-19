@@ -35,8 +35,9 @@ const ReportsScreen = lazyWithRetry(() => import('@/components/ReportsScreen'));
 const ReportsHistoryScreen = lazyWithRetry(() => import('@/components/ReportsHistoryScreen'));
 const SuperadminOrgsScreen = lazyWithRetry(() => import('@/components/SuperadminOrgsScreen'));
 const MusteringScreen = lazyWithRetry(() => import('@/components/mustering/MusteringScreen'));
+const KitsScreen = lazyWithRetry(() => import('@/components/kits/KitsScreen'));
 
-const VALID_TABS: TabType[] = ['scan', 'locate', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'mustering', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'org-geofence-defaults', 'accept-invite', 'api-keys', 'admin-orgs'];
+const VALID_TABS: TabType[] = ['scan', 'locate', 'kits', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'mustering', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'org-geofence-defaults', 'accept-invite', 'api-keys', 'admin-orgs'];
 
 export default function App() {
   const activeTab = useUIStore((state) => state.activeTab);
@@ -74,12 +75,16 @@ export default function App() {
   };
 
   const handleUrlNavigation = async (isInitialLoad = false) => {
-    const { tab, queryString, epc } = parseHash();
+    const { tab, queryString, params, epc } = parseHash();
 
     if (epc) {
       const { useSettingsStore } = await import('@/stores/settingsStore');
       useSettingsStore.getState().setTargetEPC(epc);
     }
+
+    // Kit verify → Locate handoff (TRA-1033): a `return=kits` param arms the
+    // "back to kit results" button; any locate navigation without it disarms.
+    useUIStore.getState().setLocateReturnTab(params.get('return') === 'kits' ? 'kits' : null);
 
     // Resolve retired ids (#home/#inventory/#barcode) to their successor before validating.
     const resolvedTab = resolveLegacyTab(tab);
@@ -200,6 +205,7 @@ export default function App() {
     const tabComponents: Record<string, React.ComponentType<any>> = {
       scan: InventoryScreen,
       locate: LocateScreen,
+      kits: KitsScreen,
       assets: AssetsScreen,
       locations: LocationsScreen,
       'scan-devices': ScanDevicesScreen,
@@ -226,6 +232,7 @@ export default function App() {
     const loadingScreens: Record<string, React.ComponentType> = {
       scan: InventoryLoadingScreen,
       locate: LocateLoadingScreen,
+      kits: LoadingScreen,
       assets: LoadingScreen,
       locations: LoadingScreen,
       'scan-devices': LoadingScreen,
