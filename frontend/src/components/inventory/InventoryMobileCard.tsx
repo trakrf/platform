@@ -55,6 +55,11 @@ export function InventoryMobileCard({ tag, onAssetUpdated }: InventoryMobileCard
                 <span className="font-mono text-xs text-gray-500 dark:text-gray-400 break-all">
                   {tag.displayEpc || tag.epc}
                 </span>
+                {tag.source === 'barcode' && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 flex-shrink-0">
+                    Barcode
+                  </span>
+                )}
                 <button
                   onClick={handleAssetClick}
                   className="text-blue-500 hover:text-blue-700 flex-shrink-0 p-0.5"
@@ -65,8 +70,15 @@ export function InventoryMobileCard({ tag, onAssetUpdated }: InventoryMobileCard
               </div>
             </>
           ) : (
-            <div className="font-mono text-xs sm:text-sm text-gray-900 dark:text-gray-100 break-all">
-              {tag.displayEpc || tag.epc}
+            <div className="flex items-center gap-1.5">
+              <div className="font-mono text-xs sm:text-sm text-gray-900 dark:text-gray-100 break-all">
+                {tag.displayEpc || tag.epc}
+              </div>
+              {tag.source === 'barcode' && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 flex-shrink-0">
+                  Barcode
+                </span>
+              )}
             </div>
           )}
           {tag.description && (
