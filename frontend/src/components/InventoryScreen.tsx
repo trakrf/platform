@@ -340,7 +340,7 @@ export default function InventoryScreen() {
 
   return (
     <div className="h-full flex flex-col p-2 md:p-3 space-y-2">
-      <ConfigurationSpinner readerState={readerState} mode={scanTabMode === 'barcode' ? 'Barcode' : 'Inventory'} />
+      <ConfigurationSpinner readerState={readerState} mode={scanTabMode === 'barcode' ? 'Barcode' : 'RFID'} />
       <BrowserSupportBanner isSupported={isBrowserSupported} readerState={readerState} />
 
       <input
