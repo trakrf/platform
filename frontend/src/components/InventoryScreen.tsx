@@ -84,8 +84,16 @@ export default function InventoryScreen() {
     }
   }, [isAuthenticated, tags.length, refreshAssetEnrichment]);
 
-  // Manual location selection state
+  // Manual location selection state. A location barcode scan (TRA-1031)
+  // also lands here — it behaves like a manual pick but displays as a scan,
+  // so track where the current pick came from.
   const [manualLocationId, setManualLocationId] = useState<number | null>(null);
+  const [manualLocationSource, setManualLocationSource] = useState<'user' | 'barcode'>('user');
+
+  const handleLocationChange = useCallback((locationId: number | null) => {
+    setManualLocationId(locationId);
+    setManualLocationSource('user');
+  }, []);
 
   const sortedTags = useSortableInventory(tags, sortColumn, sortDirection);
 
@@ -148,6 +156,7 @@ export default function InventoryScreen() {
     if (pick && pick.lastSeenTime > lastBarcodeLocationSeenRef.current) {
       lastBarcodeLocationSeenRef.current = pick.lastSeenTime;
       setManualLocationId(pick.locationId);
+      setManualLocationSource('barcode');
     }
   }, [tags]);
 
@@ -163,9 +172,11 @@ export default function InventoryScreen() {
 
   // Display detection method
   const displayDetectionMethod = useMemo(() => {
-    if (manualLocationId) return 'manual' as const;
+    if (manualLocationId) {
+      return manualLocationSource === 'barcode' ? ('barcode' as const) : ('manual' as const);
+    }
     return detectionMethod;
-  }, [manualLocationId, detectionMethod]);
+  }, [manualLocationId, manualLocationSource, detectionMethod]);
 
   // Count of unique saveable assets. Multiple tags can point to the same
   // asset (multi-tag asset support), so we count distinct identifiers — one
@@ -372,7 +383,7 @@ export default function InventoryScreen() {
           detectedLocation={detectedLocation}
           detectionMethod={displayDetectionMethod}
           selectedLocationId={manualLocationId}
-          onLocationChange={setManualLocationId}
+          onLocationChange={handleLocationChange}
           locations={locations}
           isAuthenticated={isAuthenticated}
         />

@@ -29,7 +29,7 @@ const locations: Location[] = [
 
 const defaultProps = {
   detectedLocation: null as { id: number; name: string } | null,
-  detectionMethod: null as 'tag' | 'manual' | null,
+  detectionMethod: null as 'tag' | 'manual' | 'barcode' | null,
   selectedLocationId: null as number | null,
   onLocationChange: vi.fn(),
   locations,
@@ -71,6 +71,20 @@ describe('LocationBar', () => {
     );
 
     expect(screen.getByText('manually selected')).toBeInTheDocument();
+  });
+
+  it('shows "via barcode scan" subtext for barcode-picked location (TRA-1031)', () => {
+    render(
+      <LocationBar
+        {...defaultProps}
+        detectedLocation={{ id: 1, name: 'Warehouse A' }}
+        detectionMethod="barcode"
+        selectedLocationId={1}
+      />,
+    );
+
+    expect(screen.getByText('via barcode scan')).toBeInTheDocument();
+    expect(screen.queryByText('manually selected')).toBeNull();
   });
 
   it('shows "Change" button when location detected, "Select" when not', () => {
