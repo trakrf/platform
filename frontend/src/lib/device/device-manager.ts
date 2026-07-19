@@ -29,9 +29,9 @@ interface CS108WorkerAPI {
 // Import stores for direct updates
 import { useDeviceStore } from '../../stores/deviceStore';
 import { useTagStore } from '../../stores/tagStore';
-import { useBarcodeStore } from '../../stores/barcodeStore';
 import { useLocateStore } from '../../stores/locateStore';
 import type { ScanTabMode } from '../../stores/uiStore';
+import { routeBarcodeRead } from './barcode-bridge';
 
 export interface DeviceManagerConfig {
   transport?: TransportFactoryConfig;
@@ -251,11 +251,7 @@ export class DeviceManager {
           break;
 
         case WorkerEventType.BARCODE_READ:
-          useBarcodeStore.getState().addBarcode({
-            data: event.payload.barcode,
-            type: event.payload.symbology || 'Unknown',
-            timestamp: event.payload.timestamp ?? Date.now()
-          });
+          routeBarcodeRead(event.payload);
           break;
 
         case WorkerEventType.BATTERY_UPDATE:
