@@ -219,10 +219,12 @@ export default function InventoryScreen() {
 
   const { paginatedTags, startIndex, endIndex } = usePagination(filteredTags, currentPage, pageSize);
 
+  // TRA-1036: tiles summarize the whole session, so counts come from the
+  // UNFILTERED set — clicking a filter tile must not shrink the other tiles.
   const stats = useMemo(() => {
     if (hasReconciliation) {
       // Asset-level stats: group by assetIdentifier, Found if ANY tag found
-      const reconItems = filteredTags
+      const reconItems = displayableTags
         .filter(t => t.reconciled !== null && t.reconciled !== undefined)
         .map(t => ({
           epc: t.epc,
@@ -231,13 +233,13 @@ export default function InventoryScreen() {
           count: t.count,
         }));
       const assetStats = getAssetReconciliationStats(reconItems);
-      const notListed = filteredTags.filter(t =>
+      const notListed = displayableTags.filter(t =>
         t.reconciled === null || t.reconciled === undefined
       ).length;
 
       return {
-        total: filteredTags.length,
-        totalScanned: filteredTags.filter(t => t.source !== 'reconciliation').length,
+        total: displayableTags.length,
+        totalScanned: displayableTags.filter(t => t.source !== 'reconciliation').length,
         found: assetStats.foundAssets,
         missing: assetStats.missingAssets,
         notListed,
@@ -247,15 +249,15 @@ export default function InventoryScreen() {
     }
 
     return {
-      total: filteredTags.length,
-      totalScanned: filteredTags.length,
+      total: displayableTags.length,
+      totalScanned: displayableTags.length,
       found: 0,
       missing: 0,
-      notListed: filteredTags.length,
+      notListed: displayableTags.length,
       hasReconciliation: false,
       saveable: saveableCount,
     };
-  }, [filteredTags, saveableCount, hasReconciliation]);
+  }, [displayableTags, saveableCount, hasReconciliation]);
 
   // TRA-1036: the Status column disappears with the list; don't let the
   // invisible reconciled sort silently drive row order.

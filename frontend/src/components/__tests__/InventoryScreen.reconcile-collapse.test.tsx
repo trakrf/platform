@@ -117,6 +117,29 @@ describe('InventoryScreen reconcile collapse (TRA-1036)', () => {
     });
   });
 
+  it('keeps tile counts unfiltered while a tile filter is active', async () => {
+    // 3 scanned tags, 1 is a recognized asset. Filtering to Assets must not
+    // shrink the Scans count — tiles summarize the whole session.
+    useTagStore.getState().setTags([
+      scannedTag(1, { type: 'asset', assetId: 1, assetIdentifier: 'A-1' }),
+      scannedTag(2),
+      scannedTag(3),
+    ]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getAllByText(/E2806894/).length).toBeGreaterThan(0);
+    });
+    const scansTile = screen.getByRole('button', { name: /^Scans/ });
+    expect(scansTile).toHaveTextContent('3');
+    fireEvent.click(screen.getByRole('button', { name: /^Assets/ }));
+    await waitFor(() => {
+      // Table filtered to the asset row only...
+      expect(screen.queryAllByText(/E28068940000000000000002/).length).toBe(0);
+    });
+    // ...but the Scans tile still reports all 3 scanned tags.
+    expect(screen.getByRole('button', { name: /^Scans/ })).toHaveTextContent('3');
+  });
+
   it('persists the tile filter selection', async () => {
     useTagStore.getState().setTags([scannedTag(1, { type: 'asset', assetId: 1, assetIdentifier: 'A-1' })]);
     renderScreen();
