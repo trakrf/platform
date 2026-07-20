@@ -26,22 +26,22 @@ const tag = (overrides: Partial<TagInfo>): TagInfo => ({
 
 describe('read-list source badge (TRA-1031)', () => {
   it('InventoryTableRow shows a Barcode badge for barcode-sourced rows', () => {
-    renderWithQuery(<InventoryTableRow tag={tag({ source: 'barcode' })} />);
+    renderWithQuery(<InventoryTableRow tag={tag({ source: 'barcode' })} hasReconciliation={true} />);
     expect(screen.getByText('Barcode')).toBeInTheDocument();
   });
 
   it('InventoryTableRow shows no badge for rfid-sourced rows', () => {
-    renderWithQuery(<InventoryTableRow tag={tag({ source: 'rfid' })} />);
+    renderWithQuery(<InventoryTableRow tag={tag({ source: 'rfid' })} hasReconciliation={true} />);
     expect(screen.queryByText('Barcode')).toBeNull();
   });
 
   it('InventoryMobileCard shows a Barcode badge for barcode-sourced rows', () => {
-    renderWithQuery(<InventoryMobileCard tag={tag({ source: 'barcode' })} />);
+    renderWithQuery(<InventoryMobileCard tag={tag({ source: 'barcode' })} hasReconciliation={true} />);
     expect(screen.getByText('Barcode')).toBeInTheDocument();
   });
 
   it('InventoryMobileCard shows no badge for rfid-sourced rows', () => {
-    renderWithQuery(<InventoryMobileCard tag={tag({ source: 'rfid' })} />);
+    renderWithQuery(<InventoryMobileCard tag={tag({ source: 'rfid' })} hasReconciliation={true} />);
     expect(screen.queryByText('Barcode')).toBeNull();
   });
 });

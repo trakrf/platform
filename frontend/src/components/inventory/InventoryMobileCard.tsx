@@ -8,10 +8,11 @@ import type { TagInfo } from '@/stores/tagStore';
 
 interface InventoryMobileCardProps {
   tag: TagInfo;
+  hasReconciliation: boolean;
   onAssetUpdated?: () => void;
 }
 
-export function InventoryMobileCard({ tag, onAssetUpdated }: InventoryMobileCardProps) {
+export function InventoryMobileCard({ tag, hasReconciliation, onAssetUpdated }: InventoryMobileCardProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAssetFormOpen, setIsAssetFormOpen] = useState(false);
 
@@ -85,19 +86,21 @@ export function InventoryMobileCard({ tag, onAssetUpdated }: InventoryMobileCard
             <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">{tag.description}</div>
           )}
         </div>
-        <span className={`inline-flex items-center px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-medium ml-2 whitespace-nowrap flex-shrink-0 ${
-          tag.reconciled === true ? 'bg-green-100 text-green-800' :
-          tag.reconciled === false ? 'bg-red-100 text-red-800' :
-          'bg-gray-100 text-gray-700'
-        }`}>
-          {tag.reconciled === true ? (
-            <><CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-0.5 sm:mr-1" /> Found</>
-          ) : tag.reconciled === false ? (
-            <><XCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-0.5 sm:mr-1" /> Missing</>
-          ) : (
-            <>Not Listed</>
-          )}
-        </span>
+        {hasReconciliation && (
+          <span className={`inline-flex items-center px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-medium ml-2 whitespace-nowrap flex-shrink-0 ${
+            tag.reconciled === true ? 'bg-green-100 text-green-800' :
+            tag.reconciled === false ? 'bg-red-100 text-red-800' :
+            'bg-gray-100 text-gray-700'
+          }`}>
+            {tag.reconciled === true ? (
+              <><CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-0.5 sm:mr-1" /> Found</>
+            ) : tag.reconciled === false ? (
+              <><XCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-0.5 sm:mr-1" /> Missing</>
+            ) : (
+              <>Extra</>
+            )}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-3 gap-1.5 sm:gap-2 text-xs sm:text-sm mb-2 sm:mb-3">

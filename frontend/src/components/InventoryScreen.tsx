@@ -24,10 +24,12 @@ import { InventoryTableContent } from '@/components/inventory/InventoryTableCont
 import { InventorySettingsPanel } from '@/components/inventory/InventorySettingsPanel';
 import { LocationBar } from '@/components/inventory/LocationBar';
 import { latestBarcodeLocation } from '@/utils/barcodeLocation';
+import { usePersistedStatusFilters } from '@/hooks/inventory/usePersistedStatusFilters';
 
 export default function InventoryScreen() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilters, setStatusFilters] = useState<Set<string>>(new Set());
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const [statusFilters, setStatusFilters] = usePersistedStatusFilters(isAuthenticated);
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [selectedExportFormat, setSelectedExportFormat] = useState<ExportFormat>('csv');
@@ -65,7 +67,6 @@ export default function InventoryScreen() {
   const { save, isSaving } = useInventorySave();
 
   // Load assets for tag enrichment (only when authenticated)
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   useAssets({ enabled: isAuthenticated });
 
   // Load locations for dropdown selection (only when authenticated)
@@ -101,6 +102,13 @@ export default function InventoryScreen() {
   const displayableTags = useMemo(() => {
     return sortedTags.filter(tag => tag.type !== 'location');
   }, [sortedTags]);
+
+  // TRA-1036: derive from the UNFILTERED set so applying a tile filter can
+  // never collapse/restore the reconcile surface mid-session.
+  const hasReconciliation = useMemo(
+    () => displayableTags.some(tag => tag.reconciled !== null && tag.reconciled !== undefined),
+    [displayableTags]
+  );
 
   // Detect location from scanned location tags (strongest RSSI wins)
   const detectedLocation = useMemo(() => {
@@ -189,20 +197,26 @@ export default function InventoryScreen() {
     return seen.size;
   }, [tags]);
 
-  const filteredTags = useMemo(() => {
-    return displayableTags.filter(tag => {
-      const matchesSearch = !searchTerm ||
-        (tag.displayEpc || tag.epc).toLowerCase().includes(searchTerm.toLowerCase());
+  // TRA-1036: search and tile filters split into two stages because the
+  // stat tiles narrow with search but NOT with tile filters — clicking a
+  // tile must not shrink the other tiles' counts.
+  const searchedTags = useMemo(() => {
+    if (!searchTerm) return displayableTags;
+    return displayableTags.filter(tag =>
+      (tag.displayEpc || tag.epc).toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [displayableTags, searchTerm]);
 
+  const filteredTags = useMemo(() => {
+    return searchedTags.filter(tag => {
       // Multi-select: empty set = show all, otherwise OR logic
-      const matchesStatus = statusFilters.size === 0 ||
+      return statusFilters.size === 0 ||
         (statusFilters.has('Found') && tag.reconciled === true) ||
         (statusFilters.has('Missing') && tag.reconciled === false) ||
-        (statusFilters.has('Not Listed') && (tag.reconciled === null || tag.reconciled === undefined));
-
-      return matchesSearch && matchesStatus;
+        (statusFilters.has('Not Listed') && (tag.reconciled === null || tag.reconciled === undefined)) ||
+        (statusFilters.has('Assets') && tag.type === 'asset' && !!tag.assetIdentifier);
     });
-  }, [displayableTags, searchTerm, statusFilters]);
+  }, [searchedTags, statusFilters]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -210,12 +224,12 @@ export default function InventoryScreen() {
 
   const { paginatedTags, startIndex, endIndex } = usePagination(filteredTags, currentPage, pageSize);
 
+  // TRA-1036: tile counts narrow with search but not with tile filters —
+  // clicking a filter tile must not shrink the other tiles.
   const stats = useMemo(() => {
-    const hasReconciliation = filteredTags.some(tag => tag.reconciled !== null && tag.reconciled !== undefined);
-
     if (hasReconciliation) {
       // Asset-level stats: group by assetIdentifier, Found if ANY tag found
-      const reconItems = filteredTags
+      const reconItems = searchedTags
         .filter(t => t.reconciled !== null && t.reconciled !== undefined)
         .map(t => ({
           epc: t.epc,
@@ -224,13 +238,13 @@ export default function InventoryScreen() {
           count: t.count,
         }));
       const assetStats = getAssetReconciliationStats(reconItems);
-      const notListed = filteredTags.filter(t =>
+      const notListed = searchedTags.filter(t =>
         t.reconciled === null || t.reconciled === undefined
       ).length;
 
       return {
-        total: filteredTags.length,
-        totalScanned: filteredTags.filter(t => t.source !== 'reconciliation').length,
+        total: searchedTags.length,
+        totalScanned: searchedTags.filter(t => t.source !== 'reconciliation').length,
         found: assetStats.foundAssets,
         missing: assetStats.missingAssets,
         notListed,
@@ -240,15 +254,23 @@ export default function InventoryScreen() {
     }
 
     return {
-      total: filteredTags.length,
-      totalScanned: filteredTags.length,
+      total: searchedTags.length,
+      totalScanned: searchedTags.length,
       found: 0,
       missing: 0,
-      notListed: filteredTags.length,
+      notListed: searchedTags.length,
       hasReconciliation: false,
       saveable: saveableCount,
     };
-  }, [filteredTags, saveableCount]);
+  }, [searchedTags, saveableCount, hasReconciliation]);
+
+  // TRA-1036: the Status column disappears with the list; don't let the
+  // invisible reconciled sort silently drive row order.
+  useEffect(() => {
+    if (!hasReconciliation && sortColumn === 'reconciled') {
+      setSortConfig('timestamp', 'desc');
+    }
+  }, [hasReconciliation, sortColumn, setSortConfig]);
 
   const handleSort = useCallback((column: string) => {
     if (sortColumn !== column) {
@@ -441,6 +463,7 @@ export default function InventoryScreen() {
             onLastPage={goToLastPage}
             onPageSizeChange={setPageSize}
             scrollContainerRef={scrollContainerRef}
+            hasReconciliation={hasReconciliation}
             onAssetUpdated={() => {
               // Asset enrichment runs automatically via worker/inventory subsystem
               console.log('[InventoryScreen] Asset updated, enrichment will refresh');

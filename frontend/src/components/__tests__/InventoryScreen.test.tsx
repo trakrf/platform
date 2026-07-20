@@ -212,7 +212,7 @@ describe('InventoryScreen Location Detection', () => {
     await waitFor(() => {
       // Should show 2 saveable (only asset type tags)
       expect(screen.getByText('2')).toBeInTheDocument();
-      expect(screen.getByText('Saveable')).toBeInTheDocument();
+      expect(screen.getByText('Assets')).toBeInTheDocument();
     });
   });
 });

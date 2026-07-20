@@ -8,10 +8,11 @@ import type { TagInfo } from '@/stores/tagStore';
 
 interface InventoryTableRowProps {
   tag: TagInfo;
+  hasReconciliation: boolean;
   onAssetUpdated?: () => void;
 }
 
-export function InventoryTableRow({ tag, onAssetUpdated }: InventoryTableRowProps) {
+export function InventoryTableRow({ tag, hasReconciliation, onAssetUpdated }: InventoryTableRowProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAssetFormOpen, setIsAssetFormOpen] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
@@ -44,21 +45,23 @@ export function InventoryTableRow({ tag, onAssetUpdated }: InventoryTableRowProp
       <div
         className="px-6 py-4 flex items-center border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
       >
-        <div className="w-32">
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-            tag.reconciled === true ? 'bg-green-100 text-green-800' :
-            tag.reconciled === false ? 'bg-red-100 text-red-800' :
-            'bg-gray-100 text-gray-700'
-          }`}>
-            {tag.reconciled === true ? (
-              <><CheckCircle className="w-3 h-3 mr-1" /> Found</>
-            ) : tag.reconciled === false ? (
-              <><XCircle className="w-3 h-3 mr-1" /> Missing</>
-            ) : (
-              <>Not Listed</>
-            )}
-          </span>
-        </div>
+        {hasReconciliation && (
+          <div className="w-32">
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+              tag.reconciled === true ? 'bg-green-100 text-green-800' :
+              tag.reconciled === false ? 'bg-red-100 text-red-800' :
+              'bg-gray-100 text-gray-700'
+            }`}>
+              {tag.reconciled === true ? (
+                <><CheckCircle className="w-3 h-3 mr-1" /> Found</>
+              ) : tag.reconciled === false ? (
+                <><XCircle className="w-3 h-3 mr-1" /> Missing</>
+              ) : (
+                <>Extra</>
+              )}
+            </span>
+          </div>
+        )}
 
         <div className="flex-1 relative">
           {tag.assetName ? (

@@ -26,6 +26,7 @@ interface InventoryTableContentProps {
   onLastPage: () => void;
   onPageSizeChange: (size: number) => void;
   scrollContainerRef: React.RefObject<HTMLDivElement>;
+  hasReconciliation: boolean;
   onAssetUpdated?: () => void;
 }
 
@@ -47,6 +48,7 @@ export function InventoryTableContent({
   onLastPage,
   onPageSizeChange,
   scrollContainerRef,
+  hasReconciliation,
   onAssetUpdated,
 }: InventoryTableContentProps) {
   if (tags.length === 0) {
@@ -68,18 +70,19 @@ export function InventoryTableContent({
           sortColumn={sortColumn}
           sortDirection={sortDirection}
           onSort={onSort}
+          hasReconciliation={hasReconciliation}
         />
       </div>
 
       <div ref={scrollContainerRef} className="flex-1 overflow-auto">
         <div className="md:hidden">
           {paginatedTags.map((tag) => (
-            <InventoryMobileCard key={tag.epc} tag={tag} onAssetUpdated={onAssetUpdated} />
+            <InventoryMobileCard key={tag.epc} tag={tag} hasReconciliation={hasReconciliation} onAssetUpdated={onAssetUpdated} />
           ))}
         </div>
         <div className="hidden md:block">
           {paginatedTags.map((tag) => (
-            <InventoryTableRow key={tag.epc} tag={tag} onAssetUpdated={onAssetUpdated} />
+            <InventoryTableRow key={tag.epc} tag={tag} hasReconciliation={hasReconciliation} onAssetUpdated={onAssetUpdated} />
           ))}
         </div>
       </div>
