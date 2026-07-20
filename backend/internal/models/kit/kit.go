@@ -26,6 +26,9 @@ type CommissionMemberRequest struct {
 type CommissionRequest struct {
 	Label   string                    `json:"label" validate:"required,min=1,max=255" example:"1184015"`
 	Members []CommissionMemberRequest `json:"members" validate:"required,min=2,dive"`
+	// Metadata holds optional QA details (part/heat/operator/date/vendor —
+	// TRA-1033). Free-form string map; keys are the frontend's field ids.
+	Metadata map[string]string `json:"metadata,omitempty" validate:"omitempty,max=20,dive,keys,min=1,max=50,endkeys,max=500"`
 }
 
 type Member struct {
@@ -44,6 +47,7 @@ type Kit struct {
 	ID                 int                  `json:"id"`
 	Label              string               `json:"label"`
 	Status             string               `json:"status"`
+	Metadata           map[string]string    `json:"metadata"`
 	CreatedAt          time.Time            `json:"created_at"`
 	UpdatedAt          time.Time            `json:"updated_at"`
 	Members            []Member             `json:"members"`
@@ -75,6 +79,9 @@ type VerifySeenMember struct {
 	AssetID int     `json:"asset_id"`
 	Role    *string `json:"role"`
 	Name    string  `json:"name"`
+	// EPCs are the scanned tag values that matched this member in THIS scan
+	// (raw as sent, deduped) — the frontend renders them per tag row (TRA-1033).
+	EPCs []string `json:"epcs"`
 }
 
 type VerifyMissingMember struct {
@@ -85,11 +92,12 @@ type VerifyMissingMember struct {
 }
 
 type VerifyKitResult struct {
-	KitID   int                   `json:"kit_id"`
-	Label   string                `json:"label"`
-	Result  string                `json:"result"`
-	Seen    []VerifySeenMember    `json:"seen"`
-	Missing []VerifyMissingMember `json:"missing"`
+	KitID    int                   `json:"kit_id"`
+	Label    string                `json:"label"`
+	Result   string                `json:"result"`
+	Metadata map[string]string     `json:"metadata"`
+	Seen     []VerifySeenMember    `json:"seen"`
+	Missing  []VerifyMissingMember `json:"missing"`
 }
 
 type VerifyUnexpected struct {

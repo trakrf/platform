@@ -1,0 +1,144 @@
+import { apiClient } from '../client';
+
+/**
+ * Kits API Client (TRA-1033)
+ *
+ * Internal-only endpoints from TRA-1032 — request/response shapes are FROZEN
+ * against backend/internal/models/kit/kit.go. All ids are bigint surrogates
+ * serialized as JSON numbers. Both POSTs require entitlement (402) and
+ * Operator+ role; errors arrive in the RFC 7807 envelope.
+ */
+
+export interface CommissionMemberRequest {
+  epc: string;
+  role?: string;
+  name?: string;
+}
+
+export interface CommissionRequest {
+  label: string;
+  members: CommissionMemberRequest[]; // backend requires >= 2
+  // Optional QA details (part/heat/operator/date/vendor — TRA-1033).
+  metadata?: Record<string, string>;
+}
+
+export interface KitMember {
+  asset_id: number;
+  role: string | null;
+  name: string;
+  epcs: string[];
+}
+
+export interface VerificationSummary {
+  result: 'complete' | 'incomplete';
+  verified_at: string;
+}
+
+export interface Kit {
+  id: number;
+  label: string;
+  status: 'active' | 'closed';
+  metadata: Record<string, string>;
+  created_at: string;
+  updated_at: string;
+  members: KitMember[];
+  latest_verification: VerificationSummary | null;
+}
+
+export interface KitResponse {
+  data: Kit;
+}
+
+export interface VerifyRequest {
+  epcs: string[];
+}
+
+export interface VerifySeenMember {
+  asset_id: number;
+  role: string | null;
+  name: string;
+  // Scanned tag values that matched this member in THIS scan (raw, deduped).
+  epcs: string[];
+}
+
+export interface VerifyMissingMember {
+  asset_id: number;
+  role: string | null;
+  name: string;
+  epcs: string[];
+}
+
+export interface VerifyKitResult {
+  kit_id: number;
+  label: string;
+  result: 'complete' | 'incomplete';
+  metadata: Record<string, string>;
+  seen: VerifySeenMember[];
+  missing: VerifyMissingMember[];
+}
+
+export interface VerifyUnexpected {
+  asset_id: number;
+  epc: string;
+  name: string;
+  belongs_to_kit_id: number;
+  belongs_to_kit_label: string;
+}
+
+// Frozen dock-check shape: top-level, no {data} envelope (TRA-1032).
+export interface VerifyResponse {
+  kits: VerifyKitResult[];
+  unexpected: VerifyUnexpected[];
+  unknown_epcs: string[];
+}
+
+export interface KitSummary {
+  id: number;
+  label: string;
+  status: 'active' | 'closed';
+  created_at: string;
+  member_count: number;
+  latest_verification: VerificationSummary | null;
+}
+
+export interface KitListResponse {
+  data: KitSummary[];
+}
+
+export const kitsApi = {
+  /**
+   * Commission a kit from scanned members.
+   * POST /api/v1/kits — 201 with Location header; 409 conflict when a member
+   * already belongs to another active kit (owning kit label in error.detail).
+   */
+  commission: (request: CommissionRequest) =>
+    apiClient.post<KitResponse>('/kits', request),
+
+  /**
+   * List kits whose active membership includes the given EPC (normalized
+   * match server-side). Returns closed kits too — filter status client-side.
+   * GET /api/v1/kits?member_epc={epc}
+   */
+  listByMemberEpc: (epc: string) =>
+    apiClient.get<KitListResponse>('/kits', { params: { member_epc: epc } }),
+
+  /**
+   * List kits by label substring (Lot # search).
+   * GET /api/v1/kits?query={substring}
+   */
+  search: (query: string) =>
+    apiClient.get<KitListResponse>('/kits', { params: { query } }),
+
+  /**
+   * Full kit record: members (with tag values) + metadata + latest verification.
+   * GET /api/v1/kits/{id}
+   */
+  get: (id: number) => apiClient.get<KitResponse>(`/kits/${id}`),
+
+  /**
+   * Dock-check verification of a scan session's EPCs.
+   * POST /api/v1/kits/verify — persists an audit row per kit server-side.
+   */
+  verify: (request: VerifyRequest) =>
+    apiClient.post<VerifyResponse>('/kits/verify', request),
+};

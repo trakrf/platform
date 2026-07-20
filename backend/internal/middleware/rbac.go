@@ -173,6 +173,95 @@ func RequireSuperadmin(store OrgRoleStore) func(http.Handler) http.Handler {
 	}
 }
 
+// RequireCurrentOrgRole checks that the session user holds at least minRole in
+// the org carried by their JWT (claims.CurrentOrgID). Use it for org-implicit
+// routes like /api/v1/kits that have no :orgId/:id URL param —
+// RequireOrgRole/RequireOrgMember resolve the org from the URL and 400 with
+// "Organization ID required" on such routes (TRA-1033). Behavior otherwise
+// mirrors RequireOrgMember: superadmin bypasses with admin role, and the
+// resolved role is stored in context for handlers.
+func RequireCurrentOrgRole(store OrgRoleStore, minRole models.OrgRole) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+			requestID := GetRequestID(ctx)
+
+			claims := GetUserClaims(r)
+			if claims == nil {
+				httputil.Respond401(w, r, "Session authentication required", requestID)
+				return
+			}
+
+			if claims.CurrentOrgID == nil {
+				httputil.RespondMissingOrgContext(w, r, requestID)
+				return
+			}
+			orgID := *claims.CurrentOrgID
+
+			isSuperadmin, err := store.IsUserSuperadmin(ctx, claims.UserID)
+			if err != nil {
+				logger.Get().Error().
+					Err(err).
+					Int("user_id", claims.UserID).
+					Str("request_id", requestID).
+					Msg("Failed to check superadmin status")
+				httputil.WriteJSONError(w, r, http.StatusInternalServerError,
+					errors.ErrInternal, "Failed to check permissions", requestID)
+				return
+			}
+
+			if isSuperadmin {
+				logger.Get().Warn().
+					Int("user_id", claims.UserID).
+					Int("org_id", orgID).
+					Str("path", r.URL.Path).
+					Str("method", r.Method).
+					Str("request_id", requestID).
+					Msg("Superadmin org access")
+				ctx = context.WithValue(ctx, orgRoleKey, models.RoleAdmin)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			role, err := store.GetUserOrgRole(ctx, claims.UserID, orgID)
+			if err != nil {
+				if err.Error() == ErrOrgUserNotFound.Error() {
+					logAccessDenied(claims.UserID, orgID, minRole.String(), r)
+					httputil.WriteJSONError(w, r, http.StatusForbidden,
+						errors.ErrForbidden, "You are not a member of this organization", requestID)
+					return
+				}
+				logger.Get().Error().
+					Err(err).
+					Int("user_id", claims.UserID).
+					Int("org_id", orgID).
+					Str("request_id", requestID).
+					Msg("Failed to get user org role")
+				httputil.WriteJSONError(w, r, http.StatusInternalServerError,
+					errors.ErrInternal, "Failed to check permissions", requestID)
+				return
+			}
+
+			if !role.HasAtLeast(minRole) {
+				logAccessDenied(claims.UserID, orgID, minRole.String(), r)
+				httputil.WriteJSONError(w, r, http.StatusForbidden,
+					errors.ErrForbidden,
+					"Insufficient permissions. Required role: "+minRole.String(), requestID)
+				return
+			}
+
+			ctx = context.WithValue(ctx, orgRoleKey, role)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// RequireCurrentOrgOperator is a convenience wrapper for
+// RequireCurrentOrgRole(store, RoleOperator).
+func RequireCurrentOrgOperator(store OrgRoleStore) func(http.Handler) http.Handler {
+	return RequireCurrentOrgRole(store, models.RoleOperator)
+}
+
 // RequireOrgRole checks that the user has at least the specified role
 func RequireOrgRole(store OrgRoleStore, minRole models.OrgRole) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

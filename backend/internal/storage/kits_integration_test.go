@@ -285,3 +285,47 @@ func TestKits_CommissionResolvesExistingAsset(t *testing.T) {
 		t.Errorf("expected 2 assets (1 existing + 1 auto-created), got %d", assetCount)
 	}
 }
+
+func TestKits_MetadataRoundTrip(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+	ctx := context.Background()
+
+	// Commission with the Howmet QA fields (TRA-1033 slide alignment).
+	req := commissionFixture("1184015")
+	req.Metadata = map[string]string{"part": "PN-778", "heat": "H-42", "vendor": "Acme"}
+	created, err := db.Store.CommissionKit(ctx, orgID, req)
+	if err != nil {
+		t.Fatalf("commission with metadata failed: %v", err)
+	}
+	if created.Metadata["part"] != "PN-778" || created.Metadata["vendor"] != "Acme" {
+		t.Errorf("commission response metadata mismatch: %+v", created.Metadata)
+	}
+
+	got, err := db.Store.GetKitByID(ctx, orgID, created.ID)
+	if err != nil || got == nil {
+		t.Fatalf("get kit failed: %v", err)
+	}
+	if got.Metadata["heat"] != "H-42" {
+		t.Errorf("get kit metadata mismatch: %+v", got.Metadata)
+	}
+
+	// The dock check carries the QA fields so scanning either tag retrieves
+	// the full record.
+	resp, err := db.Store.VerifyKits(ctx, orgID, []string{"1184015AA01"})
+	if err != nil {
+		t.Fatalf("verify failed: %v", err)
+	}
+	if len(resp.Kits) != 1 || resp.Kits[0].Metadata["part"] != "PN-778" {
+		t.Errorf("verify kit metadata mismatch: %+v", resp.Kits)
+	}
+
+	// A kit commissioned without metadata round-trips an empty object.
+	bare, err := db.Store.CommissionKit(ctx, orgID, commissionFixture("1184099"))
+	if err != nil {
+		t.Fatalf("bare commission failed: %v", err)
+	}
+	if bare.Metadata == nil || len(bare.Metadata) != 0 {
+		t.Errorf("bare kit metadata must be empty map, got %+v", bare.Metadata)
+	}
+}

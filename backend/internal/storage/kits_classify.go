@@ -12,9 +12,10 @@ type scannedEPC struct {
 
 // kitMembership is an active-kit membership of a scanned asset.
 type kitMembership struct {
-	AssetID  int
-	KitID    int
-	KitLabel string
+	AssetID     int
+	KitID       int
+	KitLabel    string
+	KitMetadata map[string]string
 }
 
 // rosterMember is one active member of a touched kit, with display fields.
@@ -40,9 +41,13 @@ func classifyVerification(scans []scannedEPC, memberships []kitMembership, roste
 		UnknownEPCs: []string{},
 	}
 
-	// Dedup scanned assets preserving scan order; first EPC per asset wins.
+	// Dedup scanned assets preserving scan order; first EPC per asset wins for
+	// the unexpected annotation, but every distinct matching EPC is kept so
+	// seen members can list their scanned tag values (TRA-1033).
 	seenAssetOrder := []int{}
 	firstEPC := map[int]string{}
+	matchedEPCs := map[int][]string{}
+	matchedEPCSeen := map[int]map[string]bool{}
 	unknownSeen := map[string]bool{}
 	for _, s := range scans {
 		if s.AssetID == 0 {
@@ -55,6 +60,13 @@ func classifyVerification(scans []scannedEPC, memberships []kitMembership, roste
 		if _, ok := firstEPC[s.AssetID]; !ok {
 			firstEPC[s.AssetID] = s.EPC
 			seenAssetOrder = append(seenAssetOrder, s.AssetID)
+		}
+		if matchedEPCSeen[s.AssetID] == nil {
+			matchedEPCSeen[s.AssetID] = map[string]bool{}
+		}
+		if !matchedEPCSeen[s.AssetID][s.EPC] {
+			matchedEPCSeen[s.AssetID][s.EPC] = true
+			matchedEPCs[s.AssetID] = append(matchedEPCs[s.AssetID], s.EPC)
 		}
 	}
 
@@ -96,7 +108,10 @@ func classifyVerification(scans []scannedEPC, memberships []kitMembership, roste
 		missing := []kit.VerifyMissingMember{}
 		for _, r := range rosterByKit[kitID] {
 			if scannedSet[r.AssetID] {
-				seen = append(seen, kit.VerifySeenMember{AssetID: r.AssetID, Role: r.Role, Name: r.Name})
+				seen = append(seen, kit.VerifySeenMember{
+					AssetID: r.AssetID, Role: r.Role, Name: r.Name,
+					EPCs: matchedEPCs[r.AssetID],
+				})
 			} else {
 				epcs := r.EPCs
 				if epcs == nil {
@@ -116,9 +131,13 @@ func classifyVerification(scans []scannedEPC, memberships []kitMembership, roste
 		// Every touched kit has >=1 scanned member, so its label is present in
 		// the memberships of its own scanned assets; fall back to roster lookup
 		// is unnecessary but label comes from membership records.
+		metadata := map[string]string{}
 		for _, assetID := range scannedMembers {
 			if m := memberKit[assetID]; m.KitID == kitID {
 				label = m.KitLabel
+				if m.KitMetadata != nil {
+					metadata = m.KitMetadata
+				}
 				break
 			}
 		}
@@ -128,19 +147,32 @@ func classifyVerification(scans []scannedEPC, memberships []kitMembership, roste
 			result = kit.ResultIncomplete
 		}
 		resp.Kits = append(resp.Kits, kit.VerifyKitResult{
-			KitID:   kitID,
-			Label:   label,
-			Result:  result,
-			Seen:    seen,
-			Missing: missing,
+			KitID:    kitID,
+			Label:    label,
+			Result:   result,
+			Metadata: metadata,
+			Seen:     seen,
+			Missing:  missing,
 		})
 	}
 
-	// Top-level unexpected: deduped union of per-kit sets == all scanned
-	// members when >=2 kits are touched, empty otherwise.
+	// Top-level unexpected: with >=2 kits touched, flag a scanned member as a
+	// wrong-pair stray only when its OWN kit is incomplete in this scan
+	// (TRA-1033). A stray coupon in the wrong tote reads with its counterpart
+	// absent → its kit is incomplete → flagged. Multiple COMPLETE pairs
+	// scanned side-by-side are all accounted for — no strays.
 	if len(touchedOrder) > 1 {
+		incomplete := map[int]bool{}
+		for _, kr := range resp.Kits {
+			if kr.Result == kit.ResultIncomplete {
+				incomplete[kr.KitID] = true
+			}
+		}
 		for _, assetID := range scannedMembers {
 			m := memberKit[assetID]
+			if !incomplete[m.KitID] {
+				continue
+			}
 			resp.Unexpected = append(resp.Unexpected, kit.VerifyUnexpected{
 				AssetID:           assetID,
 				EPC:               firstEPC[assetID],

@@ -2,7 +2,7 @@ import React from 'react';
 import { useUIStore, useDeviceStore, useOrgStore } from '@/stores';
 import type { TabType } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
-import { Package2, Search, Settings, HelpCircle, Package, MapPinned, BarChart3, RadioTower, Siren, Radio, SlidersHorizontal, Users } from 'lucide-react';
+import { Package2, Search, Settings, HelpCircle, Package, MapPinned, BarChart3, RadioTower, Siren, Radio, SlidersHorizontal, Boxes } from 'lucide-react';
 import { appVersion } from '@/version';
 
 interface NavItemProps {
@@ -180,6 +180,15 @@ export default function TabNavigation() {
           />
 
           <NavItem
+            id="kits"
+            label="Kits"
+            isActive={activeTab === 'kits'}
+            onClick={() => handleTabClick('kits')}
+            icon={<Boxes className="w-5 h-5" />}
+            tooltip="Commission kits and verify them at return — catch missing or swapped items"
+          />
+
+          <NavItem
             id="assets"
             label="Assets"
             isActive={activeTab === 'assets'}
@@ -206,14 +215,10 @@ export default function TabNavigation() {
             tooltip="View asset location reports and movement history"
           />
 
-          <NavItem
-            id="mustering"
-            label="Mustering"
-            isActive={activeTab === 'mustering'}
-            onClick={() => handleTabClick('mustering')}
-            icon={<Users className="w-5 h-5" />}
-            tooltip="Run a muster drill — track who is accounted for at muster points during an evacuation"
-          />
+          {/* Mustering is hidden until the per-org capability gate lands (TRA-1026).
+              Its presentation is `absent` per ADR 0002, so the nav item and the
+              route (VALID_TABS in App.tsx) are both removed rather than role-gated.
+              Restore both when useCapability('mustering') is available. */}
 
           <NavItem
             id="settings"

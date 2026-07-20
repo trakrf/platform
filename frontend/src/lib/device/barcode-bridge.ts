@@ -10,6 +10,7 @@
 import { useBarcodeStore } from '../../stores/barcodeStore';
 import { useTagStore } from '../../stores/tagStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useKitStore, getKitsScanMode } from '../../stores/kitStore';
 
 export interface BarcodeReadPayload {
   barcode: string;
@@ -27,7 +28,12 @@ export function routeBarcodeRead(payload: BarcodeReadPayload): void {
   });
 
   const { activeTab, scanTabMode } = useUIStore.getState();
-  if (activeTab === 'scan' && scanTabMode === 'barcode') {
+  const inScanBarcode = activeTab === 'scan' && scanTabMode === 'barcode';
+  // Kits tab in barcode mode feeds the same pipeline (TRA-1033) — kit flows
+  // read their member list from tagStore.
+  const inKitsBarcode =
+    activeTab === 'kits' && getKitsScanMode(useKitStore.getState()) === 'barcode';
+  if (inScanBarcode || inKitsBarcode) {
     useTagStore.getState().addTag({
       epc: payload.barcode,
       count: 1,
