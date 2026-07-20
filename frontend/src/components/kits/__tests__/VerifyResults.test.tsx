@@ -14,6 +14,7 @@ const result: VerifyResponse = {
       kit_id: 1,
       label: '1184015',
       result: 'complete',
+      metadata: { part: 'PN-778', vendor: 'Acme' },
       seen: [{ asset_id: 10, role: 'coupon', name: '1184015 coupon', epcs: ['EEE555'] }],
       missing: [],
     },
@@ -21,6 +22,7 @@ const result: VerifyResponse = {
       kit_id: 2,
       label: '1184016',
       result: 'incomplete',
+      metadata: {},
       seen: [{ asset_id: 20, role: 'tote', name: '1184016 tote', epcs: ['DDD444'] }],
       missing: [
         { asset_id: 21, role: 'coupon', name: '1184016 coupon', epcs: ['AAA111', 'BBB222'] },
@@ -90,6 +92,7 @@ describe('VerifyResults tree view', () => {
           kit_id: 4,
           label: '1184017',
           result: 'incomplete',
+          metadata: {},
           seen: [],
           missing: [{ asset_id: 41, role: null, name: 'orphan', epcs: [] }],
         },
@@ -107,6 +110,13 @@ describe('VerifyResults tree view', () => {
     const unexpected = screen.getByTestId('kit-unexpected');
     expect(unexpected).toHaveTextContent('1184020');
     expect(unexpected).toHaveTextContent('CCC333');
+  });
+
+  it('renders the QA details inside the lot node', () => {
+    render(<VerifyResults result={result} onLocate={() => {}} />);
+    const complete = screen.getByTestId('kit-result-complete-1');
+    expect(complete).toHaveTextContent('Part #: PN-778');
+    expect(complete).toHaveTextContent('Vendor: Acme');
   });
 
   it('renders unmatched tags with count and tag numbers', () => {

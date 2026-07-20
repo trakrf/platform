@@ -6,6 +6,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ScanModeToggle } from '@/components/inventory/ScanModeToggle';
 import CommissionKit from './CommissionKit';
 import VerifyKit from './VerifyKit';
+import FindKit from './FindKit';
 
 /**
  * Kits mode (TRA-1033): Commission (scan + Lot#) and Verify-at-return.
@@ -53,19 +54,24 @@ const KitsScreen: React.FC = () => {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <ScanModeToggle
-              mode={scanMode}
-              onSelect={(mode) => setScanMode(view, mode)}
-              testIdPrefix="kits-scan-mode-"
-            />
+            {view !== 'find' && (
+              <ScanModeToggle
+                mode={scanMode}
+                onSelect={(mode) => setScanMode(view, mode)}
+                testIdPrefix="kits-scan-mode-"
+              />
+            )}
             <div className="inline-flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden">
               {modeButton('commission', 'Commission')}
               {modeButton('verify', 'Verify')}
+              {modeButton('find', 'Find')}
             </div>
           </div>
         </div>
 
-        {view === 'commission' ? <CommissionKit /> : <VerifyKit />}
+        {view === 'commission' && <CommissionKit />}
+        {view === 'verify' && <VerifyKit />}
+        {view === 'find' && <FindKit />}
       </div>
     </ProtectedRoute>
   );

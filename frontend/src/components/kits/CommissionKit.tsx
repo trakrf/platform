@@ -5,12 +5,12 @@ import { useTagStore } from '@/stores/tagStore';
 import { useKitStore } from '@/stores/kitStore';
 import { useKitCommission } from '@/hooks/kits/useKitCommission';
 import { useKitMemberships, KIT_MEMBERSHIP_QUERY_KEY } from '@/hooks/kits/useKitMemberships';
-import { selectKitMemberTags, buildCommissionRequest } from '@/utils/kitUtils';
+import { selectKitMemberTags, buildCommissionRequest, KIT_QA_FIELDS } from '@/utils/kitUtils';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import { ErrorBanner } from '@/components/banners/ErrorBanner';
 import { ScanControls } from './ScanControls';
 
-const ROLE_SUGGESTIONS = ['coupon', 'tote', 'traveler', 'case'];
+const ROLE_SUGGESTIONS = ['coupon', 'tote', 'router', 'traveler', 'case'];
 
 /**
  * Commission flow (TRA-1033): scan asset tags, key the Lot # from the paper
@@ -31,6 +31,7 @@ const CommissionKit: React.FC = () => {
   const queryClient = useQueryClient();
 
   const [label, setLabel] = React.useState('');
+  const [qaFields, setQaFields] = React.useState<Record<string, string>>({});
   const [error, setError] = React.useState<string | null>(null);
 
   const members = selectKitMemberTags(tags);
@@ -41,11 +42,12 @@ const CommissionKit: React.FC = () => {
   const handleSave = async () => {
     setError(null);
     try {
-      const kit = await commission(buildCommissionRequest(label, eligible, memberRoles));
+      const kit = await commission(buildCommissionRequest(label, eligible, memberRoles, qaFields));
       toast.success(`Kit ${kit.label} created with ${kit.members.length} members`);
       clearTags();
       clearMemberRoles();
       setLabel('');
+      setQaFields({});
       // Freshly kitted tags must show as already-kitted on the next scan.
       queryClient.invalidateQueries({ queryKey: [KIT_MEMBERSHIP_QUERY_KEY] });
     } catch (err) {
@@ -57,6 +59,7 @@ const CommissionKit: React.FC = () => {
   const handleClear = () => {
     clearTags();
     clearMemberRoles();
+    setQaFields({});
     setError(null);
   };
 
@@ -85,6 +88,25 @@ const CommissionKit: React.FC = () => {
           placeholder="Lot # (e.g. 1184015)"
           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
         />
+      </div>
+
+      {/* Howmet slide-deck QA fields — all optional, Lot # stays the only
+          required entry. */}
+      <div className="mb-4 grid grid-cols-2 md:grid-cols-3 gap-3">
+        {KIT_QA_FIELDS.map(({ key, label: fieldLabel }) => (
+          <div key={key}>
+            <label className="block text-xs font-medium mb-1 text-gray-500 dark:text-gray-400">
+              {fieldLabel} <span className="font-normal">(optional)</span>
+            </label>
+            <input
+              type="text"
+              data-testid={`kit-qa-${key}`}
+              value={qaFields[key] ?? ''}
+              onChange={(e) => setQaFields((prev) => ({ ...prev, [key]: e.target.value }))}
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+            />
+          </div>
+        ))}
       </div>
 
       <datalist id="kit-role-suggestions">

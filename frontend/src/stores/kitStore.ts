@@ -9,7 +9,7 @@ import { create } from 'zustand';
 import type { VerifyResponse } from '@/lib/api/kits';
 import type { ScanTabMode } from './uiStore';
 
-export type KitsView = 'commission' | 'verify';
+export type KitsView = 'commission' | 'verify' | 'find';
 
 interface KitState {
   view: KitsView;
@@ -29,7 +29,7 @@ interface KitState {
 
 export const useKitStore = create<KitState>((set) => ({
   view: 'commission',
-  scanModes: { commission: 'barcode', verify: 'rfid' },
+  scanModes: { commission: 'barcode', verify: 'rfid', find: 'rfid' },
   memberRoles: {},
   verifyResult: null,
 

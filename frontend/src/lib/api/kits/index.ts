@@ -18,6 +18,8 @@ export interface CommissionMemberRequest {
 export interface CommissionRequest {
   label: string;
   members: CommissionMemberRequest[]; // backend requires >= 2
+  // Optional QA details (part/heat/operator/date/vendor — TRA-1033).
+  metadata?: Record<string, string>;
 }
 
 export interface KitMember {
@@ -36,6 +38,7 @@ export interface Kit {
   id: number;
   label: string;
   status: 'active' | 'closed';
+  metadata: Record<string, string>;
   created_at: string;
   updated_at: string;
   members: KitMember[];
@@ -69,6 +72,7 @@ export interface VerifyKitResult {
   kit_id: number;
   label: string;
   result: 'complete' | 'incomplete';
+  metadata: Record<string, string>;
   seen: VerifySeenMember[];
   missing: VerifyMissingMember[];
 }
@@ -117,6 +121,19 @@ export const kitsApi = {
    */
   listByMemberEpc: (epc: string) =>
     apiClient.get<KitListResponse>('/kits', { params: { member_epc: epc } }),
+
+  /**
+   * List kits by label substring (Lot # search).
+   * GET /api/v1/kits?query={substring}
+   */
+  search: (query: string) =>
+    apiClient.get<KitListResponse>('/kits', { params: { query } }),
+
+  /**
+   * Full kit record: members (with tag values) + metadata + latest verification.
+   * GET /api/v1/kits/{id}
+   */
+  get: (id: number) => apiClient.get<KitResponse>(`/kits/${id}`),
 
   /**
    * Dock-check verification of a scan session's EPCs.

@@ -57,6 +57,7 @@ describe('CommissionKit already-kitted flagging (TRA-1033)', () => {
           id: 1,
           label: 'Lot-1',
           status: 'active',
+          metadata: {},
           created_at: '',
           updated_at: '',
           members: [
@@ -114,6 +115,26 @@ describe('CommissionKit already-kitted flagging (TRA-1033)', () => {
       expect(kitsApi.commission).toHaveBeenCalledWith({
         label: 'Lot-1',
         members: [{ epc: 'AAA1' }, { epc: 'CCC3' }],
+      });
+    });
+  });
+
+  it('sends filled QA fields as metadata', async () => {
+    renderCommissionKit();
+    await waitFor(() => {
+      expect(screen.getByTestId('kit-member-owned-BBB2')).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByTestId('kit-label-input'), { target: { value: 'Lot-1' } });
+    fireEvent.change(screen.getByTestId('kit-qa-part'), { target: { value: 'PN-778' } });
+    fireEvent.change(screen.getByTestId('kit-qa-vendor'), { target: { value: 'Acme' } });
+    fireEvent.click(screen.getByTestId('kit-save'));
+
+    await waitFor(() => {
+      expect(kitsApi.commission).toHaveBeenCalledWith({
+        label: 'Lot-1',
+        members: [{ epc: 'AAA1' }, { epc: 'CCC3' }],
+        metadata: { part: 'PN-778', vendor: 'Acme' },
       });
     });
   });

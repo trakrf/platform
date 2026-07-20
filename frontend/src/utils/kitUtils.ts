@@ -20,18 +20,40 @@ export function collectVerifyEpcs(tags: TagInfo[]): string[] {
   return selectKitMemberTags(tags).map((t) => t.epc);
 }
 
+/**
+ * The Howmet QA fields (TRA-1033 slide alignment). All optional — Lot #
+ * (label) stays the only required entry; the envelope still travels.
+ */
+export const KIT_QA_FIELDS: { key: string; label: string }[] = [
+  { key: 'part', label: 'Part #' },
+  { key: 'heat', label: 'Heat #' },
+  { key: 'operator', label: 'Operator' },
+  { key: 'date', label: 'Date' },
+  { key: 'vendor', label: 'Vendor' },
+];
+
 export function buildCommissionRequest(
   label: string,
   tags: TagInfo[],
-  roles: Record<string, string>
+  roles: Record<string, string>,
+  metadata?: Record<string, string>
 ): CommissionRequest {
-  return {
+  const request: CommissionRequest = {
     label: label.trim(),
     members: selectKitMemberTags(tags).map((t) => {
       const role = (roles[t.epc] ?? '').trim();
       return role ? { epc: t.epc, role } : { epc: t.epc };
     }),
   };
+  const cleaned = Object.fromEntries(
+    Object.entries(metadata ?? {})
+      .map(([k, v]) => [k, v.trim()])
+      .filter(([, v]) => v !== '')
+  );
+  if (Object.keys(cleaned).length > 0) {
+    request.metadata = cleaned;
+  }
+  return request;
 }
 
 /**

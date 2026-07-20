@@ -15,8 +15,42 @@ interface VerifyResultsProps {
 const memberLabel = (role: string | null, name: string) =>
   role ? `${name} (${role})` : name;
 
+/** Display order + labels for the QA fields; unknown keys render verbatim. */
+const QA_FIELD_LABELS: Record<string, string> = {
+  part: 'Part #',
+  heat: 'Heat #',
+  operator: 'Operator',
+  date: 'Date',
+  vendor: 'Vendor',
+};
+const QA_FIELD_ORDER = ['part', 'heat', 'operator', 'date', 'vendor'];
+
+/** The kit's QA details (Lot metadata), rendered inside a lot node. */
+export const KitMetadataRows: React.FC<{ metadata: Record<string, string>; onRed?: boolean }> = ({
+  metadata,
+  onRed,
+}) => {
+  const keys = [
+    ...QA_FIELD_ORDER.filter((k) => metadata[k]),
+    ...Object.keys(metadata).filter((k) => !QA_FIELD_ORDER.includes(k) && metadata[k]),
+  ];
+  if (keys.length === 0) return null;
+  return (
+    <div
+      data-testid="kit-metadata"
+      className={`mb-1 grid grid-cols-2 gap-x-4 text-sm ${onRed ? 'text-red-100' : 'text-gray-600 dark:text-gray-400'}`}
+    >
+      {keys.map((k) => (
+        <div key={k}>
+          <span className="font-medium">{QA_FIELD_LABELS[k] ?? k}:</span> {metadata[k]}
+        </div>
+      ))}
+    </div>
+  );
+};
+
 /** One tag (EPC) leaf row — Locate pushes exactly this EPC. */
-const TagRow: React.FC<{
+export const TagRow: React.FC<{
   epc: string;
   onLocate: (epc: string) => void;
   onRed?: boolean;
@@ -99,6 +133,7 @@ const IncompleteKit: React.FC<{ kit: VerifyKitResult; onLocate: (epc: string) =>
       </div>
     </summary>
     <div className="mt-2">
+      <KitMetadataRows metadata={kit.metadata ?? {}} onRed />
       {kit.missing.map((m) => (
         <MissingMemberNode key={m.asset_id} member={m} onLocate={onLocate} />
       ))}
@@ -127,6 +162,7 @@ const CompleteKit: React.FC<{ kit: VerifyKitResult; onLocate: (epc: string) => v
       </div>
     </summary>
     <div className="mt-2">
+      <KitMetadataRows metadata={kit.metadata ?? {}} />
       {kit.seen.map((m) => (
         <SeenMemberNode key={m.asset_id} member={m} onLocate={onLocate} />
       ))}

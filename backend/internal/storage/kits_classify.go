@@ -12,9 +12,10 @@ type scannedEPC struct {
 
 // kitMembership is an active-kit membership of a scanned asset.
 type kitMembership struct {
-	AssetID  int
-	KitID    int
-	KitLabel string
+	AssetID     int
+	KitID       int
+	KitLabel    string
+	KitMetadata map[string]string
 }
 
 // rosterMember is one active member of a touched kit, with display fields.
@@ -130,9 +131,13 @@ func classifyVerification(scans []scannedEPC, memberships []kitMembership, roste
 		// Every touched kit has >=1 scanned member, so its label is present in
 		// the memberships of its own scanned assets; fall back to roster lookup
 		// is unnecessary but label comes from membership records.
+		metadata := map[string]string{}
 		for _, assetID := range scannedMembers {
 			if m := memberKit[assetID]; m.KitID == kitID {
 				label = m.KitLabel
+				if m.KitMetadata != nil {
+					metadata = m.KitMetadata
+				}
 				break
 			}
 		}
@@ -142,11 +147,12 @@ func classifyVerification(scans []scannedEPC, memberships []kitMembership, roste
 			result = kit.ResultIncomplete
 		}
 		resp.Kits = append(resp.Kits, kit.VerifyKitResult{
-			KitID:   kitID,
-			Label:   label,
-			Result:  result,
-			Seen:    seen,
-			Missing: missing,
+			KitID:    kitID,
+			Label:    label,
+			Result:   result,
+			Metadata: metadata,
+			Seen:     seen,
+			Missing:  missing,
 		})
 	}
 
