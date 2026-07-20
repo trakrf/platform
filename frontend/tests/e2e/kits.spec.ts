@@ -84,23 +84,20 @@ test.describe('Kit Scan Flows @hardware', () => {
     await simulateTriggerRelease(sharedPage);
     await sharedPage.waitForTimeout(500);
 
-    // Grab the non-location EPCs the flow will send as members
+    // Pair model: the first two eligible scans auto-fill Router then Coupon
     memberEpcs = await sharedPage.evaluate(() => {
       const stores = (window as any).__ZUSTAND_STORES__;
-      const tags = stores?.tagStore?.getState().tags || [];
-      return tags.filter((t: any) => t.type !== 'location').map((t: any) => t.epc);
+      const slots = stores?.kitStore?.getState().pairSlots || {};
+      return [slots.router, slots.coupon].filter(Boolean);
     });
-    console.log(`[Kits] Scanned ${memberEpcs.length} member EPCs:`, memberEpcs.slice(0, 5));
-    expect(memberEpcs.length).toBeGreaterThanOrEqual(2);
-
-    // Give the first member a role via the datalist input
-    await sharedPage.fill(`[data-testid="kit-role-input-${memberEpcs[0]}"]`, 'coupon');
+    console.log('[Kits] Pair slots:', memberEpcs);
+    expect(memberEpcs.length).toBe(2);
 
     await sharedPage.fill('[data-testid="kit-label-input"]', kitLabel);
     await sharedPage.click('[data-testid="kit-save"]');
 
-    // Success toast carries label + member count, list resets
-    await expect(sharedPage.getByText(`Kit ${kitLabel} created`)).toBeVisible({ timeout: 10000 });
+    // Success toast names the lot, list resets
+    await expect(sharedPage.getByText(`Lot ${kitLabel}`)).toBeVisible({ timeout: 10000 });
     const remaining = await sharedPage.evaluate(() => {
       const stores = (window as any).__ZUSTAND_STORES__;
       return (stores?.tagStore?.getState().tags || []).length;

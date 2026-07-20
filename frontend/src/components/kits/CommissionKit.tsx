@@ -1,32 +1,32 @@
 import React from 'react';
 import toast from 'react-hot-toast';
 import { useQueryClient } from '@tanstack/react-query';
+import { ArrowLeftRight } from 'lucide-react';
 import { useTagStore } from '@/stores/tagStore';
-import { useKitStore } from '@/stores/kitStore';
+import { useKitStore, type PairSlot } from '@/stores/kitStore';
 import { useKitCommission } from '@/hooks/kits/useKitCommission';
 import { useKitMemberships, KIT_MEMBERSHIP_QUERY_KEY } from '@/hooks/kits/useKitMemberships';
-import { selectKitMemberTags, buildCommissionRequest, KIT_QA_FIELDS } from '@/utils/kitUtils';
+import { selectKitMemberTags, buildPairCommissionRequest, KIT_QA_FIELDS } from '@/utils/kitUtils';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import { ErrorBanner } from '@/components/banners/ErrorBanner';
 import { ScanControls } from './ScanControls';
 
-const ROLE_SUGGESTIONS = ['coupon', 'tote', 'router', 'traveler', 'case'];
-
 /**
- * Commission flow (TRA-1033): scan asset tags, key the Lot # from the paper
- * envelope, save. Label is the ONLY typed field by design — Part#/Heat#/etc.
- * stay on the envelope; double entry is the compliance killer this replaces.
+ * Commission flow (TRA-1033 pair model): a kit is one Router + one Coupon,
+ * 1:1. Scan both tags — the first eligible scan fills the Router slot, the
+ * second the Coupon slot (reassignable per row, Swap to flip). Lot # plus the
+ * optional QA fields describe the PAIR; several pairs may share a Lot #.
  *
- * Tags already in an active kit are flagged inline and excluded from the
- * save — an asset can belong to one active kit, so including them could only
- * end in the server's 409.
+ * Tags already in an active pair are flagged inline and never auto-assigned —
+ * a tag belongs to one active pair, so including them could only end in the
+ * server's 409.
  */
 const CommissionKit: React.FC = () => {
   const tags = useTagStore((state) => state.tags);
   const clearTags = useTagStore((state) => state.clearTags);
-  const memberRoles = useKitStore((state) => state.memberRoles);
-  const setMemberRole = useKitStore((state) => state.setMemberRole);
-  const clearMemberRoles = useKitStore((state) => state.clearMemberRoles);
+  const pairSlots = useKitStore((state) => state.pairSlots);
+  const setPairSlot = useKitStore((state) => state.setPairSlot);
+  const clearPairSlots = useKitStore((state) => state.clearPairSlots);
   const { commission, isSaving } = useKitCommission();
   const queryClient = useQueryClient();
 
@@ -37,37 +37,98 @@ const CommissionKit: React.FC = () => {
   const members = selectKitMemberTags(tags);
   const memberships = useKitMemberships(members.map((t) => t.epc));
   const eligible = members.filter((t) => !memberships.has(t.epc));
-  const canSave = label.trim() !== '' && eligible.length >= 2 && !isSaving;
+
+  // Auto-assign in scan order: first eligible tag → Router, second → Coupon.
+  // Only fills EMPTY slots; manual assignments are never overridden. Slots
+  // referencing tags that left the session (Clear) are released.
+  React.useEffect(() => {
+    const eligibleEpcs = new Set(eligible.map((t) => t.epc));
+    const current = useKitStore.getState().pairSlots;
+    (['router', 'coupon'] as PairSlot[]).forEach((slot) => {
+      if (current[slot] !== null && !eligibleEpcs.has(current[slot]!)) {
+        setPairSlot(slot, null);
+      }
+    });
+    const assigned = new Set(
+      Object.values(useKitStore.getState().pairSlots).filter(Boolean) as string[]
+    );
+    for (const tag of eligible) {
+      if (assigned.has(tag.epc)) continue;
+      const slots = useKitStore.getState().pairSlots;
+      if (slots.router === null) {
+        setPairSlot('router', tag.epc);
+        assigned.add(tag.epc);
+      } else if (slots.coupon === null) {
+        setPairSlot('coupon', tag.epc);
+        assigned.add(tag.epc);
+      } else {
+        break;
+      }
+    }
+  }, [eligible, setPairSlot]);
+
+  const canSave =
+    label.trim() !== '' && pairSlots.router !== null && pairSlots.coupon !== null && !isSaving;
 
   const handleSave = async () => {
+    if (pairSlots.router === null || pairSlots.coupon === null) return;
     setError(null);
     try {
-      const kit = await commission(buildCommissionRequest(label, eligible, memberRoles, qaFields));
-      toast.success(`Kit ${kit.label} created with ${kit.members.length} members`);
+      const kit = await commission(
+        buildPairCommissionRequest(label, pairSlots.router, pairSlots.coupon, qaFields)
+      );
+      toast.success(`Pair saved — Lot ${kit.label} (Router + Coupon linked)`);
       clearTags();
-      clearMemberRoles();
+      clearPairSlots();
       setLabel('');
       setQaFields({});
-      // Freshly kitted tags must show as already-kitted on the next scan.
+      // Freshly paired tags must show as already-paired on the next scan.
       queryClient.invalidateQueries({ queryKey: [KIT_MEMBERSHIP_QUERY_KEY] });
     } catch (err) {
-      // 409 detail names the kit that already owns a member — keep it visible.
-      setError(getApiErrorMessage(err, 'Failed to create kit'));
+      // 409 detail names the pair that already owns a tag — keep it visible.
+      setError(getApiErrorMessage(err, 'Failed to save pair'));
     }
   };
 
   const handleClear = () => {
     clearTags();
-    clearMemberRoles();
+    clearPairSlots();
     setQaFields({});
     setError(null);
   };
+
+  const handleSwap = () => {
+    const { router, coupon } = useKitStore.getState().pairSlots;
+    useKitStore.setState({ pairSlots: { router: coupon, coupon: router } });
+  };
+
+  const slotDisplay = (epc: string | null) => {
+    if (!epc) return null;
+    const tag = members.find((t) => t.epc === epc);
+    return tag ? tag.displayEpc || tag.epc : epc;
+  };
+
+  const slotBadge = (slot: PairSlot, title: string) => (
+    <div
+      data-testid={`kit-slot-${slot}`}
+      className={`flex-1 rounded-lg border-2 px-3 py-2 ${
+        pairSlots[slot]
+          ? 'border-green-400 dark:border-green-700 bg-green-50 dark:bg-green-900/20'
+          : 'border-dashed border-gray-300 dark:border-gray-600'
+      }`}
+    >
+      <div className="text-xs font-medium text-gray-500 dark:text-gray-400">{title}</div>
+      <div className="font-mono text-sm text-gray-900 dark:text-gray-100 truncate">
+        {slotDisplay(pairSlots[slot]) ?? <span className="text-gray-400">scan tag…</span>}
+      </div>
+    </div>
+  );
 
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
         <p className="text-gray-600 dark:text-gray-400">
-          Scan the kit&apos;s tags, enter the Lot #, save.
+          Scan the Router and Coupon tags, enter the Lot #, save the pair.
         </p>
         <ScanControls />
       </div>
@@ -76,9 +137,23 @@ const CommissionKit: React.FC = () => {
         <ErrorBanner error={error} />
       </div>
 
+      {/* The pair being built: first scan → Router, second → Coupon */}
+      <div className="mb-4 flex items-center gap-2">
+        {slotBadge('router', 'Router')}
+        <button
+          data-testid="kit-pair-swap"
+          onClick={handleSwap}
+          title="Swap Router and Coupon"
+          className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+        >
+          <ArrowLeftRight className="w-5 h-5" />
+        </button>
+        {slotBadge('coupon', 'Coupon')}
+      </div>
+
       <div className="mb-4">
         <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-          Label (Lot #)
+          Lot #
         </label>
         <input
           type="text"
@@ -90,8 +165,7 @@ const CommissionKit: React.FC = () => {
         />
       </div>
 
-      {/* Howmet slide-deck QA fields — all optional, Lot # stays the only
-          required entry. */}
+      {/* Howmet QA fields — characteristics of this pair, all optional. */}
       <div className="mb-4 grid grid-cols-2 md:grid-cols-3 gap-3">
         {KIT_QA_FIELDS.map(({ key, label: fieldLabel }) => (
           <div key={key}>
@@ -109,15 +183,9 @@ const CommissionKit: React.FC = () => {
         ))}
       </div>
 
-      <datalist id="kit-role-suggestions">
-        {ROLE_SUGGESTIONS.map((role) => (
-          <option key={role} value={role} />
-        ))}
-      </datalist>
-
       <div className="mb-4 bg-white dark:bg-gray-800 rounded-lg shadow divide-y divide-gray-200 dark:divide-gray-700">
         <div className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400">
-          Members ({eligible.length}) — scan to add; location tags are excluded
+          Scanned tags ({members.length}) — location tags are excluded
         </div>
         {members.length === 0 && (
           <div className="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
@@ -149,18 +217,25 @@ const CommissionKit: React.FC = () => {
                   data-testid={`kit-member-owned-${tag.epc}`}
                   className="flex-shrink-0 px-2 py-1 text-xs font-medium rounded bg-amber-100 dark:bg-amber-900/30 text-amber-900 dark:text-amber-300"
                 >
-                  in kit {owningKit.label}
+                  in Lot {owningKit.label}
                 </span>
               ) : (
-                <input
-                  type="text"
-                  data-testid={`kit-role-input-${tag.epc}`}
-                  list="kit-role-suggestions"
-                  value={memberRoles[tag.epc] ?? ''}
-                  onChange={(e) => setMemberRole(tag.epc, e.target.value)}
-                  placeholder="role (optional)"
-                  className="w-32 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                />
+                <div className="inline-flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden flex-shrink-0">
+                  {(['router', 'coupon'] as PairSlot[]).map((slot) => (
+                    <button
+                      key={slot}
+                      data-testid={`kit-assign-${slot}-${tag.epc}`}
+                      onClick={() => setPairSlot(slot, tag.epc)}
+                      className={`px-2.5 py-1 text-xs font-medium capitalize transition-colors ${
+                        pairSlots[slot] === tag.epc
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      {slot}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
           );
@@ -176,7 +251,7 @@ const CommissionKit: React.FC = () => {
             canSave ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-400 opacity-50 cursor-not-allowed'
           }`}
         >
-          {isSaving ? 'Saving…' : 'Save Kit'}
+          {isSaving ? 'Saving…' : 'Save Pair'}
         </button>
         <button
           data-testid="kit-commission-clear"
@@ -185,9 +260,9 @@ const CommissionKit: React.FC = () => {
         >
           Clear
         </button>
-        {eligible.length < 2 && (
+        {(pairSlots.router === null || pairSlots.coupon === null) && (
           <span className="text-sm text-gray-500 dark:text-gray-400">
-            A kit needs at least 2 members
+            Assign a Router and a Coupon tag
           </span>
         )}
       </div>

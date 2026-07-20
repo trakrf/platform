@@ -11,34 +11,45 @@ import type { ScanTabMode } from './uiStore';
 
 export type KitsView = 'commission' | 'verify' | 'find';
 
+export type PairSlot = 'router' | 'coupon';
+
 interface KitState {
   view: KitsView;
   // Per-view RFID|Barcode toggle. Commissioning individual items defaults to
   // barcode/QR; the verify dock check is a bulk RFID scan.
   scanModes: Record<KitsView, ScanTabMode>;
-  // Commission draft: epc -> free-text role. Reset after a successful save.
-  memberRoles: Record<string, string>;
+  // Commission draft (TRA-1033 pair model): a kit is one Router + one Coupon.
+  // Slots hold the assigned tag EPCs; reset after a successful save.
+  pairSlots: Record<PairSlot, string | null>;
   verifyResult: VerifyResponse | null;
 
   setView: (view: KitsView) => void;
   setScanMode: (view: KitsView, mode: ScanTabMode) => void;
-  setMemberRole: (epc: string, role: string) => void;
-  clearMemberRoles: () => void;
+  setPairSlot: (slot: PairSlot, epc: string | null) => void;
+  clearPairSlots: () => void;
   setVerifyResult: (result: VerifyResponse | null) => void;
 }
 
 export const useKitStore = create<KitState>((set) => ({
   view: 'commission',
   scanModes: { commission: 'barcode', verify: 'rfid', find: 'rfid' },
-  memberRoles: {},
+  pairSlots: { router: null, coupon: null },
   verifyResult: null,
 
   setView: (view) => set({ view }),
   setScanMode: (view, mode) =>
     set((s) => ({ scanModes: { ...s.scanModes, [view]: mode } })),
-  setMemberRole: (epc, role) =>
-    set((s) => ({ memberRoles: { ...s.memberRoles, [epc]: role } })),
-  clearMemberRoles: () => set({ memberRoles: {} }),
+  setPairSlot: (slot, epc) =>
+    set((s) => {
+      const next: Record<PairSlot, string | null> = { ...s.pairSlots, [slot]: epc };
+      // A tag holds exactly one role — assigning it here evicts it elsewhere.
+      const other: PairSlot = slot === 'router' ? 'coupon' : 'router';
+      if (epc !== null && next[other] === epc) {
+        next[other] = null;
+      }
+      return { pairSlots: next };
+    }),
+  clearPairSlots: () => set({ pairSlots: { router: null, coupon: null } }),
   setVerifyResult: (result) => set({ verifyResult: result }),
 }));
 

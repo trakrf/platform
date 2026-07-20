@@ -38,19 +38,16 @@ function renderCommissionKit() {
   );
 }
 
-describe('CommissionKit already-kitted flagging (TRA-1033)', () => {
+describe('CommissionKit pair model (TRA-1033)', () => {
   beforeEach(() => {
     useTagStore.setState({
       tags: [
-        { epc: 'AAA1', count: 1, source: 'scan', type: 'asset' },
-        { epc: 'BBB2', count: 1, source: 'scan', type: 'asset' },
-        { epc: 'CCC3', count: 1, source: 'scan', type: 'unknown' },
+        { epc: 'RRR1', count: 1, source: 'scan', type: 'asset' },
+        { epc: 'CCC2', count: 1, source: 'scan', type: 'unknown' },
       ],
     });
-    useKitStore.setState({ memberRoles: {} });
-    vi.mocked(kitsApi.listByMemberEpc).mockImplementation(async (epc: string) =>
-      ({ data: { data: epc === 'BBB2' ? [owningKit] : [] } }) as never
-    );
+    useKitStore.setState({ pairSlots: { router: null, coupon: null } });
+    vi.mocked(kitsApi.listByMemberEpc).mockResolvedValue({ data: { data: [] } } as never);
     vi.mocked(kitsApi.commission).mockResolvedValue({
       data: {
         data: {
@@ -61,8 +58,8 @@ describe('CommissionKit already-kitted flagging (TRA-1033)', () => {
           created_at: '',
           updated_at: '',
           members: [
-            { asset_id: 1, role: null, name: 'a', epcs: ['AAA1'] },
-            { asset_id: 2, role: null, name: 'c', epcs: ['CCC3'] },
+            { asset_id: 1, role: 'router', name: 'r', epcs: ['RRR1'] },
+            { asset_id: 2, role: 'coupon', name: 'c', epcs: ['CCC2'] },
           ],
           latest_verification: null,
         },
@@ -75,67 +72,77 @@ describe('CommissionKit already-kitted flagging (TRA-1033)', () => {
     vi.clearAllMocks();
   });
 
-  it('flags a tag already in an active kit and drops its role input', async () => {
-    renderCommissionKit();
-
-    await waitFor(() => {
-      expect(screen.getByTestId('kit-member-owned-BBB2')).toHaveTextContent('in kit 1184015');
-    });
-    expect(screen.queryByTestId('kit-role-input-BBB2')).toBeNull();
-    expect(screen.getByTestId('kit-role-input-AAA1')).toBeInTheDocument();
-    // Eligible count excludes the already-kitted tag
-    expect(screen.getByText(/Members \(2\)/)).toBeInTheDocument();
-  });
-
-  it('does not flag membership in a closed kit', async () => {
-    vi.mocked(kitsApi.listByMemberEpc).mockImplementation(async (epc: string) =>
-      ({
-        data: { data: epc === 'BBB2' ? [{ ...owningKit, status: 'closed' }] : [] },
-      }) as never
-    );
-    renderCommissionKit();
-
-    await waitFor(() => {
-      expect(kitsApi.listByMemberEpc).toHaveBeenCalledWith('BBB2');
-    });
-    expect(screen.queryByTestId('kit-member-owned-BBB2')).toBeNull();
-    expect(screen.getByTestId('kit-role-input-BBB2')).toBeInTheDocument();
-  });
-
-  it('excludes already-kitted tags from the commission request', async () => {
+  it('auto-assigns the first two scanned tags: router then coupon', async () => {
     renderCommissionKit();
     await waitFor(() => {
-      expect(screen.getByTestId('kit-member-owned-BBB2')).toBeInTheDocument();
-    });
-
-    fireEvent.change(screen.getByTestId('kit-label-input'), { target: { value: 'Lot-1' } });
-    fireEvent.click(screen.getByTestId('kit-save'));
-
-    await waitFor(() => {
-      expect(kitsApi.commission).toHaveBeenCalledWith({
-        label: 'Lot-1',
-        members: [{ epc: 'AAA1' }, { epc: 'CCC3' }],
-      });
+      expect(screen.getByTestId('kit-slot-router')).toHaveTextContent('RRR1');
+      expect(screen.getByTestId('kit-slot-coupon')).toHaveTextContent('CCC2');
     });
   });
 
-  it('sends filled QA fields as metadata', async () => {
+  it('swap flips router and coupon', async () => {
     renderCommissionKit();
     await waitFor(() => {
-      expect(screen.getByTestId('kit-member-owned-BBB2')).toBeInTheDocument();
+      expect(screen.getByTestId('kit-slot-coupon')).toHaveTextContent('CCC2');
+    });
+    fireEvent.click(screen.getByTestId('kit-pair-swap'));
+    expect(screen.getByTestId('kit-slot-router')).toHaveTextContent('CCC2');
+    expect(screen.getByTestId('kit-slot-coupon')).toHaveTextContent('RRR1');
+  });
+
+  it('assigning a tag to a slot evicts it from the other slot', async () => {
+    renderCommissionKit();
+    await waitFor(() => {
+      expect(screen.getByTestId('kit-slot-router')).toHaveTextContent('RRR1');
+    });
+    // Move RRR1 to the coupon slot: coupon=RRR1, router must not keep it
+    fireEvent.click(screen.getByTestId('kit-assign-coupon-RRR1'));
+    expect(screen.getByTestId('kit-slot-coupon')).toHaveTextContent('RRR1');
+    expect(screen.getByTestId('kit-slot-router')).not.toHaveTextContent('RRR1');
+  });
+
+  it('saves the pair with router/coupon roles and QA fields', async () => {
+    renderCommissionKit();
+    await waitFor(() => {
+      expect(screen.getByTestId('kit-slot-coupon')).toHaveTextContent('CCC2');
     });
 
     fireEvent.change(screen.getByTestId('kit-label-input'), { target: { value: 'Lot-1' } });
     fireEvent.change(screen.getByTestId('kit-qa-part'), { target: { value: 'PN-778' } });
-    fireEvent.change(screen.getByTestId('kit-qa-vendor'), { target: { value: 'Acme' } });
     fireEvent.click(screen.getByTestId('kit-save'));
 
     await waitFor(() => {
       expect(kitsApi.commission).toHaveBeenCalledWith({
         label: 'Lot-1',
-        members: [{ epc: 'AAA1' }, { epc: 'CCC3' }],
-        metadata: { part: 'PN-778', vendor: 'Acme' },
+        members: [
+          { epc: 'RRR1', role: 'router' },
+          { epc: 'CCC2', role: 'coupon' },
+        ],
+        metadata: { part: 'PN-778' },
       });
     });
+  });
+
+  it('evicts a tag from the slots once it resolves as already-paired', async () => {
+    vi.mocked(kitsApi.listByMemberEpc).mockImplementation(async (epc: string) =>
+      ({ data: { data: epc === 'RRR1' ? [owningKit] : [] } }) as never
+    );
+    renderCommissionKit();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('kit-member-owned-RRR1')).toHaveTextContent('in Lot 1184015');
+    });
+    await waitFor(() => {
+      // RRR1 was auto-assigned pre-resolution, then evicted; CCC2 keeps its
+      // slot and the pair stays incomplete.
+      const slots = [
+        screen.getByTestId('kit-slot-router').textContent,
+        screen.getByTestId('kit-slot-coupon').textContent,
+      ].join(' ');
+      expect(slots).not.toContain('RRR1');
+      expect(slots).toContain('CCC2');
+      expect(slots).toContain('scan tag…');
+    });
+    expect(screen.getByTestId('kit-save')).toBeDisabled();
   });
 });

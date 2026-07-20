@@ -32,18 +32,22 @@ export const KIT_QA_FIELDS: { key: string; label: string }[] = [
   { key: 'vendor', label: 'Vendor' },
 ];
 
-export function buildCommissionRequest(
+/**
+ * A kit is one Router/Coupon pair (TRA-1033 pair model): the two tags are
+ * 1:1, and the QA fields describe the pair. Several pairs may share a Lot #.
+ */
+export function buildPairCommissionRequest(
   label: string,
-  tags: TagInfo[],
-  roles: Record<string, string>,
+  routerEpc: string,
+  couponEpc: string,
   metadata?: Record<string, string>
 ): CommissionRequest {
   const request: CommissionRequest = {
     label: label.trim(),
-    members: selectKitMemberTags(tags).map((t) => {
-      const role = (roles[t.epc] ?? '').trim();
-      return role ? { epc: t.epc, role } : { epc: t.epc };
-    }),
+    members: [
+      { epc: routerEpc, role: 'router' },
+      { epc: couponEpc, role: 'coupon' },
+    ],
   };
   const cleaned = Object.fromEntries(
     Object.entries(metadata ?? {})
