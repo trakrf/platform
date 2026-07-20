@@ -56,7 +56,7 @@ describe('InventoryTableRow - Asset Actions', () => {
   });
 
   it('should render Create button for tags without assetId', () => {
-    render(<InventoryTableRow tag={mockTag} />);
+    render(<InventoryTableRow tag={mockTag} hasReconciliation={true} />);
 
     expect(screen.getByText('Create')).toBeInTheDocument();
     expect(screen.getByTitle('Create Asset')).toBeInTheDocument();
@@ -81,14 +81,14 @@ describe('InventoryTableRow - Asset Actions', () => {
       },
     });
 
-    render(<InventoryTableRow tag={tagWithAsset} />);
+    render(<InventoryTableRow tag={tagWithAsset} hasReconciliation={true} />);
 
     expect(screen.getByText('Edit')).toBeInTheDocument();
     expect(screen.getByTitle('Edit Asset')).toBeInTheDocument();
   });
 
   it('should open AssetFormModal in create mode when Create clicked', () => {
-    render(<InventoryTableRow tag={mockTag} />);
+    render(<InventoryTableRow tag={mockTag} hasReconciliation={true} />);
 
     fireEvent.click(screen.getByText('Create'));
 
@@ -115,7 +115,7 @@ describe('InventoryTableRow - Asset Actions', () => {
       },
     });
 
-    render(<InventoryTableRow tag={tagWithAsset} />);
+    render(<InventoryTableRow tag={tagWithAsset} hasReconciliation={true} />);
 
     fireEvent.click(screen.getByText('Edit'));
 
@@ -123,7 +123,7 @@ describe('InventoryTableRow - Asset Actions', () => {
   });
 
   it('should pre-fill identifier from EPC in create mode', () => {
-    render(<InventoryTableRow tag={mockTag} />);
+    render(<InventoryTableRow tag={mockTag} hasReconciliation={true} />);
 
     fireEvent.click(screen.getByText('Create'));
 
@@ -150,7 +150,7 @@ describe('InventoryTableRow - Asset Actions', () => {
       },
     });
 
-    render(<InventoryTableRow tag={tagWithAsset} />);
+    render(<InventoryTableRow tag={tagWithAsset} hasReconciliation={true} />);
 
     fireEvent.click(screen.getByText('Edit'));
 
@@ -160,7 +160,7 @@ describe('InventoryTableRow - Asset Actions', () => {
 
   it('should call onAssetUpdated callback when modal closes', () => {
     const onAssetUpdated = vi.fn();
-    render(<InventoryTableRow tag={mockTag} onAssetUpdated={onAssetUpdated} />);
+    render(<InventoryTableRow tag={mockTag} hasReconciliation={true} onAssetUpdated={onAssetUpdated} />);
 
     // Open the asset form modal
     fireEvent.click(screen.getByText('Create'));
