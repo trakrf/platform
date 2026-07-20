@@ -22,7 +22,7 @@ const KitsScreen: React.FC = () => {
       <div className="p-4 max-w-4xl mx-auto">
         <ConfigurationSpinner
           readerState={readerState}
-          mode={scanMode === 'barcode' ? 'Barcode' : 'Inventory'}
+          mode={scanMode === 'barcode' ? 'Barcode' : 'RFID'}
         />
 
         <div className="flex justify-between items-start mb-4 gap-3 flex-wrap">
