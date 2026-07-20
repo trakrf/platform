@@ -28,7 +28,7 @@ const resolveEPCsQuery = `
 `
 
 const activeMembershipsQuery = `
-	SELECT km.asset_id, km.kit_id, k.label
+	SELECT km.asset_id, km.kit_id, k.label, k.metadata
 	FROM trakrf.kit_members km
 	JOIN trakrf.kits k ON k.id = km.kit_id
 	WHERE k.org_id = $1
@@ -80,8 +80,14 @@ func loadActiveMemberships(ctx context.Context, tx pgx.Tx, orgID int, assetIDs [
 	memberships := []kitMembership{}
 	for rows.Next() {
 		var m kitMembership
-		if err := rows.Scan(&m.AssetID, &m.KitID, &m.KitLabel); err != nil {
+		var metaBytes []byte
+		if err := rows.Scan(&m.AssetID, &m.KitID, &m.KitLabel, &metaBytes); err != nil {
 			return nil, fmt.Errorf("failed to scan kit membership: %w", err)
+		}
+		if len(metaBytes) > 0 {
+			if err := json.Unmarshal(metaBytes, &m.KitMetadata); err != nil {
+				return nil, fmt.Errorf("failed to decode kit metadata: %w", err)
+			}
 		}
 		memberships = append(memberships, m)
 	}
@@ -109,16 +115,22 @@ func loadKitRoster(ctx context.Context, tx pgx.Tx, kitIDs []int) ([]rosterMember
 // loadKit assembles the full kit payload (members + latest verification)
 // inside an existing org transaction. Returns nil when the kit doesn't exist.
 func loadKit(ctx context.Context, tx pgx.Tx, orgID, kitID int) (*kit.Kit, error) {
-	k := kit.Kit{Members: []kit.Member{}}
+	k := kit.Kit{Members: []kit.Member{}, Metadata: map[string]string{}}
+	var metaBytes []byte
 	err := tx.QueryRow(ctx,
-		`SELECT id, label, status, created_at, updated_at FROM trakrf.kits WHERE org_id = $1 AND id = $2`,
+		`SELECT id, label, status, metadata, created_at, updated_at FROM trakrf.kits WHERE org_id = $1 AND id = $2`,
 		orgID, kitID,
-	).Scan(&k.ID, &k.Label, &k.Status, &k.CreatedAt, &k.UpdatedAt)
+	).Scan(&k.ID, &k.Label, &k.Status, &metaBytes, &k.CreatedAt, &k.UpdatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to load kit: %w", err)
+	}
+	if len(metaBytes) > 0 {
+		if err := json.Unmarshal(metaBytes, &k.Metadata); err != nil {
+			return nil, fmt.Errorf("failed to decode kit metadata: %w", err)
+		}
 	}
 
 	roster, err := loadKitRoster(ctx, tx, []int{kitID})
@@ -220,10 +232,18 @@ func (s *Storage) CommissionKit(ctx context.Context, orgID int, req kit.Commissi
 			return fmt.Errorf("failed to check kit membership conflicts: %w", err)
 		}
 
+		metadata := req.Metadata
+		if metadata == nil {
+			metadata = map[string]string{}
+		}
+		metaBytes, err := json.Marshal(metadata)
+		if err != nil {
+			return fmt.Errorf("failed to serialize kit metadata: %w", err)
+		}
 		var kitID int
 		if err := tx.QueryRow(ctx,
-			`INSERT INTO trakrf.kits (org_id, label) VALUES ($1, $2) RETURNING id`,
-			orgID, req.Label,
+			`INSERT INTO trakrf.kits (org_id, label, metadata) VALUES ($1, $2, $3) RETURNING id`,
+			orgID, req.Label, metaBytes,
 		).Scan(&kitID); err != nil {
 			return fmt.Errorf("failed to create kit: %w", err)
 		}

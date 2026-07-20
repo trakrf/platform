@@ -173,7 +173,9 @@ func setupRouter(
 		musteringHandler.RegisterRoutes(r)
 		// TRA-1032: internal kit commission/verify/lookup. Writes are paid
 		// mutations and require Operator+ (scan-save precedent).
-		kitsHandler.RegisterRoutes(r, paidGate, middleware.RequireOrgOperator(store))
+		// Operator gate resolves the org from JWT claims, NOT a URL param —
+		// these routes have no :orgId, so RequireOrgOperator would 400 (TRA-1033).
+		kitsHandler.RegisterRoutes(r, paidGate, middleware.RequireCurrentOrgOperator(store))
 
 		r.Get("/swagger/openapi.internal.json", swaggerspec.ServeJSON)
 		r.Get("/swagger/openapi.internal.yaml", swaggerspec.ServeYAML)

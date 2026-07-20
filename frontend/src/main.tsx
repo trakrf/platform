@@ -59,7 +59,8 @@ if (import.meta.env.DEV || isNonProd(getAppConfig().environmentLabel)) {
       packetStore: stores.usePacketStore,
       barcodeStore: stores.useBarcodeStore,
       orgStore: stores.useOrgStore,
-      authStore: stores.useAuthStore
+      authStore: stores.useAuthStore,
+      kitStore: stores.useKitStore
     };
   });
 

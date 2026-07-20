@@ -9,6 +9,7 @@ export { useSettingsStore } from './settingsStore';
 export { usePacketStore } from './packetStore';
 export { useBarcodeStore } from './barcodeStore';
 export { useLocateStore } from './locateStore';
+export { useKitStore } from './kitStore';
 export type { BarcodeData } from './barcodeStore';
 export { useAssetStore, type AssetStore, type SearchMatchInfo } from './assets/assetStore';
 export { useLocationStore, type LocationStore } from './locations/locationStore';
