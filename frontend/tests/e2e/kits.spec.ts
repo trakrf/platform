@@ -61,13 +61,10 @@ test.describe('Kit Scan Flows @hardware', () => {
     }
   });
 
-  test('1. commission happy path — scan, label, save', async () => {
+  test('1. pair a fresh router+coupon — scan, label, save', async () => {
     await sharedPage.click('[data-testid="menu-item-kits"]');
-    await sharedPage.click('[data-testid="kits-mode-commission"]');
-    // Commission defaults to barcode mode; this test scans RFID via trigger
-    await sharedPage.click('[data-testid="kits-scan-mode-rfid"]');
 
-    // Reader reconfigures to Inventory for the kits tab in RFID mode
+    // Flattened surface, RFID default → reader configures Inventory
     await sharedPage.waitForFunction(
       () => {
         const stores = (window as any).__ZUSTAND_STORES__;
@@ -76,7 +73,7 @@ test.describe('Kit Scan Flows @hardware', () => {
       { timeout: 10000 }
     );
 
-    await sharedPage.click('[data-testid="kit-commission-clear"]');
+    await sharedPage.click('[data-testid="kit-verify-clear"]');
 
     // Scan real tags with the trigger
     await simulateTriggerPress(sharedPage);
@@ -84,7 +81,16 @@ test.describe('Kit Scan Flows @hardware', () => {
     await simulateTriggerRelease(sharedPage);
     await sharedPage.waitForTimeout(500);
 
-    // Pair model: the first two eligible scans auto-fill Router then Coupon
+    // Pair model: the first two uncommissioned scans auto-fill Router then
+    // Coupon in the pair builder
+    await sharedPage.waitForFunction(
+      () => {
+        const stores = (window as any).__ZUSTAND_STORES__;
+        const slots = stores?.kitStore?.getState().pairSlots || {};
+        return Boolean(slots.router && slots.coupon);
+      },
+      { timeout: 10000 }
+    );
     memberEpcs = await sharedPage.evaluate(() => {
       const stores = (window as any).__ZUSTAND_STORES__;
       const slots = stores?.kitStore?.getState().pairSlots || {};
@@ -105,8 +111,7 @@ test.describe('Kit Scan Flows @hardware', () => {
     expect(remaining).toBe(0);
   });
 
-  test('2. verify complete — all members present, green result', async () => {
-    await sharedPage.click('[data-testid="kits-mode-verify"]');
+  test('2. check pairs — both tags present, valid pair', async () => {
     await sharedPage.click('[data-testid="kit-verify-clear"]');
 
     await seedTags(sharedPage, memberEpcs);
@@ -117,7 +122,7 @@ test.describe('Kit Scan Flows @hardware', () => {
     await expect(complete).toContainText(kitLabel);
   });
 
-  test('3. verify incomplete — red banner, Locate handoff carries the EPC, way back works', async () => {
+  test('3. invalid pair — red banner, Locate handoff carries the EPC, way back works', async () => {
     // Scan session missing the first member
     const missingEpc = memberEpcs[0];
     await sharedPage.click('[data-testid="kit-verify-clear"]');

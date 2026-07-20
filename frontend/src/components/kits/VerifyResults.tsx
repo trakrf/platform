@@ -124,9 +124,9 @@ const IncompleteKit: React.FC<{ kit: VerifyKitResult; onLocate: (epc: string) =>
       <div className="flex items-center">
         <AlertTriangle className="w-8 h-8 mr-3 animate-pulse flex-shrink-0" />
         <div className="flex-1">
-          <div className="text-xl font-extrabold tracking-wide uppercase">Kit incomplete</div>
+          <div className="text-xl font-extrabold tracking-wide uppercase">Invalid pair</div>
           <div className="text-red-100 font-semibold">
-            Lot {kit.label} — {kit.seen.length} of {kit.seen.length + kit.missing.length} members present
+            Lot {kit.label} — {kit.seen.length} of {kit.seen.length + kit.missing.length} present
           </div>
         </div>
         <ChevronDown className="w-5 h-5 flex-shrink-0" />
@@ -155,9 +155,7 @@ const CompleteKit: React.FC<{ kit: VerifyKitResult; onLocate: (epc: string) => v
     <summary className="cursor-pointer list-none">
       <div className="flex items-center text-green-800 dark:text-green-300 font-semibold">
         <CheckCircle2 className="w-5 h-5 mr-2 flex-shrink-0" />
-        <span className="flex-1">
-          Lot {kit.label} — complete · {kit.seen.length} member{kit.seen.length === 1 ? '' : 's'}
-        </span>
+        <span className="flex-1">Lot {kit.label} — valid pair</span>
         <ChevronDown className="w-5 h-5 flex-shrink-0" />
       </div>
     </summary>
@@ -194,7 +192,7 @@ const VerifyResults: React.FC<VerifyResultsProps> = ({ result, onLocate }) => {
         >
           <div className="flex items-center font-bold dark:text-amber-300">
             <AlertTriangle className="w-5 h-5 mr-2 flex-shrink-0" />
-            Wrong-kit items in this scan
+            Wrong-pair items in this scan
           </div>
           <div className="mt-1">
             {result.unexpected.map((u) => (
@@ -213,27 +211,6 @@ const VerifyResults: React.FC<VerifyResultsProps> = ({ result, onLocate }) => {
         <CompleteKit key={kit.kit_id} kit={kit} onLocate={onLocate} />
       ))}
 
-      {result.kits.length === 0 && (
-        <div className="text-sm text-gray-600 dark:text-gray-400">
-          No kit members in this scan.
-        </div>
-      )}
-
-      {result.unknown_epcs.length > 0 && (
-        <div
-          data-testid="kit-unknown-epcs"
-          className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4"
-        >
-          <div className="text-sm font-medium text-gray-600 dark:text-gray-400">
-            Unmatched tags ({result.unknown_epcs.length}) — not registered to any asset
-          </div>
-          <div className="mt-1 divide-y divide-gray-100 dark:divide-gray-700">
-            {result.unknown_epcs.map((epc) => (
-              <TagRow key={epc} epc={epc} onLocate={onLocate} />
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 };

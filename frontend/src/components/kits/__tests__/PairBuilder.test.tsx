@@ -2,52 +2,40 @@ import '@testing-library/jest-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import CommissionKit from '@/components/kits/CommissionKit';
-import { useTagStore } from '@/stores/tagStore';
+import PairBuilder from '@/components/kits/PairBuilder';
 import { useKitStore } from '@/stores/kitStore';
-import { kitsApi, type KitSummary } from '@/lib/api/kits';
+import { kitsApi } from '@/lib/api/kits';
+import type { TagInfo } from '@/stores/tagStore';
 
 vi.mock('@/lib/api/kits', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api/kits')>();
-  return {
-    ...actual,
-    kitsApi: { ...actual.kitsApi, commission: vi.fn(), listByMemberEpc: vi.fn() },
-  };
+  return { ...actual, kitsApi: { ...actual.kitsApi, commission: vi.fn() } };
 });
 vi.mock('@/lib/auth/orgContext', () => ({
   ensureOrgContext: vi.fn().mockResolvedValue(undefined),
 }));
 
-const owningKit: KitSummary = {
-  id: 9,
-  label: '1184015',
-  status: 'active',
-  created_at: '2026-07-19T00:00:00Z',
-  member_count: 2,
-  latest_verification: null,
-};
+const tag = (epc: string, type: TagInfo['type'] = 'unknown'): TagInfo => ({
+  epc,
+  count: 1,
+  source: 'scan',
+  type,
+});
 
-function renderCommissionKit() {
+function renderBuilder(tags: TagInfo[], onSaved?: () => void) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
-      <CommissionKit />
+      <PairBuilder tags={tags} onSaved={onSaved} />
     </QueryClientProvider>
   );
 }
 
-describe('CommissionKit pair model (TRA-1033)', () => {
+describe('PairBuilder (flattened kits surface)', () => {
   beforeEach(() => {
-    useTagStore.setState({
-      tags: [
-        { epc: 'RRR1', count: 1, source: 'scan', type: 'asset' },
-        { epc: 'CCC2', count: 1, source: 'scan', type: 'unknown' },
-      ],
-    });
     useKitStore.setState({ pairSlots: { router: null, coupon: null } });
-    vi.mocked(kitsApi.listByMemberEpc).mockResolvedValue({ data: { data: [] } } as never);
     vi.mocked(kitsApi.commission).mockResolvedValue({
       data: {
         data: {
@@ -72,8 +60,13 @@ describe('CommissionKit pair model (TRA-1033)', () => {
     vi.clearAllMocks();
   });
 
-  it('auto-assigns the first two scanned tags: router then coupon', async () => {
-    renderCommissionKit();
+  it('renders nothing when there are no uncommissioned tags', () => {
+    renderBuilder([]);
+    expect(screen.queryByTestId('kit-pair-builder')).toBeNull();
+  });
+
+  it('auto-assigns the first two tags: router then coupon', async () => {
+    renderBuilder([tag('RRR1'), tag('CCC2')]);
     await waitFor(() => {
       expect(screen.getByTestId('kit-slot-router')).toHaveTextContent('RRR1');
       expect(screen.getByTestId('kit-slot-coupon')).toHaveTextContent('CCC2');
@@ -81,7 +74,7 @@ describe('CommissionKit pair model (TRA-1033)', () => {
   });
 
   it('swap flips router and coupon', async () => {
-    renderCommissionKit();
+    renderBuilder([tag('RRR1'), tag('CCC2')]);
     await waitFor(() => {
       expect(screen.getByTestId('kit-slot-coupon')).toHaveTextContent('CCC2');
     });
@@ -91,18 +84,18 @@ describe('CommissionKit pair model (TRA-1033)', () => {
   });
 
   it('assigning a tag to a slot evicts it from the other slot', async () => {
-    renderCommissionKit();
+    renderBuilder([tag('RRR1'), tag('CCC2')]);
     await waitFor(() => {
       expect(screen.getByTestId('kit-slot-router')).toHaveTextContent('RRR1');
     });
-    // Move RRR1 to the coupon slot: coupon=RRR1, router must not keep it
     fireEvent.click(screen.getByTestId('kit-assign-coupon-RRR1'));
     expect(screen.getByTestId('kit-slot-coupon')).toHaveTextContent('RRR1');
     expect(screen.getByTestId('kit-slot-router')).not.toHaveTextContent('RRR1');
   });
 
-  it('saves the pair with router/coupon roles and QA fields', async () => {
-    renderCommissionKit();
+  it('saves the pair with router/coupon roles and QA fields, then notifies', async () => {
+    const onSaved = vi.fn();
+    renderBuilder([tag('RRR1'), tag('CCC2')], onSaved);
     await waitFor(() => {
       expect(screen.getByTestId('kit-slot-coupon')).toHaveTextContent('CCC2');
     });
@@ -121,27 +114,24 @@ describe('CommissionKit pair model (TRA-1033)', () => {
         metadata: { part: 'PN-778' },
       });
     });
+    await waitFor(() => {
+      expect(onSaved).toHaveBeenCalled();
+    });
   });
 
-  it('evicts a tag from the slots once it resolves as already-paired', async () => {
-    vi.mocked(kitsApi.listByMemberEpc).mockImplementation(async (epc: string) =>
-      ({ data: { data: epc === 'RRR1' ? [owningKit] : [] } }) as never
-    );
-    renderCommissionKit();
-
+  it('releases a slot when its tag leaves the bucket', async () => {
+    const { rerender } = renderBuilder([tag('RRR1'), tag('CCC2')]);
     await waitFor(() => {
-      expect(screen.getByTestId('kit-member-owned-RRR1')).toHaveTextContent('in Lot 1184015');
+      expect(screen.getByTestId('kit-slot-router')).toHaveTextContent('RRR1');
     });
+    const client = new QueryClient();
+    rerender(
+      <QueryClientProvider client={client}>
+        <PairBuilder tags={[tag('CCC2')]} />
+      </QueryClientProvider>
+    );
     await waitFor(() => {
-      // RRR1 was auto-assigned pre-resolution, then evicted; CCC2 keeps its
-      // slot and the pair stays incomplete.
-      const slots = [
-        screen.getByTestId('kit-slot-router').textContent,
-        screen.getByTestId('kit-slot-coupon').textContent,
-      ].join(' ');
-      expect(slots).not.toContain('RRR1');
-      expect(slots).toContain('CCC2');
-      expect(slots).toContain('scan tag…');
+      expect(screen.getByTestId('kit-slot-router')).not.toHaveTextContent('RRR1');
     });
     expect(screen.getByTestId('kit-save')).toBeDisabled();
   });

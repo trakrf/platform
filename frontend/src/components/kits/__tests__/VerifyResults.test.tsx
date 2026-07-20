@@ -80,9 +80,6 @@ describe('VerifyResults tree view', () => {
     fireEvent.click(screen.getByTestId('kit-locate-CCC333'));
     expect(onLocate).toHaveBeenLastCalledWith('CCC333');
 
-    // Unmatched tag
-    fireEvent.click(screen.getByTestId('kit-locate-FFF666'));
-    expect(onLocate).toHaveBeenLastCalledWith('FFF666');
   });
 
   it('renders a missing member with no registered tags without a locate row', () => {
@@ -119,17 +116,14 @@ describe('VerifyResults tree view', () => {
     expect(complete).toHaveTextContent('Vendor: Acme');
   });
 
-  it('renders unmatched tags with count and tag numbers', () => {
+  it('does not render unknown epcs — the pair builder owns that bucket', () => {
     render(<VerifyResults result={result} onLocate={() => {}} />);
-    const unknown = screen.getByTestId('kit-unknown-epcs');
-    expect(unknown).toHaveTextContent('Unmatched tags (1)');
-    expect(unknown).toHaveTextContent('FFF666');
+    expect(screen.queryByText('FFF666')).toBeNull();
   });
 
-  it('renders nothing for unexpected/unmatched sections when empty', () => {
+  it('renders nothing for the unexpected section when empty', () => {
     const clean: VerifyResponse = { kits: [], unexpected: [], unknown_epcs: [] };
     render(<VerifyResults result={clean} onLocate={() => {}} />);
     expect(screen.queryByTestId('kit-unexpected')).toBeNull();
-    expect(screen.queryByTestId('kit-unknown-epcs')).toBeNull();
   });
 });

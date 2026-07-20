@@ -8,10 +8,9 @@ import { buildLocateHash } from '@/utils/kitUtils';
 import { TagRow, KitMetadataRows } from './VerifyResults';
 
 /**
- * Find view (TRA-1033, Howmet slide 4): look up a lot by Lot # or by a tag
- * value (Router/Coupon ID). One input, queried both ways (label substring +
- * member EPC) and merged. Expanding a result loads the full record — members
- * with tag numbers (Locate per tag) + QA details.
+ * Typed lookup for the flattened Kits surface (TRA-1033): one box searched as
+ * Lot # substring AND tag value, merged. Expanding a result loads the full
+ * pair record — members with tag numbers (Locate per tag) + QA details.
  */
 
 const KitDetail: React.FC<{ kitId: number }> = ({ kitId }) => {
@@ -27,7 +26,7 @@ const KitDetail: React.FC<{ kitId: number }> = ({ kitId }) => {
   if (error || !data) {
     return (
       <div className="py-2 text-sm text-red-600 dark:text-red-400">
-        {getApiErrorMessage(error, 'Failed to load kit')}
+        {getApiErrorMessage(error, 'Failed to load pair')}
       </div>
     );
   }
@@ -67,7 +66,7 @@ const KitResultRow: React.FC<{ kit: KitSummary }> = ({ kit }) => (
         </span>
       )}
       <span className="text-sm text-gray-500 dark:text-gray-400">
-        {kit.member_count} member{kit.member_count === 1 ? '' : 's'}
+        {kit.member_count} tag{kit.member_count === 1 ? '' : 's'}
       </span>
       {kit.latest_verification && (
         <span
@@ -77,7 +76,7 @@ const KitResultRow: React.FC<{ kit: KitSummary }> = ({ kit }) => (
               : 'text-red-600 dark:text-red-400'
           }`}
         >
-          last check: {kit.latest_verification.result}
+          last check: {kit.latest_verification.result === 'complete' ? 'valid' : 'invalid'}
         </span>
       )}
     </summary>
@@ -85,7 +84,7 @@ const KitResultRow: React.FC<{ kit: KitSummary }> = ({ kit }) => (
   </details>
 );
 
-const FindKit: React.FC = () => {
+const KitSearch: React.FC = () => {
   const [input, setInput] = React.useState('');
   const [submitted, setSubmitted] = React.useState('');
 
@@ -93,7 +92,6 @@ const FindKit: React.FC = () => {
     queryKey: ['kit-find', submitted],
     enabled: submitted !== '',
     queryFn: async () => {
-      // One box, both lookups: Lot # substring AND tag value.
       const [byLabel, byEpc] = await Promise.all([
         kitsApi.search(submitted),
         kitsApi.listByMemberEpc(submitted),
@@ -117,15 +115,11 @@ const FindKit: React.FC = () => {
 
   return (
     <div>
-      <p className="text-gray-600 dark:text-gray-400 mb-4">
-        Look up a lot by Lot # or by a tag value.
-      </p>
-
-      <div className="mb-4">
+      <div className="mb-2">
         <ErrorBanner error={error ? getApiErrorMessage(error, 'Search failed') : null} />
       </div>
 
-      <div className="mb-4 flex gap-2">
+      <div className="flex gap-2">
         <input
           type="text"
           data-testid="kit-find-input"
@@ -134,7 +128,7 @@ const FindKit: React.FC = () => {
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleSearch();
           }}
-          placeholder="Lot # or tag (e.g. 1184015)"
+          placeholder="Search Lot # or tag (e.g. 1184015)"
           className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
         />
         <button
@@ -149,17 +143,19 @@ const FindKit: React.FC = () => {
       </div>
 
       {data && data.length === 0 && (
-        <div className="text-sm text-gray-600 dark:text-gray-400">
-          No lots match &ldquo;{submitted}&rdquo;.
+        <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+          No pairs match &ldquo;{submitted}&rdquo;.
         </div>
       )}
-      <div className="space-y-2">
-        {(data ?? []).map((kit) => (
-          <KitResultRow key={kit.id} kit={kit} />
-        ))}
-      </div>
+      {data && data.length > 0 && (
+        <div className="mt-2 space-y-2">
+          {data.map((kit) => (
+            <KitResultRow key={kit.id} kit={kit} />
+          ))}
+        </div>
+      )}
     </div>
   );
 };
 
-export default FindKit;
+export default KitSearch;

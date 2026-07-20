@@ -1,44 +1,37 @@
 /**
  * Kit Store - Session-local state for the Kits tab (TRA-1033)
  *
- * Deliberately NOT persisted: kit sessions are ephemeral. The verify result
- * lives here (not in component state) so it survives the Locate handoff
- * round-trip — switching to #locate and back must not lose the red banner.
+ * One flat surface: scan/search → matched tags. Paired tags render their pair
+ * record; unpaired tags feed the pair builder. Deliberately NOT persisted —
+ * kit sessions are ephemeral. The check result lives here (not in component
+ * state) so it survives the Locate handoff round-trip.
  */
 import { create } from 'zustand';
 import type { VerifyResponse } from '@/lib/api/kits';
 import type { ScanTabMode } from './uiStore';
 
-export type KitsView = 'commission' | 'verify' | 'find';
-
 export type PairSlot = 'router' | 'coupon';
 
 interface KitState {
-  view: KitsView;
-  // Per-view RFID|Barcode toggle. Commissioning individual items defaults to
-  // barcode/QR; the verify dock check is a bulk RFID scan.
-  scanModes: Record<KitsView, ScanTabMode>;
-  // Commission draft (TRA-1033 pair model): a kit is one Router + one Coupon.
-  // Slots hold the assigned tag EPCs; reset after a successful save.
+  // RFID|Barcode toggle for the Kits tab. RFID default — the trigger reads
+  // single tags fine for commissioning; barcode/QR is one tap away.
+  scanMode: ScanTabMode;
+  // Pair being built from uncommissioned tags: one Router + one Coupon (1:1).
   pairSlots: Record<PairSlot, string | null>;
   verifyResult: VerifyResponse | null;
 
-  setView: (view: KitsView) => void;
-  setScanMode: (view: KitsView, mode: ScanTabMode) => void;
+  setScanMode: (mode: ScanTabMode) => void;
   setPairSlot: (slot: PairSlot, epc: string | null) => void;
   clearPairSlots: () => void;
   setVerifyResult: (result: VerifyResponse | null) => void;
 }
 
 export const useKitStore = create<KitState>((set) => ({
-  view: 'commission',
-  scanModes: { commission: 'barcode', verify: 'rfid', find: 'rfid' },
+  scanMode: 'rfid',
   pairSlots: { router: null, coupon: null },
   verifyResult: null,
 
-  setView: (view) => set({ view }),
-  setScanMode: (view, mode) =>
-    set((s) => ({ scanModes: { ...s.scanModes, [view]: mode } })),
+  setScanMode: (mode) => set({ scanMode: mode }),
   setPairSlot: (slot, epc) =>
     set((s) => {
       const next: Record<PairSlot, string | null> = { ...s.pairSlots, [slot]: epc };
@@ -53,7 +46,7 @@ export const useKitStore = create<KitState>((set) => ({
   setVerifyResult: (result) => set({ verifyResult: result }),
 }));
 
-/** Effective RFID|Barcode mode for the Kits tab's active view. */
-export function getKitsScanMode(state: Pick<KitState, 'view' | 'scanModes'>): ScanTabMode {
-  return state.scanModes[state.view];
+/** Effective RFID|Barcode mode for the Kits tab. */
+export function getKitsScanMode(state: Pick<KitState, 'scanMode'>): ScanTabMode {
+  return state.scanMode;
 }

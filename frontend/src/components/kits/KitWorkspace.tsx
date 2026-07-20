@@ -4,60 +4,67 @@ import { useKitStore } from '@/stores/kitStore';
 import { useDeviceStore } from '@/stores/deviceStore';
 import { ReaderState } from '@/worker/types/reader';
 import { useKitVerify } from '@/hooks/kits/useKitVerify';
+import { useKitMemberships } from '@/hooks/kits/useKitMemberships';
 import { selectKitMemberTags, collectVerifyEpcs, buildLocateHash } from '@/utils/kitUtils';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import { ErrorBanner } from '@/components/banners/ErrorBanner';
-import { ScanControls } from './ScanControls';
 import VerifyResults from './VerifyResults';
+import PairBuilder from './PairBuilder';
+import KitSearch from './KitSearch';
 
 /**
- * Verify flow — the dock check (TRA-1033). Scan the returned shipment; when
- * the scan stops (trigger release or Stop) the session auto-verifies — the
- * server persists the audit row on that call. The Verify button remains for
- * manual re-runs. Tapping Locate on a missing member deep-links into Locate
- * mode pre-armed with its first EPC; the result stays in kitStore so it's
- * still here when they come back.
+ * The flattened Kits surface (TRA-1033): one session, no modes. Scan or
+ * search → matched tags. Tags in a pair render their pair record — valid
+ * (green) when both tags are present, invalid (red alarm, with Locate) when
+ * one is missing, wrong-pair (amber) for cross-pair strays. Tags in no pair
+ * land in the pair builder to be commissioned on the spot. The check runs
+ * automatically when a scan burst ends; the server persists the audit row on
+ * that call.
  */
-const VerifyKit: React.FC = () => {
+const KitWorkspace: React.FC = () => {
   const tags = useTagStore((state) => state.tags);
   const clearTags = useTagStore((state) => state.clearTags);
   const verifyResult = useKitStore((state) => state.verifyResult);
   const setVerifyResult = useKitStore((state) => state.setVerifyResult);
+  const clearPairSlots = useKitStore((state) => state.clearPairSlots);
   const readerState = useDeviceStore((state) => state.readerState);
   const { verify, isVerifying } = useKitVerify();
 
   const [error, setError] = React.useState<string | null>(null);
 
-  const scannedCount = selectKitMemberTags(tags).length;
-  const canVerify = scannedCount > 0 && !isVerifying;
+  const scanned = selectKitMemberTags(tags);
+  const memberships = useKitMemberships(scanned.map((t) => t.epc));
+  // The commissionable bucket: scanned tags in no active pair (unregistered
+  // EPCs and registered-but-unpaired assets alike).
+  const uncommissioned = scanned.filter((t) => !memberships.has(t.epc));
 
-  const handleVerify = React.useCallback(async () => {
-    // Read from the store, not the render closure — the auto-verify effect
+  const handleCheck = React.useCallback(async () => {
+    // Read from the store, not the render closure — the auto-check effect
     // may fire before this component re-renders with the last reads.
-    const currentTags = useTagStore.getState().tags;
-    const epcs = collectVerifyEpcs(currentTags);
+    const epcs = collectVerifyEpcs(useTagStore.getState().tags);
     if (epcs.length === 0) return;
     setError(null);
     try {
       const result = await verify({ epcs });
       setVerifyResult(result);
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Failed to verify kits'));
+      setError(getApiErrorMessage(err, 'Failed to check pairs'));
     }
   }, [verify, setVerifyResult]);
 
-  // Auto-verify when a scan burst ends (SCANNING -> anything else).
+  // Auto-check when a scan burst ends (SCANNING -> anything else).
   const prevReaderStateRef = React.useRef(readerState);
   React.useEffect(() => {
     const prev = prevReaderStateRef.current;
     prevReaderStateRef.current = readerState;
     if (prev === ReaderState.SCANNING && readerState !== ReaderState.SCANNING) {
-      handleVerify();
+      handleCheck();
     }
-  }, [readerState, handleVerify]);
+  }, [readerState, handleCheck]);
 
   const handleClear = () => {
     clearTags();
+    clearPairSlots();
     setVerifyResult(null);
     setError(null);
   };
@@ -69,11 +76,8 @@ const VerifyKit: React.FC = () => {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-4">
-        <p className="text-gray-600 dark:text-gray-400">
-          Scan the shipment — results appear when the scan stops.
-        </p>
-        <ScanControls />
+      <div className="mb-4">
+        <KitSearch />
       </div>
 
       <div className="mb-4">
@@ -83,13 +87,15 @@ const VerifyKit: React.FC = () => {
       <div className="mb-4 flex items-center gap-3">
         <button
           data-testid="kit-verify"
-          onClick={handleVerify}
-          disabled={!canVerify}
+          onClick={handleCheck}
+          disabled={scanned.length === 0 || isVerifying}
           className={`px-4 py-2 rounded-lg font-medium text-white transition-colors ${
-            canVerify ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-400 opacity-50 cursor-not-allowed'
+            scanned.length > 0 && !isVerifying
+              ? 'bg-blue-600 hover:bg-blue-700'
+              : 'bg-blue-400 opacity-50 cursor-not-allowed'
           }`}
         >
-          {isVerifying ? 'Verifying…' : 'Re-verify'}
+          {isVerifying ? 'Checking…' : 'Check pairs'}
         </button>
         <button
           data-testid="kit-verify-clear"
@@ -99,13 +105,22 @@ const VerifyKit: React.FC = () => {
           Clear
         </button>
         <span data-testid="kit-verify-count" className="text-sm text-gray-500 dark:text-gray-400">
-          {scannedCount} tag{scannedCount === 1 ? '' : 's'} scanned
+          {scanned.length} tag{scanned.length === 1 ? '' : 's'} scanned
         </span>
       </div>
 
-      {verifyResult && <VerifyResults result={verifyResult} onLocate={handleLocate} />}
+      <div className="space-y-3">
+        {verifyResult && <VerifyResults result={verifyResult} onLocate={handleLocate} />}
+        <PairBuilder tags={uncommissioned} onSaved={handleCheck} />
+        {scanned.length === 0 && !verifyResult && (
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Scan tags with the trigger (or Start), or search above. Paired tags
+            show their pair record; new tags can be paired on the spot.
+          </p>
+        )}
+      </div>
     </div>
   );
 };
 
-export default VerifyKit;
+export default KitWorkspace;

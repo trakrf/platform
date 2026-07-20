@@ -61,10 +61,10 @@ describe('routeBarcodeRead on the kits tab (TRA-1033)', () => {
     useTagStore.setState({ tags: [], _lookupQueue: new Set(), _lookupTimer: null });
     useBarcodeStore.getState().clearBarcodes();
     useUIStore.setState({ activeTab: 'kits', scanTabMode: 'rfid' });
-    useKitStore.setState({ view: 'commission', scanModes: { commission: 'barcode', verify: 'rfid' } });
+    useKitStore.setState({ scanMode: 'barcode' });
   });
 
-  it('feeds tagStore when the active kit view is in barcode mode', () => {
+  it('feeds tagStore when the kits tab is in barcode mode', () => {
     routeBarcodeRead({ barcode: 'LOT-1184015-C1', timestamp: 1000 });
     const { tags } = useTagStore.getState();
     expect(tags).toHaveLength(1);
@@ -72,8 +72,8 @@ describe('routeBarcodeRead on the kits tab (TRA-1033)', () => {
     expect(tags[0].source).toBe('barcode');
   });
 
-  it('does not feed tagStore when the active kit view is in rfid mode', () => {
-    useKitStore.setState({ view: 'verify' });
+  it('does not feed tagStore when the kits tab is in rfid mode', () => {
+    useKitStore.setState({ scanMode: 'rfid' });
     routeBarcodeRead({ barcode: 'LOT-1184015-C1', timestamp: 1000 });
     expect(useTagStore.getState().tags).toHaveLength(0);
   });
