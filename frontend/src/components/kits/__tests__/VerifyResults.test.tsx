@@ -116,6 +116,32 @@ describe('VerifyResults tree view', () => {
     expect(complete).toHaveTextContent('Vendor: Acme');
   });
 
+  it('trims leading zeros for display and Locate, keeping the raw testid', () => {
+    const padded: VerifyResponse = {
+      kits: [
+        {
+          kit_id: 5,
+          label: '1184018',
+          result: 'incomplete',
+          metadata: {},
+          seen: [],
+          missing: [
+            { asset_id: 51, role: 'coupon', name: 'c', epcs: ['000000000000000000010022'] },
+          ],
+        },
+      ],
+      unexpected: [],
+      unknown_epcs: [],
+    };
+    const onLocate = vi.fn();
+    render(<VerifyResults result={padded} onLocate={onLocate} />);
+    const row = screen.getByTestId('kit-locate-000000000000000000010022');
+    expect(screen.getByTestId('kit-result-incomplete-5')).toHaveTextContent('10022');
+    expect(screen.getByTestId('kit-result-incomplete-5')).not.toHaveTextContent('000000000000000000010022');
+    fireEvent.click(row);
+    expect(onLocate).toHaveBeenCalledWith('10022');
+  });
+
   it('does not render unknown epcs — the pair builder owns that bucket', () => {
     render(<VerifyResults result={result} onLocate={() => {}} />);
     expect(screen.queryByText('FFF666')).toBeNull();

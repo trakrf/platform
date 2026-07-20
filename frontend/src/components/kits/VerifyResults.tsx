@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, Target, XCircle } from 'lucide-react';
+import { removeLeadingZeros } from '@/utils/reconciliationUtils';
 import type {
   VerifyResponse,
   VerifyKitResult,
@@ -56,27 +57,32 @@ export const TagRow: React.FC<{
   label?: string | null;
   onRed?: boolean;
   icon?: React.ReactNode;
-}> = ({ epc, onLocate, label, onRed, icon }) => (
-  <div className="flex items-center justify-between gap-2 py-1">
-    <span
-      className={`flex items-center min-w-0 text-sm ${onRed ? 'text-red-100' : 'text-gray-700 dark:text-gray-300'}`}
-    >
-      {icon}
-      {label && <span className="font-medium capitalize mr-1.5">{label}:</span>}
-      <span className="font-mono truncate">{epc}</span>
-    </span>
-    <button
-      data-testid={`kit-locate-${epc}`}
-      onClick={() => onLocate(epc)}
-      className={`flex items-center flex-shrink-0 text-sm font-medium transition-colors ${
-        onRed ? 'text-white hover:text-red-200' : 'text-blue-600 hover:text-blue-800'
-      }`}
-    >
-      <Target className="w-4 h-4 mr-1" />
-      Locate
-    </button>
-  </div>
-);
+}> = ({ epc, onLocate, label, onRed, icon }) => {
+  // Display and Locate use the trimmed value, matching the Scan tab
+  // (displayEpc); the testid keeps the raw server value for test stability.
+  const displayEpc = removeLeadingZeros(epc);
+  return (
+    <div className="flex items-center justify-between gap-2 py-1">
+      <span
+        className={`flex items-center min-w-0 text-sm ${onRed ? 'text-red-100' : 'text-gray-700 dark:text-gray-300'}`}
+      >
+        {icon}
+        {label && <span className="font-medium capitalize mr-1.5">{label}:</span>}
+        <span className="font-mono truncate">{displayEpc}</span>
+      </span>
+      <button
+        data-testid={`kit-locate-${epc}`}
+        onClick={() => onLocate(displayEpc)}
+        className={`flex items-center flex-shrink-0 text-sm font-medium transition-colors ${
+          onRed ? 'text-white hover:text-red-200' : 'text-blue-600 hover:text-blue-800'
+        }`}
+      >
+        <Target className="w-4 h-4 mr-1" />
+        Locate
+      </button>
+    </div>
+  );
+};
 
 const MissingMemberNode: React.FC<{
   member: VerifyMissingMember;

@@ -137,17 +137,19 @@ test.describe('Kit Scan Flows @hardware', () => {
     // Tap Locate on the missing member's tag row (per-tag EPC handoff)
     await incomplete.locator(`[data-testid="kit-locate-${missingEpc}"]`).click();
 
-    // Locate mode pre-armed with the missing member's EPC + return param
+    // Locate mode pre-armed with the missing member's EPC + return param.
+    // TagRow hands off the leading-zero-trimmed value (Scan tab convention).
+    const missingShort = missingEpc.replace(/^0+(?=.)/, '');
     await expect(sharedPage.locator('h2').first()).toContainText('Find Item');
     expect(sharedPage.url()).toContain('return=kits');
-    expect(decodeURIComponent(sharedPage.url())).toContain(`epc=${missingEpc}`);
+    expect(decodeURIComponent(sharedPage.url())).toContain(`epc=${missingShort}`);
 
     const armedEpc = await sharedPage.evaluate(() => {
       const stores = (window as any).__ZUSTAND_STORES__;
       return stores?.settingsStore?.getState().rfid.targetEPC;
     });
     // setTargetEPC normalizes on store — compare case-insensitively
-    expect((armedEpc || '').toUpperCase()).toBe(missingEpc.toUpperCase());
+    expect((armedEpc || '').toUpperCase()).toBe(missingShort.toUpperCase());
 
     // The way back: results still rendered after returning
     await sharedPage.click('[data-testid="locate-back-to-results"]');

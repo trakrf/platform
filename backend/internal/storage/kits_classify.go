@@ -156,11 +156,23 @@ func classifyVerification(scans []scannedEPC, memberships []kitMembership, roste
 		})
 	}
 
-	// Top-level unexpected: deduped union of per-kit sets == all scanned
-	// members when >=2 kits are touched, empty otherwise.
+	// Top-level unexpected: with >=2 kits touched, flag a scanned member as a
+	// wrong-pair stray only when its OWN kit is incomplete in this scan
+	// (TRA-1033). A stray coupon in the wrong tote reads with its counterpart
+	// absent → its kit is incomplete → flagged. Multiple COMPLETE pairs
+	// scanned side-by-side are all accounted for — no strays.
 	if len(touchedOrder) > 1 {
+		incomplete := map[int]bool{}
+		for _, kr := range resp.Kits {
+			if kr.Result == kit.ResultIncomplete {
+				incomplete[kr.KitID] = true
+			}
+		}
 		for _, assetID := range scannedMembers {
 			m := memberKit[assetID]
+			if !incomplete[m.KitID] {
+				continue
+			}
 			resp.Unexpected = append(resp.Unexpected, kit.VerifyUnexpected{
 				AssetID:           assetID,
 				EPC:               firstEPC[assetID],

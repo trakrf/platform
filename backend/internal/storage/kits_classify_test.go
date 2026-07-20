@@ -96,19 +96,15 @@ func TestClassifyVerification_CrossKitUnexpected(t *testing.T) {
 	if resp.Kits[0].Result != kit.ResultComplete || resp.Kits[1].Result != kit.ResultIncomplete {
 		t.Errorf("expected kit10 complete, kit20 incomplete: %+v", resp.Kits)
 	}
-	// >=2 kits touched: every seen member is unexpected from the other kit's
-	// perspective; each entry annotated with its OWN kit so the frontend can
-	// anchor-filter (exclude belongs_to == displayed kit).
-	if len(resp.Unexpected) != 3 {
-		t.Fatalf("expected 3 unexpected entries, got %+v", resp.Unexpected)
+	// >=2 kits touched: only members of INCOMPLETE kits are strays (TRA-1033)
+	// — kit10 is complete, so only kit20's lone coupon is flagged.
+	if len(resp.Unexpected) != 1 {
+		t.Fatalf("expected 1 unexpected entry, got %+v", resp.Unexpected)
 	}
-	stray := resp.Unexpected[2]
+	stray := resp.Unexpected[0]
 	if stray.AssetID != 3 || stray.EPC != "BBB3" || stray.Name != "1184099 coupon" ||
 		stray.BelongsToKitID != 20 || stray.BelongsToKitLabel != "1184099" {
 		t.Errorf("unexpected stray annotation: %+v", stray)
-	}
-	if resp.Unexpected[0].BelongsToKitID != 10 || resp.Unexpected[1].BelongsToKitID != 10 {
-		t.Errorf("kit10 members must be annotated with kit10: %+v", resp.Unexpected[:2])
 	}
 	// Persisted per-kit sets are the precise "members of OTHER kits" view.
 	if got := perKitUnexpected[10]; len(got) != 1 || got[0] != 3 {
@@ -194,5 +190,27 @@ func TestClassifyVerification_DuplicateEPCsSameAsset(t *testing.T) {
 		if u.AssetID == 1 && u.EPC != "AAA1" {
 			t.Errorf("expected first EPC AAA1 for asset 1, got %s", u.EPC)
 		}
+	}
+}
+
+func TestClassifyVerification_TwoCompletePairsNoStrays(t *testing.T) {
+	memberships, roster := kitFixture()
+	// Both kits fully present in one scan (two pairs side-by-side on the
+	// bench). Everything is accounted for — no wrong-pair warning (TRA-1033).
+	scans := []scannedEPC{
+		{EPC: "AAA1", AssetID: 1},
+		{EPC: "AAA2", AssetID: 2},
+		{EPC: "BBB3", AssetID: 3},
+		{EPC: "BBB4", AssetID: 4},
+	}
+
+	resp, _ := classifyVerification(scans, memberships, roster)
+
+	if len(resp.Kits) != 2 ||
+		resp.Kits[0].Result != kit.ResultComplete || resp.Kits[1].Result != kit.ResultComplete {
+		t.Fatalf("expected both kits complete, got %+v", resp.Kits)
+	}
+	if len(resp.Unexpected) != 0 {
+		t.Errorf("two complete pairs must produce no unexpected entries, got %+v", resp.Unexpected)
 	}
 }
