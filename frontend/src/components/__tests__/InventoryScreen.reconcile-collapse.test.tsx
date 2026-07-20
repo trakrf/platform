@@ -140,6 +140,30 @@ describe('InventoryScreen reconcile collapse (TRA-1036)', () => {
     expect(screen.getByRole('button', { name: /^Scans/ })).toHaveTextContent('3');
   });
 
+  it('narrows tile counts with search (but not with tile filters)', async () => {
+    useTagStore.getState().setTags([
+      scannedTag(1, { type: 'asset', assetId: 1, assetIdentifier: 'A-1' }),
+      scannedTag(2),
+      scannedTag(3),
+    ]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getAllByText(/E2806894/).length).toBeGreaterThan(0);
+    });
+    expect(screen.getByRole('button', { name: /^Scans/ })).toHaveTextContent('3');
+    const searchInput = screen.getByPlaceholderText('Search for an item by ID...');
+    fireEvent.change(searchInput, { target: { value: '01' } });
+    await waitFor(() => {
+      // Search narrows the Scans count to the one matching tag...
+      expect(screen.getByRole('button', { name: /^Scans/ })).toHaveTextContent('1');
+    });
+    // ...and stacking a tile filter on top still doesn't narrow it further.
+    fireEvent.click(screen.getByRole('button', { name: /^Assets/ }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^Scans/ })).toHaveTextContent('1');
+    });
+  });
+
   it('persists the tile filter selection', async () => {
     useTagStore.getState().setTags([scannedTag(1, { type: 'asset', assetId: 1, assetIdentifier: 'A-1' })]);
     renderScreen();
