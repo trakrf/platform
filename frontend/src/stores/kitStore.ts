@@ -19,8 +19,12 @@ interface KitState {
   // Pair being built from uncommissioned tags: one Router + one Coupon (1:1).
   pairSlots: Record<PairSlot, string | null>;
   verifyResult: VerifyResponse | null;
+  // Submitted lookup query ('' = no results shown). Lives here so the
+  // session-wide Clear can reset it along with everything else.
+  searchQuery: string;
 
   setScanMode: (mode: ScanTabMode) => void;
+  setSearchQuery: (query: string) => void;
   setPairSlot: (slot: PairSlot, epc: string | null) => void;
   clearPairSlots: () => void;
   setVerifyResult: (result: VerifyResponse | null) => void;
@@ -30,8 +34,10 @@ export const useKitStore = create<KitState>((set) => ({
   scanMode: 'rfid',
   pairSlots: { router: null, coupon: null },
   verifyResult: null,
+  searchQuery: '',
 
   setScanMode: (mode) => set({ scanMode: mode }),
+  setSearchQuery: (query) => set({ searchQuery: query }),
   setPairSlot: (slot, epc) =>
     set((s) => {
       const next: Record<PairSlot, string | null> = { ...s.pairSlots, [slot]: epc };

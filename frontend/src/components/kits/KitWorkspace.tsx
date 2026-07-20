@@ -66,6 +66,7 @@ const KitWorkspace: React.FC = () => {
     clearTags();
     clearPairSlots();
     setVerifyResult(null);
+    useKitStore.getState().setSearchQuery('');
     setError(null);
   };
 

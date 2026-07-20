@@ -129,6 +129,21 @@ describe('KitWorkspace (flattened kits surface)', () => {
     expect(screen.getByTestId('kit-pair-builder')).not.toHaveTextContent('OLD1');
   });
 
+  it('Clear resets the whole session including search results', async () => {
+    useTagStore.setState({
+      tags: [{ epc: 'AAA1', count: 1, source: 'scan', type: 'asset' }],
+    });
+    useKitStore.setState({ searchQuery: '1184015', verifyResult: emptyResult });
+    renderWorkspace();
+
+    const { fireEvent } = await import('@testing-library/react');
+    fireEvent.click(screen.getByTestId('kit-verify-clear'));
+
+    expect(useTagStore.getState().tags).toHaveLength(0);
+    expect(useKitStore.getState().searchQuery).toBe('');
+    expect(useKitStore.getState().verifyResult).toBeNull();
+  });
+
   it('renders the pair tree from the stored check result', async () => {
     useKitStore.setState({
       verifyResult: {

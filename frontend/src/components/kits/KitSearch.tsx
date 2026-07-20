@@ -2,6 +2,7 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { kitsApi, type KitSummary } from '@/lib/api/kits';
+import { useKitStore } from '@/stores/kitStore';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import { ErrorBanner } from '@/components/banners/ErrorBanner';
 import { buildLocateHash } from '@/utils/kitUtils';
@@ -86,7 +87,13 @@ const KitResultRow: React.FC<{ kit: KitSummary }> = ({ kit }) => (
 
 const KitSearch: React.FC = () => {
   const [input, setInput] = React.useState('');
-  const [submitted, setSubmitted] = React.useState('');
+  const submitted = useKitStore((state) => state.searchQuery);
+  const setSubmitted = useKitStore((state) => state.setSearchQuery);
+
+  // Session Clear resets the store query — empty the box with it.
+  React.useEffect(() => {
+    if (submitted === '') setInput('');
+  }, [submitted]);
 
   const { data, isFetching, error } = useQuery({
     queryKey: ['kit-find', submitted],
