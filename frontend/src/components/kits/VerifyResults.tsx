@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, CheckCircle2, ChevronDown, Search, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, Target, XCircle } from 'lucide-react';
 import type {
   VerifyResponse,
   VerifyKitResult,
@@ -11,9 +11,6 @@ interface VerifyResultsProps {
   result: VerifyResponse;
   onLocate: (epc: string) => void;
 }
-
-const memberLabel = (role: string | null, name: string) =>
-  role ? `${name} (${role})` : name;
 
 /** Display order + labels for the QA fields; unknown keys render verbatim. */
 const QA_FIELD_LABELS: Record<string, string> = {
@@ -49,26 +46,33 @@ export const KitMetadataRows: React.FC<{ metadata: Record<string, string>; onRed
   );
 };
 
-/** One tag (EPC) leaf row — Locate pushes exactly this EPC. */
+/**
+ * One tag row: "role: EPC" with the Scan tab's Target-icon Locate button.
+ * No generated asset names — the role + tag number is the identity.
+ */
 export const TagRow: React.FC<{
   epc: string;
   onLocate: (epc: string) => void;
+  label?: string | null;
   onRed?: boolean;
-}> = ({ epc, onLocate, onRed }) => (
-  <div className="flex items-center justify-between gap-2 py-1 pl-6">
-    <span className={`font-mono text-sm truncate ${onRed ? 'text-red-100' : 'text-gray-700 dark:text-gray-300'}`}>
-      {epc}
+  icon?: React.ReactNode;
+}> = ({ epc, onLocate, label, onRed, icon }) => (
+  <div className="flex items-center justify-between gap-2 py-1">
+    <span
+      className={`flex items-center min-w-0 text-sm ${onRed ? 'text-red-100' : 'text-gray-700 dark:text-gray-300'}`}
+    >
+      {icon}
+      {label && <span className="font-medium capitalize mr-1.5">{label}:</span>}
+      <span className="font-mono truncate">{epc}</span>
     </span>
     <button
       data-testid={`kit-locate-${epc}`}
       onClick={() => onLocate(epc)}
-      className={`flex items-center flex-shrink-0 px-3 py-1 rounded font-semibold text-sm transition-colors ${
-        onRed
-          ? 'bg-white text-red-700 hover:bg-red-50'
-          : 'bg-blue-600 text-white hover:bg-blue-700'
+      className={`flex items-center flex-shrink-0 text-sm font-medium transition-colors ${
+        onRed ? 'text-white hover:text-red-200' : 'text-blue-600 hover:text-blue-800'
       }`}
     >
-      <Search className="w-3.5 h-3.5 mr-1.5" />
+      <Target className="w-4 h-4 mr-1" />
       Locate
     </button>
   </div>
@@ -78,16 +82,23 @@ const MissingMemberNode: React.FC<{
   member: VerifyMissingMember;
   onLocate: (epc: string) => void;
 }> = ({ member, onLocate }) => (
-  <div data-testid={`kit-missing-${member.asset_id}`} className="py-1.5 border-t border-red-400/60">
-    <div className="flex items-center font-semibold">
-      <XCircle className="w-4 h-4 mr-2 flex-shrink-0" />
-      {memberLabel(member.role, member.name)} — missing
-    </div>
+  <div data-testid={`kit-missing-${member.asset_id}`} className="py-1 border-t border-red-400/60">
     {member.epcs.length === 0 && (
-      <div className="pl-6 text-sm text-red-100">no tags registered</div>
+      <div className="flex items-center py-1 text-sm font-semibold">
+        <XCircle className="w-4 h-4 mr-2 flex-shrink-0" />
+        <span className="font-medium capitalize mr-1.5">{member.role ?? 'tag'}:</span>
+        no tags registered
+      </div>
     )}
     {member.epcs.map((epc) => (
-      <TagRow key={epc} epc={epc} onLocate={onLocate} onRed />
+      <TagRow
+        key={epc}
+        epc={epc}
+        onLocate={onLocate}
+        label={`missing ${member.role ?? 'tag'}`}
+        onRed
+        icon={<XCircle className="w-4 h-4 mr-2 flex-shrink-0" />}
+      />
     ))}
   </div>
 );
@@ -98,14 +109,21 @@ const SeenMemberNode: React.FC<{
   onRed?: boolean;
 }> = ({ member, onLocate, onRed }) => (
   <div
-    className={`py-1.5 ${onRed ? 'border-t border-red-400/60' : 'border-t border-green-200 dark:border-green-800'}`}
+    className={`py-1 ${onRed ? 'border-t border-red-400/60' : 'border-t border-green-200 dark:border-green-800'}`}
   >
-    <div className={`flex items-center text-sm font-medium ${onRed ? 'text-red-100' : 'text-green-800 dark:text-green-300'}`}>
-      <CheckCircle2 className="w-4 h-4 mr-2 flex-shrink-0" />
-      {memberLabel(member.role, member.name)}
-    </div>
     {(member.epcs ?? []).map((epc) => (
-      <TagRow key={epc} epc={epc} onLocate={onLocate} onRed={onRed} />
+      <TagRow
+        key={epc}
+        epc={epc}
+        onLocate={onLocate}
+        label={member.role ?? 'tag'}
+        onRed={onRed}
+        icon={
+          <CheckCircle2
+            className={`w-4 h-4 mr-2 flex-shrink-0 ${onRed ? '' : 'text-green-600 dark:text-green-400'}`}
+          />
+        }
+      />
     ))}
   </div>
 );
@@ -196,11 +214,12 @@ const VerifyResults: React.FC<VerifyResultsProps> = ({ result, onLocate }) => {
           </div>
           <div className="mt-1">
             {result.unexpected.map((u) => (
-              <div key={`${u.asset_id}-${u.epc}`} className="py-1 border-t border-amber-300 dark:border-amber-800">
-                <div className="text-sm font-medium">
-                  {u.name} belongs to Lot {u.belongs_to_kit_label}
-                </div>
-                <TagRow epc={u.epc} onLocate={onLocate} />
+              <div key={`${u.asset_id}-${u.epc}`} className="border-t border-amber-300 dark:border-amber-800">
+                <TagRow
+                  epc={u.epc}
+                  onLocate={onLocate}
+                  label={`from Lot ${u.belongs_to_kit_label}`}
+                />
               </div>
             ))}
           </div>

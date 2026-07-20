@@ -35,14 +35,12 @@ const KitDetail: React.FC<{ kitId: number }> = ({ kitId }) => {
     <div className="mt-2">
       <KitMetadataRows metadata={data.metadata ?? {}} />
       {data.members.map((m) => (
-        <div key={m.asset_id} className="py-1.5 border-t border-gray-200 dark:border-gray-700">
-          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-            {m.role ? `${m.name} (${m.role})` : m.name}
-          </div>
+        <div key={m.asset_id} className="border-t border-gray-200 dark:border-gray-700">
           {m.epcs.map((epc) => (
             <TagRow
               key={epc}
               epc={epc}
+              label={m.role ?? 'tag'}
               onLocate={(value) => {
                 window.location.hash = buildLocateHash(value);
               }}
