@@ -17,6 +17,23 @@ import { connectToDevice } from './helpers/connection';
 import { simulateTriggerPress, simulateTriggerRelease } from './helpers/trigger-utils';
 import { signupTestUser, uniqueId } from './fixtures/org.fixture';
 
+/**
+ * Fire the auto-check by simulating a scan burst ending: the workspace
+ * checks pairs on the SCANNING -> not-SCANNING transition (there is no
+ * manual check button). The pause lets React observe both states.
+ */
+async function simulateCheckCycle(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const stores = (window as any).__ZUSTAND_STORES__;
+    stores?.deviceStore?.setState({ readerState: 'Scanning' });
+  });
+  await page.waitForTimeout(100);
+  await page.evaluate(() => {
+    const stores = (window as any).__ZUSTAND_STORES__;
+    stores?.deviceStore?.setState({ readerState: 'Connected' });
+  });
+}
+
 async function seedTags(page: Page, epcs: string[]): Promise<void> {
   await page.evaluate((values) => {
     const stores = (window as any).__ZUSTAND_STORES__;
@@ -115,7 +132,7 @@ test.describe('Kit Scan Flows @hardware', () => {
     await sharedPage.click('[data-testid="kit-verify-clear"]');
 
     await seedTags(sharedPage, memberEpcs);
-    await sharedPage.click('[data-testid="kit-verify"]');
+    await simulateCheckCycle(sharedPage);
 
     const complete = sharedPage.locator('[data-testid^="kit-result-complete-"]');
     await expect(complete).toHaveCount(1, { timeout: 10000 });
@@ -127,7 +144,7 @@ test.describe('Kit Scan Flows @hardware', () => {
     const missingEpc = memberEpcs[0];
     await sharedPage.click('[data-testid="kit-verify-clear"]');
     await seedTags(sharedPage, memberEpcs.slice(1));
-    await sharedPage.click('[data-testid="kit-verify"]');
+    await simulateCheckCycle(sharedPage);
 
     // The product moment: full-width red exception banner
     const incomplete = sharedPage.locator('[data-testid^="kit-result-incomplete-"]');

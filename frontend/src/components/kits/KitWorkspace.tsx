@@ -81,23 +81,21 @@ const KitWorkspace: React.FC = () => {
         <KitSearch />
       </div>
 
-      <div className="mb-4">
-        <ErrorBanner error={error} />
-      </div>
+      {error && (
+        <div className="mb-4">
+          <ErrorBanner error={error} />
+          <button
+            data-testid="kit-check-retry"
+            onClick={handleCheck}
+            disabled={isVerifying}
+            className="mt-2 px-4 py-2 rounded-lg font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isVerifying ? 'Checking…' : 'Retry check'}
+          </button>
+        </div>
+      )}
 
       <div className="mb-4 flex items-center gap-3">
-        <button
-          data-testid="kit-verify"
-          onClick={handleCheck}
-          disabled={scanned.length === 0 || isVerifying}
-          className={`px-4 py-2 rounded-lg font-medium text-white transition-colors ${
-            scanned.length > 0 && !isVerifying
-              ? 'bg-blue-600 hover:bg-blue-700'
-              : 'bg-blue-400 opacity-50 cursor-not-allowed'
-          }`}
-        >
-          {isVerifying ? 'Checking…' : 'Check pairs'}
-        </button>
         <button
           data-testid="kit-verify-clear"
           onClick={handleClear}

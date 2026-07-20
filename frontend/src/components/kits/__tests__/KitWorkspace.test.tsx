@@ -129,6 +129,30 @@ describe('KitWorkspace (flattened kits surface)', () => {
     expect(screen.getByTestId('kit-pair-builder')).not.toHaveTextContent('OLD1');
   });
 
+  it('offers Retry check when the auto-check fails', async () => {
+    vi.mocked(kitsApi.verify).mockRejectedValueOnce(new Error('network down'));
+    renderWorkspace();
+
+    act(() => {
+      useDeviceStore.setState({ readerState: ReaderState.SCANNING });
+      useTagStore.setState({
+        tags: [{ epc: 'AAA1', count: 1, source: 'scan', type: 'asset' }],
+      });
+    });
+    act(() => {
+      useDeviceStore.setState({ readerState: ReaderState.CONNECTED });
+    });
+
+    const retry = await screen.findByTestId('kit-check-retry');
+    const { fireEvent } = await import('@testing-library/react');
+    fireEvent.click(retry);
+
+    await waitFor(() => {
+      expect(useKitStore.getState().verifyResult).toEqual(emptyResult);
+    });
+    expect(screen.queryByTestId('kit-check-retry')).toBeNull();
+  });
+
   it('Clear resets the whole session including search results', async () => {
     useTagStore.setState({
       tags: [{ epc: 'AAA1', count: 1, source: 'scan', type: 'asset' }],
