@@ -70,6 +70,19 @@ func getEmailPrefix() string {
 	return fmt.Sprintf("[TrakRF %s]", caser.String(env))
 }
 
+// OrgNotifyOverride returns a single-recipient override list for org-lifecycle
+// superadmin notifications (self-service signup, internal create, delete) when
+// ORG_CREATE_NOTIFY_ADDR is set, or nil to keep the default all-superadmins
+// fan-out. It exists so a non-prod environment (e.g. preview) can point the
+// e2e-churn notification firehose at a single operator instead of paging every
+// superadmin. Empty/whitespace is treated as unset.
+func OrgNotifyOverride() []string {
+	if addr := strings.TrimSpace(os.Getenv("ORG_CREATE_NOTIFY_ADDR")); addr != "" {
+		return []string{addr}
+	}
+	return nil
+}
+
 // getEnvironmentNotice returns an HTML notice for non-production environments.
 // Returns empty string for production/empty.
 func getEnvironmentNotice() string {

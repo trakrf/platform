@@ -61,6 +61,38 @@ func TestNotifyOrgDeleted_NotifiesAllSuperadmins(t *testing.T) {
 	require.Equal(t, 2, sent, "should notify exactly the two superadmins")
 }
 
+// ORG_CREATE_NOTIFY_ADDR overrides the superadmin fan-out with a single address
+// (preview e2e churn → one operator). Reserved test-domain keeps the send stubbed.
+func TestNotifyOrgCreated_OverrideAddr(t *testing.T) {
+	t.Setenv("RESEND_API_KEY", "dummy-never-used")
+	t.Setenv("ORG_CREATE_NOTIFY_ADDR", "solo-ops@example.com")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	seedSuperadmins(t, pool, "ops1@example.com", "ops2@example.com")
+
+	svc := NewService(pool, store, email.NewClient())
+	org := organization.Organization{Name: "Acme Co", Identifier: "acme-co"}
+
+	sent := svc.notifyOrgCreated(context.Background(), org, "creator@example.com")
+	require.Equal(t, 1, sent, "override sends to exactly one address, not the two superadmins")
+}
+
+// The override also governs the delete (churn) notification.
+func TestNotifyOrgDeleted_OverrideAddr(t *testing.T) {
+	t.Setenv("RESEND_API_KEY", "dummy-never-used")
+	t.Setenv("ORG_CREATE_NOTIFY_ADDR", "solo-ops@example.com")
+	store, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	pool := store.Pool().(*pgxpool.Pool)
+	seedSuperadmins(t, pool, "ops1@example.com", "ops2@example.com")
+
+	svc := NewService(pool, store, email.NewClient())
+
+	sent := svc.notifyOrgDeleted(context.Background(), "Acme Co", "acme-co", "actor@example.com", time.Now())
+	require.Equal(t, 1, sent, "override sends to exactly one address, not the two superadmins")
+}
+
 // A nil emailClient must be a no-op, never a panic.
 func TestNotifyOrg_NilClientIsNoOp(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)

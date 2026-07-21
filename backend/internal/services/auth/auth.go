@@ -152,18 +152,27 @@ func (s *Service) notifyTrialSignup(ctx context.Context, org organization.Organi
 		return 0
 	}
 
-	admins, err := s.storage.ListSuperadmins(ctx)
-	if err != nil {
-		fmt.Printf("warning: failed to list superadmins for trial signup notification: %v\n", err)
-		return 0
+	// Recipients default to every active superadmin, unless ORG_CREATE_NOTIFY_ADDR
+	// overrides the fan-out with a single address (e.g. in preview, so e2e signup
+	// churn notifies one operator instead of paging every superadmin).
+	recipients := email.OrgNotifyOverride()
+	if recipients == nil {
+		admins, err := s.storage.ListSuperadmins(ctx)
+		if err != nil {
+			fmt.Printf("warning: failed to list superadmins for trial signup notification: %v\n", err)
+			return 0
+		}
+		for _, admin := range admins {
+			recipients = append(recipients, admin.Email)
+		}
 	}
 
 	sent := 0
-	for _, admin := range admins {
+	for _, addr := range recipients {
 		if err := s.emailClient.SendTrialSignupNotification(
-			admin.Email, org.Name, org.Identifier, signupEmail, org.SubscriptionExpiresAt,
+			addr, org.Name, org.Identifier, signupEmail, org.SubscriptionExpiresAt,
 		); err != nil {
-			fmt.Printf("warning: failed to send trial signup notification to %s: %v\n", admin.Email, err)
+			fmt.Printf("warning: failed to send trial signup notification to %s: %v\n", addr, err)
 			continue
 		}
 		sent++
