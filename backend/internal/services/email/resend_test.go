@@ -7,6 +7,38 @@ import (
 	"time"
 )
 
+func TestOrgNotifyOverride(t *testing.T) {
+	tests := []struct {
+		name string
+		addr string
+		want []string
+	}{
+		{"unset", "", nil},
+		{"whitespace only", "   ", nil},
+		{"single address", "ops@trakrf.id", []string{"ops@trakrf.id"}},
+		{"trimmed", "  ops@trakrf.id  ", []string{"ops@trakrf.id"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.addr == "" {
+				os.Unsetenv("ORG_CREATE_NOTIFY_ADDR")
+			} else {
+				t.Setenv("ORG_CREATE_NOTIFY_ADDR", tt.addr)
+			}
+			got := OrgNotifyOverride()
+			if len(got) != len(tt.want) {
+				t.Fatalf("OrgNotifyOverride() = %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("OrgNotifyOverride()[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
 func TestGetEmailPrefix(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -110,25 +110,34 @@ func (s *Service) DeleteOrgWithConfirmation(ctx context.Context, orgID int, conf
 	return nil
 }
 
-// notifySuperadmins lists every active superadmin and invokes send for each.
-// Best-effort: a lookup failure is logged not returned, and a send failure to
-// one superadmin does not stop the others. Returns the number successfully
-// notified (used by tests). Shared by the org create/delete notifications.
+// notifySuperadmins resolves the notification recipients and invokes send for
+// each. Recipients default to every active superadmin, unless ORG_CREATE_NOTIFY_ADDR
+// overrides the fan-out with a single address (see email.OrgNotifyOverride) — in
+// which case the superadmin lookup is skipped entirely. Best-effort: a lookup
+// failure is logged not returned, and a send failure to one recipient does not
+// stop the others. Returns the number successfully notified (used by tests).
+// Shared by the org create/delete notifications.
 func (s *Service) notifySuperadmins(ctx context.Context, send func(adminEmail string) error) int {
 	if s.emailClient == nil {
 		return 0
 	}
 
-	admins, err := s.storage.ListSuperadmins(ctx)
-	if err != nil {
-		fmt.Printf("warning: failed to list superadmins for org notification: %v\n", err)
-		return 0
+	recipients := email.OrgNotifyOverride()
+	if recipients == nil {
+		admins, err := s.storage.ListSuperadmins(ctx)
+		if err != nil {
+			fmt.Printf("warning: failed to list superadmins for org notification: %v\n", err)
+			return 0
+		}
+		for _, admin := range admins {
+			recipients = append(recipients, admin.Email)
+		}
 	}
 
 	sent := 0
-	for _, admin := range admins {
-		if err := send(admin.Email); err != nil {
-			fmt.Printf("warning: failed to send org notification to %s: %v\n", admin.Email, err)
+	for _, addr := range recipients {
+		if err := send(addr); err != nil {
+			fmt.Printf("warning: failed to send org notification to %s: %v\n", addr, err)
 			continue
 		}
 		sent++
