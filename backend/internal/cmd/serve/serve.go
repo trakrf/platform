@@ -135,16 +135,18 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// is configured; nil otherwise so the reader-config endpoints report 503.
 	var readerClient *readercontrol.Client
 	if mqttCfg.Enabled() {
-		// TRA-906: dedicated publish client on the same broker (reuses MQTT_URL).
-		alarmPublisher, stopPublisher := alarm.NewMQTTPublisher(mqttCfg, log)
-		defer stopPublisher()
-		alarmDispatcher = alarm.NewDispatcher(shellyClient, alarmPublisher)
-
 		// TRA-993: dedicated RPC client (own clientID/reply namespace) on the same
-		// broker; drives the on-reader daemon for live get/set config.
+		// broker; drives the on-reader daemon for live get/set config, and the
+		// TRA-1028 GPO alarm fire path. Constructed before the dispatcher, which
+		// takes it as its gpo seam.
 		var stopReaderClient func()
 		readerClient, stopReaderClient = readercontrol.New(mqttCfg, log)
 		defer stopReaderClient()
+
+		// TRA-906: dedicated publish client on the same broker (reuses MQTT_URL).
+		alarmPublisher, stopPublisher := alarm.NewMQTTPublisher(mqttCfg, log)
+		defer stopPublisher()
+		alarmDispatcher = alarm.NewDispatcher(shellyClient, alarmPublisher, readerClient)
 
 		// TRA-901/943: geofence engine evaluates the membership-passing reads the
 		// subscriber derives, resolving each read's location to its output devices
@@ -188,7 +190,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 		defer close(reconcileStop)
 	} else {
 		// No broker: http-only dispatcher (nil mqtt → mqtt devices error clearly).
-		alarmDispatcher = alarm.NewDispatcher(shellyClient, nil)
+		alarmDispatcher = alarm.NewDispatcher(shellyClient, nil, nil)
 		log.Info().Msg("MQTT subscriber disabled (MQTT_URL unset)")
 	}
 
