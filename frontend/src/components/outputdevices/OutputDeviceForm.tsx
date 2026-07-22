@@ -347,7 +347,7 @@ export function OutputDeviceForm({
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             {formData.type === 'csl_cs463_gpo'
               ? 'Reader base topic, e.g. trakrf.id/cs463-212'
-              : 'Shelly MQTT topic prefix'}
+              : <>The Shelly&apos;s MQTT topic prefix. Must match the prefix configured on the device; the backend publishes to <code>&lt;topic&gt;/command/switch:&lt;id&gt;</code>. Firewall-friendly (no inbound).</>}
           </p>
         </div>
       )}
