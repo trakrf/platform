@@ -11,6 +11,7 @@ ALTER TABLE output_devices
 ALTER TABLE output_devices ALTER COLUMN type SET DEFAULT 'shelly_gen4';
 DROP TYPE output_device_type_old;
 
-COMMENT ON COLUMN output_devices.switch_id IS NULL;
+COMMENT ON COLUMN output_devices.type IS NULL;
+COMMENT ON COLUMN output_devices.switch_id IS 'Shelly relay channel passed as Switch.Set id=.';
 COMMENT ON COLUMN output_devices.command_topic IS
     'TRA-906: Shelly MQTT topic prefix (mqtt transport); backend publishes to <command_topic>/command/switch:<switch_id>.';
