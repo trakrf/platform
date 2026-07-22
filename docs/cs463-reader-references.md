@@ -10,20 +10,28 @@ the `mqtt-rpc` on-reader daemon drives.
   because the CS463 work repeatedly needs command-level detail that exists
   nowhere else in this repo, and the vendor's download URLs have moved before.
 
-## Upstream
+## Upstream — start here
 
-Everything else lives in CSL's product-downloads repo rather than here — the
-manuals are large and we only need a couple of chapters:
+**All CSL manuals:**
+<https://github.com/cslrfid/CS463-CS203X-Product-Downloads/tree/main/Manuals>
 
-- **User Manual** —
-  <https://github.com/cslrfid/CS463-CS203X-Product-Downloads/tree/main/Manuals/1%20-%20User%20Manual>
-  - §5.13 — GPIO pin definition and the full pin/function table
-  - **Chapter 6 — GPIO Ports Connection Guide.** Read this before wiring
-    anything. Worked examples 1 and 3 establish GPO polarity (see below).
-- **HTTP API demo app** — <https://github.com/cslrfid/CSL-HTTP-Demo>
-  (`CS463_HL_CS/CS463_HL_API.cs`). Useful when the manual is ambiguous about
-  parameter names; it is the reference implementation for commands like
-  `directIOOutput` and `importTagGroupCSV`.
+That directory is the canonical source and covers the whole reader family. We
+check in only the HTTP API PDF above; everything else is large and needed a
+chapter at a time. Notable contents:
+
+| Folder | What it's for |
+|---|---|
+| `1 - User Manual` | Hardware. **§5.13** GPIO pin/function table, **chapter 6** GPIO Ports Connection Guide |
+| `3 - CSL HTTP API` | The `/API` command surface (same doc as the PDF here) |
+| `4 - TCPIP Network Specificatoins` | Low-level network protocol *(vendor's typo, not ours)* |
+
+**Read chapter 6 of the User Manual before wiring anything.** Worked examples 1
+and 3 establish GPO polarity — see below.
+
+**HTTP API demo app** — <https://github.com/cslrfid/CSL-HTTP-Demo>
+(`CS463_HL_CS/CS463_HL_API.cs`). The reference implementation, and the fastest
+way to resolve ambiguity about parameter names. It documented `directIOOutput`
+and `importTagGroupCSV` more clearly than the manual did.
 
 ## Facts worth knowing before you read either
 
