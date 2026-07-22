@@ -73,3 +73,11 @@ func TestRSSIThreshold(t *testing.T) {
 		t.Fatal("non-numeric should report no override")
 	}
 }
+
+func TestTypeCS463GPO_Value(t *testing.T) {
+	// The constant must match the PG enum value added in migration 000032 and
+	// the `oneof` validation tags; a drift here is a silently unfireable device.
+	if TypeCS463GPO != "csl_cs463_gpo" {
+		t.Errorf("TypeCS463GPO = %q, want %q", TypeCS463GPO, "csl_cs463_gpo")
+	}
+}

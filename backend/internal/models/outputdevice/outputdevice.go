@@ -8,8 +8,14 @@ import (
 	"time"
 )
 
-// TypeShellyGen4 is the only supported output device type today.
-const TypeShellyGen4 = "shelly_gen4"
+// Output device types. The value mirrors the PG enum output_device_type.
+const (
+	TypeShellyGen4 = "shelly_gen4"
+	// TypeCS463GPO drives a general purpose output on a CS463 reader (TRA-1028).
+	// It rides TransportMQTT: the frame is a Gpo.Set on the reader's mqtt-rpc
+	// topic, built by readercontrol rather than by the Shelly publisher.
+	TypeCS463GPO = "csl_cs463_gpo"
+)
 
 // Fire-path transports (TRA-906).
 const (
@@ -26,13 +32,19 @@ const (
 
 // OutputDevice is an output device row.
 type OutputDevice struct {
-	ID           int        `json:"id"`
-	OrgID        int        `json:"org_id"`
-	Name         string     `json:"name"`
-	Type         string     `json:"type"`
-	Transport    string     `json:"transport"`
-	BaseURL      string     `json:"base_url"`
-	SwitchID     int        `json:"switch_id"`
+	ID        int    `json:"id"`
+	OrgID     int    `json:"org_id"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	Transport string `json:"transport"`
+	BaseURL   string `json:"base_url"`
+	// SwitchID is the output-channel index on the device. Its base and range are
+	// type-specific: shelly_gen4 is the 0-based relay channel (switch:0 on a
+	// single-relay Gen4), csl_cs463_gpo is the 1-based GPO port, 1-4.
+	SwitchID int `json:"switch_id"`
+	// CommandTopic is the MQTT topic this device is addressed on (mqtt transport
+	// only). shelly_gen4: the Shelly topic prefix. csl_cs463_gpo: the reader's
+	// RPC *base* topic, e.g. "trakrf.id/cs463-212"; the frame goes to <base>/rpc.
 	CommandTopic *string    `json:"command_topic,omitempty"`
 	LocationID   *int       `json:"location_id,omitempty"`
 	IsActive     bool       `json:"is_active"`
@@ -140,7 +152,7 @@ func (d OutputDevice) RSSIThreshold() (int, bool) {
 // metadata default server-side when omitted.
 type CreateOutputDeviceRequest struct {
 	Name      string `json:"name" validate:"required,min=1,max=255"`
-	Type      string `json:"type,omitempty" validate:"omitempty,oneof=shelly_gen4"`
+	Type      string `json:"type,omitempty" validate:"omitempty,oneof=shelly_gen4 csl_cs463_gpo"`
 	Transport string `json:"transport,omitempty" validate:"omitempty,oneof=http mqtt"`
 	// base_url is only meaningful for http transport; its required/URL-format
 	// validation is transport-aware in the handler (TRA-928), not a struct tag,
@@ -156,7 +168,7 @@ type CreateOutputDeviceRequest struct {
 // UpdateOutputDeviceRequest is a partial update; nil fields are left unchanged.
 type UpdateOutputDeviceRequest struct {
 	Name      *string `json:"name,omitempty" validate:"omitempty,min=1,max=255"`
-	Type      *string `json:"type,omitempty" validate:"omitempty,oneof=shelly_gen4"`
+	Type      *string `json:"type,omitempty" validate:"omitempty,oneof=shelly_gen4 csl_cs463_gpo"`
 	Transport *string `json:"transport,omitempty" validate:"omitempty,oneof=http mqtt"`
 	// base_url validation is transport-aware in the handler (TRA-928): a non-nil
 	// pointer to "" (what the form sends for mqtt) must not be rejected here.
