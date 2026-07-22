@@ -241,6 +241,66 @@ func TestGetOperProfile_BusyMapsToTypedError(t *testing.T) {
 	}
 }
 
+func TestNotify_PublishesFrameAndLeavesNoPendingEntry(t *testing.T) {
+	var gotTopic string
+	var gotPayload []byte
+	c := &Client{
+		instance: "testhost",
+		timeout:  time.Second,
+		pending:  make(map[int]chan readerrpc.Response),
+		publish: func(topic string, payload []byte) error {
+			gotTopic, gotPayload = topic, payload
+			return nil
+		},
+	}
+
+	if err := c.GpoSet(context.Background(), "trakrf.id/cs463-212", 1, true, 30000); err != nil {
+		t.Fatalf("GpoSet: %v", err)
+	}
+
+	if gotTopic != "trakrf.id/cs463-212/rpc" {
+		t.Errorf("topic = %q, want %q", gotTopic, "trakrf.id/cs463-212/rpc")
+	}
+
+	var req readerrpc.Request
+	if err := json.Unmarshal(gotPayload, &req); err != nil {
+		t.Fatalf("unmarshal frame: %v", err)
+	}
+	if req.Method != readerrpc.MethodGpoSet {
+		t.Errorf("method = %q, want %q", req.Method, readerrpc.MethodGpoSet)
+	}
+	if req.Src == "" {
+		t.Error("src must be set so the daemon has somewhere to reply")
+	}
+	var params readerrpc.GpoSetParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		t.Fatalf("unmarshal params: %v", err)
+	}
+	if params.Port != 1 || !params.On || params.PulseMs != 30000 {
+		t.Errorf("params = %+v, want {Port:1 On:true PulseMs:30000}", params)
+	}
+
+	// Fire-and-forget: no pending entry may survive, or every alarm leaks one.
+	c.mu.Lock()
+	n := len(c.pending)
+	c.mu.Unlock()
+	if n != 0 {
+		t.Errorf("pending entries = %d, want 0 (Notify must not await a reply)", n)
+	}
+}
+
+func TestNotify_PublishError_Propagates(t *testing.T) {
+	c := &Client{
+		instance: "testhost",
+		timeout:  time.Second,
+		pending:  make(map[int]chan readerrpc.Response),
+		publish:  func(string, []byte) error { return errors.New("broker down") },
+	}
+	if err := c.GpoSet(context.Background(), "trakrf.id/cs463-212", 1, true, 0); err == nil {
+		t.Fatal("expected error when the broker rejects the publish")
+	}
+}
+
 func waitForRequest(t *testing.T, cp *capture) readerrpc.Request {
 	t.Helper()
 	deadline := time.After(time.Second)

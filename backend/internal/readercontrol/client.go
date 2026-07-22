@@ -202,6 +202,40 @@ func (c *Client) call(ctx context.Context, base, method string, params any) (rea
 	}
 }
 
+// Notify publishes a request frame and returns as soon as the broker accepts
+// it, without registering a pending entry or awaiting a reply. It is the
+// fire-and-forget counterpart to call, for paths where blocking on a reader
+// round trip is worse than not knowing the outcome — the alarm fire path
+// (TRA-1028), where a slow-but-alive reader must not delay an alarm.
+//
+// The frame still carries a real id and src, so the daemon behaves identically
+// and needs no change. Its reply lands on our subscribed wildcard and deliver
+// drops it as an unknown id, which is the intended outcome.
+//
+// Success means the broker accepted the message, not that the reader actuated.
+func (c *Client) Notify(_ context.Context, base, method string, params any) error {
+	id := c.next()
+
+	var raw json.RawMessage
+	if params != nil {
+		b, err := json.Marshal(params)
+		if err != nil {
+			return fmt.Errorf("readercontrol: marshal params: %w", err)
+		}
+		raw = b
+	}
+
+	req := readerrpc.Request{ID: id, Src: fmt.Sprintf("%s/%d", c.replyBase(), id), Method: method, Params: raw}
+	frame, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("readercontrol: marshal request: %w", err)
+	}
+	if err := c.publish(readerrpc.RPCTopic(base), frame); err != nil {
+		return fmt.Errorf("readercontrol: publish %s: %w", method, err)
+	}
+	return nil
+}
+
 // rpcErr converts a frame's error object to a Go error. A CodeReaderBusy frame
 // becomes a typed *readerrpc.BusyError so the HTTP layer can map it to a 409.
 func rpcErr(method string, e *readerrpc.RPCError) error {
@@ -261,4 +295,17 @@ func (c *Client) SetOperProfile(ctx context.Context, base string, cfg readerrpc.
 		return readerrpc.SetConfigResult{}, fmt.Errorf("readercontrol: decode set-config result: %w", err)
 	}
 	return res, nil
+}
+
+// GpoSet drives one general purpose output on the reader. It is fire-and-forget
+// (see Notify): it returns once the broker accepts the frame, and never waits
+// for the reader to confirm. pulseMs > 0 with on=true arms a reader-side
+// one-shot, the analog of the Shelly device-side toggle_after, so the OFF edge
+// does not depend on a second message arriving.
+func (c *Client) GpoSet(ctx context.Context, base string, port int, on bool, pulseMs int) error {
+	return c.Notify(ctx, base, readerrpc.MethodGpoSet, readerrpc.GpoSetParams{
+		Port:    port,
+		On:      on,
+		PulseMs: pulseMs,
+	})
 }
