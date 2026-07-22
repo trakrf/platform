@@ -6,6 +6,9 @@
 // The profile WRITE path (setOperProfile) is deliberately NOT implemented here:
 // the /API write is broken on this firmware, so writing moves to a servlet POST
 // in a separate task. XML is confined entirely to this package.
+//
+// Vendor references, including the GPIO wiring guide whose polarity rule the GPO
+// commands depend on: docs/cs463-reader-references.md.
 package cs463
 
 import (
