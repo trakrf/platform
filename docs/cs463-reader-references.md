@@ -33,6 +33,31 @@ and 3 establish GPO polarity — see below.
 way to resolve ambiguity about parameter names. It documented `directIOOutput`
 and `importTagGroupCSV` more clearly than the manual did.
 
+### Other CSL product families
+
+CSL publishes a downloads repo per product line, same layout:
+
+- **CS463 / CS203X** — fixed readers.
+  <https://github.com/cslrfid/CS463-CS203X-Product-Downloads>
+- **CS108** — handheld. **Already supported in this monorepo.**
+  <https://github.com/cslrfid/CS108-Product-Downloads>
+- **CS710S** — next-generation handheld, newer Impinj module.
+  <https://github.com/cslrfid/CS710S-Product-Downloads>
+
+**Fixed readers and handhelds take completely different paths through this
+codebase** — they share no transport, no adapter, and no protocol code:
+
+| | Fixed (CS463) | Handheld (CS108) |
+|---|---|---|
+| Lives in | `mqtt-rpc/` on-reader daemon + backend | `frontend/src/worker/cs108/` |
+| Runs on | the reader / the server | the browser, in a web worker |
+| Transport | HTTP `/API` + MQTT JSON-RPC | binary packet protocol over the worker bridge |
+| Contract | `readerrpc` | `BaseReader` / comlink bridge |
+
+So nothing in the `cs463` adapter is reusable for a handheld, and vice versa.
+Adding **CS710S** would most likely extend the *worker* side alongside
+`cs108/` — its packet protocol is the thing to compare, not this package.
+
 ## Facts worth knowing before you read either
 
 **The GPO is a polarized switch, not a symmetric dry contact.** Current must
