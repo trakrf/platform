@@ -47,6 +47,12 @@ type fakeAdapter struct {
 	lastSetCfg readerrpc.ReaderConfig
 	setCalled  bool
 	lastForce  bool
+
+	gpoErr       error
+	gpoCalled    bool
+	lastGpoPort  int
+	lastGpoOn    bool
+	lastGpoPulse int
 }
 
 func (f *fakeAdapter) GetCapabilities(_ context.Context) (readerrpc.Capabilities, error) {
@@ -70,6 +76,13 @@ func (f *fakeAdapter) SetOperProfile(_ context.Context, cfg readerrpc.ReaderConf
 }
 func (f *fakeAdapter) GetStatus(_ context.Context) (readerrpc.Status, error) {
 	return f.status, nil
+}
+func (f *fakeAdapter) GpoSet(_ context.Context, port int, on bool, pulseMs int) error {
+	f.gpoCalled = true
+	f.lastGpoPort = port
+	f.lastGpoOn = on
+	f.lastGpoPulse = pulseMs
+	return f.gpoErr
 }
 
 func newTestDaemon(a *fakeAdapter) *Daemon {

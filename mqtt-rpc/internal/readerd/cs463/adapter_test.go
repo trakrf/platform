@@ -6,7 +6,9 @@ import (
 	"net/url"
 	"reflect"
 	"strconv"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
 )
@@ -41,6 +43,11 @@ type fakeOps struct {
 	events    map[string]EntityRow
 	logics    map[string]EntityRow
 	modEvents []url.Values // recorded ModEvent calls
+
+	// GPO: guarded because a pulse releases from its own goroutine.
+	mu       sync.Mutex
+	gpoCalls []gpoCall
+	gpoErr   error
 
 	// callOrder records method names in the order they were invoked, used to
 	// assert LoginServlet runs before SetProfilePower.
@@ -126,6 +133,18 @@ func (f *fakeOps) ListEvent(ctx context.Context, session string) (map[string]Ent
 	return f.events, nil
 }
 
+func (f *fakeOps) DirectIOOutput(ctx context.Context, port int, on bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.gpoCalls = append(f.gpoCalls, gpoCall{port: port, on: on})
+	return f.gpoErr
+}
+
+type gpoCall struct {
+	port int
+	on   bool
+}
+
 func (f *fakeOps) ListTriggeringLogic(ctx context.Context, session string) (map[string]EntityRow, error) {
 	return f.logics, nil
 }
@@ -168,6 +187,7 @@ func TestGetCapabilities(t *testing.T) {
 		readerrpc.MethodGetOperProfile,
 		readerrpc.MethodSetOperProfile,
 		readerrpc.MethodGetStatus,
+		readerrpc.MethodGpoSet,
 	}
 	if !reflect.DeepEqual(caps.Supports, wantSupports) {
 		t.Errorf("supports = %v, want %v", caps.Supports, wantSupports)
@@ -175,7 +195,6 @@ func TestGetCapabilities(t *testing.T) {
 	wantUnsupported := []string{
 		readerrpc.MethodScanStart,
 		readerrpc.MethodScanStop,
-		readerrpc.MethodGpoSet,
 		readerrpc.MethodReboot,
 	}
 	if !reflect.DeepEqual(caps.Unsupported, wantUnsupported) {
@@ -541,5 +560,88 @@ func TestParseAntennaPorts(t *testing.T) {
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("parseAntennaPorts(%q) = %v, want %v", in, got, want)
 		}
+	}
+}
+
+// --- Gpo.Set --------------------------------------------------------------
+
+func (f *fakeOps) gpoSnapshot() []gpoCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]gpoCall(nil), f.gpoCalls...)
+}
+
+// A plain on with no pulse must drive the port and leave it latched: no release
+// is scheduled, so the output stays on until an explicit off.
+func TestGpoSet_NoPulseLatchesOn(t *testing.T) {
+	f := &fakeOps{}
+	a := NewAdapter(f, AdapterConfig{AntennaCount: 4})
+
+	if err := a.GpoSet(context.Background(), 1, true, 0); err != nil {
+		t.Fatalf("GpoSet: %v", err)
+	}
+	time.Sleep(30 * time.Millisecond) // give any (incorrectly) scheduled release a chance to fire
+
+	got := f.gpoSnapshot()
+	want := []gpoCall{{port: 1, on: true}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("calls = %+v, want %+v (a zero pulse must not schedule a release)", got, want)
+	}
+}
+
+// pulse_ms arms a reader-side one-shot: on now, off after the delay, with no
+// second request. This is the Shelly toggle_after analog the geofence engine's
+// auto_off_seconds maps onto.
+func TestGpoSet_PulseReleasesAfterDelay(t *testing.T) {
+	f := &fakeOps{}
+	a := NewAdapter(f, AdapterConfig{AntennaCount: 4})
+
+	if err := a.GpoSet(context.Background(), 2, true, 40); err != nil {
+		t.Fatalf("GpoSet: %v", err)
+	}
+
+	// Returns immediately, before the pulse expires: the caller is acknowledged
+	// as soon as the port is energised rather than waiting out the pulse.
+	if got := f.gpoSnapshot(); len(got) != 1 || !got[0].on {
+		t.Fatalf("calls immediately after GpoSet = %+v, want exactly one on-call", got)
+	}
+
+	time.Sleep(120 * time.Millisecond)
+	got := f.gpoSnapshot()
+	want := []gpoCall{{port: 2, on: true}, {port: 2, on: false}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("calls = %+v, want %+v", got, want)
+	}
+}
+
+// An off command never schedules a release, whatever pulse_ms says.
+func TestGpoSet_OffIgnoresPulse(t *testing.T) {
+	f := &fakeOps{}
+	a := NewAdapter(f, AdapterConfig{AntennaCount: 4})
+
+	if err := a.GpoSet(context.Background(), 3, false, 40); err != nil {
+		t.Fatalf("GpoSet: %v", err)
+	}
+	time.Sleep(120 * time.Millisecond)
+
+	got := f.gpoSnapshot()
+	want := []gpoCall{{port: 3, on: false}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("calls = %+v, want %+v", got, want)
+	}
+}
+
+// A transport failure surfaces to the caller and schedules nothing.
+func TestGpoSet_TransportErrorPropagates(t *testing.T) {
+	f := &fakeOps{gpoErr: errors.New("reader unreachable")}
+	a := NewAdapter(f, AdapterConfig{AntennaCount: 4})
+
+	if err := a.GpoSet(context.Background(), 1, true, 40); err == nil {
+		t.Fatal("expected error from transport")
+	}
+	time.Sleep(120 * time.Millisecond)
+
+	if got := f.gpoSnapshot(); len(got) != 1 {
+		t.Errorf("calls = %+v, want exactly one (no release after a failed on)", got)
 	}
 }

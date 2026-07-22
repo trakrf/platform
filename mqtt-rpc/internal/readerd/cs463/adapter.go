@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
 )
@@ -27,7 +28,13 @@ type readerOps interface {
 	SetProfilePower(ctx context.Context, profileID string, antennaCount int, enabledPorts []int, powers map[int]float64, profileFields map[string]string) error
 	CreateProfile(ctx context.Context, session, profileID string, txPowerDBm float64) error
 	EnableEvent(ctx context.Context, session, eventID string, enable bool) error
+	DirectIOOutput(ctx context.Context, port int, on bool) error
 }
+
+// gpoReleaseTimeout bounds the deferred off-command of a one-shot GPO pulse. It
+// is independent of the originating request's context, which is long gone by the
+// time the pulse expires.
+const gpoReleaseTimeout = 8 * time.Second
 
 // AdapterConfig holds the static facts the adapter needs about this reader.
 type AdapterConfig struct {
@@ -188,11 +195,11 @@ func (a *Adapter) GetCapabilities(ctx context.Context) (readerrpc.Capabilities, 
 			readerrpc.MethodGetOperProfile,
 			readerrpc.MethodSetOperProfile,
 			readerrpc.MethodGetStatus,
+			readerrpc.MethodGpoSet,
 		},
 		Unsupported: []string{
 			readerrpc.MethodScanStart,
 			readerrpc.MethodScanStop,
-			readerrpc.MethodGpoSet,
 			readerrpc.MethodReboot,
 		},
 	}, nil
@@ -395,6 +402,35 @@ func (a *Adapter) GetStatus(ctx context.Context) (readerrpc.Status, error) {
 		Reading:       len(parseAntennaPorts(prof.Attrs["antenna_port"])) > 0,
 		ActiveProfile: prof.ID,
 	}, nil
+}
+
+// GpoSet drives a general purpose output. It deliberately takes NO reader
+// session: directIOOutput authenticates inline and bypasses the single-root-session
+// lock, so an alarm fires even while an operator has the reader's web UI open.
+//
+// pulseMs > 0 with on==true arms a one-shot — the port is driven now and released
+// after the delay by a timer HERE on the reader, mirroring the Shelly toggle_after
+// behaviour the geofence engine already relies on. The release runs in its own
+// goroutine on a background context so it survives the RPC's deadline; the caller
+// gets its acknowledgement as soon as the port is energised rather than waiting out
+// the pulse.
+func (a *Adapter) GpoSet(ctx context.Context, port int, on bool, pulseMs int) error {
+	if err := a.ops.DirectIOOutput(ctx, port, on); err != nil {
+		return err
+	}
+	if !on || pulseMs <= 0 {
+		return nil
+	}
+	go func() {
+		time.Sleep(time.Duration(pulseMs) * time.Millisecond)
+		rctx, cancel := context.WithTimeout(context.Background(), gpoReleaseTimeout)
+		defer cancel()
+		// Best-effort: a failed release leaves the output latched on, which is a
+		// loud, visible failure rather than a silent one. Nothing useful to do here
+		// but let the next command correct it.
+		_ = a.ops.DirectIOOutput(rctx, port, false)
+	}()
+	return nil
 }
 
 // --- helpers --------------------------------------------------------------

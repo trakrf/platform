@@ -263,6 +263,50 @@ func (c *Client) EnableEvent(ctx context.Context, session, eventID string, enabl
 	return nil
 }
 
+// --- GPIO -----------------------------------------------------------------
+
+// DirectIOOutput drives a general purpose output port high or low.
+//
+// Unlike the session-bound runIO_output, this command carries username/password
+// inline and BYPASSES the reader's single-root-session lock — verified on
+// hardware while the web UI held the session. That property matters for an
+// alarm: firing must not fail because someone left a browser open on the reader.
+//
+// WIRING NOTE: the GPO is a POLARIZED optically isolated switch. Current must
+// enter GPO(+) and exit GPO(-) (for GPO1: pin 4 in, pin 14 out). Wired backwards,
+// an internal body diode is forward-biased and conducts continuously — regardless
+// of the commanded state, and even with the reader powered off. A continuity test
+// will not reveal it, because the meter's test voltage sits below the diode's
+// forward threshold.
+func (c *Client) DirectIOOutput(ctx context.Context, port int, on bool) error {
+	if port < 1 || port > 4 {
+		return fmt.Errorf("cs463: gpo port %d out of range [1, 4]", port)
+	}
+	logic := "0"
+	if on {
+		logic = "1"
+	}
+	params := url.Values{
+		"command":    {"directIOOutput"},
+		"mode":       {"run"},
+		"port":       {strconv.Itoa(port)},
+		"oper_logic": {logic},
+		"username":   {c.user},
+		"password":   {c.pass},
+	}
+	var ack xmlAck
+	if err := c.do(ctx, params, &ack); err != nil {
+		return err
+	}
+	if ack.Error != nil {
+		return fmt.Errorf("cs463: directIOOutput port %d: %s", port, ack.Error.Msg)
+	}
+	if !strings.HasPrefix(ack.Ack, "OK") {
+		return fmt.Errorf("cs463: directIOOutput port %d not acked: %q", port, ack.Ack)
+	}
+	return nil
+}
+
 // --- helpers --------------------------------------------------------------
 
 func parseSessionID(ack string) string {
