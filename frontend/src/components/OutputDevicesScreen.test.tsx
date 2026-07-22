@@ -155,6 +155,51 @@ describe('OutputDevicesScreen inline cell edits (TRA-940)', () => {
   });
 });
 
+describe('OutputDevicesScreen GPO inline cell (TRA-1028)', () => {
+  let update: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuthStore.setState({ isAuthenticated: true });
+    update = vi.fn().mockResolvedValue(undefined);
+    (useOutputDevices as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      outputDevices: [
+        device({
+          id: 2,
+          name: 'Egress GPO',
+          type: 'csl_cs463_gpo',
+          transport: 'mqtt',
+          base_url: '',
+          command_topic: 'trakrf.id/cs463-212',
+          switch_id: 1,
+        }),
+      ],
+      isLoading: false,
+    });
+    (useOutputDeviceMutations as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      delete: vi.fn(),
+      test: vi.fn(),
+      reset: vi.fn(),
+      update,
+    });
+  });
+  afterEach(() => cleanup());
+
+  it('enforces the 1-4 GPO port rule in the inline switch_id cell', async () => {
+    // TRA-940 moved switch_id editing out of the expander form into this cell, so
+    // validating only in the form would enforce the range on create and silently
+    // bypass it on edit.
+    render(<OutputDevicesScreen />);
+
+    fireEvent.click(await screen.findByLabelText('Edit switch ID for Egress GPO'));
+    const input = screen.getByRole('spinbutton');
+    fireEvent.change(input, { target: { value: '9' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(await screen.findByText(/GPO port must be between 1 and 4/)).toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+  });
+});
+
 describe('OutputDevicesScreen row expander (TRA-938)', () => {
   beforeEach(() => {
     vi.clearAllMocks();

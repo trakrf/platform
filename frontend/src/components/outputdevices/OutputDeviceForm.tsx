@@ -13,6 +13,7 @@ import type {
 
 const DEVICE_TYPES: { value: OutputDeviceType; label: string }[] = [
   { value: 'shelly_gen4', label: 'Shelly Gen4' },
+  { value: 'csl_cs463_gpo', label: 'CS463 GPO' },
 ];
 
 interface OutputDeviceFormData {
@@ -140,8 +141,16 @@ export function OutputDeviceForm({
       errors.command_topic = 'Command topic is required for MQTT transport';
     }
 
-    if (mode === 'create' && formData.switch_id.trim() !== '' && !/^\d+$/.test(formData.switch_id.trim())) {
-      errors.switch_id = 'Switch ID must be a non-negative integer';
+    const rawSwitchId = formData.switch_id.trim();
+    if (mode === 'create' && rawSwitchId !== '') {
+      if (formData.type === 'csl_cs463_gpo') {
+        const port = Number(rawSwitchId);
+        if (!/^\d+$/.test(rawSwitchId) || port < 1 || port > 4) {
+          errors.switch_id = 'GPO port must be between 1 and 4';
+        }
+      } else if (!/^\d+$/.test(rawSwitchId)) {
+        errors.switch_id = 'Switch ID must be a non-negative integer';
+      }
     }
 
     const ageErr = validateOptInt(formData.age_out_seconds, {});
@@ -163,6 +172,16 @@ export function OutputDeviceForm({
   ) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
+
+  const handleTypeChange = (type: OutputDeviceType) => {
+    // A GPO is reached only over mqtt-rpc; lock the transport rather than
+    // letting an invalid combination reach the server.
+    if (type === 'csl_cs463_gpo') {
+      setFormData((prev) => ({ ...prev, type, transport: 'mqtt' }));
+      return;
+    }
+    handleChange('type', type);
   };
 
   const handleSubmit = (e: FormEvent) => {
@@ -254,7 +273,7 @@ export function OutputDeviceForm({
           <select
             id="type"
             value={formData.type}
-            onChange={(e) => handleChange('type', e.target.value as OutputDeviceType)}
+            onChange={(e) => handleTypeChange(e.target.value as OutputDeviceType)}
             disabled={loading}
             className={inputClass(false)}
           >
@@ -274,7 +293,7 @@ export function OutputDeviceForm({
             id="transport"
             value={formData.transport}
             onChange={(e) => handleChange('transport', e.target.value as AlarmTransport)}
-            disabled={loading}
+            disabled={loading || formData.type === 'csl_cs463_gpo'}
             className={inputClass(false)}
           >
             {TRANSPORTS.map((t) => (
@@ -326,8 +345,9 @@ export function OutputDeviceForm({
             <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.command_topic}</p>
           )}
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            The Shelly&apos;s MQTT topic prefix. Must match the prefix configured on the device; the backend
-            publishes to <code>&lt;topic&gt;/command/switch:&lt;id&gt;</code>. Firewall-friendly (no inbound).
+            {formData.type === 'csl_cs463_gpo'
+              ? 'Reader base topic, e.g. trakrf.id/cs463-212'
+              : 'Shelly MQTT topic prefix'}
           </p>
         </div>
       )}
@@ -338,7 +358,7 @@ export function OutputDeviceForm({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label htmlFor="switch_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Switch ID
+              {formData.type === 'csl_cs463_gpo' ? 'GPO port (1–4)' : 'Switch ID'}
             </label>
             <input
               type="number"
@@ -353,7 +373,11 @@ export function OutputDeviceForm({
             {fieldErrors.switch_id && (
               <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.switch_id}</p>
             )}
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Shelly relay channel (usually 0).</p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {formData.type === 'csl_cs463_gpo'
+                ? 'GPO output port on the reader (1-4).'
+                : 'Shelly relay channel (usually 0).'}
+            </p>
           </div>
 
           <div>

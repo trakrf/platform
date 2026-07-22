@@ -353,6 +353,68 @@ describe('OutputDeviceFormModal', () => {
     });
   });
 
+  describe('CS463 GPO (TRA-1028)', () => {
+    it('locks transport to mqtt when the CS463 GPO type is selected', () => {
+      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+
+      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_cs463_gpo' } });
+
+      const transport = screen.getByLabelText(/Transport/) as HTMLSelectElement;
+      expect(transport.value).toBe('mqtt');
+      // An http GPO is not a thing; lock it rather than validating after the fact.
+      expect(transport).toBeDisabled();
+    });
+
+    it('rejects a GPO port outside 1-4', async () => {
+      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+
+      fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Egress GPO' } });
+      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_cs463_gpo' } });
+      fireEvent.change(screen.getByLabelText(/Command Topic/), {
+        target: { value: 'trakrf.id/cs463-212' },
+      });
+      fireEvent.change(screen.getByLabelText(/GPO port/), { target: { value: '0' } });
+      fireEvent.click(screen.getByRole('button', { name: /Create Output Device/i }));
+
+      expect(await screen.findByText(/GPO port must be between 1 and 4/)).toBeInTheDocument();
+      expect(outputDevicesApi.create).not.toHaveBeenCalled();
+    });
+
+    it('accepts a GPO port of 4', async () => {
+      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+
+      fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Egress GPO' } });
+      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_cs463_gpo' } });
+      fireEvent.change(screen.getByLabelText(/Command Topic/), {
+        target: { value: 'trakrf.id/cs463-212' },
+      });
+      fireEvent.change(screen.getByLabelText(/GPO port/), { target: { value: '4' } });
+      fireEvent.click(screen.getByRole('button', { name: /Create Output Device/i }));
+
+      await waitFor(() => expect(outputDevicesApi.create).toHaveBeenCalled());
+      expect((outputDevicesApi.create as any).mock.calls[0][0]).toMatchObject({
+        type: 'csl_cs463_gpo',
+        transport: 'mqtt',
+        command_topic: 'trakrf.id/cs463-212',
+        switch_id: 4,
+      });
+    });
+
+    it('still accepts switch_id 0 for a shelly device', async () => {
+      // Regression guard: 0 is a valid relay channel on a single-relay Gen4.
+      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+
+      fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Dock Strobe' } });
+      fireEvent.change(screen.getByLabelText(/Base URL/), {
+        target: { value: 'http://192.168.50.66' },
+      });
+      fireEvent.change(screen.getByLabelText(/Switch ID/), { target: { value: '0' } });
+      fireEvent.click(screen.getByRole('button', { name: /Create Output Device/i }));
+
+      await waitFor(() => expect(outputDevicesApi.create).toHaveBeenCalled());
+    });
+  });
+
   describe('OutputDeviceEditPanel', () => {
     it('renders the inline edit surface with test-fire / reset for the device', () => {
       render(<OutputDeviceEditPanel device={mockDevice} onClose={mockOnClose} />);

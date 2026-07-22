@@ -10,7 +10,7 @@ import { OutputDeviceFormModal, OutputDeviceEditPanel } from '@/components/outpu
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { PaidGate } from '@/components/entitlement';
 import { validateName } from '@/lib/location/validators';
-import type { OutputDevice } from '@/types/outputdevices';
+import type { OutputDevice, OutputDeviceType } from '@/types/outputdevices';
 
 // Editing happens inline via a single-open row expander (TRA-938): the config
 // form plus test-fire/reset controls open under the row rather than in a modal.
@@ -29,8 +29,19 @@ export default function OutputDevicesScreen() {
     ...locations.map((l) => ({ value: String(l.id), label: l.name })),
   ];
 
-  const validateSwitchId = (raw: string) =>
-    /^\d+$/.test(raw.trim()) ? null : 'Switch ID must be a non-negative integer';
+  const validateSwitchId = (raw: string, deviceType: OutputDeviceType) => {
+    const trimmed = raw.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      return deviceType === 'csl_cs463_gpo'
+        ? 'GPO port must be between 1 and 4'
+        : 'Switch ID must be a non-negative integer';
+    }
+    if (deviceType === 'csl_cs463_gpo') {
+      const port = Number(trimmed);
+      if (port < 1 || port > 4) return 'GPO port must be between 1 and 4';
+    }
+    return null;
+  };
 
   const toggleExpanded = (id: number) =>
     setExpandedId((current) => (current === id ? null : id));
@@ -140,7 +151,7 @@ export default function OutputDevicesScreen() {
                               variant="number"
                               value={device.switch_id}
                               ariaLabel={`Edit switch ID for ${device.name}`}
-                              validate={validateSwitchId}
+                              validate={(raw) => validateSwitchId(raw, device.type)}
                               onSave={(raw) =>
                                 updateOutputDevice({
                                   id: device.id,
