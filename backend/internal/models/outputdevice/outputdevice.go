@@ -52,6 +52,14 @@ type OutputDevice struct {
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    *time.Time `json:"updated_at,omitempty"`
 	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
+	// ScanDeviceID is the reader whose GPO this device drives (csl_cs463_gpo).
+	// The RPC base topic is derived from that reader's publish_topic; nil for
+	// non-GPO devices.
+	ScanDeviceID *int `json:"scan_device_id,omitempty"`
+	// ReaderBaseTopic is the derived reader RPC base topic (publish_topic minus
+	// the /reads suffix). Transient: populated only by the fire/test read paths
+	// that JOIN scan_devices, empty elsewhere. Not persisted.
+	ReaderBaseTopic string `json:"-"`
 }
 
 // metaInt reads metadata[key] as an int. Metadata arrives as map[string]any from
@@ -163,6 +171,9 @@ type CreateOutputDeviceRequest struct {
 	LocationID   *int           `json:"location_id,omitempty"`
 	IsActive     *bool          `json:"is_active,omitempty"`
 	Metadata     map[string]any `json:"metadata,omitempty"`
+	// ScanDeviceID is the reader whose GPO this device drives (csl_cs463_gpo).
+	// Cross-entity existence is checked in the handler (Task 8), not here.
+	ScanDeviceID *int `json:"scan_device_id,omitempty"`
 }
 
 // UpdateOutputDeviceRequest is a partial update; nil fields are left unchanged.
@@ -178,6 +189,9 @@ type UpdateOutputDeviceRequest struct {
 	LocationID   *int            `json:"location_id,omitempty"`
 	IsActive     *bool           `json:"is_active,omitempty"`
 	Metadata     *map[string]any `json:"metadata,omitempty"`
+	// ScanDeviceID is the reader whose GPO this device drives (csl_cs463_gpo).
+	// Cross-entity existence is checked in the handler (Task 8), not here.
+	ScanDeviceID *int `json:"scan_device_id,omitempty"`
 	// ClearLocationID is set by the PATCH handler on an explicit JSON null for
 	// location_id, requesting a column-clear (detach the location). An omitted
 	// location_id leaves the binding unchanged; a present null clears it. Not

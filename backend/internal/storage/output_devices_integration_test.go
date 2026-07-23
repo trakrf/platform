@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/trakrf/platform/backend/internal/models/location"
 	"github.com/trakrf/platform/backend/internal/models/outputdevice"
+	"github.com/trakrf/platform/backend/internal/models/scandevice"
 	"github.com/trakrf/platform/backend/internal/testutil"
 )
 
@@ -180,4 +181,112 @@ func TestOutputDevice_OrgIsolation(t *testing.T) {
 	got, err := db.Store.GetOutputDeviceByID(ctx, orgB, created.ID)
 	require.NoError(t, err)
 	require.Nil(t, got)
+}
+
+// TestOutputDevice_ReaderBaseTopic covers TRA-1028: a GPO output device
+// addressed by scan_device_id resolves ReaderBaseTopic from the reader's
+// publish_topic (minus the /reads suffix) on both the fire read
+// (GetOutputDeviceByID) and the geofence-firer read
+// (ListOutputDevicesForLocation). Also covers ScanDeviceExistsInOrg.
+func TestOutputDevice_ReaderBaseTopic(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	publishTopic := "trakrf.id/cs463-212/reads"
+	reader, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
+		Name: "CS463-212", Type: "csl_cs463", PublishTopic: &publishTopic,
+	})
+	require.NoError(t, err)
+
+	loc, err := db.Store.CreateLocation(ctx, location.Location{
+		OrgID: orgID, ExternalKey: "dock-gpo", Name: "GPO Dock",
+	})
+	require.NoError(t, err)
+
+	created, err := db.Store.CreateOutputDevice(ctx, orgID, outputdevice.CreateOutputDeviceRequest{
+		Name: "Reader GPO", Type: outputdevice.TypeCS463GPO, Transport: outputdevice.TransportMQTT,
+		ScanDeviceID: &reader.ID, LocationID: &loc.ID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, created.ScanDeviceID)
+	require.Equal(t, reader.ID, *created.ScanDeviceID)
+	// CreateOutputDevice's RETURNING path has no join: ReaderBaseTopic is
+	// transient and populated only by the two read paths under test below.
+	require.Empty(t, created.ReaderBaseTopic)
+
+	// GetOutputDeviceByID (test-fire path) resolves ReaderBaseTopic.
+	got, err := db.Store.GetOutputDeviceByID(ctx, orgID, created.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Equal(t, "trakrf.id/cs463-212", got.ReaderBaseTopic)
+
+	// ListOutputDevicesForLocation (fire path) resolves it too.
+	list, err := db.Store.ListOutputDevicesForLocation(ctx, orgID, loc.ID)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	require.Equal(t, "trakrf.id/cs463-212", list[0].ReaderBaseTopic)
+
+	// A device with no scan_device_id: ReaderBaseTopic stays empty on both reads.
+	plain, err := db.Store.CreateOutputDevice(ctx, orgID, outputdevice.CreateOutputDeviceRequest{
+		Name: "Plain Shelly", BaseURL: "http://192.168.50.70",
+	})
+	require.NoError(t, err)
+	gotPlain, err := db.Store.GetOutputDeviceByID(ctx, orgID, plain.ID)
+	require.NoError(t, err)
+	require.Empty(t, gotPlain.ReaderBaseTopic)
+}
+
+func TestOutputDevice_ReaderBaseTopic_CrossOrgReaderStaysEmpty(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgA := testutil.CreateTestAccount(t, db.AdminPool)
+	orgB := createOrg(t, db.AdminPool, "Org B Reader", "org-b-reader")
+
+	publishTopic := "trakrf.id/cs463-999/reads"
+	readerB, err := db.Store.CreateScanDevice(ctx, orgB, scandevice.CreateScanDeviceRequest{
+		Name: "Org B Reader", Type: "csl_cs463", PublishTopic: &publishTopic,
+	})
+	require.NoError(t, err)
+
+	// An output device in org A that somehow references org B's scan device id
+	// (e.g. a stale row) must not resolve ReaderBaseTopic: the JOIN runs under
+	// org A's RLS GUC, so readerB is invisible and the join simply misses.
+	created, err := db.Store.CreateOutputDevice(ctx, orgA, outputdevice.CreateOutputDeviceRequest{
+		Name: "Cross-org GPO", Type: outputdevice.TypeCS463GPO, Transport: outputdevice.TransportMQTT,
+		ScanDeviceID: &readerB.ID,
+	})
+	require.NoError(t, err)
+
+	got, err := db.Store.GetOutputDeviceByID(ctx, orgA, created.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Empty(t, got.ReaderBaseTopic, "cross-org reader must not resolve under RLS")
+}
+
+func TestScanDeviceExistsInOrg(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgA := testutil.CreateTestAccount(t, db.AdminPool)
+	orgB := createOrg(t, db.AdminPool, "Org B Exists", "org-b-exists")
+
+	publishTopic := "trakrf.id/cs463-555/reads"
+	reader, err := db.Store.CreateScanDevice(ctx, orgA, scandevice.CreateScanDeviceRequest{
+		Name: "CS463-555", Type: "csl_cs463", PublishTopic: &publishTopic,
+	})
+	require.NoError(t, err)
+
+	exists, err := db.Store.ScanDeviceExistsInOrg(ctx, orgA, reader.ID)
+	require.NoError(t, err)
+	require.True(t, exists)
+
+	// Missing id.
+	missing, err := db.Store.ScanDeviceExistsInOrg(ctx, orgA, 99999999)
+	require.NoError(t, err)
+	require.False(t, missing)
+
+	// In-org id from another org's perspective: RLS makes it read as absent.
+	crossOrg, err := db.Store.ScanDeviceExistsInOrg(ctx, orgB, reader.ID)
+	require.NoError(t, err)
+	require.False(t, crossOrg)
 }

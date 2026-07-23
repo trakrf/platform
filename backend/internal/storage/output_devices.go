@@ -12,11 +12,41 @@ import (
 // outputDeviceColumns is the canonical SELECT/RETURNING column list, kept
 // identical across every output_devices query so scan targets line up.
 const outputDeviceColumns = `id, org_id, name, type, transport, base_url, switch_id,
-	command_topic, location_id, is_active, metadata, created_at, updated_at, deleted_at`
+	command_topic, location_id, is_active, metadata, created_at, updated_at, deleted_at,
+	scan_device_id`
 
 func scanOutputDevice(row pgx.Row, d *outputdevice.OutputDevice) error {
 	return row.Scan(&d.ID, &d.OrgID, &d.Name, &d.Type, &d.Transport, &d.BaseURL, &d.SwitchID,
-		&d.CommandTopic, &d.LocationID, &d.IsActive, &d.Metadata, &d.CreatedAt, &d.UpdatedAt, &d.DeletedAt)
+		&d.CommandTopic, &d.LocationID, &d.IsActive, &d.Metadata, &d.CreatedAt, &d.UpdatedAt, &d.DeletedAt,
+		&d.ScanDeviceID)
+}
+
+// outputDeviceColumnsQualified is outputDeviceColumns with every column
+// qualified by the "od" alias, for the two read paths that LEFT JOIN
+// scan_devices to resolve ReaderBaseTopic (GetOutputDeviceByID,
+// ListOutputDevicesForLocation). Kept separate from outputDeviceColumns:
+// the INSERT/RETURNING and plain-list paths have no join and no alias.
+const outputDeviceColumnsQualified = `od.id, od.org_id, od.name, od.type, od.transport, od.base_url, od.switch_id,
+	od.command_topic, od.location_id, od.is_active, od.metadata, od.created_at, od.updated_at, od.deleted_at,
+	od.scan_device_id`
+
+// scanOutputDeviceWithReaderTopic scans outputDeviceColumnsQualified plus a
+// trailing sd.publish_topic (nullable: NULL when scan_device_id is unset or
+// the joined reader is not visible under the org's RLS GUC), and derives
+// ReaderBaseTopic from it. Mirrors
+// handlers/readerconfig.baseTopicForDevice exactly: strip a trailing
+// "/reads" suffix; "" when publish_topic is NULL/empty.
+func scanOutputDeviceWithReaderTopic(row pgx.Row, d *outputdevice.OutputDevice) error {
+	var publishTopic *string
+	if err := row.Scan(&d.ID, &d.OrgID, &d.Name, &d.Type, &d.Transport, &d.BaseURL, &d.SwitchID,
+		&d.CommandTopic, &d.LocationID, &d.IsActive, &d.Metadata, &d.CreatedAt, &d.UpdatedAt, &d.DeletedAt,
+		&d.ScanDeviceID, &publishTopic); err != nil {
+		return err
+	}
+	if publishTopic != nil {
+		d.ReaderBaseTopic = strings.TrimSuffix(*publishTopic, "/reads")
+	}
+	return nil
 }
 
 // CreateOutputDevice inserts an output device. type defaults to shelly_gen4,
@@ -45,14 +75,14 @@ func (s *Storage) CreateOutputDevice(ctx context.Context, orgID int, req outputd
 
 	query := `
 		INSERT INTO trakrf.output_devices
-		(org_id, name, type, transport, base_url, switch_id, command_topic, location_id, is_active, metadata)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		(org_id, name, type, transport, base_url, switch_id, command_topic, location_id, is_active, metadata, scan_device_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING ` + outputDeviceColumns
 
 	var d outputdevice.OutputDevice
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		return scanOutputDevice(tx.QueryRow(ctx, query, orgID, req.Name, deviceType, transport, req.BaseURL,
-			switchID, req.CommandTopic, req.LocationID, isActive, metadata), &d)
+			switchID, req.CommandTopic, req.LocationID, isActive, metadata, req.ScanDeviceID), &d)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create output device: %w", err)
@@ -60,14 +90,19 @@ func (s *Storage) CreateOutputDevice(ctx context.Context, orgID int, req outputd
 	return &d, nil
 }
 
-// GetOutputDeviceByID returns the live output device or (nil, nil) if not found.
+// GetOutputDeviceByID returns the live output device or (nil, nil) if not
+// found. LEFT JOINs scan_devices to populate ReaderBaseTopic for GPO devices
+// (the test-fire path). The join runs under the org's RLS GUC, so a
+// cross-org scan_device_id simply does not join and ReaderBaseTopic stays "".
 func (s *Storage) GetOutputDeviceByID(ctx context.Context, orgID, id int) (*outputdevice.OutputDevice, error) {
-	query := `SELECT ` + outputDeviceColumns + `
-		FROM trakrf.output_devices
-		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL`
+	query := `SELECT ` + outputDeviceColumnsQualified + `, sd.publish_topic
+		FROM trakrf.output_devices od
+		LEFT JOIN trakrf.scan_devices sd
+		  ON sd.id = od.scan_device_id AND sd.deleted_at IS NULL
+		WHERE od.id = $1 AND od.org_id = $2 AND od.deleted_at IS NULL`
 	var d outputdevice.OutputDevice
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return scanOutputDevice(tx.QueryRow(ctx, query, id, orgID), &d)
+		return scanOutputDeviceWithReaderTopic(tx.QueryRow(ctx, query, id, orgID), &d)
 	})
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -122,11 +157,16 @@ func (s *Storage) CountOutputDevices(ctx context.Context, orgID int) (int, error
 // ListOutputDevicesForLocation returns active, non-deleted devices bound to the
 // given logical location. Used by the geofence firer: the engine resolves the
 // tripped scan point to a location, and every alarm bound to that location fires.
+// LEFT JOINs scan_devices to populate ReaderBaseTopic for GPO devices; the
+// join runs under the org's RLS GUC, so a cross-org reader does not join and
+// ReaderBaseTopic stays "" (the dispatcher, Task 8, refuses to fire on that).
 func (s *Storage) ListOutputDevicesForLocation(ctx context.Context, orgID, locationID int) ([]outputdevice.OutputDevice, error) {
-	query := `SELECT ` + outputDeviceColumns + `
-		FROM trakrf.output_devices
-		WHERE org_id = $1 AND location_id = $2 AND is_active = true AND deleted_at IS NULL
-		ORDER BY id`
+	query := `SELECT ` + outputDeviceColumnsQualified + `, sd.publish_topic
+		FROM trakrf.output_devices od
+		LEFT JOIN trakrf.scan_devices sd
+		  ON sd.id = od.scan_device_id AND sd.deleted_at IS NULL
+		WHERE od.org_id = $1 AND od.location_id = $2 AND od.is_active = true AND od.deleted_at IS NULL
+		ORDER BY od.id`
 	out := []outputdevice.OutputDevice{}
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, orgID, locationID)
@@ -136,7 +176,7 @@ func (s *Storage) ListOutputDevicesForLocation(ctx context.Context, orgID, locat
 		defer rows.Close()
 		for rows.Next() {
 			var d outputdevice.OutputDevice
-			if err := scanOutputDevice(rows, &d); err != nil {
+			if err := scanOutputDeviceWithReaderTopic(rows, &d); err != nil {
 				return err
 			}
 			out = append(out, d)
@@ -177,6 +217,9 @@ func (s *Storage) UpdateOutputDevice(ctx context.Context, orgID, id int, req out
 	}
 	if req.SwitchID != nil {
 		add("switch_id", *req.SwitchID)
+	}
+	if req.ScanDeviceID != nil {
+		add("scan_device_id", *req.ScanDeviceID)
 	}
 	if req.ClearLocationID {
 		setClauses = append(setClauses, "location_id = NULL")
@@ -234,4 +277,22 @@ func (s *Storage) DeleteOutputDevice(ctx context.Context, orgID, id int) (bool, 
 		return false, fmt.Errorf("could not delete output device: %w", err)
 	}
 	return rowsAffected > 0, nil
+}
+
+// ScanDeviceExistsInOrg reports whether a live scan device with this id exists
+// in the org. Runs under the org's RLS GUC, so a device in another org reads as
+// absent — the org-scoping is enforced by RLS, not just the WHERE clause.
+func (s *Storage) ScanDeviceExistsInOrg(ctx context.Context, orgID, scanDeviceID int) (bool, error) {
+	var exists bool
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM trakrf.scan_devices
+				WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
+			)`, scanDeviceID, orgID).Scan(&exists)
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to check scan device existence: %w", err)
+	}
+	return exists, nil
 }
