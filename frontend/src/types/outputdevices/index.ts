@@ -33,6 +33,7 @@ export interface OutputDevice {
   base_url: string;
   switch_id: number;
   command_topic?: string | null;
+  scan_device_id?: number | null;
   location_id?: number | null;
   is_active: boolean;
   metadata?: Record<string, unknown>;
@@ -48,6 +49,7 @@ export interface CreateOutputDeviceRequest {
   base_url?: string;
   switch_id?: number;
   command_topic?: string | null;
+  scan_device_id?: number | null;
   location_id?: number | null;
   is_active?: boolean;
   metadata?: Record<string, unknown>;
@@ -60,6 +62,7 @@ export interface UpdateOutputDeviceRequest {
   base_url?: string;
   switch_id?: number;
   command_topic?: string | null;
+  scan_device_id?: number | null;
   location_id?: number | null;
   is_active?: boolean;
   metadata?: Record<string, unknown>;
