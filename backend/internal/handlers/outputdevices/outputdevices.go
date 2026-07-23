@@ -67,7 +67,9 @@ func (h *Handler) RegisterRoutes(r chi.Router, paidGate func(http.Handler) http.
 // rather than via struct tags keeps a field from being rejected for a device
 // type where it does not apply (TRA-928, extended for TRA-1028).
 //
-//   - csl_cs463_gpo: mqtt only; command_topic is the reader base topic; the
+//   - csl_cs463_gpo: mqtt only; the reader is addressed by scan_device_id (an
+//     FK, checked against storage separately — see Create/Update), NOT by
+//     command_topic, which this pure function does not require for GPO; the
 //     1-based GPO port lives in switch_id and must be 1-4.
 //   - shelly_gen4 over mqtt: needs a command_topic, ignores base_url.
 //   - shelly_gen4 over http: needs a base_url that is a valid http(s) URL.
@@ -77,9 +79,6 @@ func deviceFieldsError(deviceType, transport, baseURL, commandTopic string, swit
 	if deviceType == outputdevice.TypeCS463GPO {
 		if transport != outputdevice.TransportMQTT {
 			return "csl_cs463_gpo requires mqtt transport"
-		}
-		if commandTopic == "" {
-			return "command_topic (the reader base topic) is required for csl_cs463_gpo"
 		}
 		if switchID < 1 || switchID > 4 {
 			return "switch_id is the GPO port and must be between 1 and 4 for csl_cs463_gpo"
@@ -99,6 +98,26 @@ func deviceFieldsError(deviceType, transport, baseURL, commandTopic string, swit
 		return "base_url is not a valid value"
 	}
 	return ""
+}
+
+// scanDeviceFKError checks the storage-backed half of GPO validation that
+// deviceFieldsError cannot do (it is pure, with no storage access): a
+// csl_cs463_gpo device's effective scan_device_id must be present and must
+// reference a live reader in orgID. Returns a non-"" message for the caller
+// to surface as 400, or a non-nil error for an unexpected storage failure
+// (500). Both are "" only when scanDeviceID resolves.
+func (h *Handler) scanDeviceFKError(ctx context.Context, orgID int, scanDeviceID *int) (msg string, err error) {
+	if scanDeviceID == nil {
+		return "scan_device_id is required for csl_cs463_gpo", nil
+	}
+	exists, err := h.storage.ScanDeviceExistsInOrg(ctx, orgID, *scanDeviceID)
+	if err != nil {
+		return "", err
+	}
+	if !exists {
+		return "scan_device_id must reference one of your readers", nil
+	}
+	return "", nil
 }
 
 // isHTTPURL reports whether s is an absolute http(s) URL with a host. This is
@@ -200,6 +219,18 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
 		return
 	}
+	// TRA-1028: a GPO device is addressed solely by its reader FK — require it
+	// and confirm it resolves to a live reader in this org, closing the
+	// cross-org actuation hole the free-text command_topic left open.
+	if deviceType == outputdevice.TypeCS463GPO {
+		if msg, err := h.scanDeviceFKError(r.Context(), orgID, req.ScanDeviceID); err != nil {
+			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
+			return
+		} else if msg != "" {
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
+			return
+		}
+	}
 	device, err := h.storage.CreateOutputDevice(r.Context(), orgID, req)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
@@ -300,9 +331,26 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.SwitchID != nil {
 		switchID = *req.SwitchID
 	}
+	scanDeviceID := existing.ScanDeviceID
+	if req.ScanDeviceID != nil {
+		scanDeviceID = req.ScanDeviceID
+	}
 	if msg := deviceFieldsError(deviceType, transport, baseURL, commandTopic, switchID); msg != "" {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
 		return
+	}
+	// TRA-1028: same FK requirement as Create, evaluated against the merged
+	// (post-patch) state — a patch that flips type to csl_cs463_gpo without
+	// resending scan_device_id is validated against the stored value, not
+	// treated as absent.
+	if deviceType == outputdevice.TypeCS463GPO {
+		if msg, err := h.scanDeviceFKError(r.Context(), orgID, scanDeviceID); err != nil {
+			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
+			return
+		} else if msg != "" {
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
+			return
+		}
 	}
 	device, err := h.storage.UpdateOutputDevice(r.Context(), orgID, id, req)
 	if err != nil {

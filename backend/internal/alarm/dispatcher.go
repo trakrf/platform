@@ -54,17 +54,28 @@ func NewDispatcher(http httpSetter, mqtt mqttPublisher, gpo gpoSetter) Dispatche
 // on until an explicit off. Because the timer runs on the device, the OFF edge
 // survives a backend restart and needs no second message.
 func (d Dispatcher) Set(ctx context.Context, dev outputdevice.OutputDevice, on bool, offAfterSec int) error {
-	if dev.Transport != outputdevice.TransportMQTT {
-		return d.http.Set(ctx, dev.BaseURL, dev.SwitchID, on, offAfterSec)
+	// M1: a cs463 gpo is reader-addressed over mqtt only. Reject a non-mqtt
+	// transport here, before the transport branch, rather than falling through
+	// to the http/Shelly path below.
+	if dev.Type == outputdevice.TypeCS463GPO && dev.Transport != outputdevice.TransportMQTT {
+		return fmt.Errorf("alarm: device %d is a cs463 gpo but transport is %q, want mqtt", dev.ID, dev.Transport)
 	}
 
-	if dev.CommandTopic == nil || *dev.CommandTopic == "" {
-		return fmt.Errorf("alarm: device %d uses mqtt transport but has no command_topic", dev.ID)
+	if dev.Transport != outputdevice.TransportMQTT {
+		return d.http.Set(ctx, dev.BaseURL, dev.SwitchID, on, offAfterSec)
 	}
 
 	if dev.Type == outputdevice.TypeCS463GPO {
 		if d.gpo == nil {
 			return fmt.Errorf("alarm: device %d is a cs463 gpo but reader control is not configured", dev.ID)
+		}
+		// TRA-1028: the reader is addressed solely by the scan_device_id FK,
+		// resolved server-side into ReaderBaseTopic — never by the free-text
+		// command_topic, which one org could otherwise repoint at another
+		// org's reader. An unresolved topic means the reader was deleted or
+		// the FK is cross-org (RLS made the join return empty); refuse to fire.
+		if dev.ReaderBaseTopic == "" {
+			return fmt.Errorf("alarm: device %d is a cs463 gpo but its reader base topic is unresolved (reader missing or cross-org?)", dev.ID)
 		}
 		// Defense in depth: the handler validates the port on write, but a row
 		// predating that validation must error rather than fire the wrong port.
@@ -75,7 +86,11 @@ func (d Dispatcher) Set(ctx context.Context, dev outputdevice.OutputDevice, on b
 		if on && offAfterSec > 0 {
 			pulseMs = offAfterSec * 1000
 		}
-		return d.gpo.GpoSet(ctx, *dev.CommandTopic, dev.SwitchID, on, pulseMs)
+		return d.gpo.GpoSet(ctx, dev.ReaderBaseTopic, dev.SwitchID, on, pulseMs)
+	}
+
+	if dev.CommandTopic == nil || *dev.CommandTopic == "" {
+		return fmt.Errorf("alarm: device %d uses mqtt transport but has no command_topic", dev.ID)
 	}
 
 	if d.mqtt == nil {
