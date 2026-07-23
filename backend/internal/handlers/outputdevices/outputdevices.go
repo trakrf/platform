@@ -62,13 +62,29 @@ func (h *Handler) RegisterRoutes(r chi.Router, paidGate func(http.Handler) http.
 	r.Post("/api/v1/output-devices/{output_device_id}/reset", h.Reset)
 }
 
-// transportFieldsError enforces the transport-specific fields of an alarm
-// device against its effective (post-merge) state. mqtt needs a command_topic
-// and ignores base_url entirely; http (the default when transport is blank)
-// needs a base_url that is a valid http(s) URL. Validating here rather than via
-// a struct `url` tag keeps base_url from being rejected for mqtt devices, where
-// it is not applicable (TRA-928). Returns "" when valid.
-func transportFieldsError(transport, baseURL, commandTopic string) string {
+// deviceFieldsError enforces the type- and transport-specific fields of an
+// output device against its effective (post-merge) state. Validating here
+// rather than via struct tags keeps a field from being rejected for a device
+// type where it does not apply (TRA-928, extended for TRA-1028).
+//
+//   - csl_cs463_gpo: mqtt only; the reader is addressed by scan_device_id (an
+//     FK, checked against storage separately — see Create/Update), NOT by
+//     command_topic, which this pure function does not require for GPO; the
+//     1-based GPO port lives in switch_id and must be 1-4.
+//   - shelly_gen4 over mqtt: needs a command_topic, ignores base_url.
+//   - shelly_gen4 over http: needs a base_url that is a valid http(s) URL.
+//
+// Returns "" when valid.
+func deviceFieldsError(deviceType, transport, baseURL, commandTopic string, switchID int) string {
+	if deviceType == outputdevice.TypeCS463GPO {
+		if transport != outputdevice.TransportMQTT {
+			return "csl_cs463_gpo requires mqtt transport"
+		}
+		if switchID < 1 || switchID > 4 {
+			return "switch_id is the GPO port and must be between 1 and 4 for csl_cs463_gpo"
+		}
+		return ""
+	}
 	if transport == outputdevice.TransportMQTT {
 		if commandTopic == "" {
 			return "command_topic is required for mqtt transport"
@@ -82,6 +98,37 @@ func transportFieldsError(transport, baseURL, commandTopic string) string {
 		return "base_url is not a valid value"
 	}
 	return ""
+}
+
+// scanDeviceFKError checks the storage-backed half of GPO validation that
+// deviceFieldsError cannot do (it is pure, with no storage access): a
+// csl_cs463_gpo device's effective scan_device_id must be present, must
+// reference a live reader in orgID, that reader must be a csl_cs463 (the only
+// type with a CS463 daemon listening for Gpo.Set), and that reader must have
+// a non-empty publish_topic (the alarm dispatcher derives the reader's RPC
+// base topic from it at fire time; with none, the base topic is "" and the
+// dispatcher fail-closed refuses to fire — silently, unless caught here).
+// Returns a non-"" message for the caller to surface as 400, or a non-nil
+// error for an unexpected storage failure (500). Both are "" only when
+// scanDeviceID resolves to a fireable reader.
+func (h *Handler) scanDeviceFKError(ctx context.Context, orgID int, scanDeviceID *int) (msg string, err error) {
+	if scanDeviceID == nil {
+		return "scan_device_id is required for csl_cs463_gpo", nil
+	}
+	check, err := h.storage.CheckGPOReader(ctx, orgID, *scanDeviceID)
+	if err != nil {
+		return "", err
+	}
+	if !check.Found {
+		return "scan_device_id must reference one of your readers", nil
+	}
+	if !check.IsCS463 {
+		return "scan_device_id must reference a csl_cs463 reader", nil
+	}
+	if !check.HasPublishTopic {
+		return "scan_device_id must reference a reader with a publish_topic configured", nil
+	}
+	return "", nil
 }
 
 // isHTTPURL reports whether s is an absolute http(s) URL with a host. This is
@@ -166,14 +213,34 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		httputil.RespondValidationError(w, r, err, reqID)
 		return
 	}
-	// Transport-specific validation (transport defaults to http).
+	// Type-/transport-specific validation (both default server-side).
 	transport := req.Transport
 	if transport == "" {
 		transport = outputdevice.TransportHTTP
 	}
-	if msg := transportFieldsError(transport, req.BaseURL, deref(req.CommandTopic)); msg != "" {
+	deviceType := req.Type
+	if deviceType == "" {
+		deviceType = outputdevice.TypeShellyGen4
+	}
+	switchID := 0
+	if req.SwitchID != nil {
+		switchID = *req.SwitchID
+	}
+	if msg := deviceFieldsError(deviceType, transport, req.BaseURL, deref(req.CommandTopic), switchID); msg != "" {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
 		return
+	}
+	// TRA-1028: a GPO device is addressed solely by its reader FK — require it
+	// and confirm it resolves to a live reader in this org, closing the
+	// cross-org actuation hole the free-text command_topic left open.
+	if deviceType == outputdevice.TypeCS463GPO {
+		if msg, err := h.scanDeviceFKError(r.Context(), orgID, req.ScanDeviceID); err != nil {
+			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
+			return
+		} else if msg != "" {
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
+			return
+		}
 	}
 	device, err := h.storage.CreateOutputDevice(r.Context(), orgID, req)
 	if err != nil {
@@ -242,9 +309,10 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		httputil.RespondValidationError(w, r, err, reqID)
 		return
 	}
-	// Resolve effective state for transport-aware validation: a patch may change
-	// transport without resending base_url/command_topic, so merge the request
-	// over the stored device before checking (TRA-928).
+	// Resolve effective state for type-/transport-aware validation: a patch may
+	// change type or transport without resending switch_id/base_url/command_topic,
+	// so merge the request over the stored device before checking (TRA-928,
+	// extended for TRA-1028).
 	existing, err := h.storage.GetOutputDeviceByID(r.Context(), orgID, id)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
@@ -266,9 +334,34 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.CommandTopic != nil {
 		commandTopic = *req.CommandTopic
 	}
-	if msg := transportFieldsError(transport, baseURL, commandTopic); msg != "" {
+	deviceType := existing.Type
+	if req.Type != nil {
+		deviceType = *req.Type
+	}
+	switchID := existing.SwitchID
+	if req.SwitchID != nil {
+		switchID = *req.SwitchID
+	}
+	scanDeviceID := existing.ScanDeviceID
+	if req.ScanDeviceID != nil {
+		scanDeviceID = req.ScanDeviceID
+	}
+	if msg := deviceFieldsError(deviceType, transport, baseURL, commandTopic, switchID); msg != "" {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
 		return
+	}
+	// TRA-1028: same FK requirement as Create, evaluated against the merged
+	// (post-patch) state — a patch that flips type to csl_cs463_gpo without
+	// resending scan_device_id is validated against the stored value, not
+	// treated as absent.
+	if deviceType == outputdevice.TypeCS463GPO {
+		if msg, err := h.scanDeviceFKError(r.Context(), orgID, scanDeviceID); err != nil {
+			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
+			return
+		} else if msg != "" {
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
+			return
+		}
 	}
 	device, err := h.storage.UpdateOutputDevice(r.Context(), orgID, id, req)
 	if err != nil {

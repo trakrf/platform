@@ -240,6 +240,20 @@ func (d *Daemon) dispatch(ctx context.Context, req readerrpc.Request) readerrpc.
 		}
 		return d.result(req, res)
 
+	case readerrpc.MethodGpoSet:
+		var p readerrpc.GpoSetParams
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return readerrpc.NewError(req, readerrpc.CodeInvalidParams, "invalid Gpo.Set params: "+err.Error())
+		}
+		if err := d.adapter.GpoSet(ctx, p.Port, p.On, p.PulseMs); err != nil {
+			return d.errorResponse(req, err)
+		}
+		return d.result(req, readerrpc.GpoSetResult{
+			Port:   p.Port,
+			On:     p.On,
+			Pulsed: p.On && p.PulseMs > 0,
+		})
+
 	case readerrpc.MethodGetStatus:
 		st, err := d.adapter.GetStatus(ctx)
 		if err != nil {

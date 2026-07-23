@@ -19,4 +19,10 @@ type Adapter interface {
 	GetOperProfile(ctx context.Context, force bool) (readerrpc.ReaderConfig, error)
 	SetOperProfile(ctx context.Context, cfg readerrpc.ReaderConfig, force bool) (readerrpc.SetConfigResult, error)
 	GetStatus(ctx context.Context) (readerrpc.Status, error)
+
+	// GpoSet drives one general purpose output. A pulseMs > 0 with on==true
+	// requests a one-shot: drive on now, release after the delay, without a
+	// second request. Implementations own that timer so the OFF edge does not
+	// depend on a follow-up message arriving.
+	GpoSet(ctx context.Context, port int, on bool, pulseMs int) error
 }

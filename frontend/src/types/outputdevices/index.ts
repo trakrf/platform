@@ -6,7 +6,12 @@
  * under /api/v1/output-devices (TRA-903).
  */
 
-export type OutputDeviceType = 'shelly_gen4';
+/**
+ * Device type — what frame the device speaks. Distinct from transport, which is
+ * how it is reached. shelly_gen4 speaks Switch.Set; csl_cs463_gpo drives a CS463
+ * general purpose output via Gpo.Set over mqtt-rpc (TRA-1028).
+ */
+export type OutputDeviceType = 'shelly_gen4' | 'csl_cs463_gpo';
 
 export type AlarmTransport = 'http' | 'mqtt';
 
@@ -28,6 +33,7 @@ export interface OutputDevice {
   base_url: string;
   switch_id: number;
   command_topic?: string | null;
+  scan_device_id?: number | null;
   location_id?: number | null;
   is_active: boolean;
   metadata?: Record<string, unknown>;
@@ -43,6 +49,7 @@ export interface CreateOutputDeviceRequest {
   base_url?: string;
   switch_id?: number;
   command_topic?: string | null;
+  scan_device_id?: number | null;
   location_id?: number | null;
   is_active?: boolean;
   metadata?: Record<string, unknown>;
@@ -55,6 +62,7 @@ export interface UpdateOutputDeviceRequest {
   base_url?: string;
   switch_id?: number;
   command_topic?: string | null;
+  scan_device_id?: number | null;
   location_id?: number | null;
   is_active?: boolean;
   metadata?: Record<string, unknown>;

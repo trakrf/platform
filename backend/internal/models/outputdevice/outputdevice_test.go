@@ -73,3 +73,49 @@ func TestRSSIThreshold(t *testing.T) {
 		t.Fatal("non-numeric should report no override")
 	}
 }
+
+func TestTypeCS463GPO_Value(t *testing.T) {
+	// The constant must match the PG enum value added in migration 000032 and
+	// the `oneof` validation tags; a drift here is a silently unfireable device.
+	if TypeCS463GPO != "csl_cs463_gpo" {
+		t.Errorf("TypeCS463GPO = %q, want %q", TypeCS463GPO, "csl_cs463_gpo")
+	}
+}
+
+func TestOutputDevice_ScanDeviceIDAndReaderBaseTopicJSON(t *testing.T) {
+	scanDeviceID := 42
+	d := OutputDevice{
+		ID:              1,
+		ScanDeviceID:    &scanDeviceID,
+		ReaderBaseTopic: "trakrf.id/cs463-212",
+	}
+
+	b, err := json.Marshal(d)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+
+	if got, ok := m["scan_device_id"]; !ok || got != float64(42) {
+		t.Errorf("scan_device_id = %v (present=%v), want 42", got, ok)
+	}
+	if _, ok := m["reader_base_topic"]; ok {
+		t.Error("reader_base_topic must not appear in JSON (transient, json:\"-\")")
+	}
+
+	// Round-trip: scan_device_id decodes back correctly.
+	var back OutputDevice
+	if err := json.Unmarshal(b, &back); err != nil {
+		t.Fatalf("Unmarshal into OutputDevice: %v", err)
+	}
+	if back.ScanDeviceID == nil || *back.ScanDeviceID != 42 {
+		t.Errorf("round-tripped ScanDeviceID = %v, want 42", back.ScanDeviceID)
+	}
+	if back.ReaderBaseTopic != "" {
+		t.Errorf("ReaderBaseTopic should not decode from JSON, got %q", back.ReaderBaseTopic)
+	}
+}

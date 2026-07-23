@@ -19,6 +19,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/middleware"
 	"github.com/trakrf/platform/backend/internal/models/location"
 	"github.com/trakrf/platform/backend/internal/models/outputdevice"
+	"github.com/trakrf/platform/backend/internal/models/scandevice"
 	"github.com/trakrf/platform/backend/internal/testutil"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
@@ -321,6 +322,199 @@ func TestOutputDevicesHandler_ResetTurnsOff(t *testing.T) {
 	r.ServeHTTP(rec, withOrg(req, orgID))
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	require.Equal(t, []setCall{{"http://192.168.50.66", 0, false}}, drv.calls)
+}
+
+// createOrg creates a second organization beyond the default test_org, for
+// cross-tenant tests (testutil.CreateTestAccount hardcodes identifier=
+// "test-org", which is UNIQUE, so a second org needs a distinct one).
+func createOrg(t *testing.T, db *testutil.TestDB, name, identifier string) int {
+	t.Helper()
+	var orgID int
+	err := db.AdminPool.QueryRow(context.Background(),
+		`INSERT INTO trakrf.organizations (name, identifier, is_active)
+		 VALUES ($1, $2, true) RETURNING id`,
+		name, identifier,
+	).Scan(&orgID)
+	require.NoError(t, err)
+	return orgID
+}
+
+// TestOutputDevicesHandler_CreateGPORequiresScanDeviceID covers TRA-1028: a
+// csl_cs463_gpo device create with no scan_device_id at all must 400 — the
+// reader FK is how the device is addressed, so it cannot be omitted.
+func TestOutputDevicesHandler_CreateGPORequiresScanDeviceID(t *testing.T) {
+	drv := &fakeDriver{}
+	r, orgID := newTestServer(t, drv)
+
+	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
+		"name": "Reader GPO", "type": "csl_cs463_gpo", "transport": "mqtt", "switch_id": 1,
+	})
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+}
+
+// TestOutputDevicesHandler_CreateGPORejectsForeignScanDeviceID covers the
+// cross-org actuation hole this task closes: a scan_device_id that does not
+// exist at all, and one that belongs to a different org, must both 400 rather
+// than let the create succeed and (per Task 7/dispatcher) silently resolve to
+// an empty ReaderBaseTopic at fire time.
+func TestOutputDevicesHandler_CreateGPORejectsForeignScanDeviceID(t *testing.T) {
+	drv := &fakeDriver{}
+	db := testutil.SetupTestDBFull(t)
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough)
+
+	// Nonexistent id.
+	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
+		"name": "Reader GPO", "type": "csl_cs463_gpo", "transport": "mqtt", "switch_id": 1,
+		"scan_device_id": 99999999,
+	})
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+
+	// A reader that exists, but in a different org.
+	orgB := createOrg(t, db, "Org B GPO", "org-b-gpo")
+	publishTopic := "trakrf.id/cs463-999/reads"
+	readerB, err := db.Store.CreateScanDevice(context.Background(), orgB, scandevice.CreateScanDeviceRequest{
+		Name: "Org B Reader", Type: "csl_cs463", PublishTopic: &publishTopic,
+	})
+	require.NoError(t, err)
+
+	rec = doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
+		"name": "Reader GPO", "type": "csl_cs463_gpo", "transport": "mqtt", "switch_id": 1,
+		"scan_device_id": readerB.ID,
+	})
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+}
+
+// TestOutputDevicesHandler_CreateGPORejectsWrongReaderType covers the second
+// TRA-1028 hardening gap: the existence check alone accepted ANY in-org
+// reader type. The UI filters its picker to csl_cs463, but an API client
+// bypassing the UI could point scan_device_id at a gl_s10 (or any non-CS463)
+// reader and fire Gpo.Set at a device with no CS463 daemon listening. Must
+// 400 with a message distinct from the "not your reader" and "no
+// publish_topic" cases so an operator can tell which is wrong.
+func TestOutputDevicesHandler_CreateGPORejectsWrongReaderType(t *testing.T) {
+	drv := &fakeDriver{}
+	db := testutil.SetupTestDBFull(t)
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough)
+
+	glReader, err := db.Store.CreateScanDevice(context.Background(), orgID, scandevice.CreateScanDeviceRequest{
+		Name: "GL-S10 Gateway", Type: "gl_s10",
+	})
+	require.NoError(t, err)
+
+	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
+		"name": "Reader GPO", "type": "csl_cs463_gpo", "transport": "mqtt", "switch_id": 1,
+		"scan_device_id": glReader.ID,
+	})
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+	require.Contains(t, rec.Body.String(), "csl_cs463 reader")
+}
+
+// TestOutputDevicesHandler_CreateGPORejectsReaderWithNoPublishTopic covers the
+// first TRA-1028 hardening gap: scan_devices.publish_topic is nullable, so a
+// csl_cs463 reader can exist with none. Without this check, a GPO device
+// bound to such a reader would 201 and then silently never fire (the
+// dispatcher derives an empty base topic and fail-closed refuses at fire
+// time, with no config-time signal). Must 400 with its own distinct message.
+func TestOutputDevicesHandler_CreateGPORejectsReaderWithNoPublishTopic(t *testing.T) {
+	drv := &fakeDriver{}
+	db := testutil.SetupTestDBFull(t)
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough)
+
+	noTopicReader, err := db.Store.CreateScanDevice(context.Background(), orgID, scandevice.CreateScanDeviceRequest{
+		Name: "CS463 No Topic", Type: "csl_cs463", // publish_topic intentionally omitted (NULL)
+	})
+	require.NoError(t, err)
+
+	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
+		"name": "Reader GPO", "type": "csl_cs463_gpo", "transport": "mqtt", "switch_id": 1,
+		"scan_device_id": noTopicReader.ID,
+	})
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+	require.Contains(t, rec.Body.String(), "publish_topic")
+}
+
+// TestOutputDevicesHandler_CreateGPOWithValidScanDeviceID is the happy path:
+// a scan_device_id referencing a live reader in the org must succeed.
+func TestOutputDevicesHandler_CreateGPOWithValidScanDeviceID(t *testing.T) {
+	drv := &fakeDriver{}
+	db := testutil.SetupTestDBFull(t)
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough)
+
+	publishTopic := "trakrf.id/cs463-212/reads"
+	reader, err := db.Store.CreateScanDevice(context.Background(), orgID, scandevice.CreateScanDeviceRequest{
+		Name: "CS463-212", Type: "csl_cs463", PublishTopic: &publishTopic,
+	})
+	require.NoError(t, err)
+
+	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
+		"name": "Reader GPO", "type": "csl_cs463_gpo", "transport": "mqtt", "switch_id": 1,
+		"scan_device_id": reader.ID,
+	})
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+}
+
+// TestOutputDevicesHandler_UpdateGPOFlipTypeWithoutScanDeviceID covers a PATCH
+// that flips an existing shelly device's type to csl_cs463_gpo without
+// resending scan_device_id: since the stored row has none, this must 400 —
+// merging over the stored value must not let the FK requirement be skipped.
+func TestOutputDevicesHandler_UpdateGPOFlipTypeWithoutScanDeviceID(t *testing.T) {
+	drv := &fakeDriver{}
+	r, orgID := newTestServer(t, drv)
+
+	id := createMQTTDevice(t, r, orgID, "trakrf.id/dock-strobe")
+
+	rec := doReq(t, r, orgID, http.MethodPatch, "/api/v1/output-devices/"+itoa(id), map[string]any{
+		"type": "csl_cs463_gpo", "switch_id": 1,
+	})
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+}
+
+// TestOutputDevicesHandler_UpdateGPOKeepsStoredScanDeviceID covers the other
+// half of the merge: a PATCH that touches unrelated fields on an existing GPO
+// device, without resending scan_device_id, must keep passing validation
+// against the stored (already-validated) FK rather than re-demand it.
+func TestOutputDevicesHandler_UpdateGPOKeepsStoredScanDeviceID(t *testing.T) {
+	drv := &fakeDriver{}
+	db := testutil.SetupTestDBFull(t)
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough)
+
+	publishTopic := "trakrf.id/cs463-212/reads"
+	reader, err := db.Store.CreateScanDevice(context.Background(), orgID, scandevice.CreateScanDeviceRequest{
+		Name: "CS463-212", Type: "csl_cs463", PublishTopic: &publishTopic,
+	})
+	require.NoError(t, err)
+
+	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
+		"name": "Reader GPO", "type": "csl_cs463_gpo", "transport": "mqtt", "switch_id": 1,
+		"scan_device_id": reader.ID,
+	})
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+	var created struct {
+		Data struct {
+			ID int `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &created))
+
+	rec = doReq(t, r, orgID, http.MethodPatch, "/api/v1/output-devices/"+itoa(created.Data.ID), map[string]any{
+		"name": "Renamed GPO",
+	})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 }
 
 func TestOutputDevicesHandler_TestFireMissingIs404(t *testing.T) {

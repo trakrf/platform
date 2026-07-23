@@ -1,6 +1,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { validateName } from '@/lib/location/validators';
 import { useLocations } from '@/hooks/locations';
+import { useScanDevices } from '@/hooks/scandevices';
 import { PaidGate } from '@/components/entitlement';
 import type {
   OutputDevice,
@@ -11,8 +12,15 @@ import type {
   UpdateOutputDeviceRequest,
 } from '@/types/outputdevices';
 
+// Reader-type scan devices that can host a GPO alarm output. csl_cs463 is the
+// CS463 fixed reader family this ships against; over-inclusive is fine here,
+// but BLE-gateway types (gl_s10, esp32_ble_generic) never qualify — they have
+// no GPO ports.
+const GPO_READER_TYPES = ['csl_cs463'];
+
 const DEVICE_TYPES: { value: OutputDeviceType; label: string }[] = [
   { value: 'shelly_gen4', label: 'Shelly Gen4' },
+  { value: 'csl_cs463_gpo', label: 'CS463 GPO' },
 ];
 
 interface OutputDeviceFormData {
@@ -21,6 +29,7 @@ interface OutputDeviceFormData {
   transport: AlarmTransport;
   base_url: string; // http transport
   command_topic: string; // mqtt transport (Shelly topic prefix)
+  scan_device_id: string; // mqtt transport, GPO only (the chosen reader's id)
   switch_id: string; // string in the form; coerced to number on submit
   location_id: string; // optional; blank -> null (the location, not the antenna)
   is_active: boolean;
@@ -50,6 +59,7 @@ interface FieldErrors {
   name?: string;
   base_url?: string;
   command_topic?: string;
+  scan_device_id?: string;
   switch_id?: string;
   age_out_seconds?: string;
   auto_off_seconds?: string;
@@ -62,6 +72,7 @@ const EMPTY_FORM: OutputDeviceFormData = {
   transport: 'http',
   base_url: '',
   command_topic: '',
+  scan_device_id: '',
   switch_id: '0',
   location_id: '',
   is_active: true,
@@ -102,6 +113,8 @@ export function OutputDeviceForm({
   const [formData, setFormData] = useState<OutputDeviceFormData>(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const { locations } = useLocations();
+  const { scanDevices } = useScanDevices();
+  const readerDevices = scanDevices.filter((d) => GPO_READER_TYPES.includes(d.type));
 
   useEffect(() => {
     if (mode === 'edit' && device) {
@@ -111,6 +124,7 @@ export function OutputDeviceForm({
         transport: device.transport,
         base_url: device.base_url,
         command_topic: device.command_topic ?? '',
+        scan_device_id: device.scan_device_id != null ? String(device.scan_device_id) : '',
         switch_id: String(device.switch_id),
         location_id: device.location_id != null ? String(device.location_id) : '',
         is_active: device.is_active,
@@ -136,12 +150,24 @@ export function OutputDeviceForm({
     if (formData.transport === 'http') {
       const urlError = validateBaseURL(formData.base_url);
       if (urlError) errors.base_url = urlError;
+    } else if (formData.type === 'csl_cs463_gpo') {
+      if (formData.scan_device_id.trim() === '') {
+        errors.scan_device_id = 'Reader is required for a GPO output';
+      }
     } else if (formData.command_topic.trim() === '') {
       errors.command_topic = 'Command topic is required for MQTT transport';
     }
 
-    if (mode === 'create' && formData.switch_id.trim() !== '' && !/^\d+$/.test(formData.switch_id.trim())) {
-      errors.switch_id = 'Switch ID must be a non-negative integer';
+    const rawSwitchId = formData.switch_id.trim();
+    if (mode === 'create' && rawSwitchId !== '') {
+      if (formData.type === 'csl_cs463_gpo') {
+        const port = Number(rawSwitchId);
+        if (!/^\d+$/.test(rawSwitchId) || port < 1 || port > 4) {
+          errors.switch_id = 'GPO port must be between 1 and 4';
+        }
+      } else if (!/^\d+$/.test(rawSwitchId)) {
+        errors.switch_id = 'Switch ID must be a non-negative integer';
+      }
     }
 
     const ageErr = validateOptInt(formData.age_out_seconds, {});
@@ -165,6 +191,18 @@ export function OutputDeviceForm({
     setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
   };
 
+  const handleTypeChange = (type: OutputDeviceType) => {
+    // A GPO is reached only over mqtt-rpc; lock the transport rather than
+    // letting an invalid combination reach the server.
+    if (type === 'csl_cs463_gpo') {
+      // GPO ports are numbered 1-4 on the reader; '0' is not a valid port, so
+      // don't leave the field pre-seeded with the Shelly-relay default (M4).
+      setFormData((prev) => ({ ...prev, type, transport: 'mqtt', switch_id: '1' }));
+      return;
+    }
+    handleChange('type', type);
+  };
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
@@ -184,14 +222,19 @@ export function OutputDeviceForm({
       metadata.auto_off_seconds = parseInt(formData.auto_off_seconds.trim(), 10);
 
     // Cascade-coupled fields the expander form always owns (transport + its
-    // target field, type, and the rule-config metadata).
+    // target field, type, and the rule-config metadata). A GPO addresses its
+    // reader by FK (scan_device_id) — the backend derives the base topic from
+    // it server-side (TRA-1028) — everything else on mqtt still uses a
+    // free-text command_topic (Shelly).
     const base = {
       type: formData.type,
       transport: formData.transport,
       metadata,
       ...(formData.transport === 'http'
         ? { base_url: formData.base_url.trim() }
-        : { command_topic: formData.command_topic.trim() }),
+        : formData.type === 'csl_cs463_gpo'
+          ? { scan_device_id: parseInt(formData.scan_device_id.trim(), 10) }
+          : { command_topic: formData.command_topic.trim() }),
     };
 
     if (mode === 'create') {
@@ -220,7 +263,11 @@ export function OutputDeviceForm({
     } bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 disabled:opacity-50`;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    // noValidate: all validation is custom (below), including numeric fields that
+    // carry a min for UX hinting (e.g. GPO port min=1). Without this the browser's
+    // native constraint validation silently swallows the submit event for an
+    // out-of-range value before handleSubmit ever runs, so our error copy never renders.
+    <form onSubmit={handleSubmit} noValidate className="space-y-6">
       {error && (
         <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
@@ -254,7 +301,7 @@ export function OutputDeviceForm({
           <select
             id="type"
             value={formData.type}
-            onChange={(e) => handleChange('type', e.target.value as OutputDeviceType)}
+            onChange={(e) => handleTypeChange(e.target.value as OutputDeviceType)}
             disabled={loading}
             className={inputClass(false)}
           >
@@ -274,7 +321,7 @@ export function OutputDeviceForm({
             id="transport"
             value={formData.transport}
             onChange={(e) => handleChange('transport', e.target.value as AlarmTransport)}
-            disabled={loading}
+            disabled={loading || formData.type === 'csl_cs463_gpo'}
             className={inputClass(false)}
           >
             {TRANSPORTS.map((t) => (
@@ -308,6 +355,33 @@ export function OutputDeviceForm({
             the device&apos;s network.
           </p>
         </div>
+      ) : formData.type === 'csl_cs463_gpo' ? (
+        <div>
+          <label htmlFor="scan_device_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Reader <span className="text-red-500">*</span>
+          </label>
+          <select
+            id="scan_device_id"
+            value={formData.scan_device_id}
+            onChange={(e) => handleChange('scan_device_id', e.target.value)}
+            disabled={loading}
+            className={inputClass(!!fieldErrors.scan_device_id)}
+          >
+            <option value="">— Select a reader —</option>
+            {readerDevices.map((d) => (
+              <option key={d.id} value={String(d.id)}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+          {fieldErrors.scan_device_id && (
+            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.scan_device_id}</p>
+          )}
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            The CS463 reader that owns this GPO port. The backend derives its mqtt-rpc topic from the
+            reader&apos;s registration — no free-text topic to get wrong.
+          </p>
+        </div>
       ) : (
         <div>
           <label htmlFor="command_topic" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -326,8 +400,7 @@ export function OutputDeviceForm({
             <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.command_topic}</p>
           )}
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            The Shelly&apos;s MQTT topic prefix. Must match the prefix configured on the device; the backend
-            publishes to <code>&lt;topic&gt;/command/switch:&lt;id&gt;</code>. Firewall-friendly (no inbound).
+            The Shelly&apos;s MQTT topic prefix. Must match the prefix configured on the device; the backend publishes to <code>&lt;topic&gt;/command/switch:&lt;id&gt;</code>. Firewall-friendly (no inbound).
           </p>
         </div>
       )}
@@ -338,12 +411,12 @@ export function OutputDeviceForm({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label htmlFor="switch_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Switch ID
+              {formData.type === 'csl_cs463_gpo' ? 'GPO port (1–4)' : 'Switch ID'}
             </label>
             <input
               type="number"
               id="switch_id"
-              min={0}
+              min={formData.type === 'csl_cs463_gpo' ? 1 : 0}
               value={formData.switch_id}
               onChange={(e) => handleChange('switch_id', e.target.value)}
               disabled={loading}
@@ -353,7 +426,11 @@ export function OutputDeviceForm({
             {fieldErrors.switch_id && (
               <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.switch_id}</p>
             )}
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Shelly relay channel (usually 0).</p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {formData.type === 'csl_cs463_gpo'
+                ? 'GPO output port on the reader (1-4).'
+                : 'Shelly relay channel (usually 0).'}
+            </p>
           </div>
 
           <div>

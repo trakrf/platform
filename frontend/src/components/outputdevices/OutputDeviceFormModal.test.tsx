@@ -23,6 +23,18 @@ vi.mock('@/lib/auth/orgContext', () => ({
 vi.mock('@/hooks/locations', () => ({
   useLocations: () => ({ locations: [{ id: 5, name: 'Dock 1' }], isLoading: false }),
 }));
+// The GPO reader picker fetches scan devices; stub the hook so the test doesn't
+// hit the network. Includes one BLE gateway to prove the picker filters it out.
+vi.mock('@/hooks/scandevices', () => ({
+  useScanDevices: () => ({
+    scanDevices: [
+      { id: 42, name: 'cs463-212', type: 'csl_cs463' },
+      { id: 43, name: 'cs463-213', type: 'csl_cs463' },
+      { id: 99, name: 'ble-gateway-1', type: 'gl_s10' },
+    ],
+    isLoading: false,
+  }),
+}));
 
 const wrapper = ({ children }: { children: ReactNode }) => {
   const queryClient = new QueryClient({
@@ -350,6 +362,119 @@ describe('OutputDeviceFormModal', () => {
       expect(payload).not.toHaveProperty('location_id');
       expect(payload).not.toHaveProperty('is_active');
       expect(payload).toMatchObject({ type: 'shelly_gen4', transport: 'http' });
+    });
+  });
+
+  describe('CS463 GPO (TRA-1028)', () => {
+    it('locks transport to mqtt when the CS463 GPO type is selected', () => {
+      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+
+      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_cs463_gpo' } });
+
+      const transport = screen.getByLabelText(/Transport/) as HTMLSelectElement;
+      expect(transport.value).toBe('mqtt');
+      // An http GPO is not a thing; lock it rather than validating after the fact.
+      expect(transport).toBeDisabled();
+    });
+
+    it('rejects a GPO port outside 1-4', async () => {
+      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+
+      fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Egress GPO' } });
+      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_cs463_gpo' } });
+      fireEvent.change(screen.getByLabelText(/Reader/), { target: { value: '42' } });
+      fireEvent.change(screen.getByLabelText(/GPO port/), { target: { value: '0' } });
+      fireEvent.click(screen.getByRole('button', { name: /Create Output Device/i }));
+
+      expect(await screen.findByText(/GPO port must be between 1 and 4/)).toBeInTheDocument();
+      expect(outputDevicesApi.create).not.toHaveBeenCalled();
+    });
+
+    it('accepts a GPO port of 4', async () => {
+      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+
+      fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Egress GPO' } });
+      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_cs463_gpo' } });
+      fireEvent.change(screen.getByLabelText(/Reader/), { target: { value: '42' } });
+      fireEvent.change(screen.getByLabelText(/GPO port/), { target: { value: '4' } });
+      fireEvent.click(screen.getByRole('button', { name: /Create Output Device/i }));
+
+      await waitFor(() => expect(outputDevicesApi.create).toHaveBeenCalled());
+      expect((outputDevicesApi.create as any).mock.calls[0][0]).toMatchObject({
+        type: 'csl_cs463_gpo',
+        transport: 'mqtt',
+        scan_device_id: 42,
+        switch_id: 4,
+      });
+      const createPayload = (outputDevicesApi.create as any).mock.calls[0][0];
+      expect(createPayload).not.toHaveProperty('command_topic');
+    });
+
+    it('shows a reader picker instead of the command-topic input for GPO', () => {
+      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+
+      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_cs463_gpo' } });
+
+      expect(screen.queryByLabelText(/Command Topic/)).not.toBeInTheDocument();
+      const readerSelect = screen.getByLabelText(/Reader/) as HTMLSelectElement;
+      expect(readerSelect).toBeInTheDocument();
+      // Populated from the mocked useScanDevices, filtered to reader-type
+      // devices only — the BLE gateway must not appear as an option.
+      expect(screen.getByRole('option', { name: 'cs463-212' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'cs463-213' })).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'ble-gateway-1' })).not.toBeInTheDocument();
+    });
+
+    it('defaults the GPO port to 1 (not 0) when the type is selected', () => {
+      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+
+      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_cs463_gpo' } });
+
+      const switchId = screen.getByLabelText(/GPO port/) as HTMLInputElement;
+      expect(switchId.value).toBe('1');
+      expect(switchId).toHaveAttribute('min', '1');
+    });
+
+    it('requires a reader selection for GPO', async () => {
+      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+
+      fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Egress GPO' } });
+      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_cs463_gpo' } });
+      fireEvent.click(screen.getByRole('button', { name: /Create Output Device/i }));
+
+      expect(await screen.findByText(/Reader is required/)).toBeInTheDocument();
+      expect(outputDevicesApi.create).not.toHaveBeenCalled();
+    });
+
+    it('preselects the current scan_device_id on the edit path', () => {
+      const gpoDevice: OutputDevice = {
+        ...mockDevice,
+        type: 'csl_cs463_gpo',
+        transport: 'mqtt',
+        command_topic: null,
+        scan_device_id: 43,
+        switch_id: 2,
+      };
+      render(
+        <OutputDeviceFormModal isOpen={true} mode="edit" device={gpoDevice} onClose={mockOnClose} />
+      );
+
+      const readerSelect = screen.getByLabelText(/Reader/) as HTMLSelectElement;
+      expect(readerSelect.value).toBe('43');
+    });
+
+    it('still accepts switch_id 0 for a shelly device', async () => {
+      // Regression guard: 0 is a valid relay channel on a single-relay Gen4.
+      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
+
+      fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Dock Strobe' } });
+      fireEvent.change(screen.getByLabelText(/Base URL/), {
+        target: { value: 'http://192.168.50.66' },
+      });
+      fireEvent.change(screen.getByLabelText(/Switch ID/), { target: { value: '0' } });
+      fireEvent.click(screen.getByRole('button', { name: /Create Output Device/i }));
+
+      await waitFor(() => expect(outputDevicesApi.create).toHaveBeenCalled());
     });
   });
 

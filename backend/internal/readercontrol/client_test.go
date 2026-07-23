@@ -1,6 +1,7 @@
 package readercontrol
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -216,6 +217,56 @@ func TestDeliver_UnknownIDIsDropped(t *testing.T) {
 	c.deliver(b) // must be a no-op
 }
 
+// TestDeliver_UnknownIDWithErrorLogsWarn covers the fire-and-forget Notify path
+// (TRA-1028): a reader-side failure reply (rejected GPO port, /API unreachable,
+// backwards-wired GPO) arrives for an id with no pending entry — Notify never
+// registered one — and must not vanish silently. deliver must log it at Warn
+// with the id, error code, and message so a failed alarm actuation is greppable
+// instead of returning nil up the fire path with a 200-looking outcome.
+func TestDeliver_UnknownIDWithErrorLogsWarn(t *testing.T) {
+	var buf bytes.Buffer
+	c, _ := newTestClient()
+	c.log = zerolog.New(&buf)
+
+	reply := readerrpc.Response{
+		ID:    999,
+		Error: &readerrpc.RPCError{Code: readerrpc.CodeInvalidParams, Message: "gpo port rejected"},
+	}
+	b, _ := reply.Marshal()
+	c.deliver(b)
+
+	out := buf.String()
+	if !strings.Contains(out, `"level":"warn"`) {
+		t.Fatalf("expected a warn-level log line, got: %s", out)
+	}
+	if !strings.Contains(out, `"id":999`) {
+		t.Fatalf("expected log to carry the reply id, got: %s", out)
+	}
+	if !strings.Contains(out, `"code":-32602`) {
+		t.Fatalf("expected log to carry the rpc error code, got: %s", out)
+	}
+	if !strings.Contains(out, "gpo port rejected") {
+		t.Fatalf("expected log to carry the rpc error message, got: %s", out)
+	}
+}
+
+// TestDeliver_UnknownIDNoErrorStaysQuiet covers the benign case: a legitimately
+// timed-out or already-served call whose reply arrives late carries no Error
+// and must stay at Debug, not escalate to Warn.
+func TestDeliver_UnknownIDNoErrorStaysQuiet(t *testing.T) {
+	var buf bytes.Buffer
+	c, _ := newTestClient()
+	c.log = zerolog.New(&buf)
+
+	reply := readerrpc.Response{ID: 999, Result: json.RawMessage(`{}`)}
+	b, _ := reply.Marshal()
+	c.deliver(b)
+
+	if strings.Contains(buf.String(), `"level":"warn"`) {
+		t.Fatalf("benign unknown-id reply must not log at warn, got: %s", buf.String())
+	}
+}
+
 func TestGetOperProfile_BusyMapsToTypedError(t *testing.T) {
 	c, cp := newTestClient()
 	errc := make(chan error, 1)
@@ -238,6 +289,66 @@ func TestGetOperProfile_BusyMapsToTypedError(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("GetOperProfile did not return")
+	}
+}
+
+func TestNotify_PublishesFrameAndLeavesNoPendingEntry(t *testing.T) {
+	var gotTopic string
+	var gotPayload []byte
+	c := &Client{
+		instance: "testhost",
+		timeout:  time.Second,
+		pending:  make(map[int]chan readerrpc.Response),
+		publish: func(topic string, payload []byte) error {
+			gotTopic, gotPayload = topic, payload
+			return nil
+		},
+	}
+
+	if err := c.GpoSet(context.Background(), "trakrf.id/cs463-212", 1, true, 30000); err != nil {
+		t.Fatalf("GpoSet: %v", err)
+	}
+
+	if gotTopic != "trakrf.id/cs463-212/rpc" {
+		t.Errorf("topic = %q, want %q", gotTopic, "trakrf.id/cs463-212/rpc")
+	}
+
+	var req readerrpc.Request
+	if err := json.Unmarshal(gotPayload, &req); err != nil {
+		t.Fatalf("unmarshal frame: %v", err)
+	}
+	if req.Method != readerrpc.MethodGpoSet {
+		t.Errorf("method = %q, want %q", req.Method, readerrpc.MethodGpoSet)
+	}
+	if req.Src == "" {
+		t.Error("src must be set so the daemon has somewhere to reply")
+	}
+	var params readerrpc.GpoSetParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		t.Fatalf("unmarshal params: %v", err)
+	}
+	if params.Port != 1 || !params.On || params.PulseMs != 30000 {
+		t.Errorf("params = %+v, want {Port:1 On:true PulseMs:30000}", params)
+	}
+
+	// Fire-and-forget: no pending entry may survive, or every alarm leaks one.
+	c.mu.Lock()
+	n := len(c.pending)
+	c.mu.Unlock()
+	if n != 0 {
+		t.Errorf("pending entries = %d, want 0 (Notify must not await a reply)", n)
+	}
+}
+
+func TestNotify_PublishError_Propagates(t *testing.T) {
+	c := &Client{
+		instance: "testhost",
+		timeout:  time.Second,
+		pending:  make(map[int]chan readerrpc.Response),
+		publish:  func(string, []byte) error { return errors.New("broker down") },
+	}
+	if err := c.GpoSet(context.Background(), "trakrf.id/cs463-212", 1, true, 0); err == nil {
+		t.Fatal("expected error when the broker rejects the publish")
 	}
 }
 
