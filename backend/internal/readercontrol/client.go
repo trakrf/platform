@@ -134,6 +134,14 @@ func (c *Client) deliver(payload []byte) {
 	}
 	c.mu.Unlock()
 	if !ok {
+		if resp.Error != nil {
+			c.log.Warn().
+				Int("id", resp.ID).
+				Int("code", resp.Error.Code).
+				Str("message", resp.Error.Message).
+				Msg("reply for unknown/expired request carried a reader error; fire-and-forget call may not have actuated")
+			return
+		}
 		c.log.Debug().Int("id", resp.ID).Msg("reply for unknown/expired request; dropping")
 		return
 	}
