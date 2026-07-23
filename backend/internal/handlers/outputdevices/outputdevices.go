@@ -102,20 +102,31 @@ func deviceFieldsError(deviceType, transport, baseURL, commandTopic string, swit
 
 // scanDeviceFKError checks the storage-backed half of GPO validation that
 // deviceFieldsError cannot do (it is pure, with no storage access): a
-// csl_cs463_gpo device's effective scan_device_id must be present and must
-// reference a live reader in orgID. Returns a non-"" message for the caller
-// to surface as 400, or a non-nil error for an unexpected storage failure
-// (500). Both are "" only when scanDeviceID resolves.
+// csl_cs463_gpo device's effective scan_device_id must be present, must
+// reference a live reader in orgID, that reader must be a csl_cs463 (the only
+// type with a CS463 daemon listening for Gpo.Set), and that reader must have
+// a non-empty publish_topic (the alarm dispatcher derives the reader's RPC
+// base topic from it at fire time; with none, the base topic is "" and the
+// dispatcher fail-closed refuses to fire — silently, unless caught here).
+// Returns a non-"" message for the caller to surface as 400, or a non-nil
+// error for an unexpected storage failure (500). Both are "" only when
+// scanDeviceID resolves to a fireable reader.
 func (h *Handler) scanDeviceFKError(ctx context.Context, orgID int, scanDeviceID *int) (msg string, err error) {
 	if scanDeviceID == nil {
 		return "scan_device_id is required for csl_cs463_gpo", nil
 	}
-	exists, err := h.storage.ScanDeviceExistsInOrg(ctx, orgID, *scanDeviceID)
+	check, err := h.storage.CheckGPOReader(ctx, orgID, *scanDeviceID)
 	if err != nil {
 		return "", err
 	}
-	if !exists {
+	if !check.Found {
 		return "scan_device_id must reference one of your readers", nil
+	}
+	if !check.IsCS463 {
+		return "scan_device_id must reference a csl_cs463 reader", nil
+	}
+	if !check.HasPublishTopic {
+		return "scan_device_id must reference a reader with a publish_topic configured", nil
 	}
 	return "", nil
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/trakrf/platform/backend/internal/models/outputdevice"
+	"github.com/trakrf/platform/backend/internal/models/scandevice"
 )
 
 // outputDeviceColumns is the canonical SELECT/RETURNING column list, kept
@@ -279,20 +280,57 @@ func (s *Storage) DeleteOutputDevice(ctx context.Context, orgID, id int) (bool, 
 	return rowsAffected > 0, nil
 }
 
-// ScanDeviceExistsInOrg reports whether a live scan device with this id exists
-// in the org. Runs under the org's RLS GUC, so a device in another org reads as
-// absent — the org-scoping is enforced by RLS, not just the WHERE clause.
-func (s *Storage) ScanDeviceExistsInOrg(ctx context.Context, orgID, scanDeviceID int) (bool, error) {
-	var exists bool
+// GPOReaderCheck is the result of validating a scan_device_id a csl_cs463_gpo
+// output device wants to bind to. Found/IsCS463/HasPublishTopic are
+// independently inspectable so the caller can produce a distinct 400 message
+// per failure mode — a single bool can't tell "not yours" from "wrong reader
+// type" from "reader has no publish_topic", and an operator needs to know
+// which (TRA-1028 hardening).
+type GPOReaderCheck struct {
+	// Found is true iff a live scan device with this id exists in the org.
+	// Runs under the org's RLS GUC, so a device in another org (or one that
+	// doesn't exist at all) reads as not-found — the org-scoping is enforced
+	// by RLS, not just the WHERE clause. IsCS463 and HasPublishTopic are only
+	// meaningful when Found is true.
+	Found bool
+	// IsCS463 is true iff the reader's type is scandevice.DeviceTypeCS463.
+	// The GPO fire path (Gpo.Set over the reader's mqtt-rpc base topic) only
+	// exists on the CS463 daemon; any other reader type has nothing listening.
+	IsCS463 bool
+	// HasPublishTopic is true iff the reader's publish_topic is non-NULL and
+	// non-empty. The alarm dispatcher derives the reader's RPC base topic
+	// from publish_topic at fire time (stripping a trailing "/reads"); a
+	// reader with no publish_topic yields an empty base topic and the
+	// dispatcher fail-closed refuses to fire — but that refusal only
+	// surfaces at fire time, invisibly, unless caught here at write time.
+	HasPublishTopic bool
+}
+
+// CheckGPOReader validates the reader a csl_cs463_gpo output device's
+// scan_device_id would bind to. One query under the org's RLS GUC (RLS
+// remains the org boundary); see GPOReaderCheck for what each field means.
+func (s *Storage) CheckGPOReader(ctx context.Context, orgID, scanDeviceID int) (GPOReaderCheck, error) {
+	var check GPOReaderCheck
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `
-			SELECT EXISTS(
-				SELECT 1 FROM trakrf.scan_devices
-				WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
-			)`, scanDeviceID, orgID).Scan(&exists)
+		var devType string
+		var publishTopic *string
+		err := tx.QueryRow(ctx, `
+			SELECT type, publish_topic FROM trakrf.scan_devices
+			WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
+		`, scanDeviceID, orgID).Scan(&devType, &publishTopic)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return nil
+			}
+			return err
+		}
+		check.Found = true
+		check.IsCS463 = devType == scandevice.DeviceTypeCS463
+		check.HasPublishTopic = publishTopic != nil && *publishTopic != ""
+		return nil
 	})
 	if err != nil {
-		return false, fmt.Errorf("failed to check scan device existence: %w", err)
+		return GPOReaderCheck{}, fmt.Errorf("failed to check gpo reader: %w", err)
 	}
-	return exists, nil
+	return check, nil
 }

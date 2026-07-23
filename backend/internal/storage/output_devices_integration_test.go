@@ -264,7 +264,11 @@ func TestOutputDevice_ReaderBaseTopic_CrossOrgReaderStaysEmpty(t *testing.T) {
 	require.Empty(t, got.ReaderBaseTopic, "cross-org reader must not resolve under RLS")
 }
 
-func TestScanDeviceExistsInOrg(t *testing.T) {
+// TestCheckGPOReader covers the storage-level GPO reader validation added to
+// close the two write-time gaps found in final review (TRA-1028): reader type
+// must be csl_cs463, and it must have a non-empty publish_topic. Found/
+// cross-org behavior mirrors the former ScanDeviceExistsInOrg this replaces.
+func TestCheckGPOReader(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	ctx := context.Background()
 	orgA := testutil.CreateTestAccount(t, db.AdminPool)
@@ -276,17 +280,41 @@ func TestScanDeviceExistsInOrg(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	exists, err := db.Store.ScanDeviceExistsInOrg(ctx, orgA, reader.ID)
+	// Happy path: found, right type, has a publish_topic.
+	check, err := db.Store.CheckGPOReader(ctx, orgA, reader.ID)
 	require.NoError(t, err)
-	require.True(t, exists)
+	require.True(t, check.Found)
+	require.True(t, check.IsCS463)
+	require.True(t, check.HasPublishTopic)
 
-	// Missing id.
-	missing, err := db.Store.ScanDeviceExistsInOrg(ctx, orgA, 99999999)
+	// Missing id: not found.
+	missing, err := db.Store.CheckGPOReader(ctx, orgA, 99999999)
 	require.NoError(t, err)
-	require.False(t, missing)
+	require.False(t, missing.Found)
 
 	// In-org id from another org's perspective: RLS makes it read as absent.
-	crossOrg, err := db.Store.ScanDeviceExistsInOrg(ctx, orgB, reader.ID)
+	crossOrg, err := db.Store.CheckGPOReader(ctx, orgB, reader.ID)
 	require.NoError(t, err)
-	require.False(t, crossOrg)
+	require.False(t, crossOrg.Found)
+
+	// A reader of the wrong type: found, but not a CS463.
+	glReader, err := db.Store.CreateScanDevice(ctx, orgA, scandevice.CreateScanDeviceRequest{
+		Name: "GL-S10", Type: "gl_s10",
+	})
+	require.NoError(t, err)
+	glCheck, err := db.Store.CheckGPOReader(ctx, orgA, glReader.ID)
+	require.NoError(t, err)
+	require.True(t, glCheck.Found)
+	require.False(t, glCheck.IsCS463)
+
+	// A csl_cs463 reader with no publish_topic: found, right type, no topic.
+	noTopicReader, err := db.Store.CreateScanDevice(ctx, orgA, scandevice.CreateScanDeviceRequest{
+		Name: "CS463-No-Topic", Type: "csl_cs463",
+	})
+	require.NoError(t, err)
+	noTopicCheck, err := db.Store.CheckGPOReader(ctx, orgA, noTopicReader.ID)
+	require.NoError(t, err)
+	require.True(t, noTopicCheck.Found)
+	require.True(t, noTopicCheck.IsCS463)
+	require.False(t, noTopicCheck.HasPublishTopic)
 }
