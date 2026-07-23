@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
@@ -65,6 +66,14 @@ type Adapter struct {
 	ops readerOps
 	rec reconcileOps // set when ops also satisfies reconcileOps (the real *Client)
 	cfg AdapterConfig
+
+	// gpoMu guards gpoTimers, the per-port pending-release state for pulsed
+	// Gpo.Set calls. It is touched from both the RPC-handling goroutine
+	// (GpoSet) and the timer callbacks it arms, so every access — including
+	// the arm sequence and the callback's own cleanup — goes through this
+	// lock. See GpoSet for why the lock is held across timer creation.
+	gpoMu     sync.Mutex
+	gpoTimers map[int]*time.Timer
 }
 
 // Compile-time assertion: the transport Client satisfies readerOps. (That
@@ -77,7 +86,7 @@ var _ readerOps = (*Client)(nil)
 // satisfies reconcileOps (the real *Client does), the adapter can run the golden
 // config reconcile; SetOperProfile-only fakes that do not are simply not reconcilable.
 func NewAdapter(ops readerOps, cfg AdapterConfig) *Adapter {
-	a := &Adapter{ops: ops, cfg: cfg}
+	a := &Adapter{ops: ops, cfg: cfg, gpoTimers: make(map[int]*time.Timer)}
 	if r, ok := ops.(reconcileOps); ok {
 		a.rec = r
 	}
@@ -409,27 +418,71 @@ func (a *Adapter) GetStatus(ctx context.Context) (readerrpc.Status, error) {
 // lock, so an alarm fires even while an operator has the reader's web UI open.
 //
 // pulseMs > 0 with on==true arms a one-shot — the port is driven now and released
-// after the delay by a timer HERE on the reader, mirroring the Shelly toggle_after
-// behaviour the geofence engine already relies on. The release runs in its own
-// goroutine on a background context so it survives the RPC's deadline; the caller
-// gets its acknowledgement as soon as the port is energised rather than waiting out
-// the pulse.
+// after the delay by a timer HERE in the daemon, mirroring the Shelly toggle_after
+// behaviour the geofence engine already relies on. The off edge is timed on the
+// reader host and does not depend on a second message from the backend — but it
+// lives in THIS process's memory, not the reader's silicon, so it is lost if the
+// daemon itself restarts mid-pulse (no persistence, no startup safe-state drive;
+// see the TRA-1028 follow-up note). The release runs on a background context so
+// it survives the RPC's deadline; the caller gets its acknowledgement as soon as
+// the port is energised rather than waiting out the pulse.
+//
+// Every call for a port supersedes whatever that port was doing: any pending
+// release timer is stopped before the new command drives the port, and a fresh
+// timer (only for on&&pulseMs>0) replaces it. This mirrors Shelly's toggle_after
+// REPLACE semantics — two tags exiting within one auto_off window must not race
+// (see TRA-1028): the first pulse's timer must never cut the second, later
+// command short.
 func (a *Adapter) GpoSet(ctx context.Context, port int, on bool, pulseMs int) error {
+	a.gpoMu.Lock()
+	if existing, ok := a.gpoTimers[port]; ok {
+		existing.Stop()
+		delete(a.gpoTimers, port)
+	}
+
 	if err := a.ops.DirectIOOutput(ctx, port, on); err != nil {
+		a.gpoMu.Unlock()
 		return err
 	}
+
 	if !on || pulseMs <= 0 {
+		a.gpoMu.Unlock()
 		return nil
 	}
-	go func() {
-		time.Sleep(time.Duration(pulseMs) * time.Millisecond)
+
+	// Arm the fresh release timer and publish it to gpoTimers BEFORE releasing
+	// the lock. This is deliberate, not incidental: time.AfterFunc's callback
+	// runs on its own goroutine and could in principle fire the instant the
+	// timer is created (e.g. a very short pulse under scheduler pressure). By
+	// holding gpoMu across both the timer's creation and the `timer` closure
+	// variable's assignment, and having the callback's FIRST action be to take
+	// the same lock, the mutex's Unlock-before-Lock ordering guarantees the
+	// callback can never observe `timer` (or gpoTimers) in a partially-written
+	// state — it simply blocks until this critical section finishes. That is
+	// what keeps the callback's own-entry-only delete (the `cur == timer`
+	// check below) race-free: it cannot run against a half-armed timer, and it
+	// cannot clobber a NEWER timer for the same port, because a newer GpoSet
+	// call would have already Stop()'d and deleted this one under the same
+	// lock before this callback ever gets to run its check.
+	var timer *time.Timer
+	timer = time.AfterFunc(time.Duration(pulseMs)*time.Millisecond, func() {
 		rctx, cancel := context.WithTimeout(context.Background(), gpoReleaseTimeout)
-		defer cancel()
 		// Best-effort: a failed release leaves the output latched on, which is a
 		// loud, visible failure rather than a silent one. Nothing useful to do here
 		// but let the next command correct it.
 		_ = a.ops.DirectIOOutput(rctx, port, false)
-	}()
+		cancel()
+
+		a.gpoMu.Lock()
+		defer a.gpoMu.Unlock()
+		// Only clear OUR OWN entry: if a later GpoSet has already superseded us,
+		// gpoTimers[port] now points at ITS timer, and we must not delete that.
+		if cur, ok := a.gpoTimers[port]; ok && cur == timer {
+			delete(a.gpoTimers, port)
+		}
+	})
+	a.gpoTimers[port] = timer
+	a.gpoMu.Unlock()
 	return nil
 }
 

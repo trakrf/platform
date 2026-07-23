@@ -645,3 +645,97 @@ func TestGpoSet_TransportErrorPropagates(t *testing.T) {
 		t.Errorf("calls = %+v, want exactly one (no release after a failed on)", got)
 	}
 }
+
+// TRA-1028 whole-branch-review finding: each pulsed Gpo.Set used to spawn an
+// INDEPENDENT release goroutine with no per-port state. If a second tag exited
+// (a second GpoSet on the same port) before the first pulse elapsed, the FIRST
+// timer still fired at its ORIGINAL deadline and cut the second, longer alarm
+// short. A per-port timer must be superseded — Stop()'d and replaced — not
+// raced. This mirrors Shelly's toggle_after REPLACE semantics.
+//
+// The bug is proven by checking the port state at a time PAST the first
+// pulse's original deadline but BEFORE the second pulse's deadline: if the
+// stale first timer fired, the port would already show an (incorrect) off
+// call at that checkpoint.
+func TestGpoSet_LongerPulseSupersedesPendingRelease(t *testing.T) {
+	f := &fakeOps{}
+	a := NewAdapter(f, AdapterConfig{AntennaCount: 4})
+
+	if err := a.GpoSet(context.Background(), 5, true, 30); err != nil {
+		t.Fatalf("GpoSet #1: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond) // well before pulse #1's 30ms deadline
+
+	// A second, longer pulse arrives on the SAME port before #1 elapses — the
+	// two-tags-in-one-window scenario from the finding.
+	if err := a.GpoSet(context.Background(), 5, true, 150); err != nil {
+		t.Fatalf("GpoSet #2: %v", err)
+	}
+
+	// Checkpoint: past #1's original deadline (~30ms from its call, i.e. ~40ms
+	// from test start) but well before #2's (~10+150=160ms from test start).
+	time.Sleep(60 * time.Millisecond) // ~70ms since test start
+	got := f.gpoSnapshot()
+	want := []gpoCall{{port: 5, on: true}, {port: 5, on: true}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("calls at the ~70ms checkpoint = %+v, want %+v (pulse #1's stale timer must NOT have released the port)", got, want)
+	}
+
+	// Past #2's deadline: exactly one release, timed off the SECOND pulse.
+	time.Sleep(150 * time.Millisecond) // ~220ms since test start
+	got = f.gpoSnapshot()
+	want = []gpoCall{{port: 5, on: true}, {port: 5, on: true}, {port: 5, on: false}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("final calls = %+v, want %+v (exactly one release, driven by pulse #2's timer)", got, want)
+	}
+}
+
+// The explicit re-fire/latch case from the finding: an on:true,pulse_ms:0
+// (latch forever) call arriving while a pulse is pending must not be killed
+// by the stale pending timer either — the latch must win permanently.
+func TestGpoSet_LatchSupersedesPendingRelease(t *testing.T) {
+	f := &fakeOps{}
+	a := NewAdapter(f, AdapterConfig{AntennaCount: 4})
+
+	if err := a.GpoSet(context.Background(), 6, true, 30); err != nil {
+		t.Fatalf("GpoSet #1 (pulse): %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)
+
+	if err := a.GpoSet(context.Background(), 6, true, 0); err != nil {
+		t.Fatalf("GpoSet #2 (latch): %v", err)
+	}
+
+	// Wait well past pulse #1's original deadline; the latch must hold.
+	time.Sleep(80 * time.Millisecond)
+	got := f.gpoSnapshot()
+	want := []gpoCall{{port: 6, on: true}, {port: 6, on: true}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("calls = %+v, want %+v (latch must survive the superseded pulse's deadline)", got, want)
+	}
+}
+
+// An explicit off arriving while a pulse is pending must cancel the pending
+// release outright — there must be exactly one off call (the explicit one),
+// never a second one from the stale timer firing later.
+func TestGpoSet_OffCancelsPendingRelease(t *testing.T) {
+	f := &fakeOps{}
+	a := NewAdapter(f, AdapterConfig{AntennaCount: 4})
+
+	if err := a.GpoSet(context.Background(), 7, true, 30); err != nil {
+		t.Fatalf("GpoSet #1 (pulse): %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)
+
+	if err := a.GpoSet(context.Background(), 7, false, 0); err != nil {
+		t.Fatalf("GpoSet #2 (explicit off): %v", err)
+	}
+
+	// Wait well past pulse #1's original deadline: no second off must appear.
+	time.Sleep(80 * time.Millisecond)
+	got := f.gpoSnapshot()
+	want := []gpoCall{{port: 7, on: true}, {port: 7, on: false}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("calls = %+v, want %+v (the stale pulse timer must have been cancelled, not just superseded in effect)", got, want)
+	}
+}
