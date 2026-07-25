@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
 )
@@ -27,7 +29,13 @@ type readerOps interface {
 	SetProfilePower(ctx context.Context, profileID string, antennaCount int, enabledPorts []int, powers map[int]float64, profileFields map[string]string) error
 	CreateProfile(ctx context.Context, session, profileID string, txPowerDBm float64) error
 	EnableEvent(ctx context.Context, session, eventID string, enable bool) error
+	DirectIOOutput(ctx context.Context, port int, on bool) error
 }
+
+// gpoReleaseTimeout bounds the deferred off-command of a one-shot GPO pulse. It
+// is independent of the originating request's context, which is long gone by the
+// time the pulse expires.
+const gpoReleaseTimeout = 8 * time.Second
 
 // AdapterConfig holds the static facts the adapter needs about this reader.
 type AdapterConfig struct {
@@ -58,6 +66,25 @@ type Adapter struct {
 	ops readerOps
 	rec reconcileOps // set when ops also satisfies reconcileOps (the real *Client)
 	cfg AdapterConfig
+
+	// gpoPortsMu guards ONLY the gpoPorts map's lookup/lazy-create step — it is
+	// never held across a reader HTTP call. Each port gets its OWN portGPO
+	// (and its own mutex), so a slow or hung reader call driving one GPO port
+	// can never block Gpo.Set on any OTHER port. See gpoPort and GpoSet.
+	gpoPortsMu sync.Mutex
+	gpoPorts   map[int]*portGPO
+}
+
+// portGPO holds one GPO port's pending-release state. At most one timer is
+// ever armed per port; mu serializes that port's on/off writes against its
+// own release callback (see GpoSet) so the two can never land out of order.
+// This is per-port BY DESIGN: same-port GpoSet calls (and their release)
+// must serialize — you never want two conflicting writes to one physical
+// output in flight at once — but DIFFERENT ports must not contend with each
+// other, which is why this lock is not the adapter-wide gpoPortsMu.
+type portGPO struct {
+	mu    sync.Mutex
+	timer *time.Timer
 }
 
 // Compile-time assertion: the transport Client satisfies readerOps. (That
@@ -70,7 +97,7 @@ var _ readerOps = (*Client)(nil)
 // satisfies reconcileOps (the real *Client does), the adapter can run the golden
 // config reconcile; SetOperProfile-only fakes that do not are simply not reconcilable.
 func NewAdapter(ops readerOps, cfg AdapterConfig) *Adapter {
-	a := &Adapter{ops: ops, cfg: cfg}
+	a := &Adapter{ops: ops, cfg: cfg, gpoPorts: make(map[int]*portGPO)}
 	if r, ok := ops.(reconcileOps); ok {
 		a.rec = r
 	}
@@ -188,11 +215,11 @@ func (a *Adapter) GetCapabilities(ctx context.Context) (readerrpc.Capabilities, 
 			readerrpc.MethodGetOperProfile,
 			readerrpc.MethodSetOperProfile,
 			readerrpc.MethodGetStatus,
+			readerrpc.MethodGpoSet,
 		},
 		Unsupported: []string{
 			readerrpc.MethodScanStart,
 			readerrpc.MethodScanStop,
-			readerrpc.MethodGpoSet,
 			readerrpc.MethodReboot,
 		},
 	}, nil
@@ -395,6 +422,113 @@ func (a *Adapter) GetStatus(ctx context.Context) (readerrpc.Status, error) {
 		Reading:       len(parseAntennaPorts(prof.Attrs["antenna_port"])) > 0,
 		ActiveProfile: prof.ID,
 	}, nil
+}
+
+// GpoSet drives a general purpose output. It deliberately takes NO reader
+// session: directIOOutput authenticates inline and bypasses the single-root-session
+// lock, so an alarm fires even while an operator has the reader's web UI open.
+//
+// pulseMs > 0 with on==true arms a one-shot — the port is driven now and released
+// after the delay by a timer HERE in the daemon, mirroring the Shelly toggle_after
+// behaviour the geofence engine already relies on. The off edge is timed on the
+// reader host and does not depend on a second message from the backend — but it
+// lives in THIS process's memory, not the reader's silicon, so it is lost if the
+// daemon itself restarts mid-pulse (no persistence, no startup safe-state drive;
+// see the TRA-1028 follow-up note). The release runs on a background context so
+// it survives the RPC's deadline; the caller gets its acknowledgement as soon as
+// the port is energised rather than waiting out the pulse.
+//
+// Every call for a port supersedes whatever that port was doing: any pending
+// release timer is stopped before the new command drives the port, and a fresh
+// timer (only for on&&pulseMs>0) replaces it. This mirrors Shelly's toggle_after
+// REPLACE semantics — two tags exiting within one auto_off window must not race
+// (see TRA-1028): the first pulse's timer must never cut the second, later
+// command short, AND a stale release that already started must never land its
+// OFF write after a superseding command's write (the identity check in the
+// release callback below happens BEFORE that write, under the same per-port
+// lock a superseding GpoSet call takes, precisely to close that ordering gap).
+//
+// Locking is PER PORT (portGPO.mu, via gpoPort), not adapter-wide: a slow or
+// hung reader call driving one GPO port must never block Gpo.Set on a
+// different port (a multi-zone alarm must keep real-time delivery on every
+// port even if one is stuck). Same-port calls DO serialize on that port's
+// lock, including across the reader HTTP round-trip — that's intentional,
+// since two conflicting writes to the SAME physical output must never be in
+// flight at once.
+func (a *Adapter) GpoSet(ctx context.Context, port int, on bool, pulseMs int) error {
+	p := a.gpoPort(port)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.timer != nil {
+		p.timer.Stop()
+		p.timer = nil
+	}
+
+	if err := a.ops.DirectIOOutput(ctx, port, on); err != nil {
+		return err
+	}
+	if !on || pulseMs <= 0 {
+		return nil
+	}
+
+	// Arm the fresh release timer and publish it to p.timer BEFORE releasing
+	// the lock. This is deliberate, not incidental: time.AfterFunc's callback
+	// runs on its own goroutine and could in principle fire the instant the
+	// timer is created (e.g. a very short pulse under scheduler pressure). By
+	// holding p.mu across both the timer's creation and the `timer` closure
+	// variable's assignment (this whole function holds it, via the defer
+	// above), and having the callback's FIRST action be to take the same
+	// lock, the mutex's Unlock-before-Lock ordering guarantees the callback
+	// can never observe `timer` (or p.timer) in a partially-written state —
+	// it simply blocks until this critical section finishes.
+	var timer *time.Timer
+	timer = time.AfterFunc(time.Duration(pulseMs)*time.Millisecond, func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		// Identity check BEFORE the OFF write, under the SAME lock a
+		// superseding GpoSet call for this port also takes. This is the
+		// crux of the TRA-1028 review fix: the naive version issued the OFF
+		// write first and checked identity only for its own map cleanup
+		// afterwards, so a slow/in-flight OFF could still land AFTER a
+		// superseding GpoSet's ON — leaving the port physically off with
+		// nothing to correct it. Checking first and gating the write on it
+		// means exactly one of two orderings can happen, and both are
+		// correct: (a) this callback gets the lock first, finds itself
+		// still current, and writes OFF — a superseding GpoSet then blocks
+		// on p.mu until that OFF completes, and writes its own ON last; or
+		// (b) a superseding GpoSet gets the lock first, stops/replaces this
+		// timer (p.timer != timer) and writes its ON — this callback then
+		// gets the lock, sees it has been superseded, and writes NOTHING.
+		if p.timer != timer {
+			return
+		}
+		rctx, cancel := context.WithTimeout(context.Background(), gpoReleaseTimeout)
+		// Best-effort: a failed release leaves the output latched on, which is a
+		// loud, visible failure rather than a silent one. Nothing useful to do here
+		// but let the next command correct it.
+		_ = a.ops.DirectIOOutput(rctx, port, false)
+		cancel()
+		p.timer = nil
+	})
+	p.timer = timer
+	return nil
+}
+
+// gpoPort returns (lazily creating) the per-port GPO state for port. The
+// gpoPortsMu lock is held only for this map lookup/insert step — never
+// across a reader HTTP call — so unrelated ports never contend with each
+// other over it; all actual serialization for a port's writes happens on
+// that port's own portGPO.mu (see GpoSet).
+func (a *Adapter) gpoPort(port int) *portGPO {
+	a.gpoPortsMu.Lock()
+	defer a.gpoPortsMu.Unlock()
+	p := a.gpoPorts[port]
+	if p == nil {
+		p = &portGPO{}
+		a.gpoPorts[port] = p
+	}
+	return p
 }
 
 // --- helpers --------------------------------------------------------------

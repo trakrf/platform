@@ -125,6 +125,11 @@ func (f *fakeReco) ListResultantAction(ctx context.Context, s string) (map[strin
 func (f *fakeReco) ListEvent(ctx context.Context, s string) (map[string]EntityRow, error) {
 	return f.rows["event"], nil
 }
+
+// DirectIOOutput satisfies readerOps; the reconcile path never drives a GPO.
+func (f *fakeReco) DirectIOOutput(ctx context.Context, port int, on bool) error {
+	return nil
+}
 func (f *fakeReco) AddDataFormat(ctx context.Context, s string, p url.Values) error {
 	f.adds["dataformat"]++
 	return nil

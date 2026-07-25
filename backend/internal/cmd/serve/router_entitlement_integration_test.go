@@ -62,7 +62,7 @@ func setupRealRouter(t *testing.T, store *storage.Storage) *chi.Mux {
 	reportsHandler := reportshandler.NewHandler(store)
 	scanDevicesHandler := scandeviceshandler.NewHandler(store, nil)
 	scanPointsHandler := scanpointshandler.NewHandler(store)
-	outputDevicesHandler := outputdeviceshandler.NewHandler(store, alarm.NewDispatcher(shelly.New(0), nil), 0)
+	outputDevicesHandler := outputdeviceshandler.NewHandler(store, alarm.NewDispatcher(shelly.New(0), nil, nil), 0)
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(nil, buildinfo.Info{Version: "test"}, time.Now())
 	frontendHandler := frontendhandler.NewHandler(fstest.MapFS{}, "frontend/dist", "")

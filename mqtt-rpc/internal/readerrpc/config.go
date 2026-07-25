@@ -49,6 +49,28 @@ type SetOperProfileParams struct {
 	Force bool `json:"force,omitempty"`
 }
 
+// GpoSetParams are the params for Gpo.Set: drive one general purpose output.
+//
+// Port is the reader's 1-based GPO port. PulseMs, when On is true and it is > 0,
+// requests a ONE-SHOT: the reader drives the port on now and releases it after
+// the delay with no second message. It is the reader-side analog of the Shelly
+// toggle_after timer, so an output device's auto_off_seconds maps straight onto
+// it and the OFF edge never depends on a second round trip surviving. PulseMs is
+// ignored for off commands, and 0 means "stay on until an explicit off".
+type GpoSetParams struct {
+	Port    int  `json:"port"`
+	On      bool `json:"on"`
+	PulseMs int  `json:"pulse_ms,omitempty"`
+}
+
+// GpoSetResult is the response to Gpo.Set. Pulsed reports whether the reader
+// armed a one-shot release timer for this call.
+type GpoSetResult struct {
+	Port   int  `json:"port"`
+	On     bool `json:"on"`
+	Pulsed bool `json:"pulsed,omitempty"`
+}
+
 // TxPowerCap describes the transmit-power capabilities of a reader.
 type TxPowerCap struct {
 	MinDBm     float64 `json:"min_dbm"`
