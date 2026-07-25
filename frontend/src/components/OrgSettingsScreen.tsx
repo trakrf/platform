@@ -14,6 +14,7 @@ import { refreshOrgToken } from '@/lib/auth/orgContext';
 import { invalidateAllOrgScopedData } from '@/lib/cache/orgScopedCache';
 import { DeleteOrgModal } from './DeleteOrgModal';
 import { OrgEntitlementSection } from './OrgEntitlementSection';
+import { WebhooksSection } from './WebhooksSection';
 import type { Organization } from '@/types/org';
 import toast from 'react-hot-toast';
 
@@ -295,6 +296,11 @@ export default function OrgSettingsScreen() {
             </button>
           </section>
         )}
+
+        {/* Webhooks (TRA-1043). Admin-only, and deliberately NOT gated on a
+            capability: webhooks is base platform surface for every paying
+            customer, not a sold module. */}
+        {isAdmin && <WebhooksSection />}
 
         {/* Entitlement (superadmin only) */}
         {isSuperadmin && (
