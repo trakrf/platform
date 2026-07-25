@@ -340,14 +340,14 @@ func createOrg(t *testing.T, db *testutil.TestDB, name, identifier string) int {
 }
 
 // TestOutputDevicesHandler_CreateGPORequiresScanDeviceID covers TRA-1028: a
-// csl_cs463_gpo device create with no scan_device_id at all must 400 — the
+// csl_gpo device create with no scan_device_id at all must 400 — the
 // reader FK is how the device is addressed, so it cannot be omitted.
 func TestOutputDevicesHandler_CreateGPORequiresScanDeviceID(t *testing.T) {
 	drv := &fakeDriver{}
 	r, orgID := newTestServer(t, drv)
 
 	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
-		"name": "Reader GPO", "type": "csl_cs463_gpo", "transport": "mqtt", "switch_id": 1,
+		"name": "Reader GPO", "type": "csl_gpo", "transport": "mqtt", "switch_id": 1,
 	})
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 }
@@ -367,7 +367,7 @@ func TestOutputDevicesHandler_CreateGPORejectsForeignScanDeviceID(t *testing.T) 
 
 	// Nonexistent id.
 	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
-		"name": "Reader GPO", "type": "csl_cs463_gpo", "transport": "mqtt", "switch_id": 1,
+		"name": "Reader GPO", "type": "csl_gpo", "transport": "mqtt", "switch_id": 1,
 		"scan_device_id": 99999999,
 	})
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
@@ -381,7 +381,7 @@ func TestOutputDevicesHandler_CreateGPORejectsForeignScanDeviceID(t *testing.T) 
 	require.NoError(t, err)
 
 	rec = doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
-		"name": "Reader GPO", "type": "csl_cs463_gpo", "transport": "mqtt", "switch_id": 1,
+		"name": "Reader GPO", "type": "csl_gpo", "transport": "mqtt", "switch_id": 1,
 		"scan_device_id": readerB.ID,
 	})
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
@@ -408,7 +408,7 @@ func TestOutputDevicesHandler_CreateGPORejectsWrongReaderType(t *testing.T) {
 	require.NoError(t, err)
 
 	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
-		"name": "Reader GPO", "type": "csl_cs463_gpo", "transport": "mqtt", "switch_id": 1,
+		"name": "Reader GPO", "type": "csl_gpo", "transport": "mqtt", "switch_id": 1,
 		"scan_device_id": glReader.ID,
 	})
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
@@ -435,7 +435,7 @@ func TestOutputDevicesHandler_CreateGPORejectsReaderWithNoPublishTopic(t *testin
 	require.NoError(t, err)
 
 	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
-		"name": "Reader GPO", "type": "csl_cs463_gpo", "transport": "mqtt", "switch_id": 1,
+		"name": "Reader GPO", "type": "csl_gpo", "transport": "mqtt", "switch_id": 1,
 		"scan_device_id": noTopicReader.ID,
 	})
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
@@ -459,14 +459,14 @@ func TestOutputDevicesHandler_CreateGPOWithValidScanDeviceID(t *testing.T) {
 	require.NoError(t, err)
 
 	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
-		"name": "Reader GPO", "type": "csl_cs463_gpo", "transport": "mqtt", "switch_id": 1,
+		"name": "Reader GPO", "type": "csl_gpo", "transport": "mqtt", "switch_id": 1,
 		"scan_device_id": reader.ID,
 	})
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 }
 
 // TestOutputDevicesHandler_UpdateGPOFlipTypeWithoutScanDeviceID covers a PATCH
-// that flips an existing shelly device's type to csl_cs463_gpo without
+// that flips an existing shelly device's type to csl_gpo without
 // resending scan_device_id: since the stored row has none, this must 400 —
 // merging over the stored value must not let the FK requirement be skipped.
 func TestOutputDevicesHandler_UpdateGPOFlipTypeWithoutScanDeviceID(t *testing.T) {
@@ -476,7 +476,7 @@ func TestOutputDevicesHandler_UpdateGPOFlipTypeWithoutScanDeviceID(t *testing.T)
 	id := createMQTTDevice(t, r, orgID, "trakrf.id/dock-strobe")
 
 	rec := doReq(t, r, orgID, http.MethodPatch, "/api/v1/output-devices/"+itoa(id), map[string]any{
-		"type": "csl_cs463_gpo", "switch_id": 1,
+		"type": "csl_gpo", "switch_id": 1,
 	})
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 }
@@ -500,7 +500,7 @@ func TestOutputDevicesHandler_UpdateGPOKeepsStoredScanDeviceID(t *testing.T) {
 	require.NoError(t, err)
 
 	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
-		"name": "Reader GPO", "type": "csl_cs463_gpo", "transport": "mqtt", "switch_id": 1,
+		"name": "Reader GPO", "type": "csl_gpo", "transport": "mqtt", "switch_id": 1,
 		"scan_device_id": reader.ID,
 	})
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())

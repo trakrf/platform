@@ -8,10 +8,10 @@
 
 /**
  * Device type — what frame the device speaks. Distinct from transport, which is
- * how it is reached. shelly_gen4 speaks Switch.Set; csl_cs463_gpo drives a CS463
+ * how it is reached. shelly_gen4 speaks Switch.Set; csl_gpo drives a CSL fixed-reader
  * general purpose output via Gpo.Set over mqtt-rpc (TRA-1028).
  */
-export type OutputDeviceType = 'shelly_gen4' | 'csl_cs463_gpo';
+export type OutputDeviceType = 'shelly_gen4' | 'csl_gpo';
 
 export type AlarmTransport = 'http' | 'mqtt';
 

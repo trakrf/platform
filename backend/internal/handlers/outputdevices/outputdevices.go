@@ -67,7 +67,7 @@ func (h *Handler) RegisterRoutes(r chi.Router, paidGate func(http.Handler) http.
 // rather than via struct tags keeps a field from being rejected for a device
 // type where it does not apply (TRA-928, extended for TRA-1028).
 //
-//   - csl_cs463_gpo: mqtt only; the reader is addressed by scan_device_id (an
+//   - csl_gpo: mqtt only; the reader is addressed by scan_device_id (an
 //     FK, checked against storage separately — see Create/Update), NOT by
 //     command_topic, which this pure function does not require for GPO; the
 //     1-based GPO port lives in switch_id and must be 1-4.
@@ -76,12 +76,12 @@ func (h *Handler) RegisterRoutes(r chi.Router, paidGate func(http.Handler) http.
 //
 // Returns "" when valid.
 func deviceFieldsError(deviceType, transport, baseURL, commandTopic string, switchID int) string {
-	if deviceType == outputdevice.TypeCS463GPO {
+	if deviceType == outputdevice.TypeCSLGPO {
 		if transport != outputdevice.TransportMQTT {
-			return "csl_cs463_gpo requires mqtt transport"
+			return "csl_gpo requires mqtt transport"
 		}
 		if switchID < 1 || switchID > 4 {
-			return "switch_id is the GPO port and must be between 1 and 4 for csl_cs463_gpo"
+			return "switch_id is the GPO port and must be between 1 and 4 for csl_gpo"
 		}
 		return ""
 	}
@@ -102,7 +102,7 @@ func deviceFieldsError(deviceType, transport, baseURL, commandTopic string, swit
 
 // scanDeviceFKError checks the storage-backed half of GPO validation that
 // deviceFieldsError cannot do (it is pure, with no storage access): a
-// csl_cs463_gpo device's effective scan_device_id must be present, must
+// csl_gpo device's effective scan_device_id must be present, must
 // reference a live reader in orgID, that reader must be a csl_cs463 (the only
 // type with a CS463 daemon listening for Gpo.Set), and that reader must have
 // a non-empty publish_topic (the alarm dispatcher derives the reader's RPC
@@ -113,7 +113,7 @@ func deviceFieldsError(deviceType, transport, baseURL, commandTopic string, swit
 // scanDeviceID resolves to a fireable reader.
 func (h *Handler) scanDeviceFKError(ctx context.Context, orgID int, scanDeviceID *int) (msg string, err error) {
 	if scanDeviceID == nil {
-		return "scan_device_id is required for csl_cs463_gpo", nil
+		return "scan_device_id is required for csl_gpo", nil
 	}
 	check, err := h.storage.CheckGPOReader(ctx, orgID, *scanDeviceID)
 	if err != nil {
@@ -233,7 +233,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	// TRA-1028: a GPO device is addressed solely by its reader FK — require it
 	// and confirm it resolves to a live reader in this org, closing the
 	// cross-org actuation hole the free-text command_topic left open.
-	if deviceType == outputdevice.TypeCS463GPO {
+	if deviceType == outputdevice.TypeCSLGPO {
 		if msg, err := h.scanDeviceFKError(r.Context(), orgID, req.ScanDeviceID); err != nil {
 			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
 			return
@@ -351,10 +351,10 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// TRA-1028: same FK requirement as Create, evaluated against the merged
-	// (post-patch) state — a patch that flips type to csl_cs463_gpo without
+	// (post-patch) state — a patch that flips type to csl_gpo without
 	// resending scan_device_id is validated against the stored value, not
 	// treated as absent.
-	if deviceType == outputdevice.TypeCS463GPO {
+	if deviceType == outputdevice.TypeCSLGPO {
 		if msg, err := h.scanDeviceFKError(r.Context(), orgID, scanDeviceID); err != nil {
 			httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
 			return

@@ -365,11 +365,11 @@ describe('OutputDeviceFormModal', () => {
     });
   });
 
-  describe('CS463 GPO (TRA-1028)', () => {
-    it('locks transport to mqtt when the CS463 GPO type is selected', () => {
+  describe('CSL Reader GPO (TRA-1028)', () => {
+    it('locks transport to mqtt when the CSL Reader GPO type is selected', () => {
       render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
 
-      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_cs463_gpo' } });
+      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_gpo' } });
 
       const transport = screen.getByLabelText(/Transport/) as HTMLSelectElement;
       expect(transport.value).toBe('mqtt');
@@ -381,7 +381,7 @@ describe('OutputDeviceFormModal', () => {
       render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
 
       fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Egress GPO' } });
-      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_cs463_gpo' } });
+      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_gpo' } });
       fireEvent.change(screen.getByLabelText(/Reader/), { target: { value: '42' } });
       fireEvent.change(screen.getByLabelText(/GPO port/), { target: { value: '0' } });
       fireEvent.click(screen.getByRole('button', { name: /Create Output Device/i }));
@@ -394,14 +394,14 @@ describe('OutputDeviceFormModal', () => {
       render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
 
       fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Egress GPO' } });
-      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_cs463_gpo' } });
+      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_gpo' } });
       fireEvent.change(screen.getByLabelText(/Reader/), { target: { value: '42' } });
       fireEvent.change(screen.getByLabelText(/GPO port/), { target: { value: '4' } });
       fireEvent.click(screen.getByRole('button', { name: /Create Output Device/i }));
 
       await waitFor(() => expect(outputDevicesApi.create).toHaveBeenCalled());
       expect((outputDevicesApi.create as any).mock.calls[0][0]).toMatchObject({
-        type: 'csl_cs463_gpo',
+        type: 'csl_gpo',
         transport: 'mqtt',
         scan_device_id: 42,
         switch_id: 4,
@@ -413,7 +413,7 @@ describe('OutputDeviceFormModal', () => {
     it('shows a reader picker instead of the command-topic input for GPO', () => {
       render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
 
-      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_cs463_gpo' } });
+      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_gpo' } });
 
       expect(screen.queryByLabelText(/Command Topic/)).not.toBeInTheDocument();
       const readerSelect = screen.getByLabelText(/Reader/) as HTMLSelectElement;
@@ -428,7 +428,7 @@ describe('OutputDeviceFormModal', () => {
     it('defaults the GPO port to 1 (not 0) when the type is selected', () => {
       render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
 
-      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_cs463_gpo' } });
+      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_gpo' } });
 
       const switchId = screen.getByLabelText(/GPO port/) as HTMLInputElement;
       expect(switchId.value).toBe('1');
@@ -439,7 +439,7 @@ describe('OutputDeviceFormModal', () => {
       render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
 
       fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Egress GPO' } });
-      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_cs463_gpo' } });
+      fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_gpo' } });
       fireEvent.click(screen.getByRole('button', { name: /Create Output Device/i }));
 
       expect(await screen.findByText(/Reader is required/)).toBeInTheDocument();
@@ -449,7 +449,7 @@ describe('OutputDeviceFormModal', () => {
     it('preselects the current scan_device_id on the edit path', () => {
       const gpoDevice: OutputDevice = {
         ...mockDevice,
-        type: 'csl_cs463_gpo',
+        type: 'csl_gpo',
         transport: 'mqtt',
         command_topic: null,
         scan_device_id: 43,

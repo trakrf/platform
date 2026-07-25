@@ -32,11 +32,11 @@ export default function OutputDevicesScreen() {
   const validateSwitchId = (raw: string, deviceType: OutputDeviceType) => {
     const trimmed = raw.trim();
     if (!/^\d+$/.test(trimmed)) {
-      return deviceType === 'csl_cs463_gpo'
+      return deviceType === 'csl_gpo'
         ? 'GPO port must be between 1 and 4'
         : 'Switch ID must be a non-negative integer';
     }
-    if (deviceType === 'csl_cs463_gpo') {
+    if (deviceType === 'csl_gpo') {
       const port = Number(trimmed);
       if (port < 1 || port > 4) return 'GPO port must be between 1 and 4';
     }

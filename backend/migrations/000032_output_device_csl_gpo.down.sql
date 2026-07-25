@@ -1,4 +1,4 @@
--- TRA-1028 down: rebuild output_device_type without 'csl_cs463_gpo'.
+-- TRA-1028 down: rebuild output_device_type without 'csl_gpo'.
 -- PG has no DROP VALUE. If any row still uses the value the USING cast below
 -- errors, which is the intended assertion: migrate the rows first.
 SET search_path = trakrf, public;

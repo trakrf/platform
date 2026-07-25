@@ -280,7 +280,7 @@ func (s *Storage) DeleteOutputDevice(ctx context.Context, orgID, id int) (bool, 
 	return rowsAffected > 0, nil
 }
 
-// GPOReaderCheck is the result of validating a scan_device_id a csl_cs463_gpo
+// GPOReaderCheck is the result of validating a scan_device_id a csl_gpo
 // output device wants to bind to. Found/IsCS463/HasPublishTopic are
 // independently inspectable so the caller can produce a distinct 400 message
 // per failure mode — a single bool can't tell "not yours" from "wrong reader
@@ -306,7 +306,7 @@ type GPOReaderCheck struct {
 	HasPublishTopic bool
 }
 
-// CheckGPOReader validates the reader a csl_cs463_gpo output device's
+// CheckGPOReader validates the reader a csl_gpo output device's
 // scan_device_id would bind to. One query under the org's RLS GUC (RLS
 // remains the org boundary); see GPOReaderCheck for what each field means.
 func (s *Storage) CheckGPOReader(ctx context.Context, orgID, scanDeviceID int) (GPOReaderCheck, error) {

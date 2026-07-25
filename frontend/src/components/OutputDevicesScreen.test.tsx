@@ -166,7 +166,7 @@ describe('OutputDevicesScreen GPO inline cell (TRA-1028)', () => {
         device({
           id: 2,
           name: 'Egress GPO',
-          type: 'csl_cs463_gpo',
+          type: 'csl_gpo',
           transport: 'mqtt',
           base_url: '',
           command_topic: 'trakrf.id/cs463-212',

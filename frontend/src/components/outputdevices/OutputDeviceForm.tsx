@@ -20,7 +20,7 @@ const GPO_READER_TYPES = ['csl_cs463'];
 
 const DEVICE_TYPES: { value: OutputDeviceType; label: string }[] = [
   { value: 'shelly_gen4', label: 'Shelly Gen4' },
-  { value: 'csl_cs463_gpo', label: 'CS463 GPO' },
+  { value: 'csl_gpo', label: 'CSL Reader GPO' },
 ];
 
 interface OutputDeviceFormData {
@@ -150,7 +150,7 @@ export function OutputDeviceForm({
     if (formData.transport === 'http') {
       const urlError = validateBaseURL(formData.base_url);
       if (urlError) errors.base_url = urlError;
-    } else if (formData.type === 'csl_cs463_gpo') {
+    } else if (formData.type === 'csl_gpo') {
       if (formData.scan_device_id.trim() === '') {
         errors.scan_device_id = 'Reader is required for a GPO output';
       }
@@ -160,7 +160,7 @@ export function OutputDeviceForm({
 
     const rawSwitchId = formData.switch_id.trim();
     if (mode === 'create' && rawSwitchId !== '') {
-      if (formData.type === 'csl_cs463_gpo') {
+      if (formData.type === 'csl_gpo') {
         const port = Number(rawSwitchId);
         if (!/^\d+$/.test(rawSwitchId) || port < 1 || port > 4) {
           errors.switch_id = 'GPO port must be between 1 and 4';
@@ -194,7 +194,7 @@ export function OutputDeviceForm({
   const handleTypeChange = (type: OutputDeviceType) => {
     // A GPO is reached only over mqtt-rpc; lock the transport rather than
     // letting an invalid combination reach the server.
-    if (type === 'csl_cs463_gpo') {
+    if (type === 'csl_gpo') {
       // GPO ports are numbered 1-4 on the reader; '0' is not a valid port, so
       // don't leave the field pre-seeded with the Shelly-relay default (M4).
       setFormData((prev) => ({ ...prev, type, transport: 'mqtt', switch_id: '1' }));
@@ -232,7 +232,7 @@ export function OutputDeviceForm({
       metadata,
       ...(formData.transport === 'http'
         ? { base_url: formData.base_url.trim() }
-        : formData.type === 'csl_cs463_gpo'
+        : formData.type === 'csl_gpo'
           ? { scan_device_id: parseInt(formData.scan_device_id.trim(), 10) }
           : { command_topic: formData.command_topic.trim() }),
     };
@@ -321,7 +321,7 @@ export function OutputDeviceForm({
             id="transport"
             value={formData.transport}
             onChange={(e) => handleChange('transport', e.target.value as AlarmTransport)}
-            disabled={loading || formData.type === 'csl_cs463_gpo'}
+            disabled={loading || formData.type === 'csl_gpo'}
             className={inputClass(false)}
           >
             {TRANSPORTS.map((t) => (
@@ -355,7 +355,7 @@ export function OutputDeviceForm({
             the device&apos;s network.
           </p>
         </div>
-      ) : formData.type === 'csl_cs463_gpo' ? (
+      ) : formData.type === 'csl_gpo' ? (
         <div>
           <label htmlFor="scan_device_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Reader <span className="text-red-500">*</span>
@@ -411,12 +411,12 @@ export function OutputDeviceForm({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label htmlFor="switch_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {formData.type === 'csl_cs463_gpo' ? 'GPO port (1–4)' : 'Switch ID'}
+              {formData.type === 'csl_gpo' ? 'GPO port (1–4)' : 'Switch ID'}
             </label>
             <input
               type="number"
               id="switch_id"
-              min={formData.type === 'csl_cs463_gpo' ? 1 : 0}
+              min={formData.type === 'csl_gpo' ? 1 : 0}
               value={formData.switch_id}
               onChange={(e) => handleChange('switch_id', e.target.value)}
               disabled={loading}
@@ -427,7 +427,7 @@ export function OutputDeviceForm({
               <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.switch_id}</p>
             )}
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {formData.type === 'csl_cs463_gpo'
+              {formData.type === 'csl_gpo'
                 ? 'GPO output port on the reader (1-4).'
                 : 'Shelly relay channel (usually 0).'}
             </p>

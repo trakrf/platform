@@ -7,7 +7,8 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/outputdevice"
 )
 
-// gpoPortMin/gpoPortMax bound the CS463's general purpose output ports.
+// gpoPortMin/gpoPortMax bound the CS463's general purpose output ports. Other CSL
+// fixed readers expose fewer (CS203X has 2), so this becomes model-aware if one lands.
 const (
 	gpoPortMin = 1
 	gpoPortMax = 4
@@ -33,7 +34,7 @@ type gpoSetter interface {
 // Dispatcher routes a fire to the right transport and frame per device. Two
 // axes (TRA-1028): transport says how the device is reached (http = local HTTP,
 // mqtt = the shared broker), type says what frame it speaks (shelly_gen4 =
-// Switch.Set, csl_cs463_gpo = Gpo.Set). It is the single
+// Switch.Set, csl_gpo = Gpo.Set). It is the single
 // Set(device, on, offAfterSec) seam used by both the geofence Firer and the
 // output-device test-fire/reset handlers.
 type Dispatcher struct {
@@ -57,7 +58,7 @@ func (d Dispatcher) Set(ctx context.Context, dev outputdevice.OutputDevice, on b
 	// M1: a cs463 gpo is reader-addressed over mqtt only. Reject a non-mqtt
 	// transport here, before the transport branch, rather than falling through
 	// to the http/Shelly path below.
-	if dev.Type == outputdevice.TypeCS463GPO && dev.Transport != outputdevice.TransportMQTT {
+	if dev.Type == outputdevice.TypeCSLGPO && dev.Transport != outputdevice.TransportMQTT {
 		return fmt.Errorf("alarm: device %d is a cs463 gpo but transport is %q, want mqtt", dev.ID, dev.Transport)
 	}
 
@@ -65,7 +66,7 @@ func (d Dispatcher) Set(ctx context.Context, dev outputdevice.OutputDevice, on b
 		return d.http.Set(ctx, dev.BaseURL, dev.SwitchID, on, offAfterSec)
 	}
 
-	if dev.Type == outputdevice.TypeCS463GPO {
+	if dev.Type == outputdevice.TypeCSLGPO {
 		if d.gpo == nil {
 			return fmt.Errorf("alarm: device %d is a cs463 gpo but reader control is not configured", dev.ID)
 		}

@@ -205,7 +205,7 @@ func TestOutputDevice_ReaderBaseTopic(t *testing.T) {
 	require.NoError(t, err)
 
 	created, err := db.Store.CreateOutputDevice(ctx, orgID, outputdevice.CreateOutputDeviceRequest{
-		Name: "Reader GPO", Type: outputdevice.TypeCS463GPO, Transport: outputdevice.TransportMQTT,
+		Name: "Reader GPO", Type: outputdevice.TypeCSLGPO, Transport: outputdevice.TransportMQTT,
 		ScanDeviceID: &reader.ID, LocationID: &loc.ID,
 	})
 	require.NoError(t, err)
@@ -253,7 +253,7 @@ func TestOutputDevice_ReaderBaseTopic_CrossOrgReaderStaysEmpty(t *testing.T) {
 	// (e.g. a stale row) must not resolve ReaderBaseTopic: the JOIN runs under
 	// org A's RLS GUC, so readerB is invisible and the join simply misses.
 	created, err := db.Store.CreateOutputDevice(ctx, orgA, outputdevice.CreateOutputDeviceRequest{
-		Name: "Cross-org GPO", Type: outputdevice.TypeCS463GPO, Transport: outputdevice.TransportMQTT,
+		Name: "Cross-org GPO", Type: outputdevice.TypeCSLGPO, Transport: outputdevice.TransportMQTT,
 		ScanDeviceID: &readerB.ID,
 	})
 	require.NoError(t, err)

@@ -44,7 +44,7 @@ func TestTransportFieldsError(t *testing.T) {
 }
 
 // TestDeviceFieldsError_CS463GPO covers the type-aware validation added for
-// csl_cs463_gpo (TRA-1028): mqtt-only and switch_id (the GPO port) must be
+// csl_gpo (TRA-1028): mqtt-only and switch_id (the GPO port) must be
 // 1-4. command_topic is NOT required for GPO (the reader is addressed by
 // scan_device_id, checked separately against storage in the handler, not in
 // this pure function) — a device may carry a stale command_topic harmlessly,
@@ -59,13 +59,13 @@ func TestDeviceFieldsError_CS463GPO(t *testing.T) {
 		switchID     int
 		wantErr      bool
 	}{
-		{"valid gpo", outputdevice.TypeCS463GPO, outputdevice.TransportMQTT, "", "trakrf.id/cs463-212", 1, false},
-		{"valid gpo port 4", outputdevice.TypeCS463GPO, outputdevice.TransportMQTT, "", "trakrf.id/cs463-212", 4, false},
-		{"gpo on http transport", outputdevice.TypeCS463GPO, outputdevice.TransportHTTP, "http://1.2.3.4", "", 1, true},
-		{"gpo with no command_topic is fine", outputdevice.TypeCS463GPO, outputdevice.TransportMQTT, "", "", 1, false},
-		{"gpo with stale command_topic is fine", outputdevice.TypeCS463GPO, outputdevice.TransportMQTT, "", "trakrf.id/stale", 1, false},
-		{"gpo port 0", outputdevice.TypeCS463GPO, outputdevice.TransportMQTT, "", "trakrf.id/cs463-212", 0, true},
-		{"gpo port 5", outputdevice.TypeCS463GPO, outputdevice.TransportMQTT, "", "trakrf.id/cs463-212", 5, true},
+		{"valid gpo", outputdevice.TypeCSLGPO, outputdevice.TransportMQTT, "", "trakrf.id/cs463-212", 1, false},
+		{"valid gpo port 4", outputdevice.TypeCSLGPO, outputdevice.TransportMQTT, "", "trakrf.id/cs463-212", 4, false},
+		{"gpo on http transport", outputdevice.TypeCSLGPO, outputdevice.TransportHTTP, "http://1.2.3.4", "", 1, true},
+		{"gpo with no command_topic is fine", outputdevice.TypeCSLGPO, outputdevice.TransportMQTT, "", "", 1, false},
+		{"gpo with stale command_topic is fine", outputdevice.TypeCSLGPO, outputdevice.TransportMQTT, "", "trakrf.id/stale", 1, false},
+		{"gpo port 0", outputdevice.TypeCSLGPO, outputdevice.TransportMQTT, "", "trakrf.id/cs463-212", 0, true},
+		{"gpo port 5", outputdevice.TypeCSLGPO, outputdevice.TransportMQTT, "", "trakrf.id/cs463-212", 5, true},
 		// Shelly rules must be untouched, including switch_id 0.
 		{"shelly mqtt switch 0", outputdevice.TypeShellyGen4, outputdevice.TransportMQTT, "", "trakrf.id/dock", 0, false},
 		{"shelly http", outputdevice.TypeShellyGen4, outputdevice.TransportHTTP, "http://1.2.3.4", "", 0, false},

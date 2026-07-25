@@ -107,7 +107,7 @@ func TestDispatcher_GPODevice_UsesGpoSet(t *testing.T) {
 	d := NewDispatcher(h, m, g)
 	dev := outputdevice.OutputDevice{
 		Transport:       outputdevice.TransportMQTT,
-		Type:            outputdevice.TypeCS463GPO,
+		Type:            outputdevice.TypeCSLGPO,
 		ReaderBaseTopic: "trakrf.id/cs463-212",
 		SwitchID:        1,
 	}
@@ -133,7 +133,7 @@ func TestDispatcher_GPODevice_ZeroOffAfter_NoPulse(t *testing.T) {
 	d := NewDispatcher(&recordingHTTP{}, &recordingMQTT{}, g)
 	dev := outputdevice.OutputDevice{
 		Transport:       outputdevice.TransportMQTT,
-		Type:            outputdevice.TypeCS463GPO,
+		Type:            outputdevice.TypeCSLGPO,
 		ReaderBaseTopic: "trakrf.id/cs463-212",
 		SwitchID:        2,
 	}
@@ -149,7 +149,7 @@ func TestDispatcher_GPODevice_NilClient_Errors(t *testing.T) {
 	d := NewDispatcher(&recordingHTTP{}, &recordingMQTT{}, nil) // broker disabled
 	dev := outputdevice.OutputDevice{
 		Transport:       outputdevice.TransportMQTT,
-		Type:            outputdevice.TypeCS463GPO,
+		Type:            outputdevice.TypeCSLGPO,
 		ReaderBaseTopic: "trakrf.id/cs463-212",
 		SwitchID:        1,
 	}
@@ -168,7 +168,7 @@ func TestDispatcher_GPODevice_UnresolvedReaderBaseTopic_Errors(t *testing.T) {
 	d := NewDispatcher(&recordingHTTP{}, &recordingMQTT{}, g)
 	dev := outputdevice.OutputDevice{
 		Transport: outputdevice.TransportMQTT,
-		Type:      outputdevice.TypeCS463GPO,
+		Type:      outputdevice.TypeCSLGPO,
 		SwitchID:  1,
 		// ReaderBaseTopic left empty: unresolved reader.
 	}
@@ -188,7 +188,7 @@ func TestDispatcher_GPODevice_PortOutOfRange_Errors(t *testing.T) {
 		d := NewDispatcher(&recordingHTTP{}, &recordingMQTT{}, g)
 		dev := outputdevice.OutputDevice{
 			Transport:       outputdevice.TransportMQTT,
-			Type:            outputdevice.TypeCS463GPO,
+			Type:            outputdevice.TypeCSLGPO,
 			ReaderBaseTopic: "trakrf.id/cs463-212",
 			SwitchID:        port,
 		}
@@ -202,7 +202,7 @@ func TestDispatcher_GPODevice_PortOutOfRange_Errors(t *testing.T) {
 }
 
 // TestDispatcher_GPODevice_NonMQTTTransport_Errors covers the M1 finding: a
-// csl_cs463_gpo device on a non-mqtt transport must error at the top of Set,
+// csl_gpo device on a non-mqtt transport must error at the top of Set,
 // before the transport branch, rather than falling through to the http path
 // (which would otherwise silently ignore the type and drive http.Set).
 func TestDispatcher_GPODevice_NonMQTTTransport_Errors(t *testing.T) {
@@ -210,7 +210,7 @@ func TestDispatcher_GPODevice_NonMQTTTransport_Errors(t *testing.T) {
 	d := NewDispatcher(h, &recordingMQTT{}, &recordingGPO{})
 	dev := outputdevice.OutputDevice{
 		Transport: outputdevice.TransportHTTP,
-		Type:      outputdevice.TypeCS463GPO,
+		Type:      outputdevice.TypeCSLGPO,
 		BaseURL:   "http://1.2.3.4",
 		SwitchID:  1,
 	}
