@@ -77,6 +77,41 @@ and bypass the reader's single-root-session lock, so they work while an operator
 has the web UI open. The session-bound equivalents (`runIO_output`,
 `runIO_input`) do not.
 
+**GPIO connector pinout** (user manual v2.1 §5.13; HD15 / DE-15):
+
+| Function | (+) | (−) | Isolation |
+|---|---|---|---|
+| GPO1 | Pin 4 | Pin 14 | full |
+| GPO2 | Pin 3 | Pin 13 | full |
+| GPO3 | Pin 10 | **Pin 8** | (−) shared with GPO4 |
+| GPO4 | Pin 9 | **Pin 8** | (−) shared with GPO3 |
+| GPI1 | Pin 2 | Pin 12 | (−) shared with GPI3 |
+| GPI2 | Pin 1 | Pin 11 | (−) shared with GPI4 |
+| GPI3 | Pin 7 | Pin 12 | (−) shared with GPI1 |
+| GPI4 | Pin 6 | Pin 11 | (−) shared with GPI2 |
+| +12 V | Pin 5 | Pin 15 (`+12VGND`) | full |
+
+**GPO3 and GPO4 share Pin 8.** The switches are still independent — verified on
+cs463-212 with GPO3 commanded on: Pin 10 ↔ Pin 8 closed, Pin 9 ↔ Pin 8 open. But
+anything that returns both channels through Pin 8 will couple them, so put
+per-channel components in series with the `(+)` pin, which is never shared.
+
+All GPOs are **Normal Open on power-up**. Maximum 2 A, opto-isolated switches
+with an internal resettable fuse. Manual §6.2 asks for a series resistor sized
+`V / 2 A` so a shorted load cannot damage the switch.
+
+**Measured GPO characteristics** (cs463-212, 2026-07-25, GPO2 via 4.7 kΩ from a
+23.88 V supply):
+
+| | |
+|---|---|
+| On-state drop | **0.004 V** at 5.08 mA (`R_on` ≈ 0.79 Ω) |
+| Off-state leakage | ≈ **17 MΩ** |
+
+The on-state drop is negligible for low-current signalling — worth knowing when
+budgeting headroom for anything driven through a GPO, because the reader
+contributes essentially nothing. The manual does not specify either figure.
+
 **Verified GPIO mapping on cs463-212** (sysfs, readable over SSH — useful for
 programmatic verification without hardware indicators):
 
@@ -87,3 +122,50 @@ programmatic verification without hardware indicators):
 | GPO3 | `gpio175` |
 | GPO4 | `gpio176` |
 | GPI 1–4 | `gpio203`, `gpio46`, `gpio7`, `gpio8` |
+
+**Reader power.** 12 V DC via an externally-threaded 5.5 × 2.5 mm barrel jack
+(the supplied adapter carries the mating female collar — the manual says *"When
+using AC adaptor, please remember to screw tight"*), **or** PoE+ 802.3at from a
+30 W port. Both appear on the unit's label. The manual gives no DC input voltage
+range.
+
+## Operational: the post-power-cycle wedge
+
+Seen on cs463-212, 2026-07-25. **A power cycle can leave the reader with a fully
+healthy-looking stack and a non-functional API.**
+
+Symptoms — every one of these read normal:
+
+- `systemctl is-active embeddedglassfish` → `active`
+- `systemctl is-active mqtt-rpcd` → `active`, MQTT connected, RPC subscribed
+- `GET /` → HTTP 200
+
+While **every `/API` command returned HTTP 200 with an empty body**, and GPO
+commands silently did nothing — no `<Ack>`, sysfs pin never moved. It is not an
+auth failure: a bogus command, a wrong password, no credentials, and a valid
+request all return *identically empty*. A working API answers those four
+differently, which is the fastest way to tell the two apart.
+
+The boot itself was unhealthy in ways nothing surfaced: the RTC started at
+**2019-04-12**, and the daemon logged `crypto/rand: blocked for 60 seconds
+waiting to read random data from the kernel`.
+
+**Recovery:**
+
+1. `systemctl restart embeddedglassfish`
+2. Wait for `/API` to *actually answer* — roughly two minutes. **systemd "active"
+   is not "serving"**, which is the whole trap.
+3. `systemctl restart mqtt-rpcd`, so its golden-config reconcile runs against a
+   healthy API rather than failing on a 502 and never retrying.
+
+Tracked as TRA-1041 (content-validating health probe + reconcile retry). The
+durable lesson: **assert on returned content, never on HTTP status or systemd
+state.**
+
+**Fetching the manual** (21 MB, not checked in):
+
+```
+curl -sL -o csl-manual.pdf \
+  "https://raw.githubusercontent.com/cslrfid/CS463-CS203X-Product-Downloads/main/Manuals/1%20-%20User%20Manual/CSL-Intelligent-Fixed-Reader-User-Manual.pdf"
+pdftotext -layout csl-manual.pdf manual.txt
+```
