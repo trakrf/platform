@@ -12,6 +12,7 @@ import (
 
 	"github.com/trakrf/platform/backend/internal/alarm"
 	"github.com/trakrf/platform/backend/internal/alarm/shelly"
+	"github.com/trakrf/platform/backend/internal/assetevent"
 	"github.com/trakrf/platform/backend/internal/buildinfo"
 	"github.com/trakrf/platform/backend/internal/geofence"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
@@ -32,6 +33,7 @@ import (
 	scanpointshandler "github.com/trakrf/platform/backend/internal/handlers/scanpoints"
 	testhandler "github.com/trakrf/platform/backend/internal/handlers/testhandler"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
+	webhookshandler "github.com/trakrf/platform/backend/internal/handlers/webhooks"
 	"github.com/trakrf/platform/backend/internal/ingest"
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/mustering"
@@ -43,6 +45,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/services/topicroute"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
+	"github.com/trakrf/platform/backend/internal/webhook"
 )
 
 // Run starts the long-lived HTTP server process. It blocks until ctx is
@@ -118,6 +121,24 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 		log.Warn().Err(err).Msg("initial topic registry load failed; ticker will retry")
 	}
 
+	// TRA-1043: asset.moved detection and delivery. Constructed unconditionally,
+	// because the handheld/manual Save path produces events whether or not MQTT
+	// ingestion is on — and that path is the one real prod orgs exercise today.
+	//
+	// The dispatcher owns the Sink fan-out; webhook is its only Phase 1 consumer.
+	// Email/SMS notification (TRA-1044) plugs in here as a second Sink without
+	// touching detection.
+	//
+	// AllowPrivateTargets is fail-closed on APP_ENV (TRA-861 posture): in prod a
+	// webhook may not point at a private address or a plain-http URL, so a
+	// customer cannot aim one at the GKE metadata endpoint.
+	webhookClient := webhook.NewClient(webhook.AllowPrivateTargets(os.Getenv("APP_ENV")))
+	webhookSink := webhook.NewSink(store, webhookClient, log)
+	assetEvents := assetevent.NewDispatcher([]assetevent.Sink{webhookSink}, log)
+	assetEvents.Start()
+	defer assetEvents.Stop()
+	assetEventEvaluator := assetevent.NewEvaluator(store, assetEvents, log)
+
 	// TRA-978: the mustering engine + SSE broadcaster are always constructed so
 	// the mustering REST/SSE/simulate surface serves regardless of whether MQTT
 	// ingestion is on (the simulator drives the same Evaluate path directly). The
@@ -127,7 +148,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// Evaluator fan-out shared by the subscriber (hardware reads) and the
 	// mustering simulate handler (synthetic reads). Geofence is prepended when
 	// ingestion is enabled (it only exists then). nil-safe.
-	musterEvaluators := ingest.MultiEvaluator{musterEngine}
+	musterEvaluators := ingest.MultiEvaluator{musterEngine, assetEventEvaluator}
 
 	mqttCfg := ingest.ConfigFromEnv()
 	var alarmDispatcher alarm.Dispatcher
@@ -159,7 +180,9 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 
 		// TRA-978: prepend geofence to the fan-out so the subscriber drives both
 		// geofence and mustering off the same membership-passing reads.
-		musterEvaluators = ingest.MultiEvaluator{geofenceEngine, musterEngine}
+		// TRA-1043 joins the same fan-out, so one message drives geofence,
+		// mustering, and asset-event detection off the same resolved reads.
+		musterEvaluators = ingest.MultiEvaluator{geofenceEngine, musterEngine, assetEventEvaluator}
 
 		subscriber := ingest.NewSubscriber(mqttCfg, store, topicRegistry, musterEvaluators, readBroadcaster, log)
 		if err := subscriber.Start(); err != nil {
@@ -204,7 +227,8 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	usersHandler := usershandler.NewHandler(store)
 	assetsHandler := assetshandler.NewHandler(store)
 	locationsHandler := locationshandler.NewHandler(store)
-	inventoryHandler := inventoryhandler.NewHandler(store)
+	// TRA-1043: the inventory handler fires detection post-commit on Save.
+	inventoryHandler := inventoryhandler.NewHandler(store, assetEventEvaluator)
 	reportsHandler := reportshandler.NewHandler(store)
 	scanDevicesHandler := scandeviceshandler.NewHandler(store, topicRegistry)
 	scanPointsHandler := scanpointshandler.NewHandler(store)
@@ -232,9 +256,12 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// TRA-1032: internal kit commission/verify/lookup endpoints.
 	kitsHandler := kitshandler.NewHandler(store)
 	testHandler := testhandler.NewHandler(store)
+	// TRA-1043: shares the delivery client with the sink, so a test fire
+	// exercises the same SSRF guard, signing, and timeout as a real delivery.
+	webhooksHandler := webhookshandler.NewHandler(store, webhookClient)
 	log.Info().Msg("Handlers initialized")
 
-	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, testHandler, store)
+	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, webhooksHandler, testHandler, store)
 	log.Info().Msg("Routes registered")
 
 	server := &http.Server{

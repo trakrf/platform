@@ -30,6 +30,7 @@ import (
 	scanpointshandler "github.com/trakrf/platform/backend/internal/handlers/scanpoints"
 	testhandler "github.com/trakrf/platform/backend/internal/handlers/testhandler"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
+	webhookshandler "github.com/trakrf/platform/backend/internal/handlers/webhooks"
 	"github.com/trakrf/platform/backend/internal/ingest"
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/mustering"
@@ -37,6 +38,7 @@ import (
 	orgsservice "github.com/trakrf/platform/backend/internal/services/orgs"
 	readstreamsvc "github.com/trakrf/platform/backend/internal/services/readstream"
 	"github.com/trakrf/platform/backend/internal/storage"
+	"github.com/trakrf/platform/backend/internal/webhook"
 )
 
 func setupTestRouter(t *testing.T) *chi.Mux {
@@ -51,7 +53,7 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 	usersHandler := usershandler.NewHandler(store)
 	assetsHandler := assetshandler.NewHandler(store)
 	locationsHandler := locationshandler.NewHandler(store)
-	inventoryHandler := inventoryhandler.NewHandler(store)
+	inventoryHandler := inventoryhandler.NewHandler(store, nil)
 	reportsHandler := reportshandler.NewHandler(store)
 	scanDevicesHandler := scandeviceshandler.NewHandler(store, nil)
 	scanPointsHandler := scanpointshandler.NewHandler(store)
@@ -66,8 +68,9 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 	musteringHandler := musteringhandler.NewHandler(musterEngine, musterBC, store, ingest.MultiEvaluator{musterEngine}, nil)
 	kitsHandler := kitshandler.NewHandler(store)
 	testHandler := testhandler.NewHandler(store)
+	webhooksHandler := webhookshandler.NewHandler(store, webhook.NewClient(true))
 
-	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, testHandler, store)
+	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, webhooksHandler, testHandler, store)
 }
 
 func TestRouterSetup(t *testing.T) {
