@@ -2,7 +2,7 @@ import '@testing-library/jest-dom';
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import CapabilityUpsell from './CapabilityUpsell';
-import { CAPABILITY_GEOFENCE } from './registry';
+import { CAPABILITY_GEOFENCE, CAPABILITY_MUSTERING } from './registry';
 import { SUPPORT_EMAIL } from '@/components/entitlement/gateCopy';
 
 describe('CapabilityUpsell', () => {
@@ -15,6 +15,15 @@ describe('CapabilityUpsell', () => {
     expect(screen.getByText('Zone-based tracking with enter/exit alerts.')).toBeInTheDocument();
     expect(
       screen.getByText(/This feature isn't enabled for your organization\./)
+    ).toBeInTheDocument();
+  });
+
+  it('renders the fixed mustering copy', () => {
+    render(<CapabilityUpsell capability={CAPABILITY_MUSTERING} label="Mustering" />);
+
+    expect(screen.getByText('Mustering')).toBeInTheDocument();
+    expect(
+      screen.getByText('Track who is accounted for at muster points during an evacuation.')
     ).toBeInTheDocument();
   });
 

@@ -5,6 +5,8 @@ import {
   useCapabilityState,
   useCapabilityNavGate,
   useCapabilityRouteGate,
+  navGateFor,
+  routeGateFor,
 } from './useCapability';
 import { useAuthStore } from '@/stores/authStore';
 import { useOrgStore } from '@/stores/orgStore';
@@ -107,6 +109,38 @@ describe('useCapability', () => {
   });
 });
 
+/**
+ * Presentation policy as pure data. No registry entry currently uses `absent`
+ * (mustering moved to `locked` on 2026-07-27), so these tests are what keep
+ * that branch honest — the hook tests below can only cover what the registry
+ * happens to declare today.
+ */
+describe('navGateFor / routeGateFor', () => {
+  it('hides an ungated `absent` entry and resolves its route to not-found', () => {
+    expect(navGateFor('absent', 'ungated')).toBe('hidden');
+    expect(routeGateFor('absent', 'ungated')).toBe('not-found');
+  });
+
+  it('locks an ungated `locked` entry and resolves its route to the upsell', () => {
+    expect(navGateFor('locked', 'ungated')).toBe('locked');
+    expect(routeGateFor('locked', 'ungated')).toBe('upsell');
+  });
+
+  it('shows and allows either presentation once granted', () => {
+    for (const p of ['absent', 'locked'] as const) {
+      expect(navGateFor(p, 'granted')).toBe('visible');
+      expect(routeGateFor(p, 'granted')).toBe('allow');
+    }
+  });
+
+  it('fails closed in nav and waits in routing while loading, either presentation', () => {
+    for (const p of ['absent', 'locked'] as const) {
+      expect(navGateFor(p, 'loading')).toBe('hidden');
+      expect(routeGateFor(p, 'loading')).toBe('loading');
+    }
+  });
+});
+
 describe('useCapabilityNavGate', () => {
   beforeEach(() => {
     setAuth(true);
@@ -117,18 +151,15 @@ describe('useCapabilityNavGate', () => {
     expect(renderHook(() => useCapabilityNavGate('assets')).result.current).toBe('visible');
   });
 
-  it('hides an ungated `absent` route (mustering)', () => {
-    expect(renderHook(() => useCapabilityNavGate('mustering')).result.current).toBe('hidden');
-  });
-
-  it('locks an ungated `locked` route (geofence surfaces)', () => {
+  it('locks every ungated gated route (all registry entries are `locked`)', () => {
+    expect(renderHook(() => useCapabilityNavGate('mustering')).result.current).toBe('locked');
     expect(renderHook(() => useCapabilityNavGate('output-devices')).result.current).toBe('locked');
     expect(renderHook(() => useCapabilityNavGate('org-geofence-defaults')).result.current).toBe(
       'locked'
     );
   });
 
-  it('shows both presentations normally once granted', () => {
+  it('shows gated routes normally once granted', () => {
     setOrg(['geofence', 'mustering']);
     expect(renderHook(() => useCapabilityNavGate('mustering')).result.current).toBe('visible');
     expect(renderHook(() => useCapabilityNavGate('output-devices')).result.current).toBe('visible');
@@ -151,11 +182,8 @@ describe('useCapabilityRouteGate', () => {
     expect(renderHook(() => useCapabilityRouteGate('assets')).result.current).toBe('allow');
   });
 
-  it('resolves an ungated `absent` route to not-found', () => {
-    expect(renderHook(() => useCapabilityRouteGate('mustering')).result.current).toBe('not-found');
-  });
-
-  it('resolves an ungated `locked` route to the upsell', () => {
+  it('resolves every ungated gated route to the upsell', () => {
+    expect(renderHook(() => useCapabilityRouteGate('mustering')).result.current).toBe('upsell');
     expect(renderHook(() => useCapabilityRouteGate('output-devices')).result.current).toBe('upsell');
     expect(renderHook(() => useCapabilityRouteGate('org-geofence-defaults')).result.current).toBe(
       'upsell'

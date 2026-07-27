@@ -234,12 +234,12 @@ describe('TabNavigation', () => {
   });
 
   describe('capability gating (TRA-1026)', () => {
-    it('shows no trace of Mustering without the grant (`absent`)', () => {
+    it('renders Mustering with a lock without the grant (`locked`)', () => {
       setCapabilities(['geofence']);
       render(<TabNavigation />);
 
-      expect(screen.queryByText('Mustering')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('menu-item-mustering')).not.toBeInTheDocument();
+      expect(screen.getByText('Mustering')).toBeInTheDocument();
+      expect(screen.getByTestId('menu-item-mustering-locked')).toBeInTheDocument();
     });
 
     it('shows Mustering normally with the grant', () => {
@@ -295,6 +295,8 @@ describe('TabNavigation', () => {
       setCapabilities(null);
       render(<TabNavigation />);
 
+      // Not even the locked teaser — a lock that appears mid-load reads as a
+      // downgrade to anyone who actually holds the grant.
       expect(screen.queryByText('Mustering')).not.toBeInTheDocument();
       expect(screen.queryByText('Outputs')).not.toBeInTheDocument();
       expect(screen.queryByText('Geofence defaults')).not.toBeInTheDocument();
@@ -313,12 +315,12 @@ describe('TabNavigation', () => {
     it('updates nav state when the org switches from granted to ungated', () => {
       setCapabilities(['mustering', 'geofence']);
       const { rerender } = render(<TabNavigation />);
-      expect(screen.getByText('Mustering')).toBeInTheDocument();
+      expect(screen.queryByTestId('menu-item-mustering-locked')).not.toBeInTheDocument();
       expect(screen.queryByTestId('menu-item-output-devices-locked')).not.toBeInTheDocument();
 
       act(() => setCapabilities([]));
       rerender(<TabNavigation />);
-      expect(screen.queryByText('Mustering')).not.toBeInTheDocument();
+      expect(screen.getByTestId('menu-item-mustering-locked')).toBeInTheDocument();
       expect(screen.getByTestId('menu-item-output-devices-locked')).toBeInTheDocument();
     });
   });

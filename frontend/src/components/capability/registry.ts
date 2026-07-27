@@ -52,7 +52,9 @@ export const CAPABILITY_NAV: readonly CapabilityNavEntry[] = [
     label: 'Mustering',
     route: 'mustering',
     icon: Users,
-    presentation: 'absent',
+    // Was `absent` per the 2026-07-16 decision; changed to `locked` at Tim's
+    // request 2026-07-27, so mustering now presents exactly like geofence.
+    presentation: 'locked',
     tooltip:
       'Run a muster drill — track who is accounted for at muster points during an evacuation',
   },
@@ -91,5 +93,11 @@ export const CAPABILITY_UPSELL_COPY: Record<string, { title: string; blurb: stri
   [CAPABILITY_GEOFENCE]: {
     title: 'Geofence',
     blurb: 'Zone-based tracking with enter/exit alerts.',
+  },
+  [CAPABILITY_MUSTERING]: {
+    title: 'Mustering',
+    // Lifted verbatim from the nav tooltip already shipped for this surface,
+    // rather than written fresh — no new capability claim. Swap freely.
+    blurb: 'Track who is accounted for at muster points during an evacuation.',
   },
 };

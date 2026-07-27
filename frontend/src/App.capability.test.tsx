@@ -34,7 +34,6 @@ import App from './App';
 import { useUIStore } from '@/stores';
 import { useAuthStore } from '@/stores/authStore';
 import { useOrgStore } from '@/stores/orgStore';
-import { DEFAULT_TAB } from '@/utils/tabRedirects';
 import type { TabType } from '@/stores';
 
 /**
@@ -104,22 +103,18 @@ describe('App capability route gating', () => {
     window.location.hash = '';
   });
 
-  it('never loads the mustering chunk for an org without the grant', async () => {
+  it('upsells mustering without loading its chunk', async () => {
     setCapabilities([]);
     openTab('mustering');
     render(<App />);
 
-    await waitFor(() => expect(useUIStore.getState().activeTab).toBe(DEFAULT_TAB));
+    await waitFor(() =>
+      expect(screen.getByTestId('capability-upsell-mustering')).toBeInTheDocument()
+    );
     expect(loaded.mustering).toBe(0);
     expect(screen.queryByTestId('mustering-screen')).not.toBeInTheDocument();
-  });
-
-  it('rewrites the URL off an ungated `absent` route', async () => {
-    setCapabilities([]);
-    openTab('mustering');
-    render(<App />);
-
-    await waitFor(() => expect(window.location.hash).toBe(`#${DEFAULT_TAB}`));
+    // `locked` routes stay put — reachable, they just upsell.
+    expect(useUIStore.getState().activeTab).toBe('mustering');
   });
 
   it('renders the upsell instead of the geofence surface, without loading it', async () => {

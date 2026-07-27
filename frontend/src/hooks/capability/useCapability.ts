@@ -1,6 +1,7 @@
 import { useAuthStore } from '@/stores/authStore';
 import { useOrgStore } from '@/stores/orgStore';
 import { capabilityEntryForRoute } from '@/components/capability/registry';
+import type { CapabilityPresentation } from '@/components/capability/registry';
 import type { TabType } from '@/stores';
 
 /**
@@ -45,19 +46,30 @@ export function useCapability(capability: string): boolean {
 export type CapabilityNavGate = 'visible' | 'locked' | 'hidden';
 
 /**
- * Nav presentation for `route`. Ungated routes are always `visible`.
+ * Nav decision for a gated entry, as pure data.
  *
- * While the capability set is loading, a gated entry is `hidden` in both
- * presentations — fail-closed, so nothing pops in and then out.
+ * Split out from the hook so both presentations stay covered by tests
+ * regardless of which ones the registry happens to use today. `absent` has no
+ * registry entry at the moment (mustering moved to `locked` on 2026-07-27) and
+ * this is what keeps it real, tested code rather than an untested branch.
  */
+export function navGateFor(
+  presentation: CapabilityPresentation,
+  state: CapabilityState
+): CapabilityNavGate {
+  if (state === 'granted') return 'visible';
+  // Fail-closed while loading, in both presentations: nothing pops in then out.
+  if (state === 'loading') return 'hidden';
+  return presentation === 'locked' ? 'locked' : 'hidden';
+}
+
+/** Nav presentation for `route`. Ungated routes are always `visible`. */
 export function useCapabilityNavGate(route: TabType): CapabilityNavGate {
   const entry = capabilityEntryForRoute(route);
   const state = useCapabilityState(entry?.capability ?? '');
 
   if (!entry) return 'visible';
-  if (state === 'granted') return 'visible';
-  if (state === 'loading') return 'hidden';
-  return entry.presentation === 'locked' ? 'locked' : 'hidden';
+  return navGateFor(entry.presentation, state);
 }
 
 /**
@@ -72,12 +84,20 @@ export function useCapabilityNavGate(route: TabType): CapabilityNavGate {
  */
 export type CapabilityRouteGate = 'allow' | 'loading' | 'not-found' | 'upsell';
 
+/** Route decision as pure data. Same rationale as `navGateFor`. */
+export function routeGateFor(
+  presentation: CapabilityPresentation,
+  state: CapabilityState
+): CapabilityRouteGate {
+  if (state === 'granted') return 'allow';
+  if (state === 'loading') return 'loading';
+  return presentation === 'locked' ? 'upsell' : 'not-found';
+}
+
 export function useCapabilityRouteGate(route: TabType): CapabilityRouteGate {
   const entry = capabilityEntryForRoute(route);
   const state = useCapabilityState(entry?.capability ?? '');
 
   if (!entry) return 'allow';
-  if (state === 'granted') return 'allow';
-  if (state === 'loading') return 'loading';
-  return entry.presentation === 'locked' ? 'upsell' : 'not-found';
+  return routeGateFor(entry.presentation, state);
 }
