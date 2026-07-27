@@ -40,9 +40,11 @@ describe('useCapabilityState', () => {
     setOrg(null);
   });
 
-  it('is ungated when unauthenticated', () => {
+  // Not `ungated` — that would assert an org lacks the capability when there
+  // is no org at all.
+  it('is no-org when unauthenticated', () => {
     const { result } = renderHook(() => useCapabilityState('geofence'));
-    expect(result.current).toBe('ungated');
+    expect(result.current).toBe('no-org');
   });
 
   it('is loading while authenticated with no org yet', () => {
@@ -137,6 +139,15 @@ describe('navGateFor / routeGateFor', () => {
     for (const p of ['absent', 'locked'] as const) {
       expect(navGateFor(p, 'loading')).toBe('hidden');
       expect(routeGateFor(p, 'loading')).toBe('loading');
+    }
+  });
+
+  // Signed out: hide in nav (no teaser aimed at an org that doesn't exist), but
+  // don't gate the route — the screen owns signed-out handling.
+  it('hides in nav and falls through in routing with no org, either presentation', () => {
+    for (const p of ['absent', 'locked'] as const) {
+      expect(navGateFor(p, 'no-org')).toBe('hidden');
+      expect(routeGateFor(p, 'no-org')).toBe('allow');
     }
   });
 });

@@ -186,8 +186,10 @@ describe('TabNavigation', () => {
       expect(screen.queryByText('Live Reads')).not.toBeInTheDocument();
     });
 
+    // These set a real signed-in org with the geofence grant: Outputs is
+    // capability-gated as well as role-gated, and signed-out hides it outright.
     it('should show Readers, Live feed, and Outputs sub-options for an operator', () => {
-      useOrgStore.setState({ currentRole: 'operator' });
+      setCapabilities(['geofence'], 'operator');
       render(<TabNavigation />);
 
       expect(screen.getByText('Readers')).toBeInTheDocument();
@@ -197,7 +199,7 @@ describe('TabNavigation', () => {
 
     it('should show device-management sub-options for owner/admin/manager', () => {
       for (const role of ['owner', 'admin', 'manager'] as const) {
-        useOrgStore.setState({ currentRole: role });
+        setCapabilities(['geofence'], role);
         const { unmount } = render(<TabNavigation />);
         expect(screen.getByText('Readers')).toBeInTheDocument();
         expect(screen.getByText('Outputs')).toBeInTheDocument();
@@ -206,7 +208,7 @@ describe('TabNavigation', () => {
     });
 
     it('should hide device-management sub-options from a viewer', () => {
-      useOrgStore.setState({ currentRole: 'viewer' });
+      setCapabilities(['geofence'], 'viewer');
       render(<TabNavigation />);
 
       expect(screen.queryByText('Readers')).not.toBeInTheDocument();
@@ -219,7 +221,7 @@ describe('TabNavigation', () => {
     it('should navigate to the correct tab when clicking each sub-option', () => {
       const mockSetActiveTab = vi.fn();
       useUIStore.getState().setActiveTab = mockSetActiveTab;
-      useOrgStore.setState({ currentRole: 'operator' });
+      setCapabilities(['geofence'], 'operator');
       render(<TabNavigation />);
 
       fireEvent.click(screen.getByText('Readers').closest('button')!);
@@ -302,6 +304,23 @@ describe('TabNavigation', () => {
       expect(screen.queryByText('Geofence defaults')).not.toBeInTheDocument();
       // Ungated entries are unaffected.
       expect(screen.getByText('Readers')).toBeInTheDocument();
+    });
+
+    // Signed out there is no org, so no capability question to answer. Showing
+    // a lock would offer "contact us to enable it for your organization" to a
+    // visitor with no organization. Mustering used to escape this because it is
+    // the only gated entry without a role condition wrapping it.
+    it('renders no gated entry when signed out', () => {
+      useAuthStore.setState({ isAuthenticated: false } as never);
+      useOrgStore.setState({ currentRole: null, currentOrg: null } as never);
+      render(<TabNavigation />);
+
+      expect(screen.queryByText('Mustering')).not.toBeInTheDocument();
+      expect(screen.queryByText('Outputs')).not.toBeInTheDocument();
+      expect(screen.queryByText('Geofence defaults')).not.toBeInTheDocument();
+      // Ungated entries are untouched — Scan and Locate work without an account.
+      expect(screen.getByText('Scan')).toBeInTheDocument();
+      expect(screen.getByText('Locate')).toBeInTheDocument();
     });
 
     it('keeps Geofence defaults admin-only even when granted', () => {

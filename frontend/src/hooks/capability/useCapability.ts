@@ -5,13 +5,25 @@ import type { CapabilityPresentation } from '@/components/capability/registry';
 import type { TabType } from '@/stores';
 
 /**
- * Tri-state resolution of a capability grant.
+ * Resolution of a capability grant.
  *
- * `loading` exists only for route resolution: a bookmarked URL for a granted
- * surface must not be bounced to not-found just because the profile has not
- * arrived yet. Nav rendering collapses `loading` into "do not render".
+ * Two of these mean "not answerable", for different reasons, and they resolve
+ * differently in routing:
+ *
+ * - `no-org` — nobody is signed in. A capability is a property of an *org*, so
+ *   with no org the question is not merely unanswered, it is meaningless.
+ *   Answering `ungated` here would assert that an org lacks something when
+ *   there is no org, and would show a signed-out visitor copy addressed to
+ *   "your organization".
+ * - `loading` — signed in, profile not back yet. Genuinely unknown, and worth
+ *   waiting for: a bookmarked URL to a granted surface must not be bounced to
+ *   not-found just because the profile is in flight.
+ *
+ * Nav treats both as "do not render". Routing waits on `loading` but falls
+ * through on `no-org`, leaving signed-out handling to the screen — which is how
+ * every other org-scoped tab already behaves.
  */
-export type CapabilityState = 'loading' | 'granted' | 'ungated';
+export type CapabilityState = 'no-org' | 'loading' | 'granted' | 'ungated';
 
 function capabilitiesOf(caps: string[] | undefined): string[] {
   return caps ?? [];
@@ -21,7 +33,7 @@ export function useCapabilityState(capability: string): CapabilityState {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const currentOrg = useOrgStore((s) => s.currentOrg);
 
-  if (!isAuthenticated) return 'ungated';
+  if (!isAuthenticated) return 'no-org';
   // Authenticated but the profile hasn't landed: not yet knowable.
   if (!currentOrg) return 'loading';
   return capabilitiesOf(currentOrg.capabilities).includes(capability) ? 'granted' : 'ungated';
@@ -58,8 +70,10 @@ export function navGateFor(
   state: CapabilityState
 ): CapabilityNavGate {
   if (state === 'granted') return 'visible';
-  // Fail-closed while loading, in both presentations: nothing pops in then out.
-  if (state === 'loading') return 'hidden';
+  // Fail-closed whenever the answer isn't available, in both presentations:
+  // nothing pops in and then out, and a signed-out visitor is never shown a
+  // teaser whose only honest CTA would be "sign up", not "contact us".
+  if (state === 'loading' || state === 'no-org') return 'hidden';
   return presentation === 'locked' ? 'locked' : 'hidden';
 }
 
@@ -91,6 +105,11 @@ export function routeGateFor(
 ): CapabilityRouteGate {
   if (state === 'granted') return 'allow';
   if (state === 'loading') return 'loading';
+  // Signed out: the capability gate has no opinion. Fall through and let the
+  // screen handle it, the same as Assets or Locations. Gating here would either
+  // strand the visitor on a spinner or upsell them on behalf of an org they
+  // don't have.
+  if (state === 'no-org') return 'allow';
   return presentation === 'locked' ? 'upsell' : 'not-found';
 }
 
