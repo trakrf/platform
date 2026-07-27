@@ -29,6 +29,14 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    // Keep the suite hermetic — see test-utils/vitest.setup.ts (TRA-1050).
+    setupFiles: ['./test-utils/vitest.setup.ts'],
+    // Vitest inherits the developer's shell, and dev machines export
+    // VITE_API_URL pointing at a live backend. Pin it so `src/lib/api/client.ts`
+    // can never pick that up, and so local runs match CI.
+    env: {
+      VITE_API_URL: 'http://127.0.0.1:9/api/v1',
+    },
     // Disable parallel execution for ALL tests that communicate with hardware
     // Both integration and E2E tests access real CS108 hardware via bridge server
     // Running tests in parallel causes hardware conflicts and test failures
