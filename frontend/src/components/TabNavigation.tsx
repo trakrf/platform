@@ -2,8 +2,10 @@ import React from 'react';
 import { useUIStore, useDeviceStore, useOrgStore } from '@/stores';
 import type { TabType } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
-import { Package2, Search, Settings, HelpCircle, Package, MapPinned, BarChart3, RadioTower, Siren, Radio, SlidersHorizontal, Boxes } from 'lucide-react';
+import { Package2, Search, Settings, HelpCircle, Package, MapPinned, BarChart3, RadioTower, Radio, Boxes, Lock } from 'lucide-react';
 import { appVersion } from '@/version';
+import { capabilityEntryForRoute } from '@/components/capability/registry';
+import { useCapabilityNavGate } from '@/hooks/capability/useCapability';
 
 interface NavItemProps {
   id: TabType;
@@ -12,11 +14,13 @@ interface NavItemProps {
   isActive: boolean;
   onClick: () => void;
   tooltip: string;
+  /** Capability `locked` presentation — a visible teaser routing to the upsell. */
+  locked?: boolean;
 }
 
-const NavItem: React.FC<NavItemProps> = ({ id, label, icon, isActive, onClick, tooltip }) => {
+const NavItem: React.FC<NavItemProps> = ({ id, label, icon, isActive, onClick, tooltip, locked = false }) => {
   const [showTooltip, setShowTooltip] = React.useState(false);
-  
+
   return (
     <button
       onClick={onClick}
@@ -25,8 +29,8 @@ const NavItem: React.FC<NavItemProps> = ({ id, label, icon, isActive, onClick, t
       title={tooltip}
       data-testid={`menu-item-${id}`}
       className={`relative flex items-center w-full px-3 py-2 text-left rounded-lg text-sm font-medium transition-colors ${
-        isActive 
-          ? 'bg-blue-600 text-white' 
+        isActive
+          ? 'bg-blue-600 text-white'
           : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
       }`}
     >
@@ -36,6 +40,13 @@ const NavItem: React.FC<NavItemProps> = ({ id, label, icon, isActive, onClick, t
         </div>
         {label}
       </div>
+      {locked && (
+        <Lock
+          className="w-3.5 h-3.5 ml-auto opacity-60"
+          aria-label="Not enabled for your organization"
+          data-testid={`menu-item-${id}-locked`}
+        />
+      )}
       {showTooltip && (
         <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 pointer-events-none">
           <div className="relative">
@@ -45,6 +56,41 @@ const NavItem: React.FC<NavItemProps> = ({ id, label, icon, isActive, onClick, t
         </div>
       )}
     </button>
+  );
+};
+
+interface CapabilityNavItemProps {
+  route: TabType;
+  isActive: boolean;
+  onClick: () => void;
+}
+
+/**
+ * A nav entry whose label, icon, tooltip and presentation come from the
+ * capability registry (TRA-1026 / ADR 0002). Renders nothing when the entry is
+ * `hidden` — either an ungated `absent` capability, or the capability set not
+ * yet loaded, which fails closed so nothing flashes on and back off.
+ *
+ * Role gating stays at the call site: capability answers "did the org buy it",
+ * role answers "may this user touch it". Both must pass.
+ */
+const CapabilityNavItem: React.FC<CapabilityNavItemProps> = ({ route, isActive, onClick }) => {
+  const gate = useCapabilityNavGate(route);
+  const entry = capabilityEntryForRoute(route);
+
+  if (!entry || gate === 'hidden') return null;
+
+  const Icon = entry.icon;
+  return (
+    <NavItem
+      id={route}
+      label={entry.label}
+      isActive={isActive}
+      onClick={onClick}
+      icon={<Icon className="w-5 h-5" />}
+      tooltip={entry.tooltip}
+      locked={gate === 'locked'}
+    />
   );
 };
 
@@ -215,10 +261,12 @@ export default function TabNavigation() {
             tooltip="View asset location reports and movement history"
           />
 
-          {/* Mustering is hidden until the per-org capability gate lands (TRA-1026).
-              Its presentation is `absent` per ADR 0002, so the nav item and the
-              route (VALID_TABS in App.tsx) are both removed rather than role-gated.
-              Restore both when useCapability('mustering') is available. */}
+          {/* Capability-gated. `absent` presentation: no trace without the grant. */}
+          <CapabilityNavItem
+            route="mustering"
+            isActive={activeTab === 'mustering'}
+            onClick={() => handleTabClick('mustering')}
+          />
 
           <NavItem
             id="settings"
@@ -251,23 +299,21 @@ export default function TabNavigation() {
                 tooltip="Live reader feed — every tag read with age expiry, for antenna placement and RSSI coverage tuning"
               />
 
-              <NavItem
-                id="output-devices"
-                label="Outputs"
+              {/* Outputs and Geofence defaults are the geofence surface's nav —
+                  the same two route groups the backend gates with
+                  requireCap(capability.Geofence). `locked` presentation: the
+                  entries stay visible without the grant and route to the upsell. */}
+              <CapabilityNavItem
+                route="output-devices"
                 isActive={activeTab === 'output-devices'}
                 onClick={() => handleTabClick('output-devices')}
-                icon={<Siren className="w-5 h-5" />}
-                tooltip="Manage output devices (e.g. Shelly relays) and test-fire them"
               />
 
               {isAdmin && (
-                <NavItem
-                  id="org-geofence-defaults"
-                  label="Geofence defaults"
+                <CapabilityNavItem
+                  route="org-geofence-defaults"
                   isActive={activeTab === 'org-geofence-defaults'}
                   onClick={() => handleTabClick('org-geofence-defaults')}
-                  icon={<SlidersHorizontal className="w-5 h-5" />}
-                  tooltip="Org-wide geofence tuning (RSSI, age-out, auto-off, mode) — applied to every portal unless an output overrides it"
                 />
               )}
             </div>

@@ -29,6 +29,12 @@ export interface UserOrgWithRole {
   subscription_enabled: boolean;
   /** RFC3339; surfaced for renew/countdown copy. Absent when never subscribed. */
   subscription_expires_at?: string | null;
+  /**
+   * TRA-1025 / ADR 0002: the org's granted capability names, sorted. Computed
+   * server-side and always serialized (`[]`, never null) — zero grants is the
+   * default for every org. Read via `useCapability`, never gated on directly.
+   */
+  capabilities: string[];
 }
 
 /**
