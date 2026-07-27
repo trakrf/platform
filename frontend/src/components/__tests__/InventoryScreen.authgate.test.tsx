@@ -6,10 +6,20 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import InventoryScreen from '@/components/InventoryScreen';
 import { useTagStore, useAuthStore } from '@/stores';
+import { assetsApi } from '@/lib/api/assets';
+import { locationsApi } from '@/lib/api/locations';
 
 vi.mock('react-hot-toast', () => ({
   default: vi.fn(),
 }));
+
+// This suite is about the Reconcile auth gate, but it renders the whole
+// InventoryScreen, which mounts useAssets()/useLocations() on every render. Those
+// were previously left unmocked: when the test authenticates, they issued real
+// GET /assets and GET /locations requests (TRA-1052). Stub the modules so the
+// screen mounts with empty data and the gate assertions stand on their own.
+vi.mock('@/lib/api/assets');
+vi.mock('@/lib/api/locations');
 
 const renderWithQueryClient = () => {
   const queryClient = new QueryClient({
@@ -33,6 +43,13 @@ describe('InventoryScreen Reconcile auth gate', () => {
     useAuthStore.setState({ isAuthenticated: false, token: null, user: null });
     sessionStorage.clear();
     window.location.hash = '';
+
+    vi.mocked(assetsApi.list).mockResolvedValue({
+      data: { data: [], limit: 25, offset: 0, total_count: 0 },
+    } as never);
+    vi.mocked(locationsApi.list).mockResolvedValue({
+      data: { data: [], limit: 100, offset: 0, total_count: 0 },
+    } as never);
   });
 
   it('shows upsell toast and stays on inventory when an unauthenticated user clicks Reconcile', async () => {
