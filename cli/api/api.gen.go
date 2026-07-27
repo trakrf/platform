@@ -85,6 +85,7 @@ func (e BleTagRequestTagType) Valid() bool {
 // Defines values for ErrorType.
 const (
 	BadRequest           ErrorType = "bad_request"
+	CapabilityRequired   ErrorType = "capability_required"
 	Conflict             ErrorType = "conflict"
 	Forbidden            ErrorType = "forbidden"
 	InternalError        ErrorType = "internal_error"
@@ -102,6 +103,8 @@ const (
 func (e ErrorType) Valid() bool {
 	switch e {
 	case BadRequest:
+		return true
+	case CapabilityRequired:
 		return true
 	case Conflict:
 		return true

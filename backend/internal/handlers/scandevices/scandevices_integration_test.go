@@ -24,6 +24,13 @@ import (
 	"github.com/trakrf/platform/backend/internal/util/jwt"
 )
 
+// passThroughGate is a no-op paid gate. Drive-by fix (TRA-1025): these call
+// sites had not been updated when TRA-947 added the paidGate parameter, so this
+// suite has not compiled under -tags integration since. Scan devices and scan
+// points are the shared commissioning/ingestion path and are deliberately NOT
+// capability-gated.
+func passThroughGate(next http.Handler) http.Handler { return next }
+
 func withOrg(req *http.Request, orgID int) *http.Request {
 	claims := &jwt.Claims{UserID: 1, Email: "tra899@t.com", CurrentOrgID: &orgID}
 	return req.WithContext(context.WithValue(req.Context(), middleware.UserClaimsKey, claims))
@@ -41,8 +48,8 @@ func TestScanDevicesHandler_RoundTrip(t *testing.T) {
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	newScanDevicesHandler(db).RegisterRoutes(r)
-	scanpoints.NewHandler(db.Store).RegisterRoutes(r)
+	newScanDevicesHandler(db).RegisterRoutes(r, passThroughGate)
+	scanpoints.NewHandler(db.Store).RegisterRoutes(r, passThroughGate)
 
 	do := func(method, path string, body any) *httptest.ResponseRecorder {
 		var buf bytes.Buffer
@@ -141,7 +148,7 @@ func TestScanDevicesHandler_TopicPrefix(t *testing.T) {
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	newScanDevicesHandler(db).RegisterRoutes(r)
+	newScanDevicesHandler(db).RegisterRoutes(r, passThroughGate)
 
 	do := func(orgCtx int, method, path string, body any) *httptest.ResponseRecorder {
 		var buf bytes.Buffer
@@ -216,8 +223,8 @@ func TestScanPoints_UpdateLocationIDPersists(t *testing.T) {
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	newScanDevicesHandler(db).RegisterRoutes(r)
-	scanpoints.NewHandler(db.Store).RegisterRoutes(r)
+	newScanDevicesHandler(db).RegisterRoutes(r, passThroughGate)
+	scanpoints.NewHandler(db.Store).RegisterRoutes(r, passThroughGate)
 
 	do := func(method, path string, body any) *httptest.ResponseRecorder {
 		var buf bytes.Buffer

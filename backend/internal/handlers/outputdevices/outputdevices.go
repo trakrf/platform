@@ -50,16 +50,28 @@ func NewHandler(storage *storage.Storage, act actuator, testPulse time.Duration)
 
 // RegisterRoutes wires output-device routes onto r. Mount inside the session-auth
 // (middleware.Auth) group.
-func (h *Handler) RegisterRoutes(r chi.Router, paidGate func(http.Handler) http.Handler) {
+// capGate is middleware.RequireCap(store)(capability.Geofence) (TRA-1025 /
+// ADR 0002). Output devices are the geofence surface's alarm configuration —
+// their only consumers are the geofence engine and the alarm dispatcher, and
+// their tuning fields (egress/presence mode, RSSI threshold, auto-off) are the
+// per-output tier of the same three-tier geofence config as
+// /orgs/{id}/geofence-defaults. Gated on reads too: an org without the grant
+// has no geofence surface at all.
+//
+// capGate precedes paidGate on the shared lines: an org cannot be past-due on a
+// surface it never bought, so a lapsed org WITHOUT the grant must see
+// capability_required rather than payment_required (ADR 0002 §"Backend
+// enforcement").
+func (h *Handler) RegisterRoutes(r chi.Router, capGate, paidGate func(http.Handler) http.Handler) {
 	// TRA-947: output-device config mutations (create/update/delete) are paid;
 	// GETs and the operational test/reset actions stay open.
-	r.Get("/api/v1/output-devices", h.List)
-	r.With(paidGate).Post("/api/v1/output-devices", h.Create)
-	r.Get("/api/v1/output-devices/{output_device_id}", h.Get)
-	r.With(paidGate).Patch("/api/v1/output-devices/{output_device_id}", h.Update)
-	r.With(paidGate).Delete("/api/v1/output-devices/{output_device_id}", h.Delete)
-	r.Post("/api/v1/output-devices/{output_device_id}/test", h.Test)
-	r.Post("/api/v1/output-devices/{output_device_id}/reset", h.Reset)
+	r.With(capGate).Get("/api/v1/output-devices", h.List)
+	r.With(capGate, paidGate).Post("/api/v1/output-devices", h.Create)
+	r.With(capGate).Get("/api/v1/output-devices/{output_device_id}", h.Get)
+	r.With(capGate, paidGate).Patch("/api/v1/output-devices/{output_device_id}", h.Update)
+	r.With(capGate, paidGate).Delete("/api/v1/output-devices/{output_device_id}", h.Delete)
+	r.With(capGate).Post("/api/v1/output-devices/{output_device_id}/test", h.Test)
+	r.With(capGate).Post("/api/v1/output-devices/{output_device_id}/reset", h.Reset)
 }
 
 // deviceFieldsError enforces the type- and transport-specific fields of an

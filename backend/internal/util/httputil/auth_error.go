@@ -40,3 +40,17 @@ func Respond402PaymentRequired(w http.ResponseWriter, r *http.Request, detail, r
 	WriteJSONError(w, r, http.StatusPaymentRequired, apierrors.ErrPaymentRequired,
 		detail, requestID)
 }
+
+// Respond403CapabilityRequired writes the uniform denial for a surface the org
+// has not been granted (ADR 0002 / TRA-1025). 403 with a type distinct from
+// role/scope `forbidden`: the principal's permissions are irrelevant, the
+// organization has not licensed the surface, and the remedy is a sales
+// conversation rather than a role change.
+//
+// There is deliberately no hide-404 variant. The platform is source-available,
+// so route existence is confirmable from the repository and a 404 would conceal
+// nothing a 403 reveals — one denial contract for integrators and test cycles.
+func Respond403CapabilityRequired(w http.ResponseWriter, r *http.Request, detail, requestID string) {
+	WriteJSONError(w, r, http.StatusForbidden, apierrors.ErrCapabilityRequired,
+		detail, requestID)
+}

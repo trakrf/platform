@@ -477,6 +477,7 @@ components:
                 - unsupported_media_type
                 - missing_org_context
                 - payment_required
+                - capability_required
             example: validation_error
             type: string
             x-extensible-enum: true

@@ -617,7 +617,8 @@
           "method_not_allowed",
           "unsupported_media_type",
           "missing_org_context",
-          "payment_required"
+          "payment_required",
+          "capability_required"
         ],
         "example": "validation_error",
         "type": "string",

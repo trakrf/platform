@@ -129,6 +129,14 @@ type UserOrgWithRole struct {
 	IsEntitled            bool       `json:"is_entitled"`
 	SubscriptionEnabled   bool       `json:"subscription_enabled"`
 	SubscriptionExpiresAt *time.Time `json:"subscription_expires_at,omitempty"`
+	// Capabilities are the org's granted capability names, sorted (TRA-1025 /
+	// ADR 0002). Computed server-side from trakrf.org_capability_set; the
+	// frontend's useCapability hook reads it from here.
+	//
+	// Never omitempty and never null: zero grants is the default for every org,
+	// and an absent field would be indistinguishable from a stale client that
+	// has not been told about capabilities yet. Serialized as [].
+	Capabilities []string `json:"capabilities"`
 }
 
 // SetCurrentOrgRequest for POST /users/me/current-org

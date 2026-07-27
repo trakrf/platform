@@ -94,19 +94,26 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 
 // RegisterRoutes mounts the mustering routes. Caller applies session auth (the
 // route lives in the authenticated group of router.go).
-func (h *Handler) RegisterRoutes(r chi.Router) {
-	r.Get("/api/v1/mustering/stream", h.Stream)
-	r.Get("/api/v1/mustering/status", h.GetStatus)
-	r.Post("/api/v1/mustering/events", h.CreateEvent)
-	r.Get("/api/v1/mustering/events", h.ListEvents)
-	r.Get("/api/v1/mustering/events/{id}", h.GetEvent)
-	r.Post("/api/v1/mustering/events/{id}/all-clear", h.AllClear)
-	r.Post("/api/v1/mustering/events/{id}/cancel", h.Cancel)
-	r.Post("/api/v1/mustering/events/{id}/unlock", h.Unlock)
-	r.Patch("/api/v1/mustering/events/{id}/entries/{entryId}", h.PatchEntry)
-	r.Post("/api/v1/mustering/simulate", h.Simulate)
-	r.Post("/api/v1/mustering/seed", h.Seed)
+//
+// capGate is middleware.RequireCap(store)(capability.Mustering) (TRA-1025 /
+// ADR 0002). Every route on this surface carries it, reads included: mustering
+// is a sold surface, not a view of the always-on asset base, so an org without
+// the grant cannot read it either. Attached per route rather than by wrapping
+// r, so each registration reads as its complete authorization story — and so
+// adding an ungated mustering route is a visible act rather than an omission.
+func (h *Handler) RegisterRoutes(r chi.Router, capGate func(http.Handler) http.Handler) {
+	r.With(capGate).Get("/api/v1/mustering/stream", h.Stream)
+	r.With(capGate).Get("/api/v1/mustering/status", h.GetStatus)
+	r.With(capGate).Post("/api/v1/mustering/events", h.CreateEvent)
+	r.With(capGate).Get("/api/v1/mustering/events", h.ListEvents)
+	r.With(capGate).Get("/api/v1/mustering/events/{id}", h.GetEvent)
+	r.With(capGate).Post("/api/v1/mustering/events/{id}/all-clear", h.AllClear)
+	r.With(capGate).Post("/api/v1/mustering/events/{id}/cancel", h.Cancel)
+	r.With(capGate).Post("/api/v1/mustering/events/{id}/unlock", h.Unlock)
+	r.With(capGate).Patch("/api/v1/mustering/events/{id}/entries/{entryId}", h.PatchEntry)
+	r.With(capGate).Post("/api/v1/mustering/simulate", h.Simulate)
+	r.With(capGate).Post("/api/v1/mustering/seed", h.Seed)
 	// TRA-978 phase 7: optional static floor plan (image + pins on Locations).
-	r.Get("/api/v1/mustering/floor-plan", h.GetFloorPlan)
-	r.Put("/api/v1/mustering/floor-plan", h.PutFloorPlan)
+	r.With(capGate).Get("/api/v1/mustering/floor-plan", h.GetFloorPlan)
+	r.With(capGate).Put("/api/v1/mustering/floor-plan", h.PutFloorPlan)
 }

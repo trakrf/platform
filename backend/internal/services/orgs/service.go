@@ -209,6 +209,9 @@ func (s *Service) GetUserProfile(ctx context.Context, userID int) (*organization
 						ID:   org.ID,
 						Name: org.Name,
 						Role: string(role),
+						// Zero grants is the norm, and the wire shape must say
+						// so with [] rather than null (TRA-1025).
+						Capabilities: []string{},
 					}
 					// TRA-922: include the org slug so the UI can pre-fill the
 					// required {org_slug}/ publish_topic prefix. Best-effort — a
@@ -221,6 +224,13 @@ func (s *Service) GetUserProfile(ctx context.Context, userID int) (*organization
 					}
 					if entitled, eerr := s.storage.OrgIsEntitled(ctx, currentOrgID); eerr == nil {
 						cur.IsEntitled = entitled
+					}
+					// TRA-1025: the capability set the frontend gates nav and
+					// routes on. Best-effort like the fields above — a lookup
+					// failure leaves it empty, which fails CLOSED (gated
+					// surfaces stay hidden) rather than flashing them on.
+					if caps, cerr := s.storage.OrgCapabilitySet(ctx, currentOrgID); cerr == nil {
+						cur.Capabilities = caps
 					}
 					profile.CurrentOrg = cur
 					break

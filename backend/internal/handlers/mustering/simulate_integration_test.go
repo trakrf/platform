@@ -58,9 +58,14 @@ func newMusterServer(t *testing.T) (chi.Router, *testutil.TestDB, int) {
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	h.RegisterRoutes(r)
+	h.RegisterRoutes(r, passThroughCap)
 	return r, db, orgID
 }
+
+// passThroughCap is a no-op capability gate — this suite drives the mustering
+// pipeline for a granted org. The gate is covered in internal/middleware and
+// end-to-end in the router integration tests.
+func passThroughCap(next http.Handler) http.Handler { return next }
 
 func doJSON(t *testing.T, r http.Handler, orgID int, method, path string, body any) *httptest.ResponseRecorder {
 	t.Helper()

@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	httpSwagger "github.com/swaggo/http-swagger"
 
+	"github.com/trakrf/platform/backend/internal/capability"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
@@ -150,12 +151,27 @@ func setupRouter(
 	// org/user/api-key mgmt, current-org switch, output test/reset).
 	paidGate := middleware.SubscriptionRequired(store)
 
+	// TRA-1025 / ADR 0002: the per-org capability gate. Built once; attached
+	// per-route via r.With(requireCap(...)) inside the handlers that own a
+	// gated surface, so a route registration reads as its complete
+	// authorization story.
+	//
+	// Ordering where it shares a line with another gate: capability FIRST, then
+	// paidGate (402), then role/scope (403 forbidden). An org cannot be
+	// past-due on a surface it never bought.
+	//
+	// Not gated, deliberately: the asset/location/tag/scan/report base, auth,
+	// org/user/api-key management, webhooks, ingestion, and the scan-device /
+	// scan-point commissioning path (shared ingestion, not the geofence
+	// surface). `inventory` has no routes yet — nothing to attach it to.
+	requireCap := middleware.RequireCap(store)
+
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth)
 		r.Use(middleware.SentryContext)
 		r.Use(middleware.ContentType)
 
-		orgsHandler.RegisterRoutes(r, store)
+		orgsHandler.RegisterRoutes(r, store, requireCap(capability.Geofence))
 		orgsHandler.RegisterMeRoutes(r)
 		usersHandler.RegisterRoutes(r)
 		assetsHandler.RegisterRoutes(r, paidGate)
@@ -164,8 +180,10 @@ func setupRouter(
 		// Internal-only scan device/point management (not public API).
 		scanDevicesHandler.RegisterRoutes(r, paidGate)
 		scanPointsHandler.RegisterRoutes(r, paidGate)
-		// Internal-only output device management (not public API).
-		outputDevicesHandler.RegisterRoutes(r, paidGate)
+		// Internal-only output device management (not public API). TRA-1025:
+		// this is the geofence surface's alarm configuration — its only
+		// consumers are the geofence engine and the alarm dispatcher.
+		outputDevicesHandler.RegisterRoutes(r, requireCap(capability.Geofence), paidGate)
 		// TRA-993: internal-only reader live get/set config over MQTT-RPC.
 		readerConfigHandler.RegisterRoutes(r, paidGate)
 		lookupHandler.RegisterRoutes(r)
@@ -173,7 +191,8 @@ func setupRouter(
 		readstreamHandler.RegisterRoutes(r)
 		// TRA-978: internal mustering POC surface (SSE + REST + simulate/seed).
 		// Session-auth only, NOT in the public OpenAPI spec (no paidGate).
-		musteringHandler.RegisterRoutes(r)
+		// TRA-1025: capability-gated end to end, reads included.
+		musteringHandler.RegisterRoutes(r, requireCap(capability.Mustering))
 		// TRA-1032: internal kit commission/verify/lookup. Writes are paid
 		// mutations and require Operator+ (scan-save precedent).
 		// Operator gate resolves the org from JWT claims, NOT a URL param —
