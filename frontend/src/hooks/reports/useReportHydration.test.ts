@@ -1,6 +1,6 @@
 import React, { type ReactNode } from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { renderHook, waitFor, cleanup } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAssetStore } from '@/stores/assets/assetStore';
 import { useLocationStore } from '@/stores/locations/locationStore';
@@ -71,13 +71,12 @@ function seedLocations(
 
 describe('useReportHydration', () => {
   beforeEach(() => {
-    // Unmount the previous test's hook *before* touching the stores it
-    // subscribes to. Otherwise invalidateCache() below notifies a still-mounted
-    // component, it re-renders, finds the asset it had seeded now missing, and
-    // fires a fetch that lands in the middle of the next test — which is exactly
-    // what the `expect(assetsApi.get).not.toHaveBeenCalled()` assertions caught.
-    cleanup();
-
+    // The previous test's tree is unmounted by the global beforeEach in
+    // test-utils/vitest.setup.ts, before this hook runs. That ordering matters:
+    // invalidateCache() below would otherwise let the previous test's query
+    // observers re-subscribe and fetch into this test. The
+    // `expect(assetsApi.get).not.toHaveBeenCalled()` assertions below are what
+    // catch it if that regresses.
     useAssetStore.getState().invalidateCache();
     useLocationStore.getState().invalidateCache();
     useOrgStore.setState({

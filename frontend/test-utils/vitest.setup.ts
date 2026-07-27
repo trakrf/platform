@@ -1,3 +1,6 @@
+import { beforeEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
+
 /**
  * Global unit-test setup: keep the suite off the network.
  *
@@ -46,6 +49,31 @@
  */
 localStorage.clear();
 sessionStorage.clear();
+
+/*
+ * Unmount the previous test's React tree before the next test starts.
+ *
+ * TRA-1052. Testing Library's own auto-cleanup runs in `afterEach`, which is
+ * usually enough — but a test file whose `beforeEach` mutates a module-global
+ * zustand store can still see the previous test's React Query observers
+ * re-subscribe and fetch. `useReportHydration.test.ts` hit this: the asset id
+ * seeded by one test was fetched during the *next* one, entering via
+ * QueryObserver.onSubscribe. It only became visible once that file started
+ * asserting `expect(assetsApi.get).not.toHaveBeenCalled()`; with a mocked API
+ * module and no such assertion the stray call is silent.
+ *
+ * A root-level `beforeEach` runs before any describe-level `beforeEach`, so this
+ * guarantees the teardown completes before a test touches shared stores. Six
+ * other hook-test files have the same shape (render + React Query + store
+ * mutation in `beforeEach`) and no explicit cleanup; this covers all 97 files
+ * that render, rather than patching them one at a time.
+ *
+ * Safe because nothing in the suite renders inside `beforeAll` — no test relies
+ * on a tree surviving between cases.
+ */
+beforeEach(() => {
+  cleanup();
+});
 
 const blockedMessage = (url: string) =>
   `[vitest] Blocked real network request to ${url}. Unit tests must not hit the ` +
