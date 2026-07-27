@@ -213,11 +213,27 @@ touching enforcement.
 
 * **Backend work is unblocked by commercial decisions.** The pending
   `absent`-vs-`locked` call for inventory/geofence is frontend-only.
-* **Backfill and signup defaults are generous by design** (all existing and
-  new orgs receive all three capabilities), mirroring the TRA-947 posture:
-  nobody is surprise-locked at deploy; segmentation begins with grant
-  management, not retroactive revocation. The gate ships live but
-  universally passed.
+* **There is no backfill, and no signup default** (revised 2026-07-25,
+  superseding an earlier decision to grant all three capabilities to all
+  existing and new orgs). Existing orgs and new orgs alike receive **zero**
+  `org_capabilities` rows: everyone gets the always-on asset-management base,
+  nobody gets inventory, geofence, or mustering without an explicit grant.
+  Segmentation therefore begins at deploy rather than only for accounts
+  created after it. The costs are accepted deliberately — existing orgs lose
+  reachability of the geofence and mustering surfaces (assessed safe:
+  fixed-reader/geofence is pre-launch and neither live customer uses either),
+  geofence becomes a locked upsell tile where an open tab used to be, and demo
+  and internal orgs must be re-granted by hand. Consistent with "grants are
+  explicit acts": no allowlist in the migration for known exceptions, and no
+  default-grants config knob.
+* **Grant management (TRA-1027) is a near-term need, not a nicety.** Deferring
+  it was justified by the universal backfill; with an empty default, every
+  grant — starting with the first customer exception on day one — requires
+  either that UI or hand-written SQL.
+* **Deploy sequencing is load-bearing.** Because the empty default is
+  retroactive, shipping the schema ahead of the frontend nav gating means
+  every org, live customers included, sees geofence UI that 403s underneath.
+  The migration must land with, or after, the frontend gating.
 * **Integrators get one new machine-readable denial class**
   (`capability_required`) and an unchanged contract otherwise; black-box API
   test cycles verify a single denial shape instead of two.
