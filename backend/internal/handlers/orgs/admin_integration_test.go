@@ -40,6 +40,10 @@ func seedSessionUser(t *testing.T, pool *pgxpool.Pool, email string, superadmin 
 	return token
 }
 
+// passThroughCap is a no-op capability gate. It only reaches the
+// geofence-defaults pair, which these superadmin org tests do not exercise.
+func passThroughCap(next http.Handler) http.Handler { return next }
+
 // newAdminOrgRouter wires the superadmin org routes the way production does:
 // session auth + RequireSuperadmin, registered via the orgs handler.
 func newAdminOrgRouter(t *testing.T, store *storage.Storage) *chi.Mux {
@@ -52,7 +56,7 @@ func newAdminOrgRouter(t *testing.T, store *storage.Storage) *chi.Mux {
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth)
 		r.Use(middleware.ContentType)
-		handler.RegisterRoutes(r, store)
+		handler.RegisterRoutes(r, store, passThroughCap)
 	})
 	return r
 }

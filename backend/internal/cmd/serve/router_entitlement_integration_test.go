@@ -183,6 +183,13 @@ func TestEntitlementGate_Enforcement(t *testing.T) {
 			INSERT INTO trakrf.output_devices (org_id, name, transport, base_url)
 			VALUES ($1, 'Buzzer', 'http', 'http://127.0.0.1:1/relay')
 			RETURNING id`, lapsedOrg).Scan(&outID))
+		// TRA-1025: output devices are the geofence surface, so the capability
+		// gate now runs ahead of the entitlement gate on this route. Grant it,
+		// or the 403 would satisfy "not 402" without the entitlement decision
+		// ever being reached — the assertion below would pass vacuously.
+		_, err = db.AdminPool.Exec(context.Background(),
+			`INSERT INTO trakrf.org_capabilities (org_id, capability) VALUES ($1, 'geofence')`, lapsedOrg)
+		require.NoError(t, err)
 		recTest := do(lapsedOrg, http.MethodPost, "/api/v1/output-devices/"+strconv.Itoa(outID)+"/test", nil)
 		require.NotEqual(t, http.StatusPaymentRequired, recTest.Code,
 			"output test action must stay open; body: %s", recTest.Body.String())

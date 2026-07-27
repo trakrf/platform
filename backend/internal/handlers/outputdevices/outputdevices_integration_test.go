@@ -59,7 +59,7 @@ func newTestServer(t *testing.T, drv *fakeDriver) (*chi.Mux, int) {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	// testPulse 0: no blocking sleep in tests. Pass-through paid gate.
-	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough)
+	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough, passThrough)
 	return r, orgID
 }
 
@@ -129,7 +129,7 @@ func TestOutputDevicesHandler_ClearLocation(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough)
+	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough, passThrough)
 
 	loc, err := db.Store.CreateLocation(context.Background(), location.Location{
 		OrgID: orgID, ExternalKey: "dock-1", Name: "Dock 1",
@@ -363,7 +363,7 @@ func TestOutputDevicesHandler_CreateGPORejectsForeignScanDeviceID(t *testing.T) 
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough)
+	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough, passThrough)
 
 	// Nonexistent id.
 	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
@@ -400,7 +400,7 @@ func TestOutputDevicesHandler_CreateGPORejectsWrongReaderType(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough)
+	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough, passThrough)
 
 	glReader, err := db.Store.CreateScanDevice(context.Background(), orgID, scandevice.CreateScanDeviceRequest{
 		Name: "GL-S10 Gateway", Type: "gl_s10",
@@ -427,7 +427,7 @@ func TestOutputDevicesHandler_CreateGPORejectsReaderWithNoPublishTopic(t *testin
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough)
+	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough, passThrough)
 
 	noTopicReader, err := db.Store.CreateScanDevice(context.Background(), orgID, scandevice.CreateScanDeviceRequest{
 		Name: "CS463 No Topic", Type: "csl_cs463", // publish_topic intentionally omitted (NULL)
@@ -450,7 +450,7 @@ func TestOutputDevicesHandler_CreateGPOWithValidScanDeviceID(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough)
+	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough, passThrough)
 
 	publishTopic := "trakrf.id/cs463-212/reads"
 	reader, err := db.Store.CreateScanDevice(context.Background(), orgID, scandevice.CreateScanDeviceRequest{
@@ -491,7 +491,7 @@ func TestOutputDevicesHandler_UpdateGPOKeepsStoredScanDeviceID(t *testing.T) {
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough)
+	outputdevices.NewHandler(db.Store, drv, 0).RegisterRoutes(r, passThrough, passThrough)
 
 	publishTopic := "trakrf.id/cs463-212/reads"
 	reader, err := db.Store.CreateScanDevice(context.Background(), orgID, scandevice.CreateScanDeviceRequest{

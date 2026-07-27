@@ -291,7 +291,11 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 // chi's MethodNotAllowed determination runs. Flat registration keeps each
 // method registered at the parent mux level so wrong methods short-circuit
 // to the root MethodNotAllowed handler without auth running.
-func (h *Handler) RegisterRoutes(r chi.Router, store middleware.OrgRoleStore) {
+//
+// capGate is middleware.RequireCap(store)(capability.Geofence) (TRA-1025); it
+// gates only the geofence-defaults pair below. Org/member/invitation
+// management is base platform surface and is never capability-gated.
+func (h *Handler) RegisterRoutes(r chi.Router, store middleware.OrgRoleStore, capGate func(http.Handler) http.Handler) {
 	member := middleware.RequireOrgMember(store)
 	admin := middleware.RequireOrgAdmin(store)
 	superadmin := middleware.RequireSuperadmin(store)
@@ -315,8 +319,22 @@ func (h *Handler) RegisterRoutes(r chi.Router, store middleware.OrgRoleStore) {
 
 	// Geofence tuning defaults (TRA-955), internal-only. Read by any member;
 	// write is admin-only (org-wide blast radius, same tier as PUT /orgs/{id}).
-	r.With(member).Get("/api/v1/orgs/{id}/geofence-defaults", h.GetGeofenceDefaults)
-	r.With(admin).Patch("/api/v1/orgs/{id}/geofence-defaults", h.PatchGeofenceDefaults)
+	//
+	// TRA-1025: the org-tier slice of the geofence surface, so it carries the
+	// geofence capability gate. capGate precedes the role gate — an org that
+	// never licensed geofence gets capability_required regardless of whether
+	// the caller is an admin (ADR 0002 §"Backend enforcement" ordering).
+	//
+	// NOTE: capGate resolves the org from the session's current org, while
+	// member/admin resolve it from {id}. A user who belongs to two orgs can
+	// therefore satisfy the capability check with org A's grant while acting on
+	// org B — the role gate still applies, so the exposure is limited to
+	// geofence tuning defaults of an org they already administer. Left as-is
+	// because a path-param-aware gate would be a second RequireCap contract;
+	// revisit if a gated surface ever carries a {id} path param with real
+	// blast radius.
+	r.With(capGate, member).Get("/api/v1/orgs/{id}/geofence-defaults", h.GetGeofenceDefaults)
+	r.With(capGate, admin).Patch("/api/v1/orgs/{id}/geofence-defaults", h.PatchGeofenceDefaults)
 
 	// Member management routes
 	r.With(member).Get("/api/v1/orgs/{id}/members", h.ListMembers)

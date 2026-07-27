@@ -72,11 +72,16 @@ func (f *fakeBroadcaster) Subscribe(_ int) (<-chan mustering.Event, func()) {
 	return f.ch, func() {}
 }
 
+// passThroughCap is a no-op capability gate. These tests exercise handler
+// behaviour for a granted org; the gate itself is covered in
+// internal/middleware and end-to-end in the router integration tests.
+func passThroughCap(next http.Handler) http.Handler { return next }
+
 // routerFor builds a chi router with the handler routes and injects session
 // claims (org 1, user 99) into every request.
 func routerFor(h *Handler) http.Handler {
 	r := chi.NewRouter()
-	h.RegisterRoutes(r)
+	h.RegisterRoutes(r, passThroughCap)
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		claims := &jwt.Claims{UserID: 99, Email: "op@example.com", CurrentOrgID: intPtr(1)}
 		ctx := middleware.WithUserClaimsForTest(req.Context(), claims)
@@ -192,7 +197,7 @@ func TestStatus_MissingOrgContext(t *testing.T) {
 	eng := &fakeEngine{}
 	h := newHandler(eng, &fakeBroadcaster{})
 	r := chi.NewRouter()
-	h.RegisterRoutes(r)
+	h.RegisterRoutes(r, passThroughCap)
 
 	// No claims injected → 422 missing org context.
 	rr := httptest.NewRecorder()

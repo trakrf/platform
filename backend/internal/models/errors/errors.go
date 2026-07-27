@@ -18,6 +18,12 @@ const (
 	ErrUnsupportedMedia  ErrorType = "unsupported_media_type"
 	ErrMissingOrgContext ErrorType = "missing_org_context"
 	ErrPaymentRequired   ErrorType = "payment_required"
+	// ErrCapabilityRequired is returned when the org has not been granted the
+	// capability that owns the requested surface (ADR 0002 / TRA-1025). It is
+	// a 403 like ErrForbidden but a distinct type: forbidden means "this
+	// principal may not", capability_required means "this organization has not
+	// licensed this surface" — different remedies, so clients branch on it.
+	ErrCapabilityRequired ErrorType = "capability_required"
 )
 
 // FieldError describes a single field-level validation failure.
@@ -77,7 +83,7 @@ type FieldError struct {
 // independently-importable schema name (e.g. ErrorEnvelope rather than
 // openapi-generator-cli's `ErrorResponseError`).
 type ErrorEnvelope struct {
-	Type      string       `json:"type" example:"validation_error" enums:"validation_error,bad_request,unauthorized,forbidden,not_found,conflict,rate_limited,internal_error,method_not_allowed,unsupported_media_type,missing_org_context,payment_required" extensions:"x-extensible-enum=true"`
+	Type      string       `json:"type" example:"validation_error" enums:"validation_error,bad_request,unauthorized,forbidden,not_found,conflict,rate_limited,internal_error,method_not_allowed,unsupported_media_type,missing_org_context,payment_required,capability_required" extensions:"x-extensible-enum=true"`
 	Title     string       `json:"title"`
 	Status    int          `json:"status"`
 	Detail    string       `json:"detail"`
@@ -125,6 +131,8 @@ func TitleForType(t ErrorType) string {
 		return "Missing org context"
 	case ErrPaymentRequired:
 		return "Payment required"
+	case ErrCapabilityRequired:
+		return "Capability required"
 	}
 	return "Error"
 }
