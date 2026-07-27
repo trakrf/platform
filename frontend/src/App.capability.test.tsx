@@ -29,6 +29,9 @@ vi.mock('@/lib/openreplay', async (importOriginal) => ({
   initOpenReplay: vi.fn(),
   trackPageView: vi.fn(),
 }));
+// The default tab's screen, rendered whenever a route resolves away. Heavy and
+// query-driven; mocked so this file exercises routing and nothing else.
+vi.mock('@/components/InventoryScreen', () => ({ default: () => <div data-testid="scan-screen" /> }));
 
 import App from './App';
 import { useUIStore } from '@/stores';
@@ -48,6 +51,12 @@ function setCapabilities(capabilities: string[] | null) {
     isAuthenticated: true,
     token: FAR_FUTURE_JWT,
     profile: null,
+    // App's mount effect calls fetchProfile() when authenticated. Left real, it
+    // issues an XHR that vitest.setup.ts fails on a `setTimeout(…, 0)` — the
+    // rejection, its catch, and the store writes it triggers then land *after*
+    // the test file ends, which is the TRA-1050 cross-file hang. The org state
+    // is set directly below, so the fetch has nothing to contribute anyway.
+    fetchProfile: async () => {},
   } as never);
   useOrgStore.setState({
     currentRole: 'owner',
@@ -94,7 +103,12 @@ describe('App capability route gating', () => {
     loaded.mustering = 0;
     loaded.outputDevices = 0;
     loaded.geofenceDefaults = 0;
-    useAuthStore.setState({ isAuthenticated: false, token: null, profile: null } as never);
+    useAuthStore.setState({
+      isAuthenticated: false,
+      token: null,
+      profile: null,
+      fetchProfile: async () => {},
+    } as never);
     useOrgStore.setState({ currentRole: null, currentOrg: null } as never);
   });
 

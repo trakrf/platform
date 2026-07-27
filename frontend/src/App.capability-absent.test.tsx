@@ -37,6 +37,9 @@ vi.mock('@/lib/openreplay', async (importOriginal) => ({
   initOpenReplay: vi.fn(),
   trackPageView: vi.fn(),
 }));
+// The not-found redirect lands here. Heavy and query-driven, so mock it —
+// otherwise this file's real subject (routing) drags the whole Scan tab in.
+vi.mock('@/components/InventoryScreen', () => ({ default: () => <div data-testid="scan-screen" /> }));
 
 import App from './App';
 import { useUIStore } from '@/stores';
@@ -51,6 +54,9 @@ function setCapabilities(capabilities: string[] | null) {
     isAuthenticated: true,
     token: FAR_FUTURE_JWT,
     profile: null,
+    // See App.capability.test.tsx — a real fetchProfile() leaves an XHR whose
+    // failure lands after this file ends (TRA-1050 cross-file hang).
+    fetchProfile: async () => {},
   } as never);
   useOrgStore.setState({
     currentRole: 'owner',
@@ -88,7 +94,12 @@ describe('App capability route gating — `absent` presentation', () => {
 
   beforeEach(() => {
     loaded.mustering = 0;
-    useAuthStore.setState({ isAuthenticated: false, token: null, profile: null } as never);
+    useAuthStore.setState({
+      isAuthenticated: false,
+      token: null,
+      profile: null,
+      fetchProfile: async () => {},
+    } as never);
     useOrgStore.setState({ currentRole: null, currentOrg: null } as never);
   });
 
