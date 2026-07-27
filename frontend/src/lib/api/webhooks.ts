@@ -44,7 +44,11 @@ export const webhooksApi = {
    * the operator is asking for.
    */
   test: async (id: number): Promise<WebhookTestResult> => {
-    const resp = await apiClient.post<{ data: WebhookTestResult }>(`/webhooks/${id}/test`);
+    // The empty object is load-bearing: axios drops Content-Type when a request
+    // has no body, and every write route in the session group runs behind
+    // middleware.ContentType, which answers 415 without it. The endpoint itself
+    // reads no body.
+    const resp = await apiClient.post<{ data: WebhookTestResult }>(`/webhooks/${id}/test`, {});
     return resp.data.data;
   },
 };
