@@ -15,6 +15,10 @@ permissions:
 jobs:
   lint-test:
     runs-on: ubuntu-latest
+    # Without this the job inherits the 360-minute Actions default. A hung test
+    # runner would then occupy a runner for six hours and emit no signal about
+    # what happened — see TRA-1050. The job takes ~5 min when healthy.
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -58,4 +62,7 @@ jobs:
         run: just lint
 
       - name: Test
+        # Step-level guard as well as the job-level one, so a hang points at the
+        # step that hung instead of just failing the whole job on timeout.
+        timeout-minutes: 10
         run: just test
