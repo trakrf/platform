@@ -26,6 +26,27 @@
  * real socket.
  */
 
+/*
+ * Start every test file with empty web storage.
+ *
+ * TRA-1052. `pool: 'forks'` + `singleFork: true` means every test file shares
+ * one jsdom process, and therefore one `localStorage`. Vitest gives each file a
+ * fresh module graph, so zustand stores are rebuilt per file — but the `persist`
+ * middleware then rehydrates them from that *shared* storage. A file that logs
+ * in leaves `auth-storage` behind, and every later file that renders an
+ * org-aware component comes up authenticated and fires `authStore.fetchProfile()`
+ * at the API. That accounted for 38 of the 43 stray requests, and none of them
+ * reproduced when a directory was run on its own.
+ *
+ * This runs at module scope, not in `beforeEach`, and setup files are evaluated
+ * before the test file's own imports — so storage is empty at the moment the
+ * stores are constructed and rehydrate. Doing it in `beforeEach` would be both
+ * too late (stores already rehydrated) and too aggressive (it would wipe state a
+ * file deliberately set up in `beforeAll`).
+ */
+localStorage.clear();
+sessionStorage.clear();
+
 const blockedMessage = (url: string) =>
   `[vitest] Blocked real network request to ${url}. Unit tests must not hit the ` +
   `network — mock the API module with vi.mock(), or stub fetch for this test. ` +
