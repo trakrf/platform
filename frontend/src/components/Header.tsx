@@ -80,6 +80,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
     'api-keys': { title: "API Keys", subtitle: "Manage programmatic access tokens" },
     'org-members': { title: "Members", subtitle: "Manage organization members" },
     'org-settings': { title: "Organization Settings", subtitle: "Configure your organization" },
+    'webhooks': { title: "Webhooks", subtitle: "Send asset.moved events to your systems" },
     'create-org': { title: "Create Organization", subtitle: "Set up a new organization" },
     'accept-invite': { title: "Accept Invite", subtitle: "Join an organization" }
   };

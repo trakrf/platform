@@ -15,7 +15,31 @@ import { extractErrorMessage } from '@/lib/asset/helpers';
 import type { Webhook, WebhookTestResult } from '@/types/webhook';
 import toast from 'react-hot-toast';
 
-export function WebhooksSection() {
+/**
+ * Mirrors the backend's webhook.Mask: prefix + ellipsis + last four. Applied
+ * client-side to the create response so the cleartext secret lives in exactly
+ * one place on screen — the reveal-once banner. Without this the "will not be
+ * shown again" warning sits directly above a full-length copy of the secret,
+ * which reads as a lie and stays on screen until the next load.
+ *
+ * Idempotent: a value the API already masked is returned unchanged.
+ */
+function maskSecret(secret: string): string {
+  if (!secret || secret.includes('…')) return secret;
+  if (secret.length < 'whsec_'.length + 8) return 'whsec_…';
+  return `whsec_…${secret.slice(-4)}`;
+}
+
+interface WebhooksSectionProps {
+  /**
+   * true when rendered as its own screen rather than as a section inside a
+   * settings form: drops the top divider and promotes the heading, since there
+   * is nothing above it to separate from.
+   */
+  standalone?: boolean;
+}
+
+export function WebhooksSection({ standalone = false }: WebhooksSectionProps) {
   const [webhook, setWebhook] = useState<Webhook | null>(null);
   const [url, setUrl] = useState('');
   const [enabled, setEnabled] = useState(true);
@@ -61,7 +85,10 @@ export function WebhooksSection() {
         toast.success('Webhook updated');
       } else {
         const created = await webhooksApi.create({ url, enabled });
-        setWebhook(created);
+        // The cleartext goes to the reveal-once banner and nowhere else; the
+        // persistent row below renders the masked form immediately, matching
+        // what every subsequent load will show.
+        setWebhook({ ...created, secret: maskSecret(created.secret) });
         setRevealedSecret(created.secret);
         toast.success('Webhook created');
       }
@@ -108,8 +135,10 @@ export function WebhooksSection() {
   const isDirty = webhook ? url !== webhook.url || enabled !== webhook.enabled : url.trim() !== '';
 
   return (
-    <section className="mt-8 border-t border-gray-700 pt-6">
-      <h2 className="text-lg font-semibold text-white mb-1">Webhooks</h2>
+    <section className={standalone ? '' : 'mt-8 border-t border-gray-700 pt-6'}>
+      <h2 className={`font-semibold text-white mb-1 ${standalone ? 'text-2xl' : 'text-lg'}`}>
+        Webhooks
+      </h2>
       <p className="text-sm text-gray-400 mb-4">
         Receive an <code className="text-gray-300">asset.moved</code> event when an asset is
         scanned at a different location than it was last seen at. Rescans at the same location
@@ -162,7 +191,9 @@ export function WebhooksSection() {
           {webhook && (
             <div>
               <span className="block text-sm font-medium text-gray-300 mb-1">Signing secret</span>
-              <code className="text-sm text-gray-400">{webhook.secret}</code>
+              {/* break-all: the masked form is short, but a long value must wrap
+                  inside the card rather than running past its right edge. */}
+              <code className="block break-all text-sm text-gray-400">{webhook.secret}</code>
             </div>
           )}
 

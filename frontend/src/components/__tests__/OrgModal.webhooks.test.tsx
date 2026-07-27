@@ -1,7 +1,7 @@
 import React, { type ReactNode } from 'react';
 import '@testing-library/jest-dom';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { OrgModal } from '@/components/OrgModal';
 import { useOrgStore, useAuthStore } from '@/stores';
@@ -74,29 +74,48 @@ describe('OrgModal settings tab — webhooks (TRA-1043)', () => {
     cleanup();
   });
 
-  it('renders the webhook section for an admin', async () => {
+  it('offers a route into the webhooks screen for an admin', () => {
     setOrg('admin');
     renderModal('settings');
 
-    expect(await screen.findByRole('heading', { name: /webhooks/i })).toBeInTheDocument();
-    expect(await screen.findByLabelText(/endpoint url/i)).toBeInTheDocument();
-    expect(webhooksApi.get).toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: /webhooks/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /manage webhooks/i })).toBeInTheDocument();
+    // The modal only links out; it must not mount the form or fetch anything.
+    expect(screen.queryByLabelText(/endpoint url/i)).not.toBeInTheDocument();
+    expect(webhooksApi.get).not.toHaveBeenCalled();
   });
 
-  it('does not render the webhook section on the members tab', () => {
+  it('navigates to the webhooks screen and closes the modal', () => {
+    setOrg('admin');
+    const onClose = vi.fn();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const Wrapper = ({ children }: { children: ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: queryClient }, children);
+    render(<OrgModal isOpen mode="manage" defaultTab="settings" onClose={onClose} />, {
+      wrapper: Wrapper,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /manage webhooks/i }));
+
+    expect(window.location.hash).toBe('#webhooks');
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('does not offer webhooks on the members tab', () => {
     setOrg('admin');
     renderModal('members');
 
-    expect(screen.queryByRole('heading', { name: /webhooks/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /manage webhooks/i })).not.toBeInTheDocument();
   });
 
   // The settings tab itself is admin-gated; this pins that webhooks inherits
   // that gate rather than needing its own.
-  it('does not render the webhook section for a non-admin', () => {
+  it('does not offer webhooks to a non-admin', () => {
     setOrg('operator');
     renderModal('settings');
 
-    expect(screen.queryByRole('heading', { name: /webhooks/i })).not.toBeInTheDocument();
-    expect(webhooksApi.get).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /manage webhooks/i })).not.toBeInTheDocument();
   });
 });

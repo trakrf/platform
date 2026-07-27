@@ -14,7 +14,6 @@ import { refreshOrgToken } from '@/lib/auth/orgContext';
 import { invalidateAllOrgScopedData } from '@/lib/cache/orgScopedCache';
 import { DeleteOrgModal } from './DeleteOrgModal';
 import { OrgEntitlementSection } from './OrgEntitlementSection';
-import { WebhooksSection } from './WebhooksSection';
 import type { Organization } from '@/types/org';
 import toast from 'react-hot-toast';
 
@@ -297,10 +296,26 @@ export default function OrgSettingsScreen() {
           </section>
         )}
 
-        {/* Webhooks (TRA-1043). Admin-only, and deliberately NOT gated on a
-            capability: webhooks is base platform surface for every paying
-            customer, not a sold module. */}
-        {isAdmin && <WebhooksSection />}
+        {/* Webhooks (TRA-1043). Its own screen, like API Keys — an integration
+            surface, not an org attribute. Deliberately NOT capability-gated:
+            webhooks is base platform surface for every paying customer. */}
+        {isAdmin && (
+          <section className="mt-8 border-t border-gray-700 pt-6">
+            <h2 className="text-lg font-semibold text-white mb-2">Webhooks</h2>
+            <p className="text-sm text-gray-400 mb-3">
+              Send an event to your systems when an asset moves to a new location.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                window.location.hash = '#webhooks';
+              }}
+              className="px-4 py-2 text-sm border border-gray-600 rounded text-gray-300 hover:text-white hover:border-gray-400 transition-colors"
+            >
+              Manage webhooks →
+            </button>
+          </section>
+        )}
 
         {/* Entitlement (superadmin only) */}
         {isSuperadmin && (
