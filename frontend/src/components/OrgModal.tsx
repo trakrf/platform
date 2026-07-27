@@ -7,6 +7,7 @@ import { X, Users, Settings, Trash2 } from 'lucide-react';
 import { DeleteOrgModal } from './DeleteOrgModal';
 import { RoleBadge } from './RoleBadge';
 import InvitationsSection from './InvitationsSection';
+import { WebhooksSection } from './WebhooksSection';
 import { OrgEntitlementStatus } from './OrgEntitlementStatus';
 import { useOrgModal, ROLES, type ModalMode, type TabType } from './useOrgModal';
 import type { OrgRole } from '@/types/org';
@@ -296,6 +297,13 @@ export function OrgModal({ isOpen, onClose, mode = 'manage', defaultTab = 'membe
                     {isSaving ? 'Saving...' : 'Save Changes'}
                   </button>
                 </form>
+
+                {/* TRA-1043. This modal is the org-settings surface an admin
+                    actually reaches (OrgSwitcher → Organization Settings); the
+                    standalone #org-settings screen is hash-only and carries a
+                    near-duplicate of this tab. The section is mounted in both so
+                    webhooks are not reachable by URL alone. */}
+                <WebhooksSection />
 
                 <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
                   <h3 className="text-lg font-semibold text-red-500 mb-2">Danger Zone</h3>
