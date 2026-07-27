@@ -11,6 +11,9 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { lazyWithRetry } from '@/utils/lazyWithRetry';
 import { EnvironmentBanner } from '@/components/EnvironmentBanner';
 import { DEFAULT_TAB, resolveLegacyTab, isLegacyTab } from '@/utils/tabRedirects';
+import { useCapabilityRouteGate } from '@/hooks/capability/useCapability';
+import { capabilityEntryForRoute } from '@/components/capability/registry';
+import CapabilityUpsell from '@/components/capability/CapabilityUpsell';
 
 const InventoryScreen = lazyWithRetry(() => import('@/components/InventoryScreen'));
 const LocateScreen = lazyWithRetry(() => import('@/components/LocateScreen'));
@@ -38,14 +41,20 @@ const SuperadminOrgsScreen = lazyWithRetry(() => import('@/components/Superadmin
 const MusteringScreen = lazyWithRetry(() => import('@/components/mustering/MusteringScreen'));
 const KitsScreen = lazyWithRetry(() => import('@/components/kits/KitsScreen'));
 
-// 'mustering' is intentionally omitted until the capability gate lands (TRA-1026).
-// A direct #mustering hash falls back to the default tab. Its component wiring
-// stays in tabComponents/loadingScreens below so restoring it is a one-line add.
-const VALID_TABS: TabType[] = ['scan', 'locate', 'kits', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'org-geofence-defaults', 'accept-invite', 'api-keys', 'webhooks', 'admin-orgs'];
+// Capability-gated tabs (mustering, output-devices, org-geofence-defaults) are
+// valid hash targets here; whether they *resolve* is decided by the capability
+// registry at render time, not by this list. Resolving them here would bounce a
+// granted user's bookmark on every cold load, before the profile lands.
+const VALID_TABS: TabType[] = ['scan', 'locate', 'kits', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'mustering', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'org-geofence-defaults', 'accept-invite', 'api-keys', 'webhooks', 'admin-orgs'];
 
 export default function App() {
   const activeTab = useUIStore((state) => state.activeTab);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // TRA-1026 / ADR 0002: capability gate for the active route, evaluated at the
+  // route definition rather than inside the screen, so an ungated org never
+  // downloads the gated surface's chunk.
+  const capabilityGate = useCapabilityRouteGate(activeTab);
 
   useEffect(() => {
     initOpenReplay();
@@ -137,6 +146,16 @@ export default function App() {
       unsubActiveTab();
     };
   }, []);
+
+  // An ungated `absent` capability leaves no trace, so its route resolves the
+  // way any unknown hash does: fall back to the default tab and rewrite the URL
+  // so the unreachable one doesn't linger in the address bar. Runs only once the
+  // capability set is known, so a granted user's bookmark survives a cold load.
+  useEffect(() => {
+    if (capabilityGate !== 'not-found') return;
+    useUIStore.getState().setActiveTab(DEFAULT_TAB);
+    window.history.replaceState({ tab: DEFAULT_TAB }, '', `#${DEFAULT_TAB}`);
+  }, [capabilityGate]);
 
   useEffect(() => {
     const handleHashChange = () => handleUrlNavigation(false);
@@ -264,6 +283,24 @@ export default function App() {
 
     const Component = tabComponents[activeTab] || InventoryScreen;
     const LoadingComponent = loadingScreens[activeTab] || LoadingScreen;
+
+    // Capability gate (TRA-1026). Every non-`allow` branch returns before the
+    // lazy component is referenced in the tree, which is what keeps a gated
+    // org from ever requesting the surface's chunk.
+    if (capabilityGate === 'loading' || capabilityGate === 'not-found') {
+      // Set not yet known, or the redirect effect above is about to fire.
+      return <LoadingComponent />;
+    }
+
+    const capabilityEntry = capabilityEntryForRoute(activeTab);
+    if (capabilityGate === 'upsell' && capabilityEntry) {
+      return (
+        <CapabilityUpsell
+          capability={capabilityEntry.capability}
+          label={capabilityEntry.label}
+        />
+      );
+    }
 
     // Get token from URL for reset-password screen
     const { params } = parseHash();

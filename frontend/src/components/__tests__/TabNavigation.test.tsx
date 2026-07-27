@@ -1,10 +1,32 @@
 import '@testing-library/jest-dom';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import TabNavigation from '@/components/TabNavigation';
 import { useUIStore, useDeviceStore, useOrgStore } from '@/stores';
+import { useAuthStore } from '@/stores/authStore';
 import { ReaderState } from '@/worker/types/reader';
 import { appVersion } from '@/version';
+
+/** Set the current org's capability grants; `null` models "profile not loaded". */
+function setCapabilities(capabilities: string[] | null, role = 'owner') {
+  useAuthStore.setState({ isAuthenticated: true } as never);
+  useOrgStore.setState({
+    currentRole: role,
+    currentOrg:
+      capabilities === null
+        ? null
+        : ({
+            id: 1,
+            name: 'Acme',
+            identifier: 'acme',
+            role,
+            is_entitled: true,
+            subscription_enabled: true,
+            subscription_expires_at: null,
+            capabilities,
+          } as never),
+  } as never);
+}
 
 describe('TabNavigation', () => {
   beforeEach(() => {
@@ -12,12 +34,15 @@ describe('TabNavigation', () => {
     useUIStore.setState({ activeTab: 'scan' });
     useDeviceStore.setState({ readerState: ReaderState.DISCONNECTED });
     // Default to no org role; device-management tests opt into a role.
-    useOrgStore.setState({ currentRole: null });
+    // Auth/org are reset too so capability tests can't leak into the rest.
+    useAuthStore.setState({ isAuthenticated: false } as never);
+    useOrgStore.setState({ currentRole: null, currentOrg: null } as never);
   });
 
   afterEach(() => {
     cleanup();
-    useOrgStore.setState({ currentRole: null });
+    useAuthStore.setState({ isAuthenticated: false } as never);
+    useOrgStore.setState({ currentRole: null, currentOrg: null } as never);
   });
 
   it('should render all navigation items with correct labels', () => {
@@ -161,8 +186,10 @@ describe('TabNavigation', () => {
       expect(screen.queryByText('Live Reads')).not.toBeInTheDocument();
     });
 
+    // These set a real signed-in org with the geofence grant: Outputs is
+    // capability-gated as well as role-gated, and signed-out hides it outright.
     it('should show Readers, Live feed, and Outputs sub-options for an operator', () => {
-      useOrgStore.setState({ currentRole: 'operator' });
+      setCapabilities(['geofence'], 'operator');
       render(<TabNavigation />);
 
       expect(screen.getByText('Readers')).toBeInTheDocument();
@@ -172,7 +199,7 @@ describe('TabNavigation', () => {
 
     it('should show device-management sub-options for owner/admin/manager', () => {
       for (const role of ['owner', 'admin', 'manager'] as const) {
-        useOrgStore.setState({ currentRole: role });
+        setCapabilities(['geofence'], role);
         const { unmount } = render(<TabNavigation />);
         expect(screen.getByText('Readers')).toBeInTheDocument();
         expect(screen.getByText('Outputs')).toBeInTheDocument();
@@ -181,7 +208,7 @@ describe('TabNavigation', () => {
     });
 
     it('should hide device-management sub-options from a viewer', () => {
-      useOrgStore.setState({ currentRole: 'viewer' });
+      setCapabilities(['geofence'], 'viewer');
       render(<TabNavigation />);
 
       expect(screen.queryByText('Readers')).not.toBeInTheDocument();
@@ -194,7 +221,7 @@ describe('TabNavigation', () => {
     it('should navigate to the correct tab when clicking each sub-option', () => {
       const mockSetActiveTab = vi.fn();
       useUIStore.getState().setActiveTab = mockSetActiveTab;
-      useOrgStore.setState({ currentRole: 'operator' });
+      setCapabilities(['geofence'], 'operator');
       render(<TabNavigation />);
 
       fireEvent.click(screen.getByText('Readers').closest('button')!);
@@ -205,6 +232,115 @@ describe('TabNavigation', () => {
 
       fireEvent.click(screen.getByText('Outputs').closest('button')!);
       expect(mockSetActiveTab).toHaveBeenCalledWith('output-devices');
+    });
+  });
+
+  describe('capability gating (TRA-1026)', () => {
+    it('renders Mustering with a lock without the grant (`locked`)', () => {
+      setCapabilities(['geofence']);
+      render(<TabNavigation />);
+
+      expect(screen.getByText('Mustering')).toBeInTheDocument();
+      expect(screen.getByTestId('menu-item-mustering-locked')).toBeInTheDocument();
+    });
+
+    it('shows Mustering normally with the grant', () => {
+      setCapabilities(['mustering']);
+      render(<TabNavigation />);
+
+      expect(screen.getByText('Mustering')).toBeInTheDocument();
+      expect(screen.queryByTestId('menu-item-mustering-locked')).not.toBeInTheDocument();
+    });
+
+    it('navigates to the mustering tab when granted', () => {
+      const mockSetActiveTab = vi.fn();
+      useUIStore.getState().setActiveTab = mockSetActiveTab;
+      setCapabilities(['mustering']);
+      render(<TabNavigation />);
+
+      fireEvent.click(screen.getByText('Mustering').closest('button')!);
+      expect(mockSetActiveTab).toHaveBeenCalledWith('mustering');
+    });
+
+    it('renders the geofence entries with a lock without the grant (`locked`)', () => {
+      setCapabilities([]);
+      render(<TabNavigation />);
+
+      expect(screen.getByText('Outputs')).toBeInTheDocument();
+      expect(screen.getByText('Geofence defaults')).toBeInTheDocument();
+      expect(screen.getByTestId('menu-item-output-devices-locked')).toBeInTheDocument();
+      expect(screen.getByTestId('menu-item-org-geofence-defaults-locked')).toBeInTheDocument();
+    });
+
+    it('drops the lock on the geofence entries once granted', () => {
+      setCapabilities(['geofence']);
+      render(<TabNavigation />);
+
+      expect(screen.getByText('Outputs')).toBeInTheDocument();
+      expect(screen.queryByTestId('menu-item-output-devices-locked')).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId('menu-item-org-geofence-defaults-locked')
+      ).not.toBeInTheDocument();
+    });
+
+    it('still routes to the surface when a locked entry is clicked (upsell resolves it)', () => {
+      const mockSetActiveTab = vi.fn();
+      useUIStore.getState().setActiveTab = mockSetActiveTab;
+      setCapabilities([]);
+      render(<TabNavigation />);
+
+      fireEvent.click(screen.getByText('Outputs').closest('button')!);
+      expect(mockSetActiveTab).toHaveBeenCalledWith('output-devices');
+    });
+
+    it('renders no gated entry at all while the profile is loading (fail-closed)', () => {
+      setCapabilities(null);
+      render(<TabNavigation />);
+
+      // Not even the locked teaser — a lock that appears mid-load reads as a
+      // downgrade to anyone who actually holds the grant.
+      expect(screen.queryByText('Mustering')).not.toBeInTheDocument();
+      expect(screen.queryByText('Outputs')).not.toBeInTheDocument();
+      expect(screen.queryByText('Geofence defaults')).not.toBeInTheDocument();
+      // Ungated entries are unaffected.
+      expect(screen.getByText('Readers')).toBeInTheDocument();
+    });
+
+    // Signed out there is no org, so no capability question to answer. Showing
+    // a lock would offer "contact us to enable it for your organization" to a
+    // visitor with no organization. Mustering used to escape this because it is
+    // the only gated entry without a role condition wrapping it.
+    it('renders no gated entry when signed out', () => {
+      useAuthStore.setState({ isAuthenticated: false } as never);
+      useOrgStore.setState({ currentRole: null, currentOrg: null } as never);
+      render(<TabNavigation />);
+
+      expect(screen.queryByText('Mustering')).not.toBeInTheDocument();
+      expect(screen.queryByText('Outputs')).not.toBeInTheDocument();
+      expect(screen.queryByText('Geofence defaults')).not.toBeInTheDocument();
+      // Ungated entries are untouched — Scan and Locate work without an account.
+      expect(screen.getByText('Scan')).toBeInTheDocument();
+      expect(screen.getByText('Locate')).toBeInTheDocument();
+    });
+
+    it('keeps Geofence defaults admin-only even when granted', () => {
+      setCapabilities(['geofence'], 'manager');
+      render(<TabNavigation />);
+
+      expect(screen.getByText('Outputs')).toBeInTheDocument();
+      expect(screen.queryByText('Geofence defaults')).not.toBeInTheDocument();
+    });
+
+    it('updates nav state when the org switches from granted to ungated', () => {
+      setCapabilities(['mustering', 'geofence']);
+      const { rerender } = render(<TabNavigation />);
+      expect(screen.queryByTestId('menu-item-mustering-locked')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('menu-item-output-devices-locked')).not.toBeInTheDocument();
+
+      act(() => setCapabilities([]));
+      rerender(<TabNavigation />);
+      expect(screen.getByTestId('menu-item-mustering-locked')).toBeInTheDocument();
+      expect(screen.getByTestId('menu-item-output-devices-locked')).toBeInTheDocument();
     });
   });
 });

@@ -166,6 +166,14 @@ published specs cannot honor. Initial assignment: `mustering` = `absent`.
 `inventory` and `geofence` are a pending commercial decision with zero
 backend implication.
 
+**Amended.** The pending decision resolved on 2026-07-16 (Mike + Tim) to
+`geofence` = `locked` and `inventory` = `locked` when its surface ships. On
+2026-07-27 Tim additionally moved `mustering` from `absent` to `locked`, so
+every capability now presents as a visible upsell teaser and no shipped
+registry entry uses `absent`. That presentation remains fully implemented and
+tested — the assignment is a commercial call that can change again, and it
+carries no backend implication either way (TRA-1026).
+
 Delivery: the capability set is one more field on the `/users/me` org payload
 (the same shape carrying `is_entitled`), flowing through the existing
 Zustand path; `switchOrg`'s profile refetch refreshes it for free.

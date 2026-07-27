@@ -8,9 +8,11 @@ export interface GateCopy {
   action: GateAction;
 }
 
+/** The one support address the app hands out. Every contact CTA points here. */
+export const SUPPORT_EMAIL = 'support@trakrf.id';
+
 /** Where the lapsed "contact us" CTA points (no self-serve Stripe yet). */
-export const RENEW_CONTACT_MAILTO =
-  'mailto:support@trakrf.id?subject=Renew%20TrakRF%20subscription';
+export const RENEW_CONTACT_MAILTO = `mailto:${SUPPORT_EMAIL}?subject=Renew%20TrakRF%20subscription`;
 
 /** Value-led (not feature-led) prompt copy per state. `entitled` never renders a prompt. */
 export function gateCopy(state: EntitlementState): GateCopy {
