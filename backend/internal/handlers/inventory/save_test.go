@@ -75,7 +75,7 @@ func newTestRequest(t *testing.T, body any, orgID int) *http.Request {
 }
 
 func TestSave_MissingOrgContext(t *testing.T) {
-	handler := NewHandler(nil)
+	handler := NewHandler(nil, nil)
 
 	body := SaveRequest{
 		LocationIdentifier: ptr("WH-01"),
@@ -105,7 +105,7 @@ func TestSave_MissingOrgContext(t *testing.T) {
 }
 
 func TestSave_InvalidJSON(t *testing.T) {
-	handler := NewHandler(nil)
+	handler := NewHandler(nil, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewReader([]byte("invalid json")))
 	req.Header.Set("Content-Type", "application/json")
@@ -126,7 +126,7 @@ func TestSave_InvalidJSON(t *testing.T) {
 }
 
 func TestSave_NeitherLocationFieldProvided(t *testing.T) {
-	handler := NewHandler(&mockInventoryStorage{})
+	handler := NewHandler(&mockInventoryStorage{}, nil)
 
 	body := map[string]any{
 		"asset_identifiers": []string{"ASSET-0001"},
@@ -153,7 +153,7 @@ func TestSave_NeitherLocationFieldProvided(t *testing.T) {
 }
 
 func TestSave_EmptyAssetIdentifiers(t *testing.T) {
-	handler := NewHandler(&mockInventoryStorage{})
+	handler := NewHandler(&mockInventoryStorage{}, nil)
 
 	body := SaveRequest{
 		LocationIdentifier: ptr("WH-01"),
@@ -204,7 +204,7 @@ func TestSave_RouteRegistration(t *testing.T) {
 	// POST /api/v1/inventory/save is now wired in cmd/serve/router.go under the
 	// public-write group (TRA-397); Handler.RegisterRoutes is intentionally empty.
 	// Wire the route directly here to verify handler-level plumbing.
-	handler := NewHandler(nil)
+	handler := NewHandler(nil, nil)
 
 	r := chi.NewRouter()
 	r.Post("/api/v1/inventory/save", handler.Save)
@@ -407,7 +407,7 @@ func TestInventorySave_MalformedBody_StableDetail(t *testing.T) {
 	ctx := context.WithValue(req.Context(), middleware.UserClaimsKey, claims)
 	req = req.WithContext(ctx)
 
-	handler := NewHandler(nil)
+	handler := NewHandler(nil, nil)
 	w := httptest.NewRecorder()
 	handler.Save(w, req)
 
@@ -445,7 +445,7 @@ func TestInventorySave_BadBody_CrossFieldEnvelope(t *testing.T) {
 	ctx := context.WithValue(req.Context(), middleware.UserClaimsKey, claims)
 	req = req.WithContext(ctx)
 
-	handler := NewHandler(&mockInventoryStorage{})
+	handler := NewHandler(&mockInventoryStorage{}, nil)
 	w := httptest.NewRecorder()
 	handler.Save(w, req)
 
@@ -481,7 +481,7 @@ func TestSave_LocationAccessDenied(t *testing.T) {
 		},
 		assetIDsByIdentifiers: map[string]int{"ASSET-0001": 100, "ASSET-0002": 101},
 	}
-	handler := NewHandler(mock)
+	handler := NewHandler(mock, nil)
 
 	body := map[string]any{
 		"location_identifier": "WH-99",
@@ -514,7 +514,7 @@ func TestSave_AssetAccessDenied(t *testing.T) {
 		},
 		assetIDsByIdentifiers: map[string]int{"ASSET-1": 1, "ASSET-2": 2, "ASSET-3": 3},
 	}
-	handler := NewHandler(mock)
+	handler := NewHandler(mock, nil)
 
 	body := map[string]any{
 		"location_identifier": "WH-01",
@@ -540,7 +540,7 @@ func TestSave_InternalStorageError(t *testing.T) {
 		},
 		assetIDsByIdentifiers: map[string]int{"ASSET-0001": 100},
 	}
-	handler := NewHandler(mock)
+	handler := NewHandler(mock, nil)
 
 	body := map[string]any{
 		"location_identifier": "WH-01",
@@ -569,7 +569,7 @@ func TestSave_Success(t *testing.T) {
 		},
 		assetIDsByIdentifiers: map[string]int{"ASSET-1": 1, "ASSET-2": 2, "ASSET-3": 3},
 	}
-	handler := NewHandler(mock)
+	handler := NewHandler(mock, nil)
 
 	body := map[string]any{
 		"location_identifier": "WH-B",
@@ -593,7 +593,7 @@ func TestSave_Success(t *testing.T) {
 }
 
 func TestSave_RequiresAtLeastOneLocationField(t *testing.T) {
-	handler := NewHandler(&mockInventoryStorage{})
+	handler := NewHandler(&mockInventoryStorage{}, nil)
 	req := newTestRequest(t, map[string]any{"asset_identifiers": []string{"ASSET-0001"}}, 1)
 	w := httptest.NewRecorder()
 	handler.Save(w, req)
@@ -603,7 +603,7 @@ func TestSave_RequiresAtLeastOneLocationField(t *testing.T) {
 }
 
 func TestSave_RequiresAtLeastOneAssetField(t *testing.T) {
-	handler := NewHandler(&mockInventoryStorage{})
+	handler := NewHandler(&mockInventoryStorage{}, nil)
 	req := newTestRequest(t, map[string]any{"location_identifier": "WH-01"}, 1)
 	w := httptest.NewRecorder()
 	handler.Save(w, req)
@@ -616,7 +616,7 @@ func TestSave_LocationIdentifierNotFound_Rejected(t *testing.T) {
 	mock := &mockInventoryStorage{
 		locationByIdentifier: map[string]*location.LocationWithParent{}, // ghost
 	}
-	handler := NewHandler(mock)
+	handler := NewHandler(mock, nil)
 	body := map[string]any{
 		"location_identifier": "ghost",
 		"asset_identifiers":   []string{"ASSET-0001"},
@@ -639,7 +639,7 @@ func TestSave_AssetIdentifierNotFound_Rejected(t *testing.T) {
 			// "ASSET-GHOST" intentionally absent
 		},
 	}
-	handler := NewHandler(mock)
+	handler := NewHandler(mock, nil)
 	body := map[string]any{
 		"location_identifier": "WH-01",
 		"asset_identifiers":   []string{"ASSET-1", "ASSET-GHOST"},
@@ -666,7 +666,7 @@ func TestSave_IdentifierHappyPath_ResolvesAndSucceeds(t *testing.T) {
 			"ASSET-2": 8,
 		},
 	}
-	handler := NewHandler(mock)
+	handler := NewHandler(mock, nil)
 	body := map[string]any{
 		"location_identifier": "WH-01",
 		"asset_identifiers":   []string{"ASSET-1", "ASSET-2"},
@@ -685,3 +685,93 @@ func TestSave_IdentifierHappyPath_ResolvesAndSucceeds(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// --- TRA-1043: asset.moved detection hook ---
+
+type recordingMovedEvaluator struct {
+	calls      int
+	orgID      int
+	assetIDs   []int
+	locationID int
+	at         time.Time
+}
+
+func (r *recordingMovedEvaluator) EvaluateScans(_ context.Context, orgID int, assetIDs []int, locationID int, at time.Time) {
+	r.calls++
+	r.orgID = orgID
+	r.assetIDs = assetIDs
+	r.locationID = locationID
+	r.at = at
+}
+
+func TestSave_FiresMovedDetectionAfterCommit(t *testing.T) {
+	saved := time.Now()
+	mock := &mockInventoryStorage{
+		saveResult: &storage.SaveInventoryResult{Count: 2, LocationID: 1, LocationName: "WH-01", Timestamp: saved},
+		locationByIdentifier: map[string]*location.LocationWithParent{
+			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 1, ExternalKey: "WH-01"}}},
+		},
+		assetIDsByIdentifiers: map[string]int{"ASSET-1": 100, "ASSET-2": 101},
+	}
+	moved := &recordingMovedEvaluator{}
+	handler := NewHandler(mock, moved)
+
+	req := newTestRequest(t, map[string]any{
+		"location_identifier": "WH-01",
+		"asset_identifiers":   []string{"ASSET-1", "ASSET-2"},
+	}, 7)
+	w := httptest.NewRecorder()
+	handler.Save(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	require.Equal(t, 1, moved.calls)
+	require.Equal(t, 7, moved.orgID)
+	require.Equal(t, []int{100, 101}, moved.assetIDs)
+	require.Equal(t, 1, moved.locationID)
+	// The save's own timestamp, so the previous-location lookup excludes the
+	// rows this save just wrote.
+	require.Equal(t, saved, moved.at)
+}
+
+// A save that never committed must never produce an event — that is the whole
+// reason detection runs post-commit rather than inside the write transaction.
+func TestSave_DoesNotFireDetectionOnFailure(t *testing.T) {
+	mock := &mockInventoryStorage{
+		saveError: errors.New("insert exploded"),
+		locationByIdentifier: map[string]*location.LocationWithParent{
+			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 1, ExternalKey: "WH-01"}}},
+		},
+		assetIDsByIdentifiers: map[string]int{"ASSET-1": 100},
+	}
+	moved := &recordingMovedEvaluator{}
+	handler := NewHandler(mock, moved)
+
+	req := newTestRequest(t, map[string]any{
+		"location_identifier": "WH-01",
+		"asset_identifiers":   []string{"ASSET-1"},
+	}, 7)
+	w := httptest.NewRecorder()
+	handler.Save(w, req)
+
+	require.NotEqual(t, http.StatusCreated, w.Code)
+	require.Zero(t, moved.calls)
+}
+
+func TestSave_NilMovedEvaluatorIsSafe(t *testing.T) {
+	mock := &mockInventoryStorage{
+		saveResult: &storage.SaveInventoryResult{Count: 1, LocationID: 1, Timestamp: time.Now()},
+		locationByIdentifier: map[string]*location.LocationWithParent{
+			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 1, ExternalKey: "WH-01"}}},
+		},
+		assetIDsByIdentifiers: map[string]int{"ASSET-1": 100},
+	}
+	handler := NewHandler(mock, nil)
+
+	req := newTestRequest(t, map[string]any{
+		"location_identifier": "WH-01",
+		"asset_identifiers":   []string{"ASSET-1"},
+	}, 7)
+	w := httptest.NewRecorder()
+	require.NotPanics(t, func() { handler.Save(w, req) })
+	require.Equal(t, http.StatusCreated, w.Code)
+}

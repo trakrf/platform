@@ -4,7 +4,7 @@
 import { create } from 'zustand';
 
 // Define tab types
-export type TabType = 'scan' | 'settings' | 'locate' | 'kits' | 'help' | 'assets' | 'locations' | 'scan-devices' | 'output-devices' | 'live-reads' | 'reports' | 'reports-history' | 'mustering' | 'login' | 'signup' | 'forgot-password' | 'reset-password' | 'create-org' | 'org-members' | 'org-settings' | 'org-geofence-defaults' | 'accept-invite' | 'api-keys' | 'admin-orgs';
+export type TabType = 'scan' | 'settings' | 'locate' | 'kits' | 'help' | 'assets' | 'locations' | 'scan-devices' | 'output-devices' | 'live-reads' | 'reports' | 'reports-history' | 'mustering' | 'login' | 'signup' | 'forgot-password' | 'reset-password' | 'create-org' | 'org-members' | 'org-settings' | 'org-geofence-defaults' | 'accept-invite' | 'api-keys' | 'webhooks' | 'admin-orgs';
 export type TabId = TabType;
 
 // Scan tab read mode (TRA-1031). Session-local, never persisted — always

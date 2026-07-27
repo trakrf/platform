@@ -31,6 +31,7 @@ const OrgSettingsScreen = lazyWithRetry(() => import('@/components/OrgSettingsSc
 const OrgGeofenceDefaultsScreen = lazyWithRetry(() => import('@/components/OrgGeofenceDefaultsScreen'));
 const AcceptInviteScreen = lazyWithRetry(() => import('@/components/AcceptInviteScreen'));
 const APIKeysScreen = lazyWithRetry(() => import('@/components/APIKeysScreen'));
+const WebhooksScreen = lazyWithRetry(() => import('@/components/WebhooksScreen'));
 const ReportsScreen = lazyWithRetry(() => import('@/components/ReportsScreen'));
 const ReportsHistoryScreen = lazyWithRetry(() => import('@/components/ReportsHistoryScreen'));
 const SuperadminOrgsScreen = lazyWithRetry(() => import('@/components/SuperadminOrgsScreen'));
@@ -40,7 +41,7 @@ const KitsScreen = lazyWithRetry(() => import('@/components/kits/KitsScreen'));
 // 'mustering' is intentionally omitted until the capability gate lands (TRA-1026).
 // A direct #mustering hash falls back to the default tab. Its component wiring
 // stays in tabComponents/loadingScreens below so restoring it is a one-line add.
-const VALID_TABS: TabType[] = ['scan', 'locate', 'kits', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'org-geofence-defaults', 'accept-invite', 'api-keys', 'admin-orgs'];
+const VALID_TABS: TabType[] = ['scan', 'locate', 'kits', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'org-geofence-defaults', 'accept-invite', 'api-keys', 'webhooks', 'admin-orgs'];
 
 export default function App() {
   const activeTab = useUIStore((state) => state.activeTab);
@@ -229,6 +230,7 @@ export default function App() {
       'reports-history': ReportsHistoryScreen,
       mustering: MusteringScreen,
       'api-keys': APIKeysScreen,
+      'webhooks': WebhooksScreen,
       'admin-orgs': SuperadminOrgsScreen,
     };
 
@@ -256,6 +258,7 @@ export default function App() {
       'reports-history': LoadingScreen,
       mustering: LoadingScreen,
       'api-keys': LoadingScreen,
+      'webhooks': LoadingScreen,
       'admin-orgs': LoadingScreen,
     };
 

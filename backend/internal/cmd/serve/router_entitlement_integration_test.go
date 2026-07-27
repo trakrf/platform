@@ -25,22 +25,30 @@ import (
 	frontendhandler "github.com/trakrf/platform/backend/internal/handlers/frontend"
 	healthhandler "github.com/trakrf/platform/backend/internal/handlers/health"
 	inventoryhandler "github.com/trakrf/platform/backend/internal/handlers/inventory"
+	kitshandler "github.com/trakrf/platform/backend/internal/handlers/kits"
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
+	musteringhandler "github.com/trakrf/platform/backend/internal/handlers/mustering"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
 	outputdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/outputdevices"
+	readerconfighandler "github.com/trakrf/platform/backend/internal/handlers/readerconfig"
 	readstreamhandler "github.com/trakrf/platform/backend/internal/handlers/readstream"
 	reportshandler "github.com/trakrf/platform/backend/internal/handlers/reports"
 	scandeviceshandler "github.com/trakrf/platform/backend/internal/handlers/scandevices"
 	scanpointshandler "github.com/trakrf/platform/backend/internal/handlers/scanpoints"
 	testhandler "github.com/trakrf/platform/backend/internal/handlers/testhandler"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
+	webhookshandler "github.com/trakrf/platform/backend/internal/handlers/webhooks"
+	"github.com/trakrf/platform/backend/internal/ingest"
+	"github.com/trakrf/platform/backend/internal/logger"
+	"github.com/trakrf/platform/backend/internal/mustering"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
 	orgsservice "github.com/trakrf/platform/backend/internal/services/orgs"
 	readstreamsvc "github.com/trakrf/platform/backend/internal/services/readstream"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/testutil"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
+	"github.com/trakrf/platform/backend/internal/webhook"
 )
 
 // setupRealRouter builds the full production router (setupRouter) wired against
@@ -58,7 +66,7 @@ func setupRealRouter(t *testing.T, store *storage.Storage) *chi.Mux {
 	usersHandler := usershandler.NewHandler(store)
 	assetsHandler := assetshandler.NewHandler(store)
 	locationsHandler := locationshandler.NewHandler(store)
-	inventoryHandler := inventoryhandler.NewHandler(store)
+	inventoryHandler := inventoryhandler.NewHandler(store, nil)
 	reportsHandler := reportshandler.NewHandler(store)
 	scanDevicesHandler := scandeviceshandler.NewHandler(store, nil)
 	scanPointsHandler := scanpointshandler.NewHandler(store)
@@ -68,8 +76,14 @@ func setupRealRouter(t *testing.T, store *storage.Storage) *chi.Mux {
 	frontendHandler := frontendhandler.NewHandler(fstest.MapFS{}, "frontend/dist", "")
 	readstreamHandler := readstreamhandler.NewHandler(readstreamsvc.New())
 	testHandler := testhandler.NewHandler(store)
+	readerConfigHandler := readerconfighandler.NewHandler(store, nil)
+	musterBC := mustering.NewBroadcaster()
+	musterEngine := mustering.NewEngine(store, musterBC, logger.Get())
+	musteringHandler := musteringhandler.NewHandler(musterEngine, musterBC, store, ingest.MultiEvaluator{musterEngine}, nil)
+	kitsHandler := kitshandler.NewHandler(store)
+	webhooksHandler := webhookshandler.NewHandler(store, webhook.NewClient(true))
 
-	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, testHandler, store)
+	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, webhooksHandler, testHandler, store)
 }
 
 // sessionToken mints a real session JWT (passes middleware.Auth / EitherAuth and

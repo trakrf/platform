@@ -297,6 +297,29 @@ export function OrgModal({ isOpen, onClose, mode = 'manage', defaultTab = 'membe
                   </button>
                 </form>
 
+                {/* TRA-1043. This modal is the org-settings surface an admin
+                    actually reaches (OrgSwitcher → Organization Settings), so
+                    the route into webhooks has to start here — the standalone
+                    #org-settings screen is hash-only. Webhooks get their own
+                    screen, like API keys: an integration surface, not an org
+                    attribute. */}
+                <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Webhooks</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                    Send an event to your systems when an asset moves to a new location.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.location.hash = '#webhooks';
+                      onClose();
+                    }}
+                    className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-300 hover:border-gray-400 transition-colors"
+                  >
+                    Manage webhooks →
+                  </button>
+                </div>
+
                 <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
                   <h3 className="text-lg font-semibold text-red-500 mb-2">Danger Zone</h3>
                   <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">

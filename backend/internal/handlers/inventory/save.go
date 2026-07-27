@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -29,15 +30,27 @@ type InventoryStorage interface {
 	GetAssetIDsByExternalKeys(ctx context.Context, orgID int, externalKeys []string) (map[string]int, error)
 }
 
+// MovedEvaluator detects asset.moved events from a completed save (TRA-1043);
+// *assetevent.Evaluator satisfies it. Optional: a nil evaluator disables
+// detection, which keeps the handler constructible in tests that do not care.
+//
+// It is invoked AFTER the save transaction commits and does its own reads, so
+// SaveInventoryScans is untouched — no new parameter, return field, or query.
+type MovedEvaluator interface {
+	EvaluateScans(ctx context.Context, orgID int, assetIDs []int, locationID int, at time.Time)
+}
+
 // Handler handles inventory-related API requests
 type Handler struct {
 	storage InventoryStorage
+	moved   MovedEvaluator
 }
 
-// NewHandler creates a new inventory handler
-func NewHandler(storage InventoryStorage) *Handler {
+// NewHandler creates a new inventory handler. moved may be nil.
+func NewHandler(storage InventoryStorage, moved MovedEvaluator) *Handler {
 	return &Handler{
 		storage: storage,
+		moved:   moved,
 	}
 }
 
@@ -175,6 +188,23 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 		}
 		httputil.RespondStorageError(w, r, err, requestID)
 		return
+	}
+
+	// TRA-1043: asset.moved detection runs here, post-commit, and does its own
+	// reads. Enqueueing from inside the write transaction would send a phantom
+	// event whenever that transaction rolled back — the TRA-900 failure mode,
+	// where the ingest fan-out silently rolled back because the org GUC was never
+	// set. Post-commit is the only ordering that cannot lie.
+	//
+	// This is the handheld/manual Save path, which is what the real prod orgs
+	// exercise today; a webhook covering only the fixed-reader path would look
+	// broken to half the customer base.
+	//
+	// Best-effort by construction: detection failures are logged inside the
+	// evaluator and the dispatcher drops rather than blocking, so a slow customer
+	// endpoint can never delay a scan save.
+	if h.moved != nil {
+		h.moved.EvaluateScans(r.Context(), orgID, assetIDs, locationID, result.Timestamp)
 	}
 
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": result})

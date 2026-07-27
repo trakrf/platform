@@ -33,8 +33,10 @@ import (
 	"github.com/trakrf/platform/backend/internal/handlers/swaggerspec"
 	testhandler "github.com/trakrf/platform/backend/internal/handlers/testhandler"
 	usershandler "github.com/trakrf/platform/backend/internal/handlers/users"
+	webhookshandler "github.com/trakrf/platform/backend/internal/handlers/webhooks"
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/middleware"
+	"github.com/trakrf/platform/backend/internal/models"
 	"github.com/trakrf/platform/backend/internal/ratelimit"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
@@ -58,6 +60,7 @@ func setupRouter(
 	readstreamHandler *readstreamhandler.Handler,
 	musteringHandler *musteringhandler.Handler,
 	kitsHandler *kitshandler.Handler,
+	webhooksHandler *webhookshandler.Handler,
 	testHandler *testhandler.Handler,
 	store *storage.Storage,
 ) *chi.Mux {
@@ -176,6 +179,16 @@ func setupRouter(
 		// Operator gate resolves the org from JWT claims, NOT a URL param —
 		// these routes have no :orgId, so RequireOrgOperator would 400 (TRA-1033).
 		kitsHandler.RegisterRoutes(r, paidGate, middleware.RequireCurrentOrgOperator(store))
+		// TRA-1043: webhook registration is an org-settings action, so admin-only
+		// and internal (not in the public spec). Deliberately NOT capability-gated:
+		// webhooks is base platform surface for every paying customer, not a sold
+		// module. paidGate covers the mutations; reads stay open for a lapsed org
+		// per TRA-946, and DELIVERY is gated inside the sink, where an outbound
+		// POST no middleware can see is actually stopped.
+		//
+		// Admin gate resolves the org from JWT claims, NOT a URL param — these
+		// routes have no :orgId, so RequireOrgAdmin would 400 (TRA-1033).
+		webhooksHandler.RegisterRoutes(r, paidGate, middleware.RequireCurrentOrgRole(store, models.RoleAdmin))
 
 		r.Get("/swagger/openapi.internal.json", swaggerspec.ServeJSON)
 		r.Get("/swagger/openapi.internal.yaml", swaggerspec.ServeYAML)

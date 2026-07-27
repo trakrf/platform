@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import { Menu } from '@headlessui/react';
-import { ChevronDown, Plus, Check, Settings, Users, Key, LogOut, Building2 } from 'lucide-react';
+import { ChevronDown, Plus, Check, Settings, Users, Key, LogOut, Building2, Webhook } from 'lucide-react';
 import { useOrgStore, useAuthStore } from '@/stores';
 import { useOrgSwitch } from '@/hooks/orgs/useOrgSwitch';
 import { RoleBadge } from './RoleBadge';
@@ -182,6 +182,24 @@ export function OrgSwitcher({ user, onLogout }: OrgSwitcherProps) {
                 >
                   <Key className="w-4 h-4" />
                   API Keys
+                </button>
+              )}
+            </Menu.Item>
+            {/* TRA-1043: webhooks sits next to API Keys because it is the same
+                kind of thing — an outbound integration surface, admin-scoped —
+                and both are base platform surface, never capability-gated. */}
+            <Menu.Item>
+              {({ active }) => (
+                <button
+                  onClick={() => {
+                    window.location.hash = '#webhooks';
+                  }}
+                  className={`${
+                    active ? 'bg-gray-100 dark:bg-gray-700' : ''
+                  } group flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-900 dark:text-gray-100 transition-colors`}
+                >
+                  <Webhook className="w-4 h-4" />
+                  Webhooks
                 </button>
               )}
             </Menu.Item>
