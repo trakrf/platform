@@ -1,7 +1,8 @@
 import React from 'react';
 import { SkeletonBase } from '@/components/SkeletonLoaders';
+import { lazyWithRetry } from '@/utils/lazyWithRetry';
 
-const SortableHeader = React.lazy(() => import('@/components/SortableHeader').then(module => ({ default: module.SortableHeader })));
+const SortableHeader = lazyWithRetry(() => import('@/components/SortableHeader').then(module => ({ default: module.SortableHeader })));
 
 interface InventoryTableHeaderProps {
   sortColumn: string | null;

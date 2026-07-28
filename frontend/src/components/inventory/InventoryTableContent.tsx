@@ -4,9 +4,10 @@ import { InventoryTableRow } from './InventoryTableRow';
 import { InventoryMobileCard } from './InventoryMobileCard';
 import { InventoryTableHeader } from './InventoryTableHeader';
 import { SkeletonBase } from '@/components/SkeletonLoaders';
+import { lazyWithRetry } from '@/utils/lazyWithRetry';
 import type { TagInfo } from '@/stores/tagStore';
 
-const PaginationControls = React.lazy(() => import('@/components/PaginationControls').then(module => ({ default: module.PaginationControls })));
+const PaginationControls = lazyWithRetry(() => import('@/components/PaginationControls').then(module => ({ default: module.PaginationControls })));
 
 interface InventoryTableContentProps {
   tags: TagInfo[];
