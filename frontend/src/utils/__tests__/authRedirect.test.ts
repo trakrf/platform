@@ -9,7 +9,7 @@ describe('handleAuthRedirect', () => {
     window.location.hash = '';
   });
 
-  describe('sessionStorage handling (ProtectedRoute flow)', () => {
+  describe('sessionStorage handling (SignedOutUpsell flow)', () => {
     it('should redirect to saved path from sessionStorage', () => {
       sessionStorage.setItem('redirectAfterLogin', 'assets');
       handleAuthRedirect();

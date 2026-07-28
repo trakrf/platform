@@ -3,7 +3,7 @@
  *
  * Priority order:
  * 1. URL query params (from AcceptInviteScreen flow: #login?returnTo=...&token=...)
- * 2. sessionStorage (from ProtectedRoute flow)
+ * 2. sessionStorage (from the signed-out card's Log in CTA)
  * 3. Default to scan
  */
 export function handleAuthRedirect(): void {
@@ -26,7 +26,7 @@ export function handleAuthRedirect(): void {
     }
   }
 
-  // Priority 2: Check sessionStorage (from ProtectedRoute flow)
+  // Priority 2: Check sessionStorage (written by SignedOutUpsell / InventoryScreen)
   const redirect = sessionStorage.getItem('redirectAfterLogin');
   if (redirect) {
     sessionStorage.removeItem('redirectAfterLogin');

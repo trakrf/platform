@@ -11,7 +11,7 @@ interface SignedOutUpsellProps {
 /**
  * What a signed-out visitor sees on an org-scoped route (TRA-1057).
  *
- * Replaces `ProtectedRoute`'s silent `#login` redirect: a card naming the
+ * Replaces the old wrapper's silent `#login` redirect: a card naming the
  * surface, one sentence on what it does, and both paths out — start a trial, or
  * log in if the session simply expired. The redirect told the visitor nothing
  * about their options; this does.

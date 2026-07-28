@@ -30,8 +30,8 @@ export type RouteAuthGate = 'allow' | 'pending' | 'signed-out';
 
 /**
  * Routes whose content is org-scoped and therefore meaningless without an
- * account. Superset of the nine screens `ProtectedRoute` used to wrap: the
- * org-admin routes were never wrapped and rendered a screen that 401s.
+ * account. Superset of the nine screens the old wrapper component used to
+ * gate: the org-admin routes were never wrapped and rendered a screen that 401s.
  */
 export const ROUTE_REQUIRES_AUTH: ReadonlySet<TabType> = new Set<TabType>([
   'assets',

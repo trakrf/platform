@@ -7,7 +7,6 @@ import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import { useUIStore } from '@/stores';
 import { ConfirmModal, InlineEditCell } from '@/components/shared';
 import { OutputDeviceFormModal, OutputDeviceEditPanel } from '@/components/outputdevices';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { PaidGate } from '@/components/entitlement';
 import { validateName } from '@/lib/location/validators';
 import type { OutputDevice, OutputDeviceType } from '@/types/outputdevices';
@@ -66,177 +65,175 @@ export default function OutputDevicesScreen() {
   };
 
   return (
-    <ProtectedRoute>
-      <div className="h-full flex flex-col p-2">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Output Devices</h1>
-          <PaidGate surface="outputs-crud">
-            <button
-              type="button"
-              onClick={() => setIsCreateModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              New Output Device
-            </button>
-          </PaidGate>
-        </div>
+    <div className="h-full flex flex-col p-2">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Output Devices</h1>
+        <PaidGate surface="outputs-crud">
+          <button
+            type="button"
+            onClick={() => setIsCreateModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            New Output Device
+          </button>
+        </PaidGate>
+      </div>
 
-        <div className="flex-1 overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg">
-          {isLoading ? (
-            <p className="p-4 text-sm text-gray-500 dark:text-gray-400">Loading output devices…</p>
-          ) : outputDevices.length === 0 ? (
-            <p className="p-4 text-sm text-gray-600 dark:text-gray-400">
-              No output devices yet. Create one to wire a Shelly relay.
-            </p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 dark:bg-gray-800">
-                <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                  <th className="w-8 px-2"></th>
-                  <th className="py-2 px-3 font-medium">Name</th>
-                  <th className="px-3 font-medium">Type</th>
-                  <th className="px-3 font-medium">Transport</th>
-                  <th className="px-3 font-medium">Target</th>
-                  <th className="px-3 font-medium">Switch</th>
-                  <th className="px-3 font-medium">Location</th>
-                  <th className="px-3 font-medium">Active</th>
-                  <th className="px-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {outputDevices.map((device) => {
-                  const isExpanded = expandedId === device.id;
-                  return (
-                    <Fragment key={device.id}>
-                      <tr className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                        <td className="w-8 px-2">
+      <div className="flex-1 overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+        {isLoading ? (
+          <p className="p-4 text-sm text-gray-500 dark:text-gray-400">Loading output devices…</p>
+        ) : outputDevices.length === 0 ? (
+          <p className="p-4 text-sm text-gray-600 dark:text-gray-400">
+            No output devices yet. Create one to wire a Shelly relay.
+          </p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 dark:bg-gray-800">
+              <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                <th className="w-8 px-2"></th>
+                <th className="py-2 px-3 font-medium">Name</th>
+                <th className="px-3 font-medium">Type</th>
+                <th className="px-3 font-medium">Transport</th>
+                <th className="px-3 font-medium">Target</th>
+                <th className="px-3 font-medium">Switch</th>
+                <th className="px-3 font-medium">Location</th>
+                <th className="px-3 font-medium">Active</th>
+                <th className="px-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {outputDevices.map((device) => {
+                const isExpanded = expandedId === device.id;
+                return (
+                  <Fragment key={device.id}>
+                    <tr className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                      <td className="w-8 px-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpanded(device.id)}
+                          className="p-1.5 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
+                          aria-label={`Edit output device ${device.name}`}
+                          aria-expanded={isExpanded}
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="w-4 h-4" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4" />
+                          )}
+                        </button>
+                      </td>
+                      <td className="py-2 px-3 text-gray-900 dark:text-gray-100">
+                        <PaidGate surface="outputs-crud" silentImpression>
+                          <InlineEditCell
+                            variant="text"
+                            value={device.name}
+                            ariaLabel={`Edit name for ${device.name}`}
+                            validate={validateName}
+                            onSave={(name) =>
+                              updateOutputDevice({ id: device.id, updates: { name } }).then(
+                                () => undefined
+                              )
+                            }
+                          />
+                        </PaidGate>
+                      </td>
+                      <td className="px-3 text-gray-700 dark:text-gray-300">{device.type}</td>
+                      <td className="px-3 text-gray-700 dark:text-gray-300">{device.transport}</td>
+                      <td className="px-3 font-mono text-xs text-gray-700 dark:text-gray-300">
+                        {device.transport === 'mqtt' ? (device.command_topic || '—') : device.base_url}
+                      </td>
+                      <td className="px-3 text-gray-700 dark:text-gray-300">
+                        <PaidGate surface="outputs-crud" silentImpression>
+                          <InlineEditCell
+                            variant="number"
+                            value={device.switch_id}
+                            ariaLabel={`Edit switch ID for ${device.name}`}
+                            validate={(raw) => validateSwitchId(raw, device.type)}
+                            onSave={(raw) =>
+                              updateOutputDevice({
+                                id: device.id,
+                                updates: { switch_id: parseInt(raw, 10) },
+                              }).then(() => undefined)
+                            }
+                          />
+                        </PaidGate>
+                      </td>
+                      <td className="px-3 text-gray-700 dark:text-gray-300">
+                        <PaidGate surface="outputs-crud" silentImpression>
+                          <InlineEditCell
+                            variant="select"
+                            value={device.location_id != null ? String(device.location_id) : ''}
+                            ariaLabel={`Edit location for ${device.name}`}
+                            options={locationOptions}
+                            display={(v) => locationName(v ? Number(v) : null)}
+                            onSave={(raw) =>
+                              updateOutputDevice({
+                                id: device.id,
+                                updates: { location_id: raw === '' ? null : parseInt(raw, 10) },
+                              }).then(() => undefined)
+                            }
+                          />
+                        </PaidGate>
+                      </td>
+                      <td className="px-3 text-gray-700 dark:text-gray-300">
+                        <PaidGate surface="outputs-crud" silentImpression>
+                          <InlineEditCell
+                            variant="toggle"
+                            value={device.is_active}
+                            ariaLabel={`Toggle active for ${device.name}`}
+                            onSave={(is_active) =>
+                              updateOutputDevice({ id: device.id, updates: { is_active } }).then(
+                                () => undefined
+                              )
+                            }
+                          />
+                        </PaidGate>
+                      </td>
+                      <td className="px-3 text-right whitespace-nowrap">
+                        <PaidGate surface="outputs-crud" silentImpression>
                           <button
                             type="button"
-                            onClick={() => toggleExpanded(device.id)}
-                            className="p-1.5 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
-                            aria-label={`Edit output device ${device.name}`}
-                            aria-expanded={isExpanded}
+                            onClick={() => setDeletingDevice(device)}
+                            className="p-1.5 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
+                            aria-label={`Delete output device ${device.name}`}
                           >
-                            {isExpanded ? (
-                              <ChevronDown className="w-4 h-4" />
-                            ) : (
-                              <ChevronRight className="w-4 h-4" />
-                            )}
+                            <Trash2 className="w-4 h-4" />
                           </button>
-                        </td>
-                        <td className="py-2 px-3 text-gray-900 dark:text-gray-100">
-                          <PaidGate surface="outputs-crud" silentImpression>
-                            <InlineEditCell
-                              variant="text"
-                              value={device.name}
-                              ariaLabel={`Edit name for ${device.name}`}
-                              validate={validateName}
-                              onSave={(name) =>
-                                updateOutputDevice({ id: device.id, updates: { name } }).then(
-                                  () => undefined
-                                )
-                              }
-                            />
-                          </PaidGate>
-                        </td>
-                        <td className="px-3 text-gray-700 dark:text-gray-300">{device.type}</td>
-                        <td className="px-3 text-gray-700 dark:text-gray-300">{device.transport}</td>
-                        <td className="px-3 font-mono text-xs text-gray-700 dark:text-gray-300">
-                          {device.transport === 'mqtt' ? (device.command_topic || '—') : device.base_url}
-                        </td>
-                        <td className="px-3 text-gray-700 dark:text-gray-300">
-                          <PaidGate surface="outputs-crud" silentImpression>
-                            <InlineEditCell
-                              variant="number"
-                              value={device.switch_id}
-                              ariaLabel={`Edit switch ID for ${device.name}`}
-                              validate={(raw) => validateSwitchId(raw, device.type)}
-                              onSave={(raw) =>
-                                updateOutputDevice({
-                                  id: device.id,
-                                  updates: { switch_id: parseInt(raw, 10) },
-                                }).then(() => undefined)
-                              }
-                            />
-                          </PaidGate>
-                        </td>
-                        <td className="px-3 text-gray-700 dark:text-gray-300">
-                          <PaidGate surface="outputs-crud" silentImpression>
-                            <InlineEditCell
-                              variant="select"
-                              value={device.location_id != null ? String(device.location_id) : ''}
-                              ariaLabel={`Edit location for ${device.name}`}
-                              options={locationOptions}
-                              display={(v) => locationName(v ? Number(v) : null)}
-                              onSave={(raw) =>
-                                updateOutputDevice({
-                                  id: device.id,
-                                  updates: { location_id: raw === '' ? null : parseInt(raw, 10) },
-                                }).then(() => undefined)
-                              }
-                            />
-                          </PaidGate>
-                        </td>
-                        <td className="px-3 text-gray-700 dark:text-gray-300">
-                          <PaidGate surface="outputs-crud" silentImpression>
-                            <InlineEditCell
-                              variant="toggle"
-                              value={device.is_active}
-                              ariaLabel={`Toggle active for ${device.name}`}
-                              onSave={(is_active) =>
-                                updateOutputDevice({ id: device.id, updates: { is_active } }).then(
-                                  () => undefined
-                                )
-                              }
-                            />
-                          </PaidGate>
-                        </td>
-                        <td className="px-3 text-right whitespace-nowrap">
-                          <PaidGate surface="outputs-crud" silentImpression>
-                            <button
-                              type="button"
-                              onClick={() => setDeletingDevice(device)}
-                              className="p-1.5 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
-                              aria-label={`Delete output device ${device.name}`}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </PaidGate>
+                        </PaidGate>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+                        <td colSpan={9} className="px-3 py-4">
+                          <OutputDeviceEditPanel
+                            device={device}
+                            onClose={() => setExpandedId(null)}
+                          />
                         </td>
                       </tr>
-                      {isExpanded && (
-                        <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
-                          <td colSpan={9} className="px-3 py-4">
-                            <OutputDeviceEditPanel
-                              device={device}
-                              onClose={() => setExpandedId(null)}
-                            />
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        <OutputDeviceFormModal
-          isOpen={isCreateModalOpen}
-          mode="create"
-          onClose={() => setIsCreateModalOpen(false)}
-        />
-
-        <ConfirmModal
-          isOpen={!!deletingDevice}
-          title="Delete Output Device"
-          message={`Are you sure you want to delete "${deletingDevice?.name}"? This action cannot be undone.`}
-          onConfirm={confirmDelete}
-          onCancel={() => setDeletingDevice(null)}
-        />
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
-    </ProtectedRoute>
+
+      <OutputDeviceFormModal
+        isOpen={isCreateModalOpen}
+        mode="create"
+        onClose={() => setIsCreateModalOpen(false)}
+      />
+
+      <ConfirmModal
+        isOpen={!!deletingDevice}
+        title="Delete Output Device"
+        message={`Are you sure you want to delete "${deletingDevice?.name}"? This action cannot be undone.`}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeletingDevice(null)}
+      />
+    </div>
   );
 }
