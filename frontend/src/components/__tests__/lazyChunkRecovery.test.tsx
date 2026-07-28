@@ -10,6 +10,9 @@
  * is genuinely gone. App.tsx's screen-level imports use it; three *nested* lazy
  * imports did not, so they crashed straight to the ErrorBoundary. All three sit
  * behind Scan and Locate, the two highest-traffic tabs.
+ *
+ * `lazyWithRetry`'s own behaviour is covered in src/utils/lazyWithRetry.test.tsx;
+ * this file pins the three call sites to it.
  */
 
 import '@testing-library/jest-dom';
@@ -96,9 +99,12 @@ describe('nested lazy chunk recovery (TRA-1054)', () => {
   });
 
   it('rethrows to the ErrorBoundary rather than reloading again when the chunk is genuinely missing', async () => {
-    // A reload already happened this session — the chunk is still unreachable,
-    // so this is a broken deploy, not a stale tab. Reloading again would loop.
-    sessionStorage.setItem('page-has-been-force-refreshed', 'true');
+    // First attempt spends the one retry.
+    await renderHeader();
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+
+    // Second attempt is the post-reload one: the chunk is still unreachable, so
+    // this is a broken deploy rather than a stale tab. Reloading again loops.
     // React logs every error a boundary catches; that's the expected path here.
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -106,7 +112,7 @@ describe('nested lazy chunk recovery (TRA-1054)', () => {
       const { findByTestId } = await renderHeader();
 
       await findByTestId('boundary');
-      expect(reload).not.toHaveBeenCalled();
+      expect(reload, 'no second reload').toHaveBeenCalledTimes(1);
     } finally {
       logged.mockRestore();
     }
