@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom';
+import { StrictMode } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 
@@ -67,6 +68,38 @@ describe('SignedOutUpsell', () => {
 
     expect(tracked.calls.filter(([name]) => name === 'signed_out_gate_shown')).toEqual([
       ['signed_out_gate_shown', { surface: 'reports' }],
+    ]);
+  });
+
+  it('fires a new impression event per distinct route on the SAME instance', () => {
+    // App.tsx renders <SignedOutUpsell route={activeTab} /> at a stable tree
+    // position with no `key`, so React reuses this instance across route
+    // changes rather than remounting. A signed-out visitor clicking
+    // Assets -> Locations -> Reports must produce three impression events,
+    // one per surface, not one for whichever route happened to mount first.
+    const { rerender } = render(<SignedOutUpsell route="assets" />);
+    rerender(<SignedOutUpsell route="locations" />);
+    rerender(<SignedOutUpsell route="reports" />);
+    // Re-rendering with the same route again (e.g. a parent re-render that
+    // doesn't change the tab) must not re-fire for a route already counted.
+    rerender(<SignedOutUpsell route="reports" />);
+
+    expect(tracked.calls.filter(([name]) => name === 'signed_out_gate_shown')).toEqual([
+      ['signed_out_gate_shown', { surface: 'assets' }],
+      ['signed_out_gate_shown', { surface: 'locations' }],
+      ['signed_out_gate_shown', { surface: 'reports' }],
+    ]);
+  });
+
+  it('does not double-fire the same route under StrictMode double-invoke', () => {
+    render(
+      <StrictMode>
+        <SignedOutUpsell route="assets" />
+      </StrictMode>
+    );
+
+    expect(tracked.calls.filter(([name]) => name === 'signed_out_gate_shown')).toEqual([
+      ['signed_out_gate_shown', { surface: 'assets' }],
     ]);
   });
 

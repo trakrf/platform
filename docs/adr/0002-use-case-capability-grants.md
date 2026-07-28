@@ -200,9 +200,12 @@ visitor reloading a bookmarked org-scoped route never sees the signed-out card
 flash before the route corrects to allowed. It replaced `ProtectedRoute`, which
 redirected to `#login` with no explanation and had been applied to some
 screens and not others. The signed-out nav is the ungated core — Scan, Locate,
-Assets, Locations, Reports, Settings, Help — with capability-gated entries
-hidden via `no-org`, so a first-time visitor is not opened with advanced
-modules.
+Assets, Locations, Reports, Kits, Settings, Help — with capability-gated
+entries hidden via `no-org`, so a first-time visitor is not opened with
+advanced modules. Kits gets the generic sign-in card rather than a pitch: it
+is ungated today, but TRA-1065 (in flight) puts it behind a capability, at
+which point it leaves this nav automatically via the same `no-org` path — a
+pitch here now would advertise a module about to go behind a paywall.
 
 Delivery: the capability set is one more field on the `/users/me` org payload
 (the same shape carrying `is_entitled`), flowing through the existing

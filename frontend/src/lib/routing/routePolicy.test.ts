@@ -7,16 +7,41 @@ import {
 import type { TabType } from '@/stores';
 
 /**
- * Every tab the app can route to. Kept literal rather than derived, so adding a
- * TabType without deciding its auth answer fails here instead of defaulting.
+ * Every tab the app can route to, keyed off `TabType` itself rather than
+ * hand-copied — so adding a member to the `TabType` union without updating
+ * this map is a typecheck failure (a missing key), not a silently-passing
+ * test that forgot to gate the new route. `ALL_TABS` below is derived from
+ * this map's keys, so the assertions that use it stay exhaustive for free.
  */
-const ALL_TABS: TabType[] = [
-  'scan', 'settings', 'locate', 'kits', 'help', 'assets', 'locations',
-  'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history',
-  'mustering', 'login', 'signup', 'forgot-password', 'reset-password',
-  'create-org', 'org-members', 'org-settings', 'org-geofence-defaults',
-  'accept-invite', 'api-keys', 'webhooks', 'admin-orgs',
-];
+const ALL_TABS_MAP: Record<TabType, true> = {
+  scan: true,
+  settings: true,
+  locate: true,
+  kits: true,
+  help: true,
+  assets: true,
+  locations: true,
+  'scan-devices': true,
+  'output-devices': true,
+  'live-reads': true,
+  reports: true,
+  'reports-history': true,
+  mustering: true,
+  login: true,
+  signup: true,
+  'forgot-password': true,
+  'reset-password': true,
+  'create-org': true,
+  'org-members': true,
+  'org-settings': true,
+  'org-geofence-defaults': true,
+  'accept-invite': true,
+  'api-keys': true,
+  webhooks: true,
+  'admin-orgs': true,
+};
+
+const ALL_TABS: TabType[] = Object.keys(ALL_TABS_MAP) as TabType[];
 
 describe('routePolicy', () => {
   it('classifies every tab exactly once', () => {

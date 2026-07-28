@@ -23,11 +23,20 @@ interface SignedOutUpsellProps {
 export default function SignedOutUpsell({ route }: SignedOutUpsellProps) {
   const copy = signedOutCopyFor(route);
   const Icon = copy.icon;
-  const shown = useRef(false);
+  // Holds the route this instance last fired an impression for, not just
+  // whether it has ever fired: App.tsx renders this component at a stable
+  // tree position with no `key`, so React reuses the same instance across
+  // route changes rather than remounting it. A boolean guard would fire once
+  // total and then go permanently silent as the visitor moves between
+  // surfaces, undercounting every impression after the first. Comparing
+  // against the last-fired route (rather than always firing on change) also
+  // keeps this idempotent under StrictMode's dev-only double-invoke of
+  // effects, which reruns this effect twice for the same commit.
+  const lastFiredRoute = useRef<string | null>(null);
 
   useEffect(() => {
-    if (shown.current) return;
-    shown.current = true;
+    if (lastFiredRoute.current === route) return;
+    lastFiredRoute.current = route;
     // Distinct from the paid_gate_* events on purpose: a signed-out visitor and
     // a lapsed subscriber are different funnel populations.
     trackEvent('signed_out_gate_shown', { surface: route });
