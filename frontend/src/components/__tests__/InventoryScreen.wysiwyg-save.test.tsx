@@ -181,6 +181,38 @@ describe('InventoryScreen WYSIWYG save (TRA-1038)', () => {
     await waitFor(() => expect(within(assetsTile()).getByText('1')).toBeInTheDocument());
   });
 
+  // The shape reported from preview on 2026-07-28: search "1002" listed four
+  // rows, only three of which were recognized assets, while a fourth
+  // recognized asset (EPC nowhere near the search term) sat outside the view.
+  // Pre-TRA-1038 that saved four — including the invisible one. The manifest
+  // must be a subset of the listed rows, never a superset.
+  it('ignores unrecognized rows in view and recognized assets out of view', async () => {
+    useTagStore.getState().setTags([
+      locationTag(),
+      assetTag(0, { epc: '10020', displayEpc: '10020', assetIdentifier: 'L107-COUPON' }),
+      assetTag(1, { epc: '10021', displayEpc: '10021', assetIdentifier: 'SQUIDGET' }),
+      // On the list, scanned, but no asset behind the tag — must not count.
+      { ...assetTag(2, { epc: '10022', displayEpc: '10022' }), type: 'unknown', assetId: undefined, assetIdentifier: undefined },
+      assetTag(3, { epc: '10023', displayEpc: '10023', assetIdentifier: 'WIDGET' }),
+      // A recognized asset the search excludes — the invisible write.
+      assetTag(4, { epc: '300703506000000010005009', displayEpc: '300703506000000010005009', assetIdentifier: 'SNITCH' }),
+    ]);
+    renderScreen();
+
+    const search = screen.getAllByPlaceholderText(/Search for an item/i)[0];
+    fireEvent.change(search, { target: { value: '1002' } });
+
+    await waitFor(() => expect(within(assetsTile()).getByText('3')).toBeInTheDocument());
+    clickSave();
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect([...save.mock.calls[0][0].asset_identifiers].sort()).toEqual([
+      'L107-COUPON',
+      'SQUIDGET',
+      'WIDGET',
+    ]);
+  });
+
   it('dedups multi-tag assets in the save payload', async () => {
     useTagStore.getState().setTags([
       locationTag(),
