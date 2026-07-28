@@ -204,7 +204,15 @@ export default function TabNavigation() {
         </div>
       </div>
 
-      {/* Navigation Items */}
+      {/* Navigation Items.
+
+          There is deliberately no signed-out branch here (TRA-1057). Ungated
+          entries render for everyone and the *route* decides what they show —
+          `lib/routing/routePolicy.ts` owns that answer, and signed-out resolves
+          to a card explaining the surface plus a trial/login path. Hiding them
+          here would close the shop window and duplicate a decision that lives
+          in one place. Capability entries hide via `no-org` (TRA-1026); role
+          entries hide via the role checks below. */}
       <div className="flex-1 px-6 py-4">
         <nav className="space-y-2">
           <NavItem
