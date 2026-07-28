@@ -15,7 +15,7 @@
 
 ## Cluster Ops
 - `just ops <recipe> [args]` forwards to the trakrf/infra justfile — `just ops` lists what's available
-- Shortcuts for the two common ones: `just psql preview`, `just logs prod 1h`
+- Shortcuts for the common ones: `just gcp-auth`, `just psql preview`, `just logs prod 1h`
 - Cluster/namespace/pod knowledge stays in infra; never reimplement a kubectl incantation here
 - Infra checkout is `TRAKRF_INFRA_DIR`, else a sibling `infra/` — set it in `.env.local` if yours is elsewhere
 

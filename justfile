@@ -88,6 +88,10 @@ ops *ARGS:
     fi
     just --justfile "$infra_dir/justfile" {{ ARGS }}
 
+# Authenticate to GCP and point kubectl at the cluster (no-op if already valid)
+gcp-auth *ARGS:
+    @just ops gcp-auth {{ ARGS }}
+
 # Interactive psql on a CNPG primary: `just psql preview`, `just psql prod`
 psql *ARGS:
     @just ops psql {{ ARGS }}

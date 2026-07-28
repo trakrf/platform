@@ -53,6 +53,9 @@ default: list
 list:
     @echo "STUB list"
 
+gcp-auth:
+    @echo "STUB gcp-auth FORCE=${FORCE:-unset}"
+
 psql ENV:
     @echo "STUB psql {{ ENV }}"
 
@@ -99,7 +102,15 @@ expect "bare ops lists infra's recipes" "STUB list" "$out"
 out=$(cd "$repo_root" && TRAKRF_INFRA_DIR="$tmp/infra-explicit" just ops sourcecheck 2>&1)
 expect "delegated recipe resolves infra-relative paths" "STUB sourced ok" "$out"
 
-echo "== psql / logs aliases =="
+echo "== gcp-auth / psql / logs aliases =="
+
+out=$(cd "$repo_root" && TRAKRF_INFRA_DIR="$tmp/infra-explicit" just gcp-auth 2>&1)
+expect "gcp-auth alias forwards" "STUB gcp-auth" "$out"
+
+# gcp-auth's FORCE=1 escape hatch is an env var, not an argument — it has to
+# survive the hop through platform's recipe into infra's.
+out=$(cd "$repo_root" && TRAKRF_INFRA_DIR="$tmp/infra-explicit" FORCE=1 just gcp-auth 2>&1)
+expect "gcp-auth alias passes env through" "STUB gcp-auth FORCE=1" "$out"
 
 out=$(cd "$repo_root" && TRAKRF_INFRA_DIR="$tmp/infra-explicit" just psql preview 2>&1)
 expect "psql alias forwards" "STUB psql preview" "$out"
