@@ -14,6 +14,8 @@ import { DEFAULT_TAB, resolveLegacyTab, isLegacyTab } from '@/utils/tabRedirects
 import { useCapabilityRouteGate } from '@/hooks/capability/useCapability';
 import { capabilityEntryForRoute } from '@/components/capability/registry';
 import CapabilityUpsell from '@/components/capability/CapabilityUpsell';
+import { routeAuthGate } from '@/lib/routing/routePolicy';
+import SignedOutUpsell from '@/components/auth/SignedOutUpsell';
 
 const InventoryScreen = lazyWithRetry(() => import('@/components/InventoryScreen'));
 const LocateScreen = lazyWithRetry(() => import('@/components/LocateScreen'));
@@ -55,6 +57,7 @@ export default function App() {
   // route definition rather than inside the screen, so an ungated org never
   // downloads the gated surface's chunk.
   const capabilityGate = useCapabilityRouteGate(activeTab);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   useEffect(() => {
     initOpenReplay();
@@ -283,6 +286,15 @@ export default function App() {
 
     const Component = tabComponents[activeTab] || InventoryScreen;
     const LoadingComponent = loadingScreens[activeTab] || LoadingScreen;
+
+    // Auth gate (TRA-1057), first of the four gates: auth → entitlement →
+    // capability → role. Returning here — before the lazy component is
+    // referenced — keeps a signed-out visitor from downloading a surface chunk
+    // they cannot use, and keeps the capability gate from being asked a
+    // question that has no meaning without an org.
+    if (routeAuthGate(activeTab, isAuthenticated) === 'signed-out') {
+      return <SignedOutUpsell route={activeTab} />;
+    }
 
     // Capability gate (TRA-1026). Every non-`allow` branch returns before the
     // lazy component is referenced in the tree, which is what keeps a gated
