@@ -135,8 +135,14 @@ export function OrgSwitcher({ user, onLogout }: OrgSwitcherProps) {
         )}
         {/* TRA-1058: Settings and Members go to the hash screens. They used to
             open OrgModal's manage mode, a parallel org-admin surface that never
-            received the entitlement (TRA-949) or capability (TRA-1027)
-            controls — three tickets shipped features nobody could click to. */}
+            received the controls built for the first — three tickets shipped
+            features nobody could click to.
+
+            What a viewer finds there still depends on who they are: a
+            superadmin gets the entitlement editor (TRA-949) and capability
+            grants (TRA-1027); a regular org admin gets the read-only
+            subscription status (TRA-975) and no capability surface at all —
+            a read-only view of an org's own grants does not exist yet. */}
         {currentRole && ['owner', 'admin'].includes(currentRole) && (
           <div className="p-1">
             <Menu.Item>
