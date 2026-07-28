@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Search, FileText, Package, CheckCircle, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { EmptyState } from '@/components/shared';
 import { CurrentLocationsTable } from '@/components/reports/CurrentLocationsTable';
 import { CurrentLocationCard } from '@/components/reports/CurrentLocationCard';
@@ -147,7 +146,7 @@ export default function ReportsScreen() {
   ];
 
   return (
-    <ProtectedRoute>
+    <>
       <div className="h-full flex flex-col p-2 md:p-4">
         {/* Header */}
         <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
@@ -346,6 +345,6 @@ export default function ReportsScreen() {
         generateExport={generateExport}
         shareTitle="Locations History"
       />
-    </ProtectedRoute>
+    </>
   );
 }

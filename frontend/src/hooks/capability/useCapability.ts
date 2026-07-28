@@ -105,10 +105,13 @@ export function routeGateFor(
 ): CapabilityRouteGate {
   if (state === 'granted') return 'allow';
   if (state === 'loading') return 'loading';
-  // Signed out: the capability gate has no opinion. Fall through and let the
-  // screen handle it, the same as Assets or Locations. Gating here would either
-  // strand the visitor on a spinner or upsell them on behalf of an org they
-  // don't have.
+  // Signed out: the capability gate has no opinion, so this answers `allow`
+  // and defers. Retained as a defensive default, but routing no longer
+  // reaches it in practice — all three capability-gated routes are in
+  // `ROUTE_REQUIRES_AUTH`, so the auth gate (routePolicy, TRA-1057) answers
+  // first and renders the signed-out card before this hook is ever asked.
+  // Gating here too would either strand the visitor on a spinner or upsell
+  // them on behalf of an org they don't have, if that ever changed.
   if (state === 'no-org') return 'allow';
   return presentation === 'locked' ? 'upsell' : 'not-found';
 }
