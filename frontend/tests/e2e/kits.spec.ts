@@ -8,6 +8,13 @@
  * Commission scans real tags via the trigger; the verify sessions seed
  * tagStore directly so the complete/incomplete split is deterministic while
  * still exercising the real /kits/verify backend.
+ *
+ * SKIPPED as of TRA-1065. Kits is gated behind the `kitting` capability, and
+ * `signupTestUser` creates an org with zero grants (ADR 0002: no signup
+ * default), so the Kits tab does not render and the menu-item click times out.
+ * Reviving this needs a superadmin/grant fixture in tests/e2e/fixtures that can
+ * grant `kitting` to the freshly-signed-up org — worth building alongside
+ * whoever next has the hardware in hand, not before.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -52,7 +59,7 @@ async function seedTags(page: Page, epcs: string[]): Promise<void> {
   }, epcs);
 }
 
-test.describe('Kit Scan Flows @hardware', () => {
+test.describe.skip('Kit Scan Flows @hardware', () => {
   // Serial — verify tests depend on the kit commissioned in the first test
   test.describe.configure({ mode: 'serial' });
 
