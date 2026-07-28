@@ -5,12 +5,11 @@ import { render, screen, cleanup, waitFor } from '@testing-library/react';
 /**
  * The `absent` presentation, end to end through App's route guard.
  *
- * No registry entry uses `absent` today — mustering moved to `locked` on
- * 2026-07-27 — but the presentation is still fully implemented and must stay
- * that way (per TRA-1026's ticket comment: one presentation being universal
- * doesn't make the other dead code). So this file mocks the registry to declare
- * mustering `absent` and drives the real App with it, rather than letting the
- * branch survive on unit coverage of `routeGateFor` alone.
+ * `kits` is the real `absent` entry as of TRA-1065, and App.capability.test.tsx
+ * covers it directly. This file keeps a mocked-registry version of the same
+ * branch on `mustering` so the presentation stays covered independently of
+ * which capabilities happen to use it — per TRA-1026's ticket comment, one
+ * presentation being popular doesn't make the other dead code.
  */
 const loaded = vi.hoisted(() => ({ mustering: 0 }));
 
