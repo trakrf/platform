@@ -44,11 +44,18 @@ func (s *Storage) ListUserOrgs(ctx context.Context, userID int) ([]organization.
 // org_users to restrict by membership — caller authorization is enforced by the
 // RequireSuperadmin middleware. The member count is a left-join aggregate so
 // member-less orgs still appear (count 0).
+//
+// TRA-1027: capability grants come from the org_capability_set function rather
+// than a second LEFT JOIN, deliberately. Joining org_capabilities here would
+// multiply the org_users rows by the grant rows and silently inflate
+// member_count — the function is one indexed lookup per org against a table
+// that holds a handful of rows, and it cannot fan out.
 func (s *Storage) ListAllOrgs(ctx context.Context) ([]organization.AdminOrgListItem, error) {
 	query := `
 		SELECT o.id, o.name, o.identifier,
 		       o.subscription_enabled, o.subscription_expires_at,
-		       COUNT(ou.user_id) FILTER (WHERE ou.deleted_at IS NULL) AS member_count
+		       COUNT(ou.user_id) FILTER (WHERE ou.deleted_at IS NULL) AS member_count,
+		       trakrf.org_capability_set(o.id) AS capabilities
 		FROM trakrf.organizations o
 		LEFT JOIN trakrf.org_users ou ON ou.org_id = o.id
 		WHERE o.deleted_at IS NULL
@@ -65,8 +72,12 @@ func (s *Storage) ListAllOrgs(ctx context.Context) ([]organization.AdminOrgListI
 	for rows.Next() {
 		var o organization.AdminOrgListItem
 		if err := rows.Scan(&o.ID, &o.Name, &o.Identifier,
-			&o.SubscriptionEnabled, &o.SubscriptionExpiresAt, &o.MemberCount); err != nil {
+			&o.SubscriptionEnabled, &o.SubscriptionExpiresAt, &o.MemberCount,
+			&o.Capabilities); err != nil {
 			return nil, fmt.Errorf("failed to scan admin org: %w", err)
+		}
+		if o.Capabilities == nil {
+			o.Capabilities = []string{}
 		}
 		orgs = append(orgs, o)
 	}

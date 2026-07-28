@@ -120,6 +120,9 @@ export default function SuperadminOrgsScreen() {
                       <th scope="col" className="px-4 py-3">
                         Expires
                       </th>
+                      <th scope="col" className="px-4 py-3">
+                        Capabilities
+                      </th>
                       <th scope="col" className="px-4 py-3 text-right">
                         Members
                       </th>
@@ -148,6 +151,25 @@ export default function SuperadminOrgsScreen() {
                         </td>
                         <td className="px-4 py-3">
                           {formatExpiry(org.subscription_expires_at)}
+                        </td>
+                        <td className="px-4 py-3">
+                          {org.capabilities?.length ? (
+                            <span className="flex flex-wrap gap-1">
+                              {org.capabilities.map((cap) => (
+                                <span
+                                  key={cap}
+                                  className="px-2 py-0.5 text-xs rounded bg-gray-700 text-gray-200"
+                                >
+                                  {cap}
+                                </span>
+                              ))}
+                            </span>
+                          ) : (
+                            // Zero grants is the default for most orgs (ADR 0002
+                            // — no backfill), so it reads as a state, not as a
+                            // blank cell that looks like missing data.
+                            <span className="text-gray-500">None</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right">
                           {org.member_count}

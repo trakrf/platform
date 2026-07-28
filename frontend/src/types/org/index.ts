@@ -77,6 +77,34 @@ export interface AdminOrgListItem {
   subscription_enabled: boolean;
   subscription_expires_at?: string | null;
   member_count: number;
+  /**
+   * TRA-1027: the org's granted capability names, sorted. Always sent (`[]`,
+   * never null) — zero grants is the default and the norm.
+   */
+  capabilities: string[];
+}
+
+/**
+ * GET/PUT /orgs/{id}/capabilities payload (TRA-1027).
+ *
+ * `available` is the backend's capability vocabulary, shipped with every
+ * response so the grant UI renders its checkboxes from server truth. Do not
+ * replace it with a frontend list: a capability the backend knows and the
+ * frontend does not would be ungrantable, and would look identical to a
+ * capability nobody has granted.
+ */
+export interface OrgCapabilitiesView {
+  capabilities: string[];
+  available: string[];
+}
+
+/**
+ * Superadmin capability grant payload (TRA-1027). Whole-set replace: names in
+ * the list are granted, names left out are revoked. An empty list revokes
+ * everything; omitting the field entirely is a 400, not a silent revoke.
+ */
+export interface SetOrgCapabilitiesRequest {
+  capabilities: string[];
 }
 
 /**

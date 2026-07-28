@@ -13,6 +13,8 @@ vi.mock('@/lib/api/orgs', () => ({
     update: vi.fn(),
     delete: vi.fn(),
     updateEntitlement: vi.fn(),
+    getOrgCapabilities: vi.fn(),
+    setOrgCapabilities: vi.fn(),
   },
 }));
 
@@ -60,6 +62,12 @@ function setProfile(isSuperadmin: boolean) {
 describe('OrgSettingsScreen entitlement controls (TRA-949)', () => {
   beforeEach(() => {
     window.location.hash = '';
+    // The capability section (TRA-1027) loads on mount wherever this screen
+    // renders for a superadmin; an unmocked call leaves a rejected promise
+    // behind and poisons later tests in the shared jsdom.
+    vi.mocked(orgsApi.getOrgCapabilities).mockResolvedValue({
+      data: { data: { capabilities: ['geofence'], available: ['geofence', 'inventory', 'mustering'] } },
+    } as Awaited<ReturnType<typeof orgsApi.getOrgCapabilities>>);
   });
   afterEach(() => {
     cleanup();
@@ -104,5 +112,53 @@ describe('OrgSettingsScreen entitlement controls (TRA-949)', () => {
     });
     expect(await screen.findByText('Foreign Org')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /save entitlement/i })).toBeInTheDocument();
+  });
+
+  // TRA-1027 mounts the grant surface in the same two places as entitlement.
+  it('shows the Capabilities section to a superadmin on their own org', async () => {
+    setProfile(true);
+    renderScreen();
+
+    expect(
+      await screen.findByRole('button', { name: /save capabilities/i })
+    ).toBeInTheDocument();
+    expect(orgsApi.getOrgCapabilities).toHaveBeenCalledWith(1);
+  });
+
+  it('hides the Capabilities section from a non-superadmin', async () => {
+    setProfile(false);
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /save capabilities/i })).not.toBeInTheDocument();
+    });
+    expect(orgsApi.getOrgCapabilities).not.toHaveBeenCalled();
+  });
+
+  // The release-day path: granting an org the operator does not belong to.
+  it('offers capability grants on a non-member org reached by ?org=', async () => {
+    setProfile(true);
+    window.location.hash = '#org-settings?org=42';
+    vi.mocked(orgsApi.get).mockResolvedValueOnce({
+      data: {
+        data: {
+          id: 42,
+          name: 'Foreign Org',
+          identifier: 'foreign-org',
+          is_active: true,
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+          subscription_enabled: false,
+          subscription_expires_at: null,
+        },
+      },
+    } as Awaited<ReturnType<typeof orgsApi.get>>);
+
+    renderScreen();
+
+    expect(
+      await screen.findByRole('button', { name: /save capabilities/i })
+    ).toBeInTheDocument();
+    expect(orgsApi.getOrgCapabilities).toHaveBeenCalledWith(42);
   });
 });

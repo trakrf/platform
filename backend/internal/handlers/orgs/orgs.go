@@ -312,6 +312,13 @@ func (h *Handler) RegisterRoutes(r chi.Router, store middleware.OrgRoleStore, ca
 	r.With(superadmin).Get("/api/v1/admin/orgs", h.ListAllOrgs)
 	r.With(superadmin).Patch("/api/v1/orgs/{id}/entitlement", h.UpdateEntitlement)
 
+	// Capability grant management (TRA-1027 / ADR 0002). Superadmin-only, and
+	// deliberately NOT capability-gated itself: the surface that grants a
+	// capability can never require one. Like entitlement, these sit outside the
+	// 402 paidGate so an operator can provision a lapsed org.
+	r.With(superadmin).Get("/api/v1/orgs/{id}/capabilities", h.GetOrgCapabilities)
+	r.With(superadmin).Put("/api/v1/orgs/{id}/capabilities", h.SetOrgCapabilities)
+
 	// Protected routes (require org membership/admin)
 	r.With(member).Get("/api/v1/orgs/{id}", h.Get)
 	r.With(admin).Put("/api/v1/orgs/{id}", h.Update)

@@ -12,6 +12,8 @@ import type {
   GeofenceDefaultsView,
   AdminOrgListItem,
   UpdateEntitlementRequest,
+  OrgCapabilitiesView,
+  SetOrgCapabilitiesRequest,
 } from '../../types/org';
 
 export interface MessageResponse {
@@ -91,6 +93,17 @@ export const orgsApi = {
 
   updateEntitlement: (orgId: number, body: UpdateEntitlementRequest) =>
     apiClient.patch<{ data: Organization }>(`/orgs/${orgId}/entitlement`, body, {
+      headers: { 'Content-Type': 'application/json' },
+    }),
+
+  // Capability grants (TRA-1027 / ADR 0002). Superadmin-only, like the pair
+  // above. The write is a whole-set replace and takes effect on the org's next
+  // request — no restart, no token reissue.
+  getOrgCapabilities: (orgId: number) =>
+    apiClient.get<{ data: OrgCapabilitiesView }>(`/orgs/${orgId}/capabilities`),
+
+  setOrgCapabilities: (orgId: number, body: SetOrgCapabilitiesRequest) =>
+    apiClient.put<{ data: OrgCapabilitiesView }>(`/orgs/${orgId}/capabilities`, body, {
       headers: { 'Content-Type': 'application/json' },
     }),
 };
