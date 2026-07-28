@@ -17,6 +17,18 @@ import (
 // were vestigial — they were always dereferenced from the source values, never
 // nil. Tightening the spec lets generated SDKs surface the fields as
 // non-optional and lets integrators drop dead null-checks.
+//
+// TRA-1023: dwell_started_at / dwell_seconds describe the asset's current
+// presence interval — how long it has been at location_id without moving.
+// Both are non-nullable for the same reason asset_last_seen is: every row here
+// is derived from at least one materialized scan bucket.
+//
+// dwell_seconds is an OBSERVED span (asset_last_seen - dwell_started_at), not a
+// wall clock. It freezes when reads stop rather than growing forever for an
+// asset that has left. Consumers that need "is this still true?" should read
+// asset_last_seen on the same row and apply their own staleness rule; this
+// report deliberately does not bake in the geofence engine's age_out_seconds,
+// which is a per-output-device knob with no meaning in an asset-scoped view.
 type PublicCurrentLocationItem struct {
 	AssetID             int                `json:"asset_id"`
 	AssetExternalKey    string             `json:"asset_external_key"`
@@ -24,6 +36,8 @@ type PublicCurrentLocationItem struct {
 	LocationExternalKey *string            `json:"location_external_key"`
 	AssetLastSeen       shared.PublicTime  `json:"asset_last_seen"`
 	AssetDeletedAt      *shared.PublicTime `json:"asset_deleted_at"`
+	DwellStartedAt      shared.PublicTime  `json:"dwell_started_at"`
+	DwellSeconds        int64              `json:"dwell_seconds"`
 }
 
 func ToPublicCurrentLocationItem(it CurrentLocationItem) PublicCurrentLocationItem {
@@ -34,6 +48,8 @@ func ToPublicCurrentLocationItem(it CurrentLocationItem) PublicCurrentLocationIt
 		LocationExternalKey: it.LocationExternalKey,
 		AssetLastSeen:       shared.NewPublicTime(it.LastSeen),
 		AssetDeletedAt:      shared.PublicTimePtr(it.AssetDeletedAt),
+		DwellStartedAt:      shared.NewPublicTime(it.DwellStartedAt),
+		DwellSeconds:        it.DwellSeconds,
 	}
 }
 

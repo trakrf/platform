@@ -18,6 +18,13 @@ export interface CurrentLocationItem {
   location_external_key: string | null;
   asset_last_seen: string; // ISO 8601
   asset_deleted_at: string | null; // ISO 8601, always emitted (null when asset is live)
+  // TRA-1023 — current dwell: when the asset arrived at location_id, and how
+  // long it has been there. dwell_seconds is an OBSERVED span
+  // (asset_last_seen - dwell_started_at), so it freezes when reads stop rather
+  // than growing forever for an asset that has left; compare asset_last_seen
+  // against your own threshold to decide whether the dwell is still current.
+  dwell_started_at: string; // ISO 8601
+  dwell_seconds: number;
 }
 
 /**
