@@ -12,6 +12,14 @@ type CurrentLocationItem struct {
 	LocationExternalKey *string    `json:"location_external_key"`
 	LastSeen            time.Time  `json:"last_seen"`
 	AssetDeletedAt      *time.Time `json:"asset_deleted_at,omitempty"`
+
+	// DwellStartedAt is the first observation of this asset at its current
+	// location within the current unbroken run, and DwellSeconds is
+	// LastSeen - DwellStartedAt (TRA-1023). Both are non-pointer: every row in
+	// this projection originates from at least one asset_scan_latest bucket, so
+	// the run always has a first bucket and the span is always defined.
+	DwellStartedAt time.Time `json:"dwell_started_at"`
+	DwellSeconds   int64     `json:"dwell_seconds"`
 }
 
 // CurrentLocationSort declares one entry in a list-endpoint sort. Field is

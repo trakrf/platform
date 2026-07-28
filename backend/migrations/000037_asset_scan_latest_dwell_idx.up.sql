@@ -1,0 +1,43 @@
+-- TRA-1023: covering index supporting the dwell (presence-interval) walk-back on
+-- the asset_scan_latest continuous aggregate (TRA-1022).
+--
+-- The dwell query resolves the start of an asset's current location run by
+-- asking, per asset, for the newest bucket whose location_id IS DISTINCT FROM
+-- the current one. That predicate is not indexable, so without this index the
+-- planner satisfies the `ORDER BY bucket DESC LIMIT 1` from the bucket-only
+-- index and filters — reading EVERY org's rows in each chunk it walks back
+-- through. Measured on preview's "Organized Chaos" soak org (~9.9M scans, 435k
+-- CAGG rows, 74k buckets on the hottest asset): a worst-case walk-back (an asset
+-- that has never changed location, so the scan runs out of history before it
+-- finds a match) cost 67ms; with this index, 3.9ms.
+--
+-- Column order is load-bearing:
+--   asset_id    — equality, narrows to one asset's buckets
+--   bucket DESC — supplies the ordering, so ChunkAppend can stop at the first
+--                 match instead of sorting
+--   location_id — trailing payload, makes the DISTINCT FROM check an index-only
+--                 comparison with no heap fetch
+--
+-- This matters for stationary-asset workloads, which are a real customer shape
+-- (tags parked in a storeroom geofence read field for months), not just the soak
+-- rig: those are precisely the assets whose walk-back runs the deepest.
+--
+-- CREATE INDEX on a continuous aggregate is forwarded by TimescaleDB to the
+-- underlying materialization hypertable, so the index actually lands in
+-- _timescaledb_internal (see the .down.sql).
+--
+-- Compression interaction: none today, and asset_scans compression is barred on
+-- RLS grounds anyway. TRA-921 scoped compression to tag_scans only because
+-- Timescale does not enforce RLS on compressed chunks (timescaledb#7830), and
+-- asset_scans carries org-isolation RLS (000008) — compressing it would open a
+-- tenant-isolation hole. This CAGG's materialization hypertable has no
+-- compression policy either, so this btree covers every chunk.
+--
+-- If the CAGG itself is ever compressed to bound its growth, #7830 does not
+-- bite the same way (the CAGG has no RLS to leak — isolation here is the
+-- explicit WHERE org_id in every read, which still applies on compressed
+-- chunks), but this index would stop covering the compressed chunks: the
+-- walk-back would then need segmentby (asset_id) / orderby (bucket DESC) to
+-- keep the same access pattern.
+CREATE INDEX asset_scan_latest_asset_bucket_loc_idx
+    ON trakrf.asset_scan_latest (asset_id, bucket DESC, location_id);
