@@ -61,9 +61,10 @@ export type CapabilityNavGate = 'visible' | 'locked' | 'hidden';
  * Nav decision for a gated entry, as pure data.
  *
  * Split out from the hook so both presentations stay covered by tests
- * regardless of which ones the registry happens to use today. `absent` has no
- * registry entry at the moment (mustering moved to `locked` on 2026-07-27) and
- * this is what keeps it real, tested code rather than an untested branch.
+ * regardless of which ones the registry happens to use today. `kitting` is
+ * the only entry currently on `absent` (TRA-1065; mustering moved to `locked`
+ * on 2026-07-27) — this split is what keeps the `absent` branch real, tested
+ * code rather than depending on the registry always having one such entry.
  */
 export function navGateFor(
   presentation: CapabilityPresentation,
