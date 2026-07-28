@@ -37,12 +37,7 @@ type PublicCurrentLocationItem struct {
 	AssetLastSeen       shared.PublicTime  `json:"asset_last_seen"`
 	AssetDeletedAt      *shared.PublicTime `json:"asset_deleted_at"`
 	DwellStartedAt      shared.PublicTime  `json:"dwell_started_at"`
-	// int64 mirrors the BIGINT the query casts to; the spec advertises it as
-	// int32, matching PublicAssetHistoryItem.duration_seconds. That is the
-	// deliberate convention, not an oversight — apispec's int64 roster
-	// (surrogateIDFields) is for surrogate ids only, and non-id integers are
-	// explicitly excluded from it per TRA-864.
-	DwellSeconds int64 `json:"dwell_seconds"`
+	DwellSeconds        int64              `json:"dwell_seconds"`
 }
 
 func ToPublicCurrentLocationItem(it CurrentLocationItem) PublicCurrentLocationItem {
