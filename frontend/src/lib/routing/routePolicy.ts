@@ -10,11 +10,23 @@ import type { TabType } from '@/stores';
  * role is organizational, not commercial. See ADR 0002 §Frontend.
  *
  * - `allow`      — render the route normally.
+ * - `pending`    — the answer isn't known yet; render the route's loading
+ *                  screen, not a verdict. Same class of problem
+ *                  `useCapability`'s `loading` state solves
+ *                  (hooks/capability/useCapability.ts): `isAuthenticated`
+ *                  starts `false` at store creation and only flips inside
+ *                  `initialize()`, which runs from a mount effect — after
+ *                  first paint. A signed-in visitor reloading a page would
+ *                  otherwise see `signed-out` flash before correcting to
+ *                  `allow`, which is worse than the redirect this gate
+ *                  replaces. `token` is persisted and rehydrates
+ *                  synchronously before `initialize()` runs, so its presence
+ *                  is the "don't know yet" signal.
  * - `signed-out` — render `<SignedOutUpsell>` instead: what the surface does,
  *                  plus a trial path and a log-in path. Never a bare redirect;
  *                  a redirect tells the visitor nothing about their options.
  */
-export type RouteAuthGate = 'allow' | 'signed-out';
+export type RouteAuthGate = 'allow' | 'pending' | 'signed-out';
 
 /**
  * Routes whose content is org-scoped and therefore meaningless without an
@@ -64,7 +76,16 @@ export const PUBLIC_ROUTES: ReadonlySet<TabType> = new Set<TabType>([
   'create-org',
 ]);
 
-export function routeAuthGate(route: TabType, isAuthenticated: boolean): RouteAuthGate {
+export function routeAuthGate(
+  route: TabType,
+  isAuthenticated: boolean,
+  hasPersistedToken = false
+): RouteAuthGate {
   if (isAuthenticated) return 'allow';
-  return ROUTE_REQUIRES_AUTH.has(route) ? 'signed-out' : 'allow';
+  if (!ROUTE_REQUIRES_AUTH.has(route)) return 'allow';
+  // A token survived rehydration but initialize() hasn't run (or hasn't
+  // finished) yet — genuinely unknown, not a verdict. Default false keeps
+  // every existing two-argument call (and test) meaningful: no persisted
+  // token in play means the question really is answered, not pending.
+  return hasPersistedToken ? 'pending' : 'signed-out';
 }

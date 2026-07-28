@@ -59,4 +59,23 @@ describe('routePolicy', () => {
       expect(routeAuthGate(tab, true)).toBe('allow');
     }
   });
+
+  it('holds a persisted-token reload as pending rather than flashing signed-out', () => {
+    // Token rehydrated synchronously, initialize() hasn't resolved it yet.
+    expect(routeAuthGate('reports', false, true)).toBe('pending');
+  });
+
+  it('answers signed-out on an auth-required route with no persisted token', () => {
+    expect(routeAuthGate('reports', false, false)).toBe('signed-out');
+  });
+
+  it('leaves public routes allowed regardless of the persisted-token flag', () => {
+    expect(routeAuthGate('scan', false, true)).toBe('allow');
+    expect(routeAuthGate('scan', false, false)).toBe('allow');
+  });
+
+  it('leaves an authenticated user allowed regardless of the persisted-token flag', () => {
+    expect(routeAuthGate('reports', true, true)).toBe('allow');
+    expect(routeAuthGate('reports', true, false)).toBe('allow');
+  });
 });

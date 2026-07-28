@@ -58,6 +58,10 @@ export default function App() {
   // downloads the gated surface's chunk.
   const capabilityGate = useCapabilityRouteGate(activeTab);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  // Persisted token rehydrates synchronously, before the mount effect below
+  // calls initialize() to flip isAuthenticated. Its presence on first paint
+  // is the "answer not known yet" signal the auth gate needs (TRA-1057).
+  const hasPersistedToken = useAuthStore((state) => !!state.token);
 
   useEffect(() => {
     initOpenReplay();
@@ -292,7 +296,16 @@ export default function App() {
     // referenced — keeps a signed-out visitor from downloading a surface chunk
     // they cannot use, and keeps the capability gate from being asked a
     // question that has no meaning without an org.
-    if (routeAuthGate(activeTab, isAuthenticated) === 'signed-out') {
+    const authGate = routeAuthGate(activeTab, isAuthenticated, hasPersistedToken);
+    if (authGate === 'pending') {
+      // A persisted token survived rehydration but initialize() (mount
+      // effect) hasn't resolved it yet — same "not yet knowable" treatment
+      // the capability gate gives its own `loading` state below. Rendering
+      // the verdict here would flash the signed-out card at an actually
+      // signed-in visitor who just reloaded the page.
+      return <LoadingComponent />;
+    }
+    if (authGate === 'signed-out') {
       return <SignedOutUpsell route={activeTab} />;
     }
 
