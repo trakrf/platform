@@ -47,9 +47,16 @@ export async function signupTestUser(
 ): Promise<void> {
   await page.goto('/#signup');
   await page.locator('input#email').fill(email);
-  // Organization name is required on signup
+  // Org contact details are all required on signup (TRA-970/971); this fixture
+  // predates them and silently failed validation until TRA-1058 re-ran it.
+  await page.locator('input#name').fill('E2E Test User');
   await page.locator('input#orgName').fill(orgName || `Test Org ${uniqueId()}`);
+  await page.locator('input#website').fill('example.com');
+  await page.locator('input#phone').fill('+1 555 123 4567');
   await page.locator('input#password').fill(password);
+  // Non-prod hosts require a deliberate sandbox acknowledgment (TRA-970).
+  const ack = page.locator('input#ackNonProd');
+  if (await ack.count()) await ack.check();
   await page.locator('button[type="submit"]').click();
   // Wait for redirect to home after successful signup
   await page.waitForURL(/#scan/, { timeout: 10000 });
@@ -249,16 +256,22 @@ export async function switchOrgViaAPI(page: Page, orgId: number): Promise<void> 
     throw new Error(`Failed to switch org: ${response.status()} - ${text}`);
   }
 
-  // Update localStorage with new token
+  // Update localStorage with new token. The endpoint returns access_token —
+  // reading data.token wrote undefined and left the app with no org, which is
+  // why every org-members spec landed on "No Organization Selected".
   const data = await response.json();
-  await page.evaluate((newToken: string) => {
+  const newToken = data.access_token ?? data.token;
+  if (!newToken) {
+    throw new Error(`Switch org returned no token: ${JSON.stringify(data)}`);
+  }
+  await page.evaluate((token: string) => {
     const authStorage = localStorage.getItem('auth-storage');
     if (authStorage) {
       const parsed = JSON.parse(authStorage);
-      parsed.state.token = newToken;
+      parsed.state.token = token;
       localStorage.setItem('auth-storage', JSON.stringify(parsed));
     }
-  }, data.token);
+  }, newToken);
 }
 
 /**
@@ -305,7 +318,18 @@ async function signupViaAPI(
     headers: {
       'Content-Type': 'application/json',
     },
-    data: { email, password, org_name: orgName },
+    // name/phone/website became required with the org contact details, and a
+    // non-prod host rejects signup without the deliberate sandbox
+    // acknowledgment (TRA-970/971). This helper was never updated for either.
+    data: {
+      email,
+      password,
+      org_name: orgName,
+      name: 'E2E Test Member',
+      phone: '+1 555 123 4567',
+      website: 'example.com',
+      acknowledge_non_prod: true,
+    },
   });
 
   if (!response.ok()) {
@@ -314,7 +338,14 @@ async function signupViaAPI(
   }
 
   const data = await response.json();
-  return data.data.token;
+  // The field is access_token; reading .token returned undefined, so the
+  // caller fell back to the *admin's* localStorage token and accepted the
+  // invitation as the wrong user (403 "this invitation was sent to …").
+  const token = data.data?.access_token ?? data.data?.token;
+  if (!token) {
+    throw new Error(`Signup via API returned no token: ${JSON.stringify(data)}`);
+  }
+  return token;
 }
 
 /**
