@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Users, Siren, SlidersHorizontal } from 'lucide-react';
+import { Users, Siren, SlidersHorizontal, Boxes } from 'lucide-react';
 import type { TabType } from '@/stores';
 
 /**
@@ -7,6 +7,7 @@ import type { TabType } from '@/stores';
  * (backend/internal/capability). Names describe workflows, never customers.
  */
 export const CAPABILITY_GEOFENCE = 'geofence';
+export const CAPABILITY_KITTING = 'kitting';
 export const CAPABILITY_MUSTERING = 'mustering';
 
 /**
@@ -45,8 +46,24 @@ export interface CapabilityNavEntry {
  * `inventory` is deliberately absent. Its presentation decision is `locked`,
  * but it has no surface behind it yet — a teaser for a capability with nothing
  * to unlock would be a claim we cannot honor. The entry lands with the surface.
+ *
+ * `kitting` is the first entry to actually use the `absent` presentation
+ * (TRA-1065): the surface exists and works, but it is half-finished and
+ * customer-shaped, so it is hidden rather than advertised.
  */
 export const CAPABILITY_NAV: readonly CapabilityNavEntry[] = [
+  {
+    capability: CAPABILITY_KITTING,
+    label: 'Kits',
+    route: 'kits',
+    icon: Boxes,
+    // TRA-1065: `absent`, not `locked`. Kits is still shaped around one
+    // customer's workflow and unfinished, so a teaser would be a claim we
+    // cannot honor — the same reasoning that keeps `inventory` out of this
+    // list. Flip to `locked` and add upsell copy when it is ready to sell.
+    presentation: 'absent',
+    tooltip: 'Commission kits and verify them at return — catch missing or swapped items',
+  },
   {
     capability: CAPABILITY_MUSTERING,
     label: 'Mustering',

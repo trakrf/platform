@@ -342,5 +342,40 @@ describe('TabNavigation', () => {
       expect(screen.getByTestId('menu-item-mustering-locked')).toBeInTheDocument();
       expect(screen.getByTestId('menu-item-output-devices-locked')).toBeInTheDocument();
     });
+
+    it('hides Kits entirely without the grant (`absent`)', () => {
+      setCapabilities(['geofence']);
+      render(<TabNavigation />);
+
+      // `absent` means no trace at all — not a lock, not a disabled entry.
+      expect(screen.queryByText('Kits')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('menu-item-kits')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('menu-item-kits-locked')).not.toBeInTheDocument();
+    });
+
+    it('shows Kits with the kitting grant, unlocked', () => {
+      setCapabilities(['kitting']);
+      render(<TabNavigation />);
+
+      expect(screen.getByTestId('menu-item-kits')).toBeInTheDocument();
+      expect(screen.queryByTestId('menu-item-kits-locked')).not.toBeInTheDocument();
+    });
+
+    it('hides Kits when signed out rather than teasing it', () => {
+      setCapabilities(null);
+      render(<TabNavigation />);
+
+      expect(screen.queryByTestId('menu-item-kits')).not.toBeInTheDocument();
+    });
+
+    it('navigates to the kits tab when granted', () => {
+      const mockSetActiveTab = vi.fn();
+      useUIStore.getState().setActiveTab = mockSetActiveTab;
+      setCapabilities(['kitting']);
+      render(<TabNavigation />);
+
+      fireEvent.click(screen.getByTestId('menu-item-kits'));
+      expect(mockSetActiveTab).toHaveBeenCalledWith('kits');
+    });
   });
 });
