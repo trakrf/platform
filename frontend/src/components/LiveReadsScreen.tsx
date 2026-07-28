@@ -12,7 +12,6 @@
 
 import { useEffect } from 'react';
 import { useUIStore } from '@/stores';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { LiveReadsFeed } from '@/components/readerfeed/LiveReadsFeed';
 import { PaidGate } from '@/components/entitlement';
 
@@ -24,22 +23,20 @@ export default function LiveReadsScreen() {
   }, [setActiveTab]);
 
   return (
-    <ProtectedRoute>
-      <div className="h-full flex flex-col p-2">
-        <div className="mb-4">
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Live Reads</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Live tag inventory — every tag in range (registered or not) with read count and RSSI,
-            for antenna &amp; RSSI coverage tuning. A tag drops out after 30s of silence.
-          </p>
-        </div>
-
-        <div className="flex-1 min-h-0">
-          <PaidGate surface="live-reads" panel className="h-full">
-            <LiveReadsFeed />
-          </PaidGate>
-        </div>
+    <div className="h-full flex flex-col p-2">
+      <div className="mb-4">
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Live Reads</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Live tag inventory — every tag in range (registered or not) with read count and RSSI,
+          for antenna &amp; RSSI coverage tuning. A tag drops out after 30s of silence.
+        </p>
       </div>
-    </ProtectedRoute>
+
+      <div className="flex-1 min-h-0">
+        <PaidGate surface="live-reads" panel className="h-full">
+          <LiveReadsFeed />
+        </PaidGate>
+      </div>
+    </div>
   );
 }

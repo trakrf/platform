@@ -179,6 +179,40 @@ assigns it `absent`, making it the first shipped registry entry to use that
 presentation. It deliberately carries no upsell copy: the capability is
 invisible on production until granted by hand.
 
+**Gate precedence (TRA-1057, 2026-07-28).** Four gates filter the frontend and
+they compose in one order: **auth → entitlement → capability → role.**
+
+A lock means money can unlock this; hiding means money cannot. Capability and
+entitlement are commercial, so they lock and carry a CTA. Role is
+organizational, so it hides — showing a viewer a lock on "Geofence defaults"
+invites a sales conversation that does not exist.
+
+Auth is its own gate, ahead of the rest, rather than folded into any of them. A
+capability is a property of an org, so asking it of a visitor with no org is
+meaningless; answering it produces copy addressed to "your organization" for
+someone who has none. A signed-out visitor on an org-scoped route therefore gets
+the auth answer and never reaches the capability question — including by direct
+URL to a gated route, which renders the generic signed-out card and makes no
+capability claim.
+
+The auth answer lives in `frontend/src/lib/routing/routePolicy.ts`, evaluated in
+`App`'s route switch ahead of the capability gate, and it renders
+`<SignedOutUpsell>`: what the surface does, plus a free-trial path and a log-in
+path. A third state covers the moment a persisted auth token has survived
+rehydration but `initialize()` has not yet run: the gate answers `pending` and
+renders the route's loading screen rather than a verdict, so a signed-in
+visitor reloading a bookmarked org-scoped route never sees the signed-out card
+flash before the route corrects to allowed. It replaced `ProtectedRoute`, which
+redirected to `#login` with no explanation and had been applied to some
+screens and not others. The signed-out nav is the ungated core — Scan, Locate,
+Assets, Locations, Reports, Settings, Help — with capability-gated entries
+hidden via `no-org`, so a first-time visitor is not opened with advanced
+modules. Kits was in that list when TRA-1057 landed and got the generic
+sign-in card rather than a pitch, because TRA-1065 was already in flight to
+put it behind a capability; that landed too, so Kits now drops out of this
+nav via the same `no-org` path — which is why a pitch would have advertised a
+module on its way behind a paywall.
+
 Delivery: the capability set is one more field on the `/users/me` org payload
 (the same shape carrying `is_entitled`), flowing through the existing
 Zustand path; `switchOrg`'s profile refetch refreshes it for free.

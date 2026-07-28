@@ -378,4 +378,36 @@ describe('TabNavigation', () => {
       expect(mockSetActiveTab).toHaveBeenCalledWith('kits');
     });
   });
+
+  // TRA-1057. The signed-out nav is the shop window: the ungated core shows and
+  // the route decides what it renders (a card, via routePolicy). Capability and
+  // role entries hide through the mechanisms they already own. Pinned here so a
+  // future change cannot quietly reintroduce a per-component auth conditional.
+  describe('signed out', () => {
+    it('shows the ungated core and nothing gated', () => {
+      // beforeEach already leaves auth false and org/role null.
+      render(<TabNavigation />);
+
+      for (const label of ['Scan', 'Locate', 'Kits', 'Assets', 'Locations', 'Reports', 'Settings', 'Help']) {
+        expect(screen.getByText(label), label).toBeInTheDocument();
+      }
+
+      // Capability-gated: hidden via the `no-org` state (TRA-1026).
+      expect(screen.queryByText('Mustering')).not.toBeInTheDocument();
+      expect(screen.queryByText('Outputs')).not.toBeInTheDocument();
+      expect(screen.queryByText('Geofence defaults')).not.toBeInTheDocument();
+      // Role-gated: hidden because there is no role.
+      expect(screen.queryByText('Readers')).not.toBeInTheDocument();
+      expect(screen.queryByText('Live feed')).not.toBeInTheDocument();
+    });
+
+    it('renders no lock on the ungated core', () => {
+      render(<TabNavigation />);
+
+      // A lock means "your org didn't buy this" — false for a visitor with no org.
+      for (const tab of ['assets', 'locations', 'reports', 'kits']) {
+        expect(screen.queryByTestId(`menu-item-${tab}-locked`)).not.toBeInTheDocument();
+      }
+    });
+  });
 });
