@@ -95,6 +95,7 @@ func TestCapabilityGate_Enforcement(t *testing.T) {
 	grantedOrg := newOrg(t, db, "Granted Co", "granted-co")
 	grantCap(t, db, grantedOrg, "mustering")
 	grantCap(t, db, grantedOrg, "geofence")
+	grantCap(t, db, grantedOrg, "kitting")
 
 	do := func(orgID int, method, path string, body any) *httptest.ResponseRecorder {
 		var buf bytes.Buffer
@@ -134,11 +135,24 @@ func TestCapabilityGate_Enforcement(t *testing.T) {
 			"/api/v1/orgs/"+strconv.Itoa(ungrantedOrg)+"/geofence-defaults", nil))
 	})
 
+	t.Run("ungranted org is denied on kits, reads included", func(t *testing.T) {
+		// TRA-1065: kits presents as `absent` in the UI — no nav entry, no
+		// route. That is only honest if the API agrees, so the reads are gated
+		// too, not just the paid mutations.
+		requireCapabilityRequired(t, do(ungrantedOrg, http.MethodGet, "/api/v1/kits", nil))
+		requireCapabilityRequired(t, do(ungrantedOrg, http.MethodGet, "/api/v1/kits/1", nil))
+		requireCapabilityRequired(t, do(ungrantedOrg, http.MethodPost, "/api/v1/kits",
+			map[string]any{"label": "K-1", "members": []string{"E1", "E2"}}))
+		requireCapabilityRequired(t, do(ungrantedOrg, http.MethodPost, "/api/v1/kits/verify",
+			map[string]any{"epcs": []string{"E1"}}))
+	})
+
 	t.Run("granted org behaves as before", func(t *testing.T) {
 		for _, path := range []string{
 			"/api/v1/mustering/status",
 			"/api/v1/mustering/events",
 			"/api/v1/output-devices",
+			"/api/v1/kits",
 		} {
 			requireNotCapabilityGated(t, do(grantedOrg, http.MethodGet, path, nil), path)
 		}
@@ -256,4 +270,31 @@ func TestUsersMe_ExposesCapabilities(t *testing.T) {
 	// per-request, never baked into the token (the JWT above is unchanged).
 	_, caps = me()
 	require.Equal(t, []string{"geofence", "mustering"}, caps)
+}
+
+// TestKitsCapabilityPrecedesPaidGate pins ADR 0002's ordering on the kits
+// write path, which carries all three gates: an org that never bought kitting
+// sees capability_required, not payment_required, even when it is also lapsed.
+func TestKitsCapabilityPrecedesPaidGate(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key")
+
+	db := testutil.SetupTestDBFull(t)
+	r := setupRealRouter(t, db.Store)
+
+	lapsedNoGrant := newOrg(t, db, "Lapsed No Kitting", "lapsed-no-kitting")
+	_, err := db.AdminPool.Exec(context.Background(),
+		`UPDATE trakrf.organizations SET subscription_enabled = false WHERE id = $1`,
+		lapsedNoGrant)
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	require.NoError(t, json.NewEncoder(&buf).Encode(
+		map[string]any{"label": "K-1", "members": []string{"E1", "E2"}}))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/kits", &buf)
+	req.Header.Set("Authorization", "Bearer "+sessionToken(t, lapsedNoGrant))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	requireCapabilityRequired(t, rec)
 }
