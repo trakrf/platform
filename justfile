@@ -39,7 +39,7 @@ alias be := backend
 
 lint: (frontend "lint") (backend "lint") (cli "lint")
 
-test: (frontend "test") (backend "test") (cli "test")
+test: test-ops (frontend "test") (backend "test") (cli "test")
 
 build: (frontend "build") (backend "build") (cli "build")
 
@@ -50,6 +50,55 @@ check: validate
 
 # TRA-671: Run Schemathesis contract tests (see backend/justfile for details)
 test-contract: (backend "test-contract")
+
+# ============================================================================
+# Infra Ops Passthrough (TRA-1053)
+# ============================================================================
+# Cluster, namespace, pod and CNPG knowledge lives in trakrf/infra. These
+# recipes only forward to its justfile — they never restate any of it, and they
+# deliberately do not mirror infra's recipe names, so infra can add, rename or
+# re-signature a recipe without platform going stale.
+#
+# `just --justfile <path>` runs the delegated recipe with its working directory
+# set to the infra checkout, so infra's own relative paths (`source
+# scripts/ops-lib.sh`) keep working with no cd or path rewriting here.
+#
+# Nothing below is evaluated until a recipe is invoked: `just dev` and
+# `just test` never need gcloud, kubectl or an infra checkout.
+
+# Run an infra ops recipe (`just ops logs prod 1h`); bare `just ops` lists them
+ops *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    infra_dir="${TRAKRF_INFRA_DIR:-}"
+    if [ -z "$infra_dir" ]; then
+        # Resolve against the MAIN worktree, not this one: platform worktrees
+        # live in .claude/worktrees/<branch>/, where ../infra would resolve to
+        # .claude/worktrees/infra.
+        main_dir=$(git worktree list --porcelain 2>/dev/null \
+            | awk '/^worktree /{path=$2} /^branch refs\/heads\/main$/{print path; exit}')
+        [ -n "$main_dir" ] || main_dir="{{ justfile_directory() }}"
+        infra_dir="$(dirname "$main_dir")/infra"
+    fi
+    if [ ! -f "$infra_dir/justfile" ]; then
+        echo "ERROR: no infra checkout at $infra_dir" >&2
+        echo "       Set TRAKRF_INFRA_DIR to your trakrf/infra checkout." >&2
+        echo "       See .env.local.example — .envrc loads .env.local." >&2
+        exit 1
+    fi
+    just --justfile "$infra_dir/justfile" {{ ARGS }}
+
+# Interactive psql on a CNPG primary: `just psql preview`, `just psql prod`
+psql *ARGS:
+    @just ops psql {{ ARGS }}
+
+# Follow backend logs: `just logs preview`, `just logs prod 1h`
+logs *ARGS:
+    @just ops logs {{ ARGS }}
+
+# Test the passthrough against a stub infra justfile (no cluster access needed)
+test-ops:
+    @./scripts/test-ops-passthrough.sh
 
 # ============================================================================
 # Full Stack Development
