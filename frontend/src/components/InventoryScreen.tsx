@@ -186,17 +186,6 @@ export default function InventoryScreen() {
     return detectionMethod;
   }, [manualLocationId, manualLocationSource, detectionMethod]);
 
-  // Count of unique saveable assets. Multiple tags can point to the same
-  // asset (multi-tag asset support), so we count distinct identifiers — one
-  // save row per asset, not per tag. (TRA-812)
-  const saveableCount = useMemo(() => {
-    const seen = new Set<string>();
-    for (const t of tags) {
-      if (t.type === 'asset' && t.assetIdentifier) seen.add(t.assetIdentifier);
-    }
-    return seen.size;
-  }, [tags]);
-
   // TRA-1036: search and tile filters split into two stages because the
   // stat tiles narrow with search but NOT with tile filters — clicking a
   // tile must not shrink the other tiles' counts.
@@ -217,6 +206,32 @@ export default function InventoryScreen() {
         (statusFilters.has('Assets') && tag.type === 'asset' && !!tag.assetIdentifier);
     });
   }, [searchedTags, statusFilters]);
+
+  // TRA-1038: the save manifest IS the visible list. Derived from
+  // `filteredTags` (all pages — pagination is presentation only), so search
+  // and tile filters stage what Save commits instead of silently writing rows
+  // the user filtered away.
+  //
+  // Two invariants ride along:
+  //   - Recon-only rows (`source === 'reconciliation'`: on the CSV, never
+  //     physically scanned) NEVER save, under any filter state. The guard is
+  //     explicit rather than relying on the fact that `mergeReconciliationTags`
+  //     currently stubs them as `type: 'unknown'` — asset enrichment must not
+  //     be able to promote a Missing row into a location assignment.
+  //   - Multiple tags can point to the same asset (multi-tag asset support),
+  //     so identifiers dedup: one save row per asset, not per tag. The backend
+  //     validates with a semi-join against the input length, so a duplicate
+  //     turns into a false 403. (TRA-812)
+  const saveableAssetIdentifiers = useMemo(() => {
+    const seen = new Set<string>();
+    for (const t of filteredTags) {
+      if (t.source === 'reconciliation') continue;
+      if (t.type === 'asset' && t.assetIdentifier) seen.add(t.assetIdentifier);
+    }
+    return Array.from(seen);
+  }, [filteredTags]);
+
+  const saveableCount = saveableAssetIdentifiers.length;
 
   useEffect(() => {
     setCurrentPage(1);
@@ -318,19 +333,8 @@ export default function InventoryScreen() {
 
     if (!resolvedLocation) return;
 
-    // Get saveable asset identifiers. Multiple tags can point to the same
-    // asset (multi-tag asset support, e.g. a tagged crate that also carries
-    // a second redundant tag), so dedup before sending — one save row per
-    // asset, not per tag. Backend `SaveInventoryScans` validates with
-    // `COUNT(*) WHERE id = ANY(...)` (semi-join, deduped by Postgres) against
-    // the input length, so a duplicate identifier turns into a false 403
-    // claiming an org-mismatch that isn't real. (TRA-812)
-    const saveableAssetIdentifiers = Array.from(new Set(
-      tags
-        .filter(t => t.type === 'asset' && t.assetIdentifier)
-        .map(t => t.assetIdentifier!)
-    ));
-
+    // WYSIWYG: what the filtered view lists is exactly what gets written.
+    // See `saveableAssetIdentifiers` for the dedup + recon-only invariants.
     if (saveableAssetIdentifiers.length === 0) return;
 
     try {
@@ -349,7 +353,18 @@ export default function InventoryScreen() {
     } catch {
       // Error handling is done in the hook with toast
     }
-  }, [isAuthenticated, resolvedLocation, tags, save, autoClearOnSave, clearTags]);
+  }, [isAuthenticated, resolvedLocation, saveableAssetIdentifiers, save, autoClearOnSave, clearTags]);
+
+  // TRA-1038: with the manifest tied to the view, an empty save set is now a
+  // routine state (Missing-only filter, search that matches no asset). The
+  // tooltip has to name the real reason instead of always blaming the
+  // location picker.
+  const saveTitle = useMemo(() => {
+    if (!isAuthenticated) return 'Log in to save scans';
+    if (!resolvedLocation) return 'Select a location first';
+    if (saveableCount === 0) return 'Nothing in view to save';
+    return `Save ${saveableCount} assets`;
+  }, [isAuthenticated, resolvedLocation, saveableCount]);
 
   const handleReconcileUpload = useCallback(() => {
     if (!isAuthenticated) {
@@ -403,6 +418,7 @@ export default function InventoryScreen() {
           isSaveDisabled={isAuthenticated ? (!resolvedLocation || saveableCount === 0 || isSaving) : displayableTags.length === 0}
           isSaving={isSaving}
           saveableCount={saveableCount}
+          saveTitle={saveTitle}
           showClearPulse={showClearPulse}
           onClearPulseEnd={() => setShowClearPulse(false)}
         />

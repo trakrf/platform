@@ -24,6 +24,8 @@ interface InventoryHeaderProps {
   isSaveDisabled: boolean;
   isSaving?: boolean;
   saveableCount: number;
+  /** Tooltip naming the current save state (TRA-1038). */
+  saveTitle: string;
   // Clear button pulse animation
   showClearPulse?: boolean;
   onClearPulseEnd?: () => void;
@@ -46,6 +48,7 @@ export function InventoryHeader({
   isSaveDisabled,
   isSaving = false,
   saveableCount,
+  saveTitle,
   showClearPulse = false,
   onClearPulseEnd,
 }: InventoryHeaderProps) {
@@ -111,7 +114,7 @@ export function InventoryHeader({
                 onClick={onSave}
                 disabled={isSaveDisabled}
                 className="p-1.5 sm:p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title={isSaveDisabled ? 'Select a location first' : `Save ${saveableCount} assets`}
+                title={saveTitle}
               >
                 {isSaving ? (
                   <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -191,14 +194,17 @@ export function InventoryHeader({
               onClick={onSave}
               disabled={isSaveDisabled}
               className="px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center text-sm"
-              title={isSaveDisabled ? 'Select a location first' : `Save ${saveableCount} assets`}
+              title={saveTitle}
             >
               {isSaving ? (
                 <div className="w-4 h-4 mr-1.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : (
                 <Save className="w-4 h-4 mr-1.5" />
               )}
-              {isSaving ? 'Saving...' : 'Save'}
+              {/* TRA-1038: the count is the mitigation for a forgotten
+                  filter — it has to be readable at click time, not buried
+                  in a tooltip. */}
+              {isSaving ? 'Saving...' : saveableCount > 0 ? `Save (${saveableCount})` : 'Save'}
             </button>
           </PaidGate>
         </div>
