@@ -14,6 +14,7 @@ import { refreshOrgToken } from '@/lib/auth/orgContext';
 import { invalidateAllOrgScopedData } from '@/lib/cache/orgScopedCache';
 import { DeleteOrgModal } from './DeleteOrgModal';
 import { OrgEntitlementSection } from './OrgEntitlementSection';
+import { OrgEntitlementStatus } from './OrgEntitlementStatus';
 import { OrgCapabilitiesSection } from './OrgCapabilitiesSection';
 import type { Organization } from '@/types/org';
 import toast from 'react-hot-toast';
@@ -239,6 +240,19 @@ export default function OrgSettingsScreen() {
         {error && (
           <div className="bg-red-900/20 border border-red-800 rounded-lg p-3 mb-6">
             <p className="text-red-400 text-sm">{error}</p>
+          </div>
+        )}
+
+        {/* Read-only subscription status (TRA-975), for admins who are not
+            superadmins. A superadmin gets OrgEntitlementSection below, which
+            states the same enabled/expiry facts in editable form — rendering
+            both would show one fact twice in two shapes. */}
+        {isAdmin && !isSuperadmin && (
+          <div className="mb-6">
+            <OrgEntitlementStatus
+              isEntitled={currentOrg.is_entitled}
+              subscriptionExpiresAt={currentOrg.subscription_expires_at}
+            />
           </div>
         )}
 

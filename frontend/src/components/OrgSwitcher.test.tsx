@@ -21,6 +21,7 @@ const mockUser: User = {
 
 afterEach(() => {
   cleanup();
+  window.location.hash = '';
   useOrgStore.setState({
     currentOrg: null,
     currentRole: null,
@@ -52,6 +53,39 @@ describe('OrgSwitcher', () => {
   it('exposes "Account menu" as accessible name on the trigger', () => {
     wrap(<OrgSwitcher user={mockUser} />);
     expect(screen.getByRole('button', { name: /account menu/i })).toBeInTheDocument();
+  });
+
+  // TRA-1058: these two used to open OrgModal's manage mode, a second org-admin
+  // surface that never got the entitlement or capability controls. The menu now
+  // lands on the hash screens that actually carry them.
+  it('navigates to the org settings screen', () => {
+    setAdminOrg();
+    wrap(<OrgSwitcher user={mockUser} />);
+    fireEvent.click(screen.getByRole('button', { name: /account menu/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /organization settings/i }));
+
+    expect(window.location.hash).toBe('#org-settings');
+  });
+
+  it('navigates to the members screen', () => {
+    setAdminOrg();
+    wrap(<OrgSwitcher user={mockUser} />);
+    fireEvent.click(screen.getByRole('button', { name: /account menu/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /^members$/i }));
+
+    expect(window.location.hash).toBe('#org-members');
+  });
+
+  // The modal survives for Create Organization only — it must never render the
+  // member table or the org-name form again.
+  it('does not open a member/settings modal from the menu', () => {
+    setAdminOrg();
+    wrap(<OrgSwitcher user={mockUser} />);
+    fireEvent.click(screen.getByRole('button', { name: /account menu/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /organization settings/i }));
+
+    expect(screen.queryByRole('button', { name: /close modal/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/organization name/i)).not.toBeInTheDocument();
   });
 
   // TRA-1043: webhooks is reachable from the header menu, next to API Keys —

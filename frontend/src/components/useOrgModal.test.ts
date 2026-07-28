@@ -1,5 +1,10 @@
 /**
- * Tests for useOrgModal hook - TRA-204 regression prevention
+ * Tests for useOrgModal — create mode.
+ *
+ * TRA-1058 removed the manage half of this hook, and with it the TRA-204
+ * showDeleteModal-reset tests: the delete flow now lives on OrgSettingsScreen,
+ * which unmounts on navigation and cannot carry stale open-modal state across
+ * a reopen the way this modal could.
  */
 
 import React, { type ReactNode } from 'react';
@@ -7,8 +12,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useOrgModal } from './useOrgModal';
+import { useOrgSwitch } from '@/hooks/orgs/useOrgSwitch';
 
-// Mock dependencies
+const createOrgMock = vi.fn().mockResolvedValue({ id: 2, name: 'New Org' });
+
 vi.mock('@/stores', () => ({
   useOrgStore: vi.fn(() => ({
     currentOrg: { id: 1, name: 'Test Org' },
@@ -22,24 +29,7 @@ vi.mock('@/stores', () => ({
 }));
 
 vi.mock('@/hooks/orgs/useOrgSwitch', () => ({
-  useOrgSwitch: vi.fn(() => ({
-    createOrg: vi.fn().mockResolvedValue({ id: 2, name: 'New Org' }),
-  })),
-}));
-
-vi.mock('@/lib/api/orgs', () => ({
-  orgsApi: {
-    listMembers: vi.fn().mockResolvedValue({ data: { data: [] } }),
-    delete: vi.fn().mockResolvedValue({}),
-  },
-}));
-
-vi.mock('@/lib/auth/orgContext', () => ({
-  refreshOrgToken: vi.fn().mockResolvedValue(true),
-}));
-
-vi.mock('@/lib/cache/orgScopedCache', () => ({
-  invalidateAllOrgScopedData: vi.fn().mockResolvedValue(undefined),
+  useOrgSwitch: vi.fn(() => ({ createOrg: createOrgMock })),
 }));
 
 vi.mock('react-hot-toast', () => ({
@@ -58,81 +48,77 @@ const createWrapper = () => {
   };
 };
 
-describe('useOrgModal', () => {
-  const mockOnClose = vi.fn();
+const submit = () => ({ preventDefault: vi.fn() }) as unknown as React.FormEvent;
 
-  const defaultProps = {
-    isOpen: true,
-    onClose: mockOnClose,
-    mode: 'manage' as const,
-    defaultTab: 'members' as const,
-  };
+describe('useOrgModal (create)', () => {
+  const mockOnClose = vi.fn();
+  const defaultProps = { isOpen: true, onClose: mockOnClose };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    createOrgMock.mockResolvedValue({ id: 2, name: 'New Org' });
   });
 
-  describe('TRA-204: showDeleteModal state management', () => {
-    it('initializes showDeleteModal as false', () => {
-      const { result } = renderHook(() => useOrgModal(defaultProps), { wrapper: createWrapper() });
-      expect(result.current.showDeleteModal).toBe(false);
+  it('creates the org and closes on submit', async () => {
+    const { result } = renderHook(() => useOrgModal(defaultProps), { wrapper: createWrapper() });
+
+    act(() => result.current.setNewOrgName('New Org'));
+    await act(async () => {
+      await result.current.handleCreateOrg(submit());
     });
 
-    it('resets showDeleteModal when modal opens in manage mode', () => {
-      const { result, rerender } = renderHook(
-        ({ isOpen }) => useOrgModal({ ...defaultProps, isOpen }),
-        { initialProps: { isOpen: false }, wrapper: createWrapper() }
-      );
-
-      // Simulate having stale state by opening delete modal
-      act(() => {
-        result.current.openDeleteModal();
-      });
-      expect(result.current.showDeleteModal).toBe(true);
-
-      // Close and reopen modal
-      rerender({ isOpen: false });
-      rerender({ isOpen: true });
-
-      // showDeleteModal should be reset to false
-      expect(result.current.showDeleteModal).toBe(false);
-    });
-
-    it('resets showDeleteModal after successful org deletion', async () => {
-      const { result } = renderHook(() => useOrgModal(defaultProps), { wrapper: createWrapper() });
-
-      // Open delete modal
-      act(() => {
-        result.current.openDeleteModal();
-      });
-      expect(result.current.showDeleteModal).toBe(true);
-
-      // Perform deletion
-      await act(async () => {
-        await result.current.handleDeleteOrg('Test Org');
-      });
-
-      // showDeleteModal should be reset
-      expect(result.current.showDeleteModal).toBe(false);
-      expect(mockOnClose).toHaveBeenCalled();
-    });
+    // createOrg comes from useOrgSwitch, not the bare store action — it mints a
+    // token for the new org and clears org-scoped caches.
+    expect(vi.mocked(useOrgSwitch)).toHaveBeenCalled();
+    expect(createOrgMock).toHaveBeenCalledWith('New Org');
+    expect(mockOnClose).toHaveBeenCalled();
   });
 
-  describe('openDeleteModal and closeDeleteModal', () => {
-    it('opens and closes delete modal', () => {
-      const { result } = renderHook(() => useOrgModal(defaultProps), { wrapper: createWrapper() });
+  it('rejects a name shorter than two characters without calling the API', async () => {
+    const { result } = renderHook(() => useOrgModal(defaultProps), { wrapper: createWrapper() });
 
-      expect(result.current.showDeleteModal).toBe(false);
-
-      act(() => {
-        result.current.openDeleteModal();
-      });
-      expect(result.current.showDeleteModal).toBe(true);
-
-      act(() => {
-        result.current.closeDeleteModal();
-      });
-      expect(result.current.showDeleteModal).toBe(false);
+    act(() => result.current.setNewOrgName('x'));
+    await act(async () => {
+      await result.current.handleCreateOrg(submit());
     });
+
+    expect(result.current.createNameError).toMatch(/at least 2 characters/i);
+    expect(createOrgMock).not.toHaveBeenCalled();
+    expect(mockOnClose).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a create failure and keeps the modal open', async () => {
+    createOrgMock.mockRejectedValueOnce({
+      response: { data: { error: { detail: 'Name already taken' } } },
+    });
+    const { result } = renderHook(() => useOrgModal(defaultProps), { wrapper: createWrapper() });
+
+    act(() => result.current.setNewOrgName('Dupe Org'));
+    await act(async () => {
+      await result.current.handleCreateOrg(submit());
+    });
+
+    expect(result.current.createError).toBe('Name already taken');
+    expect(mockOnClose).not.toHaveBeenCalled();
+  });
+
+  it('clears a previous attempt when the modal reopens', async () => {
+    const { result, rerender } = renderHook(
+      ({ isOpen }) => useOrgModal({ ...defaultProps, isOpen }),
+      { initialProps: { isOpen: true }, wrapper: createWrapper() }
+    );
+
+    createOrgMock.mockRejectedValueOnce(new Error('boom'));
+    act(() => result.current.setNewOrgName('Failed Org'));
+    await act(async () => {
+      await result.current.handleCreateOrg(submit());
+    });
+    expect(result.current.createError).toBe('boom');
+
+    rerender({ isOpen: false });
+    rerender({ isOpen: true });
+
+    expect(result.current.newOrgName).toBe('');
+    expect(result.current.createError).toBeNull();
   });
 });

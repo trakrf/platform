@@ -9,7 +9,6 @@ import { useOrgStore, useAuthStore } from '@/stores';
 import { useOrgSwitch } from '@/hooks/orgs/useOrgSwitch';
 import { RoleBadge } from './RoleBadge';
 import { OrgModal } from './OrgModal';
-import type { ModalMode, TabType } from './useOrgModal';
 import type { User } from '@/lib/api/auth';
 
 interface OrgSwitcherProps {
@@ -25,9 +24,7 @@ export function OrgSwitcher({ user, onLogout }: OrgSwitcherProps) {
   const { currentOrg, currentRole, orgs, isLoading } = useOrgStore();
   const isSuperadmin = useAuthStore((s) => s.profile?.is_superadmin ?? false);
   const { switchOrg } = useOrgSwitch();
-  const [showModal, setShowModal] = useState(false);
-  const [modalMode, setModalMode] = useState<ModalMode>('manage');
-  const [modalTab, setModalTab] = useState<TabType>('members');
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const handleSwitchOrg = async (orgId: number) => {
     if (orgId === currentOrg?.id) return;
@@ -38,24 +35,18 @@ export function OrgSwitcher({ user, onLogout }: OrgSwitcherProps) {
     }
   };
 
-  const openModal = (mode: ModalMode, tab: TabType = 'members') => {
-    setModalMode(mode);
-    setModalTab(tab);
-    setShowModal(true);
-  };
-
   const avatarLetter = user ? getFirstLetter(user.email) : null;
 
   if (!currentOrg && !user) {
     return (
       <>
         <button
-          onClick={() => openModal('create')}
+          onClick={() => setShowCreateModal(true)}
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm"
         >
           <span>No organization</span>
         </button>
-        <OrgModal isOpen={showModal} onClose={() => setShowModal(false)} mode={modalMode} defaultTab={modalTab} />
+        <OrgModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} />
       </>
     );
   }
@@ -112,7 +103,7 @@ export function OrgSwitcher({ user, onLogout }: OrgSwitcherProps) {
           <Menu.Item>
             {({ active }) => (
               <button
-                onClick={() => openModal('create')}
+                onClick={() => setShowCreateModal(true)}
                 className={`${
                   active ? 'bg-gray-100 dark:bg-gray-700' : ''
                 } group flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-900 dark:text-gray-100 transition-colors`}
@@ -142,12 +133,18 @@ export function OrgSwitcher({ user, onLogout }: OrgSwitcherProps) {
             </Menu.Item>
           </div>
         )}
+        {/* TRA-1058: Settings and Members go to the hash screens. They used to
+            open OrgModal's manage mode, a parallel org-admin surface that never
+            received the entitlement (TRA-949) or capability (TRA-1027)
+            controls — three tickets shipped features nobody could click to. */}
         {currentRole && ['owner', 'admin'].includes(currentRole) && (
           <div className="p-1">
             <Menu.Item>
               {({ active }) => (
                 <button
-                  onClick={() => openModal('manage', 'settings')}
+                  onClick={() => {
+                    window.location.hash = '#org-settings';
+                  }}
                   className={`${
                     active ? 'bg-gray-100 dark:bg-gray-700' : ''
                   } group flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-900 dark:text-gray-100 transition-colors`}
@@ -160,7 +157,9 @@ export function OrgSwitcher({ user, onLogout }: OrgSwitcherProps) {
             <Menu.Item>
               {({ active }) => (
                 <button
-                  onClick={() => openModal('manage', 'members')}
+                  onClick={() => {
+                    window.location.hash = '#org-members';
+                  }}
                   className={`${
                     active ? 'bg-gray-100 dark:bg-gray-700' : ''
                   } group flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-900 dark:text-gray-100 transition-colors`}
@@ -224,7 +223,7 @@ export function OrgSwitcher({ user, onLogout }: OrgSwitcherProps) {
         )}
       </Menu.Items>
 
-      <OrgModal isOpen={showModal} onClose={() => setShowModal(false)} mode={modalMode} defaultTab={modalTab} />
+      <OrgModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} />
     </Menu>
   );
 }
