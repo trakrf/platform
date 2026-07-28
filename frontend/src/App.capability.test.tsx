@@ -196,6 +196,10 @@ describe('App capability route gating', () => {
 
     await waitFor(() => expect(useUIStore.getState().activeTab).toBe(DEFAULT_TAB));
     expect(window.location.hash).toBe(`#${DEFAULT_TAB}`);
+    // Order-dependent: the vi.mock factory increments loaded.kits once at first
+    // import, and beforeEach resets the counter but cannot un-import the module.
+    // This assertion only holds because this (ungranted) test runs before the
+    // granted one below — do not reorder them, or it passes vacuously forever.
     expect(loaded.kits).toBe(0);
     expect(screen.queryByTestId('kits-screen')).not.toBeInTheDocument();
     // `absent`, not `locked` — no upsell view either.
