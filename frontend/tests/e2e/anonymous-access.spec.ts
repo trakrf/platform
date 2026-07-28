@@ -121,4 +121,21 @@ test.describe('Anonymous Access', () => {
     });
     expect(tagCount).toBe(3);
   });
+
+  test('should show the signed-out card on reports instead of redirecting (TRA-1057)', async ({
+    page,
+  }) => {
+    await page.goto('/#reports');
+    await page.waitForTimeout(1000);
+
+    // No silent bounce — the visitor stays put and is told their options.
+    expect(page.url()).not.toContain('#login');
+    expect(page.url()).toContain('#reports');
+
+    await expect(page.locator('[data-testid="signed-out-upsell-reports"]')).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(page.locator('[data-testid="signed-out-trial"]')).toBeVisible();
+    await expect(page.locator('[data-testid="signed-out-login"]')).toBeVisible();
+  });
 });
