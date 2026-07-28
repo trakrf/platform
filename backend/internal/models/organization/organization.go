@@ -39,6 +39,35 @@ type AdminOrgListItem struct {
 	SubscriptionEnabled   bool       `json:"subscription_enabled"`
 	SubscriptionExpiresAt *time.Time `json:"subscription_expires_at,omitempty"`
 	MemberCount           int        `json:"member_count"`
+	// Capabilities is the org's granted capability names, sorted (TRA-1027).
+	// Always serialized, `[]` for the zero-grant default that most orgs sit at —
+	// the list is where an operator scans grant state across every org.
+	Capabilities []string `json:"capabilities"`
+}
+
+// OrgCapabilitiesView is the superadmin capability grant payload (TRA-1027),
+// returned by both the read and the write.
+//
+// Available ships the vocabulary alongside the grants so the grant UI renders
+// its checkboxes from server truth. The alternative — a hand-maintained copy of
+// the capability names in the frontend — would drift the moment a capability is
+// added, and would drift silently, since a missing checkbox looks exactly like
+// a capability nobody has granted yet.
+type OrgCapabilitiesView struct {
+	Capabilities []string `json:"capabilities"`
+	Available    []string `json:"available"`
+}
+
+// SetOrgCapabilitiesRequest is the superadmin grant edit payload (TRA-1027).
+// It is a whole-set replace: names present are granted, names absent from the
+// list are revoked.
+//
+// The field is a pointer and required so that an omitted `capabilities` key is
+// a 400 rather than a silent revoke-everything, matching the reasoning behind
+// UpdateEntitlementRequest's required kill switch. An explicit empty list is
+// still a valid request, and does revoke everything.
+type SetOrgCapabilitiesRequest struct {
+	Capabilities *[]string `json:"capabilities" validate:"required"`
 }
 
 // UpdateEntitlementRequest is the superadmin entitlement edit payload (TRA-949).

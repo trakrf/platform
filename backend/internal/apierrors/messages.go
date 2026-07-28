@@ -116,6 +116,9 @@ const (
 	OrgDeleteNotFound       = "Organization not found"
 	OrgNotMember            = "You are not a member of this organization"
 	OrgSetCurrentFailed     = "Failed to set current organization"
+	// TRA-1027 superadmin capability grant management.
+	OrgCapabilitiesFailed       = "Failed to read organization capabilities"
+	OrgCapabilitiesUpdateFailed = "Failed to update organization capabilities"
 )
 
 // Member management error messages

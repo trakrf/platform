@@ -14,6 +14,7 @@ import { refreshOrgToken } from '@/lib/auth/orgContext';
 import { invalidateAllOrgScopedData } from '@/lib/cache/orgScopedCache';
 import { DeleteOrgModal } from './DeleteOrgModal';
 import { OrgEntitlementSection } from './OrgEntitlementSection';
+import { OrgCapabilitiesSection } from './OrgCapabilitiesSection';
 import type { Organization } from '@/types/org';
 import toast from 'react-hot-toast';
 
@@ -185,6 +186,9 @@ export default function OrgSettingsScreen() {
                   )
                 }
               />
+              {/* TRA-1027: grants for an org the superadmin is not a member of —
+                  the release-day path (Frederick Health, demo orgs). */}
+              <OrgCapabilitiesSection orgId={foreignOrg.id} />
             </>
           )}
         </div>
@@ -323,6 +327,19 @@ export default function OrgSettingsScreen() {
             orgId={currentOrg.id}
             initialEnabled={currentOrg.subscription_enabled}
             initialExpiresAt={currentOrg.subscription_expires_at}
+          />
+        )}
+
+        {/* Capability grants (superadmin only, TRA-1027). Editing the current
+            org's grants changes what this session's nav and routes resolve to,
+            so the profile is refetched — capabilities are read from
+            /users/me, never from the token. */}
+        {isSuperadmin && (
+          <OrgCapabilitiesSection
+            orgId={currentOrg.id}
+            onSaved={() => {
+              void fetchProfile();
+            }}
           />
         )}
 

@@ -91,6 +91,29 @@ describe('SuperadminOrgsScreen (TRA-949)', () => {
     expect(screen.getByText(/no organizations match/i)).toBeInTheDocument();
   });
 
+  // TRA-1027: the list is where an operator scans grant state across every org,
+  // so the capability set is a column rather than something you open each org
+  // to discover.
+  it('shows each org capability set, and says so when there is none', async () => {
+    vi.mocked(orgsApi.listAllOrgs).mockResolvedValueOnce({
+      data: {
+        data: [
+          { id: 42, name: 'Acme Co', identifier: 'acme-co', subscription_enabled: true, subscription_expires_at: null, member_count: 3, capabilities: ['geofence', 'mustering'] },
+          { id: 7, name: 'Bare Co', identifier: 'bare-co', subscription_enabled: true, subscription_expires_at: null, member_count: 1, capabilities: [] },
+        ],
+      },
+    } as Awaited<ReturnType<typeof orgsApi.listAllOrgs>>);
+
+    render(<SuperadminOrgsScreen />);
+    await screen.findByText('Acme Co');
+
+    expect(screen.getByText('geofence')).toBeInTheDocument();
+    expect(screen.getByText('mustering')).toBeInTheDocument();
+    // Zero grants is the default for most orgs and must read as a real state,
+    // not a blank cell that looks like missing data.
+    expect(screen.getByText(/^none$/i)).toBeInTheDocument();
+  });
+
   it('shows an empty state when there are no orgs', async () => {
     vi.mocked(orgsApi.listAllOrgs).mockResolvedValueOnce({
       data: { data: [] },
