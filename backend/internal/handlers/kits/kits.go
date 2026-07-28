@@ -44,12 +44,18 @@ func NewHandler(storage KitStorage) *Handler {
 
 // RegisterRoutes wires the kit routes onto r. Mount inside the session-auth
 // (middleware.Auth) group. Writes are paid mutations (TRA-947) and require
-// Operator+ (scan-save precedent); reads stay open to any org member.
-func (h *Handler) RegisterRoutes(r chi.Router, paidGate, operatorGate func(http.Handler) http.Handler) {
-	r.Get("/api/v1/kits", h.List)
-	r.Get("/api/v1/kits/{kit_id}", h.Get)
-	r.With(paidGate, operatorGate).Post("/api/v1/kits", h.Create)
-	r.With(paidGate, operatorGate).Post("/api/v1/kits/verify", h.Verify)
+// Operator+ (scan-save precedent).
+//
+// TRA-1065: every route carries capGate, reads included. Kits presents as
+// `absent` in the UI — no nav entry, no route, no trace the surface exists —
+// and that is only honest if an ungranted org cannot list kits over the API
+// either. capGate precedes paidGate, which precedes the role gate: an org
+// cannot be past-due on a surface it never bought (ADR 0002).
+func (h *Handler) RegisterRoutes(r chi.Router, capGate, paidGate, operatorGate func(http.Handler) http.Handler) {
+	r.With(capGate).Get("/api/v1/kits", h.List)
+	r.With(capGate).Get("/api/v1/kits/{kit_id}", h.Get)
+	r.With(capGate, paidGate, operatorGate).Post("/api/v1/kits", h.Create)
+	r.With(capGate, paidGate, operatorGate).Post("/api/v1/kits/verify", h.Verify)
 }
 
 // @Summary  Commission a kit

@@ -37,9 +37,10 @@ func orgCapabilitySet(t *testing.T, pool *pgxpool.Pool, orgID int) []string {
 	return caps
 }
 
-// The lookup table is the code-owned vocabulary: exactly the three names in the
-// ADR, no more. A fourth seeded name would mean DDL drifted ahead of the Go
-// registry (TRA-1025) that must match it.
+// The lookup table is the code-owned vocabulary: it must match capability.All
+// (TRA-1025) exactly, whatever that set's current size. Drift in either
+// direction — a seeded name missing from the Go registry, or a registry entry
+// not yet seeded — is the failure this test exists to catch.
 func TestCapabilities_SeededVocabulary(t *testing.T) {
 	store, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
@@ -58,7 +59,7 @@ func TestCapabilities_SeededVocabulary(t *testing.T) {
 	}
 	require.NoError(t, rows.Err())
 
-	assert.Equal(t, []string{"geofence", "inventory", "mustering"}, names)
+	assert.Equal(t, []string{"geofence", "inventory", "kitting", "mustering"}, names)
 }
 
 // Zero grants is the default, and the function must say so with an empty array

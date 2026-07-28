@@ -197,7 +197,10 @@ func setupRouter(
 		// mutations and require Operator+ (scan-save precedent).
 		// Operator gate resolves the org from JWT claims, NOT a URL param —
 		// these routes have no :orgId, so RequireOrgOperator would 400 (TRA-1033).
-		kitsHandler.RegisterRoutes(r, paidGate, middleware.RequireCurrentOrgOperator(store))
+		// TRA-1065: capability-gated end to end, reads included — the UI hides
+		// kits entirely for an ungranted org, so the API must agree.
+		kitsHandler.RegisterRoutes(r, requireCap(capability.Kitting), paidGate,
+			middleware.RequireCurrentOrgOperator(store))
 		// TRA-1043: webhook registration is an org-settings action, so admin-only
 		// and internal (not in the public spec). Deliberately NOT capability-gated:
 		// webhooks is base platform surface for every paying customer, not a sold

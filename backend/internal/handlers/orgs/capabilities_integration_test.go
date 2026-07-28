@@ -85,7 +85,7 @@ func TestGetOrgCapabilities_SuperadminSeesGrantsOfNonMemberOrg(t *testing.T) {
 	assert.Equal(t, []string{"geofence"}, granted)
 	// The vocabulary ships with the response so the grant UI renders checkboxes
 	// from server truth rather than a hand-maintained frontend copy.
-	assert.Equal(t, []string{"geofence", "inventory", "mustering"}, available)
+	assert.Equal(t, []string{"geofence", "inventory", "kitting", "mustering"}, available)
 }
 
 // Zero grants is the norm, and it must arrive as [] — a null would render as

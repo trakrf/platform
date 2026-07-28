@@ -10,7 +10,12 @@ import { render, screen, cleanup, waitFor } from '@testing-library/react';
  * whether each gated module was ever imported, which is the unit-test stand-in
  * for "the chunk is not fetched" in the network tab.
  */
-const loaded = vi.hoisted(() => ({ mustering: 0, outputDevices: 0, geofenceDefaults: 0 }));
+const loaded = vi.hoisted(() => ({
+  mustering: 0,
+  outputDevices: 0,
+  geofenceDefaults: 0,
+  kits: 0,
+}));
 
 vi.mock('@/components/mustering/MusteringScreen', () => {
   loaded.mustering += 1;
@@ -23,6 +28,10 @@ vi.mock('@/components/OutputDevicesScreen', () => {
 vi.mock('@/components/OrgGeofenceDefaultsScreen', () => {
   loaded.geofenceDefaults += 1;
   return { default: () => <div data-testid="geofence-defaults-screen" /> };
+});
+vi.mock('@/components/kits/KitsScreen', () => {
+  loaded.kits += 1;
+  return { default: () => <div data-testid="kits-screen" /> };
 });
 vi.mock('@/lib/openreplay', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/openreplay')>()),
@@ -38,6 +47,7 @@ import { useUIStore } from '@/stores';
 import { useAuthStore } from '@/stores/authStore';
 import { useOrgStore } from '@/stores/orgStore';
 import type { TabType } from '@/stores';
+import { DEFAULT_TAB } from '@/utils/tabRedirects';
 
 /**
  * App's mount effect runs authStore.initialize(), which clears isAuthenticated
@@ -103,6 +113,7 @@ describe('App capability route gating', () => {
     loaded.mustering = 0;
     loaded.outputDevices = 0;
     loaded.geofenceDefaults = 0;
+    loaded.kits = 0;
     useAuthStore.setState({
       isAuthenticated: false,
       token: null,
@@ -175,5 +186,33 @@ describe('App capability route gating', () => {
     expect(loaded.mustering).toBe(0);
     // Not bounced to the default tab — the answer simply isn't known yet.
     expect(useUIStore.getState().activeTab).toBe('mustering');
+  });
+
+  it('resolves #kits to not-found without the grant, and never loads the chunk', async () => {
+    setCapabilities([]);
+    window.location.hash = '#kits';
+    useUIStore.setState({ activeTab: 'kits' } as never);
+    render(<App />);
+
+    await waitFor(() => expect(useUIStore.getState().activeTab).toBe(DEFAULT_TAB));
+    expect(window.location.hash).toBe(`#${DEFAULT_TAB}`);
+    // Order-dependent: the vi.mock factory increments loaded.kits once at first
+    // import, and beforeEach resets the counter but cannot un-import the module.
+    // This assertion only holds because this (ungranted) test runs before the
+    // granted one below — do not reorder them, or it passes vacuously forever.
+    expect(loaded.kits).toBe(0);
+    expect(screen.queryByTestId('kits-screen')).not.toBeInTheDocument();
+    // `absent`, not `locked` — no upsell view either.
+    expect(screen.queryByTestId('capability-upsell-kitting')).not.toBeInTheDocument();
+  });
+
+  it('renders Kits for a granted org', async () => {
+    setCapabilities(['kitting']);
+    window.location.hash = '#kits';
+    useUIStore.setState({ activeTab: 'kits' } as never);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByTestId('kits-screen')).toBeInTheDocument());
+    expect(useUIStore.getState().activeTab).toBe('kits');
   });
 });

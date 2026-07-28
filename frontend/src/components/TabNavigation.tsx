@@ -2,7 +2,7 @@ import React from 'react';
 import { useUIStore, useDeviceStore, useOrgStore } from '@/stores';
 import type { TabType } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
-import { Package2, Search, Settings, HelpCircle, Package, MapPinned, BarChart3, RadioTower, Radio, Boxes, Lock } from 'lucide-react';
+import { Package2, Search, Settings, HelpCircle, Package, MapPinned, BarChart3, RadioTower, Radio, Lock } from 'lucide-react';
 import { appVersion } from '@/version';
 import { capabilityEntryForRoute } from '@/components/capability/registry';
 import { useCapabilityNavGate } from '@/hooks/capability/useCapability';
@@ -233,13 +233,13 @@ export default function TabNavigation() {
             tooltip="Find a specific item by walking around with the scanner"
           />
 
-          <NavItem
-            id="kits"
-            label="Kits"
+          {/* Capability-gated (TRA-1065). `absent` presentation: an org without
+              the `kitting` grant sees no entry at all. Label, icon and tooltip
+              now come from the capability registry. */}
+          <CapabilityNavItem
+            route="kits"
             isActive={activeTab === 'kits'}
             onClick={() => handleTabClick('kits')}
-            icon={<Boxes className="w-5 h-5" />}
-            tooltip="Commission kits and verify them at return — catch missing or swapped items"
           />
 
           <NavItem

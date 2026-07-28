@@ -34,6 +34,13 @@ const (
 	// exist for it yet.
 	Inventory = "inventory"
 
+	// Kitting is commissioning expected-together asset groups and verifying
+	// them at return (the dock check). Gated because the surface is still
+	// shaped around one customer's workflow and unfinished — TRA-1065. It is a
+	// capability, not a customer name, so promoting it to a standard module is
+	// a grant-data change and nothing here has to be renamed.
+	Kitting = "kitting"
+
 	// Mustering is the roster / muster-mode / presence-rollup surface built
 	// on the geofence engine, with a distinct buyer persona and data
 	// sensitivity.
@@ -41,8 +48,8 @@ const (
 )
 
 // All is the complete capability vocabulary, sorted, matching the rows seeded
-// into trakrf.capabilities by migration 000036.
-var All = []string{Geofence, Inventory, Mustering}
+// into trakrf.capabilities by migrations 000036 and 000038.
+var All = []string{Geofence, Inventory, Kitting, Mustering}
 
 // IsValid reports whether name is a known capability. Grants are additionally
 // constrained by the lookup-table FK, so this is a convenience for callers that

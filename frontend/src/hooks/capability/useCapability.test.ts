@@ -112,10 +112,10 @@ describe('useCapability', () => {
 });
 
 /**
- * Presentation policy as pure data. No registry entry currently uses `absent`
- * (mustering moved to `locked` on 2026-07-27), so these tests are what keep
- * that branch honest — the hook tests below can only cover what the registry
- * happens to declare today.
+ * Presentation policy as pure data. `kitting` is the only shipped registry
+ * entry using `absent` (mustering moved to `locked` on 2026-07-27), so these
+ * tests are what keep that branch honest — the hook tests below can only
+ * cover what the registry happens to declare today.
  */
 describe('navGateFor / routeGateFor', () => {
   it('hides an ungated `absent` entry and resolves its route to not-found', () => {

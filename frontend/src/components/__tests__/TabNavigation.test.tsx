@@ -342,6 +342,41 @@ describe('TabNavigation', () => {
       expect(screen.getByTestId('menu-item-mustering-locked')).toBeInTheDocument();
       expect(screen.getByTestId('menu-item-output-devices-locked')).toBeInTheDocument();
     });
+
+    it('hides Kits entirely without the grant (`absent`)', () => {
+      setCapabilities(['geofence']);
+      render(<TabNavigation />);
+
+      // `absent` means no trace at all — not a lock, not a disabled entry.
+      expect(screen.queryByText('Kits')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('menu-item-kits')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('menu-item-kits-locked')).not.toBeInTheDocument();
+    });
+
+    it('shows Kits with the kitting grant, unlocked', () => {
+      setCapabilities(['kitting']);
+      render(<TabNavigation />);
+
+      expect(screen.getByTestId('menu-item-kits')).toBeInTheDocument();
+      expect(screen.queryByTestId('menu-item-kits-locked')).not.toBeInTheDocument();
+    });
+
+    it('hides Kits when signed out rather than teasing it', () => {
+      setCapabilities(null);
+      render(<TabNavigation />);
+
+      expect(screen.queryByTestId('menu-item-kits')).not.toBeInTheDocument();
+    });
+
+    it('navigates to the kits tab when granted', () => {
+      const mockSetActiveTab = vi.fn();
+      useUIStore.getState().setActiveTab = mockSetActiveTab;
+      setCapabilities(['kitting']);
+      render(<TabNavigation />);
+
+      fireEvent.click(screen.getByTestId('menu-item-kits'));
+      expect(mockSetActiveTab).toHaveBeenCalledWith('kits');
+    });
   });
 
   // TRA-1057. The signed-out nav is the shop window: the ungated core shows and
@@ -353,7 +388,7 @@ describe('TabNavigation', () => {
       // beforeEach already leaves auth false and org/role null.
       render(<TabNavigation />);
 
-      for (const label of ['Scan', 'Locate', 'Kits', 'Assets', 'Locations', 'Reports', 'Settings', 'Help']) {
+      for (const label of ['Scan', 'Locate', 'Assets', 'Locations', 'Reports', 'Settings', 'Help']) {
         expect(screen.getByText(label), label).toBeInTheDocument();
       }
 
@@ -361,6 +396,10 @@ describe('TabNavigation', () => {
       expect(screen.queryByText('Mustering')).not.toBeInTheDocument();
       expect(screen.queryByText('Outputs')).not.toBeInTheDocument();
       expect(screen.queryByText('Geofence defaults')).not.toBeInTheDocument();
+      // Kits was part of the ungated core when TRA-1057 landed; TRA-1065 put it
+      // behind `kitting`, so it now leaves the signed-out nav by the same
+      // `no-org` path as every other gated entry.
+      expect(screen.queryByText('Kits')).not.toBeInTheDocument();
       // Role-gated: hidden because there is no role.
       expect(screen.queryByText('Readers')).not.toBeInTheDocument();
       expect(screen.queryByText('Live feed')).not.toBeInTheDocument();
@@ -370,7 +409,10 @@ describe('TabNavigation', () => {
       render(<TabNavigation />);
 
       // A lock means "your org didn't buy this" — false for a visitor with no org.
-      for (const tab of ['assets', 'locations', 'reports', 'kits']) {
+      // `kits` dropped off this list with TRA-1065: it is capability-gated now,
+      // so it renders nothing at all when signed out and a lock assertion here
+      // would pass vacuously. Its absence is asserted in the test above.
+      for (const tab of ['assets', 'locations', 'reports']) {
         expect(screen.queryByTestId(`menu-item-${tab}-locked`)).not.toBeInTheDocument();
       }
     });
