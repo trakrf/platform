@@ -14,6 +14,7 @@ import { EXAMPLE_EPCS } from '@test-utils/constants';
 import { ConfigurationSpinner } from '@/components/ConfigurationSpinner';
 import { useWebAudioTone } from '@/hooks/useWebAudioTone';
 import { recordComponentRender } from '@/lib/perf/locate-metrics';
+import { lazyWithRetry } from '@/utils/lazyWithRetry';
 
 // Constants
 const DEFAULT_RSSI = -120;
@@ -21,7 +22,7 @@ const MIN_RSSI = -100;
 const MAX_RSSI = -20;
 
 // Lazy load the gauge component
-const GaugeComponent = React.lazy(() => import('react-gauge-component'));
+const GaugeComponent = lazyWithRetry(() => import('react-gauge-component'));
 
 const LocateScreen: React.FC = () => {
   // Track render for performance metrics
