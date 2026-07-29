@@ -188,6 +188,25 @@ func getMigrationsPath(t *testing.T) string {
 	return ""
 }
 
+// ledgerPin keeps the bare `migrate` CLI's schema_migrations table in the same
+// schema that ./server migrate pins it to (TRA-1069). Unpinned, the CLI locates
+// the ledger with CURRENT_SCHEMA(), which resolves to public before migration
+// 000001 creates the trakrf schema and to trakrf afterwards — splitting the
+// migration history in two. The harness drops and recreates its database every
+// run so it cannot drift today, but the invariant belongs everywhere the CLI is
+// invoked, not just where drift has already bitten.
+const ledgerPin = "x-migrations-table=%22public%22.%22schema_migrations%22" +
+	"&x-migrations-table-quoted=true"
+
+// withLedgerPin appends ledgerPin to a database URL, opening a query string if
+// it has none (TEST_PG_URL is arbitrary environment input).
+func withLedgerPin(dbURL string) string {
+	if strings.Contains(dbURL, "?") {
+		return dbURL + "&" + ledgerPin
+	}
+	return dbURL + "?" + ledgerPin
+}
+
 func runMigrations(dbURL, migrationsPath string, t *testing.T) error {
 	t.Helper()
 
@@ -198,7 +217,7 @@ func runMigrations(dbURL, migrationsPath string, t *testing.T) error {
 
 	cmd := exec.Command(migrateBinary,
 		"-path", migrationsPath,
-		"-database", dbURL,
+		"-database", withLedgerPin(dbURL),
 		"up",
 	)
 

@@ -38,7 +38,7 @@ TimescaleDB data stays on the Podman named volume `timescale_data`.
 | `scripts/trakrf-backup.sh` | `pg_dump` → `/srv/trakrf/backups` |
 | `systemd/trakrf-backup.{service,timer}` | daily backup user timer |
 | `install.sh` | deploy `config/`+`quadlets/`+`scripts/`+`systemd/` → `/srv/trakrf`, link + reload units, enable backup timer |
-| `db-init.sh` | one-time DB bootstrap (trakrf schema, search_path, obfuscation key) |
+| `db-init.sh` | one-time DB bootstrap (search_path, obfuscation key, ledger schema) |
 | `smoke-test.sh` | broker→subscriber→ingest proof |
 | `secrets/*.example` | templates; real secrets live only on the box under `/srv/trakrf/secrets/` |
 
@@ -74,7 +74,7 @@ podman unshare chown 1883:1883 /srv/trakrf/secrets/mosquitto/passwd
 # 4. Deploy + start (Timescale must be up before db-init/migrate)
 deploy/edge/install.sh                 # config+quadlets+scripts+systemd -> /srv/trakrf; links units; enables backup timer
 systemctl --user start timescaledb.service
-deploy/edge/db-init.sh                 # schema + search_path + obfuscation key
+deploy/edge/db-init.sh                 # search_path + obfuscation key (trakrf schema comes from migration 000001)
 systemctl --user start traefik.service # pulls up migrate -> backend via deps
 systemctl --user enable --now podman-auto-update.timer
 

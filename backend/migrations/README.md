@@ -35,6 +35,29 @@ Or browse via the tag on GitHub: <https://github.com/trakrf/platform/releases/ta
   `CREATE SCHEMA IF NOT EXISTS`, etc. — guards against double-apply on
   recovery scenarios.
 
+## The ledger lives in `public.schema_migrations` (TRA-1069)
+
+golang-migrate records applied versions in a `schema_migrations` table. Its
+schema is **pinned to `public`** in `internal/cmd/migrate` — do not let it be
+resolved dynamically.
+
+Unpinned, the postgres driver locates that table with `CURRENT_SCHEMA()`. Every
+connection string here carries `search_path=trakrf,public`, and migration
+`000001` creates the `trakrf` schema — so `CURRENT_SCHEMA()` yields `public` on a
+fresh database's first run and `trakrf` on every run after it. The ledger moves,
+the new location starts empty at version 0, and the whole stack replays onto an
+already-populated schema. The failure is quiet: it dies partway with an
+"already exists" error, and forcing a version to unstick it leaves a ledger that
+reports clean while the schema is missing objects. That is how a local database
+ended up without `trakrf.refresh_tokens` while reporting a clean version 38.
+
+`public` is the pinned schema because it is where the ledger already lives in
+preview and prod, and where a fresh database's first run puts it.
+
+`./server migrate` refuses to run if it finds a `schema_migrations` table in any
+other schema, and names both. Anything invoking the bare `migrate` CLI must pin
+the same location (see `ledger_pin` in `backend/justfile`).
+
 ## Required GUC
 
 `trakrf.generate_obfuscated_id()` reads `app.obfuscation_key` via

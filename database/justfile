@@ -64,46 +64,29 @@ status:
     @docker compose exec timescaledb pg_isready -U postgres && echo "✅ Database is ready" || echo "❌ Database not ready"
 
 # ============================================================================
-# Migrations (host → docker postgres)
+# Migrations
 # ============================================================================
+#
+# Migrations live in backend/migrations and are owned by the backend workspace,
+# which applies them through the embedded set (`./server migrate`). These
+# recipes delegate rather than shelling out to the bare `migrate` CLI: the
+# backend pins the schema_migrations ledger to public, and an unpinned CLI
+# invocation would resolve it with CURRENT_SCHEMA() and split the migration
+# history (TRA-1069). They previously pointed at ./migrations, a path that has
+# not existed here since migrations moved under backend/.
 
-# Run migrations from host machine (requires: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest)
-migrate:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "🔄 Running migrations (host → docker postgres)..."
-    if [ -z "${PG_URL_LOCAL:-}" ]; then
-        echo "❌ PG_URL_LOCAL not set in .env.local"
-        echo "   Example: PG_URL_LOCAL=postgres://postgres:password@localhost:5432/trakrf?sslmode=disable"
-        exit 1
-    fi
-    migrate -path ./migrations -database "${PG_URL_LOCAL}" up
-    echo "✅ Migrations complete"
+# Run migrations (delegates to the backend workspace)
+migrate *args:
+    @just backend migrate {{args}}
 
 # Show migration status
-migrate-status:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ -z "${PG_URL_LOCAL:-}" ]; then
-        echo "❌ PG_URL_LOCAL not set"
-        exit 1
-    fi
-    echo "📊 Migration status:"
-    migrate -path ./migrations -database "${PG_URL_LOCAL}" version
+migrate-status *args:
+    @just backend migrate-status {{args}}
 
 # Roll back last migration
-migrate-down:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ -z "${PG_URL_LOCAL:-}" ]; then
-        echo "❌ PG_URL_LOCAL not set"
-        exit 1
-    fi
-    echo "⏪ Rolling back last migration..."
-    migrate -path ./migrations -database "${PG_URL_LOCAL}" down 1
-    echo "✅ Rollback complete"
+migrate-down *args:
+    @just backend migrate-down {{args}}
 
 # Create new migration file
 migrate-create name:
-    @echo "📝 Creating new migration: {{name}}"
-    migrate create -ext sql -dir ./migrations -seq {{name}}
+    @just backend migrate-create {{name}}
