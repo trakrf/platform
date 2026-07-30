@@ -193,11 +193,10 @@ const LocateScreen: React.FC = () => {
         </button>
       )}
 
-      <div className="flex justify-between items-start mb-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Find Item</h2>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">Search for a specific item</p>
-        </div>
+      {/* No page heading here: Header titles this tab "Locate" from PAGE_TITLES,
+          same as Scan, Assets, Locations and Reports. This block used to print a
+          second "Find Item" heading that agreed with neither (TRA-1071). */}
+      <div className="flex justify-end items-start mb-4">
         <button
           onClick={() => {
             // Toggle the UI button state - DeviceManager will react to this

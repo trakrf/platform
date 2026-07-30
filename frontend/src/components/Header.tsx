@@ -6,6 +6,30 @@ import { Battery, BatteryLow, BatteryMedium, BatteryFull, Plug, Unplug, Info } f
 import toast from 'react-hot-toast';
 import { OrgSwitcher } from './OrgSwitcher';
 
+/**
+ * Header title and subtitle per tab.
+ *
+ * A tab listed here must be titled exactly as its sidebar entry reads — that is
+ * the name the user clicked. `pageTitleNavParity.test.tsx` enforces it, and
+ * lists the tabs whose screens deliberately own their own heading instead.
+ */
+export const PAGE_TITLES = {
+  scan: { title: "Scan", subtitle: "View and manage your scanned items" },
+  locate: { title: "Locate", subtitle: "Search for a specific item" },
+  settings: { title: "Settings", subtitle: "Configure your RFID reader" },
+  help: { title: "Help", subtitle: "Quick answers to get you started" },
+  assets: { title: "Assets", subtitle: "Manage your organization's assets" },
+  locations: { title: "Locations", subtitle: "Manage your organization's locations" },
+  reports: { title: "Reports", subtitle: "View asset locations and movement history" },
+  'reports-history': { title: "Report History", subtitle: "Previously generated reports" },
+  'api-keys': { title: "API Keys", subtitle: "Manage programmatic access tokens" },
+  'org-members': { title: "Members", subtitle: "Manage organization members" },
+  'org-settings': { title: "Organization Settings", subtitle: "Configure your organization" },
+  'webhooks': { title: "Webhooks", subtitle: "Send asset.moved events to your systems" },
+  'create-org': { title: "Create Organization", subtitle: "Set up a new organization" },
+  'accept-invite': { title: "Accept Invite", subtitle: "Join an organization" }
+} as const;
+
 const TriggerIndicator = ({ isDown }: { isDown: boolean }) => {
   return (
     <div className="flex items-center">
@@ -67,23 +91,6 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
   const MOCK_TESTING = false;
   const mockBatteryPercentage = MOCK_TESTING ? 75 : batteryPercentage;
   const mockReaderState = MOCK_TESTING ? ReaderState.CONNECTED : readerState;
-
-  const pageTitles = {
-    scan: { title: "Scan", subtitle: "View and manage your scanned items" },
-    locate: { title: "Locate", subtitle: "Search for a specific item" },
-    settings: { title: "Device Setup", subtitle: "Configure your RFID reader" },
-    help: { title: "Help", subtitle: "Quick answers to get you started" },
-    assets: { title: "Assets", subtitle: "Manage your organization's assets" },
-    locations: { title: "Locations", subtitle: "Manage your organization's locations" },
-    reports: { title: "Reports", subtitle: "View asset locations and movement history" },
-    'reports-history': { title: "Report History", subtitle: "Previously generated reports" },
-    'api-keys': { title: "API Keys", subtitle: "Manage programmatic access tokens" },
-    'org-members': { title: "Members", subtitle: "Manage organization members" },
-    'org-settings': { title: "Organization Settings", subtitle: "Configure your organization" },
-    'webhooks': { title: "Webhooks", subtitle: "Send asset.moved events to your systems" },
-    'create-org': { title: "Create Organization", subtitle: "Set up a new organization" },
-    'accept-invite': { title: "Accept Invite", subtitle: "Join an organization" }
-  };
 
   const [isBrowserSupported, setIsBrowserSupported] = useState(true);
   const [isDebounced, setIsDebounced] = useState(false);
@@ -160,7 +167,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
     }
   }, [readerState, isBrowserSupported]);
 
-  const currentPage = pageTitles[activeTab as keyof typeof pageTitles] || { title: "", subtitle: "" };
+  const currentPage = PAGE_TITLES[activeTab as keyof typeof PAGE_TITLES] || { title: "", subtitle: "" };
 
   const shouldShowConnectButton = activeTab !== 'help';
 
@@ -187,7 +194,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
             )}
 
             <div className="flex items-center gap-1.5">
-              <h1 className="text-base md:text-xl font-semibold text-gray-900 dark:text-gray-100">{currentPage.title}</h1>
+              <h1 data-testid="page-title" className="text-base md:text-xl font-semibold text-gray-900 dark:text-gray-100">{currentPage.title}</h1>
               <div className="relative flex items-center">
                 <button
                   onClick={() => setShowInfoTooltip(!showInfoTooltip)}

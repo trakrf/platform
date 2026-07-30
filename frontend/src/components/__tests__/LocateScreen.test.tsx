@@ -1,3 +1,4 @@
+import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import LocateScreen from '../LocateScreen';
@@ -153,5 +154,24 @@ describe('LocateScreen EPC Input', () => {
     mockSetTargetEPC.mockReturnValue(true);
     fireEvent.blur(input);
     expect(mockSetTargetEPC).toHaveBeenCalledWith('ABCDEF0123456789');
+  });
+});
+
+describe('LocateScreen heading', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  /**
+   * Header already titles this tab "Locate" from PAGE_TITLES, so the screen must
+   * not print a second page heading of its own — it used to say "Find Item",
+   * disagreeing with both the header and the nav item (TRA-1071). Assets,
+   * Locations, Reports and Scan all rely on the header for this.
+   */
+  it('does not print its own page heading', () => {
+    render(<LocateScreen />);
+
+    expect(screen.queryByText('Find Item')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Locate' })).not.toBeInTheDocument();
   });
 });

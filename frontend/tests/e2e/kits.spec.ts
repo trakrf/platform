@@ -164,7 +164,7 @@ test.describe.skip('Kit Scan Flows @hardware', () => {
     // Locate mode pre-armed with the missing member's EPC + return param.
     // TagRow hands off the leading-zero-trimmed value (Scan tab convention).
     const missingShort = missingEpc.replace(/^0+(?=.)/, '');
-    await expect(sharedPage.locator('h2').first()).toContainText('Find Item');
+    await expect(sharedPage.getByTestId('page-title')).toContainText('Locate');
     expect(sharedPage.url()).toContain('return=kits');
     expect(decodeURIComponent(sharedPage.url())).toContain(`epc=${missingShort}`);
 
