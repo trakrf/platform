@@ -81,8 +81,9 @@ test.describe('Locate Navigation Tests @hardware', () => {
     // Wait for configuration spinner to disappear if present
     await page.waitForSelector('h2:text("Configuring Reader")', { state: 'detached', timeout: 10000 }).catch(() => {});
 
-    // Verify we're on the locate screen
-    await expect(page.locator('h2').first()).toContainText('Find Item');
+    // Verify we're on the locate screen. The screen no longer prints its own
+    // heading (TRA-1071) — the header title is the page identity now.
+    await expect(page.getByTestId('page-title')).toContainText('Locate');
 
     // Verify the URL has the correct EPC parameter
     const url = page.url();
