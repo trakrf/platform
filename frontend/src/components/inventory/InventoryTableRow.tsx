@@ -159,6 +159,7 @@ export function InventoryTableRow({ tag, hasReconciliation, onAssetUpdated }: In
           <Pencil className="w-4 h-4" />
         </button>
         <button
+          data-testid="locate-button"
           onClick={() => {
             useTagStore.getState().selectTag(tag);
             const targetEPC = tag.displayEpc || tag.epc;
