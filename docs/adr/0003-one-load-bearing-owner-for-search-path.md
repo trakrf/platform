@@ -10,7 +10,8 @@ All application objects live in a `trakrf` schema rather than `public`. The
 original motivations were forward-looking: plugins or microservices with their
 own schemas alongside the core tables, and schema-per-tenant or
 schema-per-environment segmentation inside one database. **Neither was ever
-implemented.** What the schema earns today is operational:
+implemented.** Schema-per-tenant is now explicitly abandoned; plugin schemas stay
+plausible on the terms set out below. What the schema earns today is operational:
 `DROP SCHEMA trakrf CASCADE` as the rebuild primitive, and a clean boundary for
 the two-role least-privilege posture (TRA-85), where `trakrf-migrate` owns the
 schema and `trakrf-app` holds `USAGE` and CRUD with no `CREATE`.
@@ -208,6 +209,42 @@ not depend on the path — but because **a superuser bypasses RLS**. Connecting 
 deployed environment, which is the TRA-900 class of bug. The integration harness
 already proved the posture with the non-superuser `trakrf_test_app` role
 (TRA-874); TRA-1075 extends it to the dev stack, keeping the DDL/DML split.
+
+### Future plugin schemas are explicit too, and this decision is what enables them
+
+Schema-per-tenant is off the table. Additional schemas for plugins or
+customer-specific data stay plausible, and if they arrive they follow the same
+rule: **explicit, never path-reliant.**
+
+This is not merely consistent with plugins, it is the precondition for them. If
+core code resolved names through `search_path`, any new schema would be a
+potential regression — a plugin schema earlier on the path containing a table
+named `assets` silently intercepts core queries, and a shadowed table means the
+RLS policies attached to the real table are never consulted. Path-reliance would
+hand plugin authors a way to break tenant isolation. Because core names
+`trakrf.assets`, a plugin schema cannot interfere; the core is immune by
+construction.
+
+Conditions on any such schema, each following from TRA-1069:
+
+* **Its own migration ledger.** golang-migrate's ledger is a single
+  `(version, dirty)` row and structurally cannot represent two independent
+  histories, so a plugin pins its own via `SchemaName` / `x-migrations-table` and
+  never shares core's. The configuration point that caused TRA-1069 is the right
+  tool here — used deliberately rather than by accident.
+* **Explicit DDL placement.** A plugin's migrations name their target schema
+  rather than inheriting an ambient path. Plugin authors are more likely to run
+  migrations ad hoc than the platform is, and an inherited path would quietly
+  place their objects in `trakrf`.
+* **No unpinned `SECURITY DEFINER`.** Any plugin-defined `SECURITY DEFINER`
+  function must pin its own `search_path`. This is the escalation vector and is
+  not relaxable.
+
+Keeping this door open costs nothing now, precisely because explicitness was
+chosen. No configurability machinery is required today, and none should be built
+speculatively — the `trakrf` schema itself was originally justified by plugin and
+multi-tenant plans that never materialized, and TRA-278 was the same instinct one
+level up.
 
 ## Consequences
 
