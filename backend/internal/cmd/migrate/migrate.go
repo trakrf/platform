@@ -39,6 +39,35 @@ import (
 // trakrf would orphan those ledgers and replay migration 000001 on live data.
 const ledgerSchema = "public"
 
+// ddlSearchPath is the search_path this runner imposes on every connection it
+// opens, and therefore the single point that decides where a migration's
+// unqualified DDL lands (ADR 0003).
+//
+// Migrations are replayable artifacts. Letting ambient session state — a DSN
+// parameter, a role default, an interactive session — decide their DDL target
+// is how objects end up in the wrong schema silently, which is the same class of
+// defect as TRA-1069. Setting it here means placement is a property of the
+// runner: one authoritative value, in code, rather than a line repeated in every
+// migration file and duplicated by whatever the caller's role happens to say.
+//
+// Files 000001-000038 also carry their own `SET search_path = trakrf, public`
+// header. Those stay (they set the same value, and rewriting applied migrations
+// buys nothing), but new migrations do not need one.
+const ddlSearchPath = "trakrf, public"
+
+// buildPoolConfig parses pgURL and imposes this runner's DDL search_path on
+// every connection the pool opens, overriding whatever the DSN or the role
+// default says. RuntimeParams is sent as a startup parameter, so it applies to
+// each pooled connection rather than only the first.
+func buildPoolConfig(pgURL string) (*pgxpool.Config, error) {
+	config, err := pgxpool.ParseConfig(pgURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse PG_URL: %w", err)
+	}
+	config.ConnConfig.RuntimeParams["search_path"] = ddlSearchPath
+	return config, nil
+}
+
 // strayLedger is a schema_migrations table found outside ledgerSchema.
 type strayLedger struct {
 	schema  string
@@ -129,9 +158,9 @@ func Run(ctx context.Context, info buildinfo.Info) error {
 		return fmt.Errorf("PG_URL environment variable not set")
 	}
 
-	config, err := pgxpool.ParseConfig(pgURL)
+	config, err := buildPoolConfig(pgURL)
 	if err != nil {
-		return fmt.Errorf("failed to parse PG_URL: %w", err)
+		return err
 	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)

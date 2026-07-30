@@ -176,6 +176,61 @@ func TestLedgerStaysInOneSchema(t *testing.T) {
 	}
 }
 
+// TestDDLLandsInTrakrfDespiteHostileSearchPath asserts the outcome ADR 0003
+// protects: after migrating with a caller whose search_path excludes trakrf, the
+// application tables are still in trakrf.
+//
+// Honest about what this does and does not prove. Migrations 000001-000038 each
+// carry their own `SET search_path = trakrf, public`, so today they would land
+// correctly even without the runner-level override — this passes either way. It
+// earns its keep as a guard for the convention going forward: the first
+// header-less migration that lands somewhere else fails here. The override itself
+// is unit-tested in search_path_test.go, where it can actually fail.
+func TestDDLLandsInTrakrfDespiteHostileSearchPath(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := provisionLedgerTestDB(ctx, t)
+
+	// A deliberately hostile search_path: public only, no trakrf. If the runner
+	// deferred to it, unqualified CREATE TABLE would land in public.
+	hostile := dbURL
+	if strings.Contains(hostile, "?") {
+		hostile += "&options=-c%20search_path%3Dpublic"
+	} else {
+		hostile += "?options=-c%20search_path%3Dpublic"
+	}
+	t.Setenv("PG_URL", hostile)
+
+	if err := migrate.Run(ctx, buildinfo.Info{Version: "test"}); err != nil {
+		t.Fatalf("migrate run failed: %v", err)
+	}
+
+	conn, err := pgx.Connect(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("connect failed: %v", err)
+	}
+	defer conn.Close(ctx)
+
+	// Spot-check tables from migrations that create them unqualified.
+	for _, table := range []string{"organizations", "assets", "refresh_tokens"} {
+		var schema string
+		err := conn.QueryRow(ctx, `
+			SELECT schemaname FROM pg_tables WHERE tablename = $1`, table).Scan(&schema)
+		if err != nil {
+			t.Fatalf("locating %q failed: %v", table, err)
+		}
+		if schema != "trakrf" {
+			t.Errorf("table %q landed in schema %q, want trakrf "+
+				"(the caller's search_path leaked into DDL placement)", table, schema)
+		}
+	}
+
+	// And the ledger is still pinned independently of all of the above.
+	if got := ledgerSchemas(ctx, t, dbURL); len(got) != 1 || got[0] != wantLedgerSchema {
+		t.Fatalf("ledger schemas = %v, want [%s]", got, wantLedgerSchema)
+	}
+}
+
 // TestStrayLedgerIsReported covers the misleading-success half of TRA-1069: a
 // database that already carries a ledger in the wrong schema must fail loudly
 // rather than silently replaying or reporting a clean version.
