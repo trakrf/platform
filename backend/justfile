@@ -105,10 +105,7 @@ test-contract:
     #
     # Pin search_path=trakrf,public at the database level (not on the connection
     # URL) so every connection — migrate, backend, psql for seeding — sees the
-    # same path. Putting it on the URL via options=-c would break golang-migrate:
-    # CURRENT_SCHEMA() returns 'public' on the first run (trakrf doesn't exist
-    # yet) and 'trakrf' afterwards, putting schema_migrations in different
-    # schemas across runs.
+    # same path.
     echo "🗄  Recreating ${SCHEMA_DB}..."
     psql "$PG_URL_ROOT" -v ON_ERROR_STOP=1 -c \
         "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='${SCHEMA_DB}';" >/dev/null
@@ -119,15 +116,11 @@ test-contract:
     # Set obfuscation key required by trakrf.generate_obfuscated_id() (TRA-720).
     psql "$PG_URL_ROOT" -v ON_ERROR_STOP=1 -c \
         "ALTER DATABASE ${SCHEMA_DB} SET app.obfuscation_key = '6f626675736361746f72746573746b657920303132333435363738396162636465';"
-    # Pre-create the trakrf schema so CURRENT_SCHEMA() on the first migrate
-    # connection resolves to 'trakrf'. Without this the migration library would
-    # put schema_migrations in 'public' on the first run, then look for it in
-    # 'trakrf' on the second (backend startup re-runs migrations) — and apply
-    # migration 1 again, which fails on an "already exists" error (e.g. the
-    # trakrf schema or an extension).
-    psql "$PG_URL_LOCAL" -v ON_ERROR_STOP=1 -c "CREATE SCHEMA trakrf;"
 
-    # 3. Migrate (PG_URL_LOCAL exported above, re-evaluated by just migrate)
+    # 3. Migrate (PG_URL_LOCAL exported above, re-evaluated by just migrate).
+    # The trakrf schema used to be pre-created here, so CURRENT_SCHEMA() would
+    # resolve to 'trakrf' and keep schema_migrations in one place. `./server
+    # migrate` now creates the schema and pins its ledger itself (TRA-1069).
     echo "🔄 Migrating ${SCHEMA_DB}..."
     just migrate
 
@@ -472,6 +465,11 @@ migrate-create name:
     docker compose exec backend sh -c 'migrate create -ext sql -dir /app/migrations -seq {{name}}'
 
 # Force migration to specific version (dangerous)
+#
+# Forcing stamps a version without applying anything, so it is also how a schema
+# and its ledger drift apart (TRA-1069): confirm `just migrate-status` reports
+# the version you expect before forcing, and prefer rebuilding a local database
+# over forcing it into agreement.
 migrate-force version:
     @echo "⚠️  Forcing migration version to {{version}}"
     docker compose exec backend sh -c 'migrate -path /app/migrations -database "$PG_URL" force {{version}}'

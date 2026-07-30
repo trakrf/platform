@@ -35,6 +35,23 @@ Or browse via the tag on GitHub: <https://github.com/trakrf/platform/releases/ta
   `CREATE SCHEMA IF NOT EXISTS`, etc. — guards against double-apply on
   recovery scenarios.
 
+## The schema and its ledger are owned by `./server migrate` (TRA-1069)
+
+`internal/cmd/migrate` is the only thing that applies migrations — the integration
+harness calls into it rather than shelling out to the `migrate` CLI. Before
+golang-migrate runs it:
+
+1. creates the `trakrf` schema if absent, because the driver resolves its
+   `schema_migrations` location *before* migration `000001` could create it;
+2. sets its own `search_path`, so unqualified DDL never depends on the caller's
+   DSN or role;
+3. pins the ledger to `trakrf.schema_migrations`, so `DROP SCHEMA trakrf CASCADE`
+   takes the ledger with it and leaves a genuinely empty database;
+4. refuses to run if a `schema_migrations` exists in another schema — a split
+   history that would otherwise report a clean version over a mismatched schema.
+
+Do not add another path that applies migrations. See `docs/adr/0003`.
+
 ## Required GUC
 
 `trakrf.generate_obfuscated_id()` reads `app.obfuscation_key` via

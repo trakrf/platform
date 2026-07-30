@@ -6,12 +6,15 @@ package migrate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 
@@ -20,21 +23,136 @@ import (
 	"github.com/trakrf/platform/backend/migrations"
 )
 
-// Run applies all pending embedded migrations to the database identified
-// by the PG_URL environment variable, then returns. A nil return means
-// success (including the "no pending migrations" case).
-func Run(ctx context.Context, info buildinfo.Info) error {
-	log := logger.Get()
+// appSchema owns everything this runner touches: the application objects and the
+// migration ledger that tracks them.
+const appSchema = "trakrf"
 
+// ledgerSchema pins the schema holding golang-migrate's schema_migrations table
+// (TRA-1069). Left unset, the postgres driver locates it with CURRENT_SCHEMA(),
+// which on a fresh database resolves to public — trakrf does not exist until
+// migration 000001 creates it — and to trakrf on every run afterwards. The ledger
+// silently relocates, the new one starts at version 0, and the whole stack
+// replays onto a populated schema.
+//
+// It lives in appSchema, not public, so that schema and its bookkeeping are one
+// unit. That matters for the documented rebuild path: DROP SCHEMA trakrf CASCADE
+// takes the ledger with it, leaving a genuinely empty database. A ledger in public
+// would survive the drop still claiming version 38, and the next migrate would
+// report "no pending migrations" against an empty schema — TRA-1069 reproduced by
+// the reset procedure itself.
+const ledgerSchema = appSchema
+
+// ddlSearchPath is imposed on every connection this runner opens, so a
+// migration's unqualified DDL always resolves to the application schema no matter
+// what the caller's DSN or role default says (ADR 0003).
+//
+// One line here means no migration has to declare it and no lint has to enforce
+// that it did.
+const ddlSearchPath = "trakrf, public"
+
+// strayLedger is a schema_migrations table found outside ledgerSchema.
+type strayLedger struct {
+	schema  string
+	version int64
+	dirty   bool
+}
+
+// findStrayLedgers looks for schema_migrations tables outside ledgerSchema.
+//
+// Such a table is a second, divergent migration history left behind by the
+// CURRENT_SCHEMA() drift described on ledgerSchema. The two ledgers record
+// different versions, so the authoritative one reports a clean, fully-applied
+// version that does not describe the schema actually on disk — the misleading
+// success in TRA-1069, where trakrf.refresh_tokens was absent while the ledger
+// claimed a clean version 38.
+//
+// pg_tables rather than information_schema.tables: the latter hides tables the
+// current role has no privileges on, which would let a stray ledger owned by
+// another role go unreported.
+func findStrayLedgers(ctx context.Context, pool *pgxpool.Pool) ([]strayLedger, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT schemaname
+		FROM pg_tables
+		WHERE tablename = $1 AND schemaname <> $2
+		ORDER BY schemaname`, postgres.DefaultMigrationsTable, ledgerSchema)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check for stray migration ledgers: %w", err)
+	}
+
+	var schemas []string
+	for rows.Next() {
+		var schema string
+		if err := rows.Scan(&schema); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("failed to read stray migration ledger: %w", err)
+		}
+		schemas = append(schemas, schema)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to check for stray migration ledgers: %w", err)
+	}
+
+	strays := make([]strayLedger, 0, len(schemas))
+	for _, schema := range schemas {
+		stray := strayLedger{schema: schema}
+		table := pgx.Identifier{schema, postgres.DefaultMigrationsTable}.Sanitize()
+		// A ledger table with no row is a version-0 placeholder; report it as
+		// version 0 rather than failing the whole preflight on ErrNoRows.
+		err := pool.QueryRow(ctx,
+			"SELECT version, dirty FROM "+table+" LIMIT 1").Scan(&stray.version, &stray.dirty)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("failed to read stray migration ledger %s: %w", table, err)
+		}
+		strays = append(strays, stray)
+	}
+	return strays, nil
+}
+
+// strayLedgerError renders an actionable message for a split migration history.
+// Recovery is a human decision — reconcile the two histories or rebuild the
+// schema — so this reports what was found rather than guessing.
+func strayLedgerError(strays []strayLedger) error {
+	var b strings.Builder
+	fmt.Fprintf(&b, "refusing to migrate: found %d migration ledger(s) outside schema %q, "+
+		"meaning this database has a split migration history (TRA-1069)",
+		len(strays), ledgerSchema)
+	for _, s := range strays {
+		fmt.Fprintf(&b, "\n  %s.%s: version=%d dirty=%t",
+			s.schema, postgres.DefaultMigrationsTable, s.version, s.dirty)
+	}
+	fmt.Fprintf(&b, "\n  %s.%s is authoritative. A stray ledger means some migrations were "+
+		"recorded against a different history, so the version reported here does not describe "+
+		"the schema on disk. Reconcile the two by hand, or rebuild the schema "+
+		"(DROP SCHEMA trakrf CASCADE plus the stray ledger, then migrate); then drop the stray table.",
+		ledgerSchema, postgres.DefaultMigrationsTable)
+	return fmt.Errorf("%s", b.String())
+}
+
+// Run applies all pending embedded migrations to the database identified by the
+// PG_URL environment variable, then returns. A nil return means success
+// (including the "no pending migrations" case).
+func Run(ctx context.Context, info buildinfo.Info) error {
 	pgURL := os.Getenv("PG_URL")
 	if pgURL == "" {
 		return fmt.Errorf("PG_URL environment variable not set")
 	}
+	return RunURL(ctx, pgURL, info)
+}
+
+// RunURL is Run against an explicit database URL. It exists so that everything
+// which migrates goes through this one implementation rather than growing a
+// second one: the integration harness used to shell out to the bare `migrate`
+// CLI, which meant the schema bootstrap, the ledger pin and the split-history
+// preflight all had to be duplicated there — or, as in TRA-1069, not be.
+func RunURL(ctx context.Context, pgURL string, info buildinfo.Info) error {
+	log := logger.Get()
 
 	config, err := pgxpool.ParseConfig(pgURL)
 	if err != nil {
 		return fmt.Errorf("failed to parse PG_URL: %w", err)
 	}
+	config.ConnConfig.RuntimeParams["search_path"] = ddlSearchPath
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
@@ -46,6 +164,27 @@ func Run(ctx context.Context, info buildinfo.Info) error {
 		return fmt.Errorf("failed to ping database: %w", err)
 	}
 
+	// Preflight before golang-migrate touches anything: a split history must not
+	// be papered over by creating or advancing a ledger.
+	strays, err := findStrayLedgers(ctx, pool)
+	if err != nil {
+		return err
+	}
+	if len(strays) > 0 {
+		return strayLedgerError(strays)
+	}
+
+	// Create the schema before golang-migrate looks for its ledger. This is the
+	// one thing that cannot be left to a migration: the driver resolves the ledger
+	// location, and creates the table, before migration 000001 runs. Without this
+	// the ledger lands wherever CURRENT_SCHEMA() happens to point on a database
+	// that does not have the schema yet — the root of TRA-1069. Idempotent, and
+	// migration 000001 still declares it for a hand-applied run.
+	if _, err := pool.Exec(ctx,
+		"CREATE SCHEMA IF NOT EXISTS "+pgx.Identifier{appSchema}.Sanitize()); err != nil {
+		return fmt.Errorf("failed to ensure schema %s exists: %w", appSchema, err)
+	}
+
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()
 
@@ -54,7 +193,7 @@ func Run(ctx context.Context, info buildinfo.Info) error {
 		return fmt.Errorf("failed to create migration source: %w", err)
 	}
 
-	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	driver, err := postgres.WithInstance(db, &postgres.Config{SchemaName: ledgerSchema})
 	if err != nil {
 		return fmt.Errorf("failed to create migration driver: %w", err)
 	}

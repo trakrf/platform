@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/trakrf/platform/backend/internal/buildinfo"
+	"github.com/trakrf/platform/backend/internal/cmd/migrate"
 	"github.com/trakrf/platform/backend/internal/storage"
 )
 
@@ -149,92 +150,6 @@ func grantTestAppRole(ctx context.Context, t *testing.T, dbURL string) error {
 	return nil
 }
 
-func getMigrationsPath(t *testing.T) string {
-	t.Helper()
-
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get working directory: %v", err)
-	}
-
-	possiblePaths := []string{
-		filepath.Join(wd, "..", "database", "migrations"),
-		filepath.Join(wd, "..", "..", "database", "migrations"),
-		filepath.Join(wd, "..", "..", "..", "database", "migrations"),
-		filepath.Join(wd, "..", "..", "..", "..", "database", "migrations"),
-		// backend/migrations layout (no database/ subdirectory)
-		filepath.Join(wd, "..", "migrations"),
-		filepath.Join(wd, "..", "..", "migrations"),
-		filepath.Join(wd, "..", "..", "..", "migrations"),
-		filepath.Join(wd, "..", "..", "..", "..", "migrations"),
-	}
-
-	for _, path := range possiblePaths {
-		cleanPath := filepath.Clean(path)
-		absPath, err := filepath.Abs(cleanPath)
-		if err != nil {
-			continue
-		}
-		if stat, err := os.Stat(absPath); err == nil && stat.IsDir() {
-			entries, err := os.ReadDir(absPath)
-			if err == nil && len(entries) > 0 {
-				t.Logf("✅ Found migrations at: %s (%d files)", absPath, len(entries))
-				return absPath
-			}
-		}
-	}
-
-	t.Fatalf("Migrations directory not found or empty. Tried: %v", possiblePaths)
-	return ""
-}
-
-func runMigrations(dbURL, migrationsPath string, t *testing.T) error {
-	t.Helper()
-
-	migrateBinary := findMigrateBinary()
-	if migrateBinary == "" {
-		return fmt.Errorf("migrate binary not found in PATH - install with: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest")
-	}
-
-	cmd := exec.Command(migrateBinary,
-		"-path", migrationsPath,
-		"-database", dbURL,
-		"up",
-	)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		if strings.Contains(string(output), "no change") {
-			t.Logf("✅ Migrations already up to date")
-			return nil
-		}
-		return fmt.Errorf("migrate command failed: %w\nOutput: %s", err, string(output))
-	}
-
-	t.Logf("✅ Migrations applied successfully")
-	return nil
-}
-
-func findMigrateBinary() string {
-	// Check PATH first
-	for _, name := range []string{"migrate", "golang-migrate"} {
-		if path, err := exec.LookPath(name); err == nil {
-			return path
-		}
-	}
-
-	// Check common Go binary locations
-	homeDir, err := os.UserHomeDir()
-	if err == nil {
-		goBinPath := filepath.Join(homeDir, "go", "bin", "migrate")
-		if _, err := os.Stat(goBinPath); err == nil {
-			return goBinPath
-		}
-	}
-
-	return ""
-}
-
 func cleanupTestData(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
@@ -287,8 +202,10 @@ func SetupTestDBFull(t *testing.T) *TestDB {
 
 	dbURL := GetTestDatabaseURL()
 
-	migrationsPath := getMigrationsPath(t)
-	if err := runMigrations(dbURL, migrationsPath, t); err != nil {
+	// Migrate through the same code path the server uses (TRA-1069). This used to
+	// exec the bare `migrate` CLI, which was a second implementation that had to be
+	// taught the schema bootstrap and ledger location separately — and wasn't.
+	if err := migrate.RunURL(ctx, dbURL, buildinfo.Info{Version: "test"}); err != nil {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
