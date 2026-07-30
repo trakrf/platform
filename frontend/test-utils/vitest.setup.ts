@@ -1,5 +1,6 @@
 import { beforeEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import { installIsolatedWebStorage } from './isolatedWebStorage';
 
 /**
  * Global unit-test setup: keep the suite off the network.
@@ -30,7 +31,7 @@ import { cleanup } from '@testing-library/react';
  */
 
 /*
- * Start every test file with empty web storage.
+ * Give every test file its own web storage.
  *
  * TRA-1052. `pool: 'forks'` + `singleFork: true` means every test file shares
  * one jsdom process, and therefore one `localStorage`. Vitest gives each file a
@@ -46,9 +47,16 @@ import { cleanup } from '@testing-library/react';
  * stores are constructed and rehydrate. Doing it in `beforeEach` would be both
  * too late (stores already rehydrated) and too aggressive (it would wipe state a
  * file deliberately set up in `beforeAll`).
+ *
+ * TRA-1079 replaced a `.clear()` of the shared object with a fresh object per
+ * file, because clearing cannot close a race: a pending 500 ms tagStore timer
+ * fires during a *later* file, on the old module's closure, and its `persist`
+ * write can land after that file's clear but before its stores rehydrate. Since
+ * zustand resolves the storage engine once when `persist()` runs, a per-file
+ * object sends that late write somewhere nobody reads. See
+ * `isolatedWebStorage.ts` and `tests/config/storage-isolation.test.ts`.
  */
-localStorage.clear();
-sessionStorage.clear();
+installIsolatedWebStorage();
 
 /*
  * Unmount the previous test's React tree before the next test starts.
@@ -109,7 +117,17 @@ XMLHttpRequest.prototype.send = function (this: XMLHttpRequest) {
   const url = requestedUrl.get(this) ?? '<unknown url>';
   console.warn(blockedMessage(url));
   setTimeout(() => {
-    this.dispatchEvent(new ProgressEvent('error'));
-    this.dispatchEvent(new ProgressEvent('loadend'));
+    // TRA-1079: a request begun near the end of a file dispatches after the
+    // environment is torn down, and `new ProgressEvent(...)` then throws
+    // `ProgressEvent is not defined` as an *uncaught* error — every test still
+    // reports passing and only the exit code changes, attributed to whichever
+    // file happened to be running. Nobody is listening by then, so swallowing it
+    // loses nothing; the blocked-request warning above is already on the record.
+    try {
+      this.dispatchEvent(new ProgressEvent('error'));
+      this.dispatchEvent(new ProgressEvent('loadend'));
+    } catch {
+      /* environment gone between send() and this tick */
+    }
   }, 0);
 };
