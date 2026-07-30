@@ -62,6 +62,9 @@ export default function HelpScreen() {
     setOpenItems(newOpenItems);
   };
 
+  // Every nav name and control label quoted below is the label the app renders
+  // today. When a surface is renamed, this file is part of the rename — see
+  // HelpScreen.test.tsx, which cross-checks these against the real sidebar.
   const faqSections: FAQSection[] = [
     {
       title: 'Getting Started - Read This First!',
@@ -69,14 +72,14 @@ export default function HelpScreen() {
       items: [
         {
           question: 'Which browser should I use?',
-          answer: `Use Google Chrome - it's the only browser that works reliably.
+          answer: `Use Chrome, Edge, or Opera.
 
-Other browsers like Safari and Firefox won't connect to your scanner.`
+Safari and Firefox can't connect to your scanner - they don't support the Bluetooth features this app needs.`
         },
         {
           question: 'How do I connect my scanner?',
           answer: `1. Turn on your CS108 scanner (green light)
-2. Click "Device Setup" on the left menu
+2. Click "Settings" on the left menu
 3. Click the blue "Connect Device" button
 4. Pick your CS108 from the popup list
 5. You'll see "Connected" in green when ready`
@@ -84,57 +87,64 @@ Other browsers like Safari and Firefox won't connect to your scanner.`
         {
           question: 'How do I scan items?',
           answer: `1. First connect your scanner (see above)
-2. Click "My Items" on the left menu
+2. Click "Scan" on the left menu
 3. Point scanner at your tags
-4. Hold down the trigger button
+4. Hold down the trigger button - or click "Start" in the toolbar
 5. Items appear on screen instantly!`
         },
         {
           question: 'What is this app for?',
           answer: `This app helps you:
 • Find lost items with RFID tags
-• Check inventory (what's here vs what's missing)
-• Scan barcodes with your phone camera
+• Check what's here against a list you upload
+• Read barcodes with your scanner's barcode reader
 • Track items in real-time`
         }
       ]
     },
     {
-      title: 'My Items',
+      title: 'Scan',
       icon: <Package2 className="w-5 h-5" />,
       items: [
         {
-          question: 'What do the colors mean?',
-          answer: `• Green = Found (item is here)
-• Red = Missing (should be here but isn't)
-• Gray = Extra item (not on your list)`
+          question: 'What do the tiles at the top mean?',
+          answer: `• Scans (blue) = every tag you've read
+• Assets (purple) = reads matched to an asset in your organization
+
+Upload a list and three more appear:
+• Found (green) = on your list and here
+• Missing (red) = on your list but not read
+• Extra (gray) = read but not on your list
+
+Click any tile to show only those items. Click "Scans" to clear the filter.`
         },
         {
           question: 'How do I check what\'s missing?',
-          answer: `1. Click "Reconcile with CSV"
+          answer: `1. Click "Reconcile" in the toolbar
 2. Upload your list (Excel file saved as CSV)
 3. Scan your area
 4. Red items are missing!`
         },
         {
           question: 'How do I save my scanned items?',
-          answer: `Click "Export CSV" to download your list.
-Opens in Excel automatically.`
+          answer: `"Save" records the matched assets in your organization - sign in first.
+
+"Share" downloads the list instead: PDF Report, Excel Spreadsheet, or CSV File.`
         },
         {
           question: 'How do I find a specific item?',
           answer: `Type part of the item number in the search box.
-Or use the dropdown to show only Missing items.`
+Or click the "Missing" tile to show only missing items.`
         }
       ]
     },
     {
-      title: 'Find Item',
+      title: 'Locate',
       icon: <Search className="w-5 h-5" />,
       items: [
         {
           question: 'How do I find a specific item?',
-          answer: `1. Click "Find Item" on the left
+          answer: `1. Click "Locate" on the left menu
 2. Type the item number
 3. Hold the trigger and walk around
 4. Watch the gauge - higher = closer!`
@@ -143,54 +153,61 @@ Or use the dropdown to show only Missing items.`
           question: 'What does the gauge mean?',
           answer: `Think of it like "hot and cold":
 • Red (left) = Cold - far away
-• Yellow (middle) = Warm - getting closer
+• Orange / yellow (middle) = Warm - getting closer
 • Green (right) = Hot - very close!`
         },
         {
-          question: 'Quick way to find from My Items?',
+          question: 'Quick way to get there from Scan?',
           answer: `Click the blue "Locate" button next to any item.
 Takes you straight to the finder!`
         }
       ]
     },
     {
-      title: 'Barcode Scanner',
+      title: 'Barcodes',
       icon: <ScanLine className="w-5 h-5" />,
       items: [
         {
           question: 'How do I scan regular barcodes?',
-          answer: `1. Click "Barcode Scanner" on the left
-2. Allow camera access (click "Allow")
-3. Point phone at barcode
-4. It scans automatically!`
+          answer: `Barcodes are a mode of the Scan screen, not a separate page:
+
+1. Click "Scan" on the left menu
+2. Switch the RFID / Barcode toggle to "Barcode"
+3. Point the scanner at the barcode and pull the trigger
+4. It appears in the same list as your tag reads`
         },
         {
           question: 'What types work?',
-          answer: `All common types:
-• Regular barcodes on products
-• QR codes
-• Shipping labels`
+          answer: `Your scanner's barcode reader handles the common ones:
+• Product barcodes (EAN/UPC)
+• Code 128, Code 39, Interleaved 2 of 5
+• QR Code and Data Matrix`
         }
       ]
     },
     {
-      title: 'Device Setup',
+      title: 'Settings',
       icon: <Settings className="w-5 h-5" />,
       items: [
         {
           question: 'How do I make it scan further?',
-          answer: `Click the gear icon (bottom right).
+          answer: `On the Scan screen, click the gear icon (bottom right).
 Slide "RF Power" to the right for more range.`
         },
         {
           question: 'How do I turn off the beeping?',
-          answer: `Click the gear icon (bottom right).
-Slide "Buzzer Volume" all the way left.`
+          answer: `Click the speaker button in the Scan toolbar.
+It shows what the next click will do: "Off" mutes, "On" turns sound back on.`
         },
         {
           question: 'The item numbers are too long!',
-          answer: `Click the gear icon (bottom right).
+          answer: `On the Scan screen, click the gear icon (bottom right).
 Turn OFF "Show Leading Zeros" to shorten them.`
+        },
+        {
+          question: 'How do I stop re-scanning what I just saved?',
+          answer: `On the Scan screen, click the gear icon (bottom right).
+Turn ON "Auto-clear after Save" and the list empties each time you save.`
         }
       ]
     },
@@ -201,14 +218,14 @@ Turn OFF "Show Leading Zeros" to shorten them.`
         {
           question: 'Scanner won\'t connect',
           answer: `1. Make sure scanner has green light
-2. Using Chrome browser? (Required!)
+2. Using Chrome, Edge, or Opera? (Required!)
 3. Turn scanner off and on
 4. Refresh the webpage`
         },
         {
           question: 'Not finding any items',
           answer: `1. Is scanner connected? (green "Connected")
-2. Are you holding the trigger?
+2. Are you holding the trigger, or did you click "Start"?
 3. Try the gear icon → slide RF Power right`
         },
         {
@@ -273,10 +290,10 @@ Turn OFF "Show Leading Zeros" to shorten them.`
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 m-6 p-4 rounded-lg">
           <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">Remember</h3>
           <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-            <li>• Must use Chrome browser</li>
+            <li>• Must use Chrome, Edge, or Opera</li>
             <li>• Connect scanner first before anything else</li>
             <li>• Hold trigger button to scan</li>
-            <li>• Green = Found, Red = Missing</li>
+            <li>• After you upload a list: Green = Found, Red = Missing</li>
           </ul>
         </div>
       </div>
