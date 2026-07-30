@@ -60,7 +60,10 @@ if (import.meta.env.DEV || isNonProd(getAppConfig().environmentLabel)) {
       barcodeStore: stores.useBarcodeStore,
       orgStore: stores.useOrgStore,
       authStore: stores.useAuthStore,
-      kitStore: stores.useKitStore
+      kitStore: stores.useKitStore,
+      // locateStore was the one store missing here, so e2e tests had no way to
+      // reset the RSSI ring buffer between runs (TRA-1088).
+      locateStore: stores.useLocateStore
     };
   });
 

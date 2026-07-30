@@ -45,17 +45,20 @@ test.describe('Locate Navigation Tests @hardware', () => {
     // Wait for the mode switch to complete (spinner disappears or times out)
     await page.waitForTimeout(3000); // Give it time to complete mode switch
 
-    // Now we should see the Inventory header - may have configuration spinner
-    // Just verify we're on the inventory page by checking for any inventory element
-    await page.waitForSelector('[data-testid="inventory-tag-list"], h2:has-text("Inventory"), h2:has-text("Configuring")', { timeout: 10000 });
+    // The tab is titled by PAGE_TITLES in the header and is named "Scan", not
+    // "Inventory" (TRA-1029). The old selector waited on an `h2:has-text("Inventory")`
+    // and a `inventory-tag-list` test id, neither of which exists.
+    await expect(page.getByTestId('page-title')).toContainText('Scan', { timeout: 10000 });
 
     // Wait for inventory to load and show tags
     await page.waitForTimeout(1000); // Let mode switch complete
 
-    // Add a test tag to inventory
+    // Add a test tag to inventory. Stores are exposed as
+    // `window.__ZUSTAND_STORES__.tagStore` (main.tsx) — there is no bare
+    // `window.useTagStore`, so the old form threw on `.getState()` (TRA-1088).
     await page.evaluate(() => {
-      const { useTagStore } = window as any;
-      useTagStore.getState().addTag({
+      const tagStore = window.__ZUSTAND_STORES__!.tagStore;
+      tagStore.getState().addTag({
         epc: '10019',
         rssi: -45,
         count: 1,
@@ -65,18 +68,22 @@ test.describe('Locate Navigation Tests @hardware', () => {
       });
     });
 
-    // Wait for tag to appear
-    await expect(page.locator('[data-testid="tag-row"]')).toHaveCount(1);
+    // Wait for the row to render. `tag-row` never existed on the desktop table;
+    // the row's locate control is the stable handle. Both the mobile card and
+    // the desktop row are in the DOM at once (Tailwind hides one), so match on
+    // `:visible` — an unqualified test id resolves to 2 elements.
+    const locateButton = page.locator('[data-testid="locate-button"]:visible');
+    await expect(locateButton).toHaveCount(1);
 
-    // Click the locate link for tag 10019
-    const locateLink = page.locator('[data-testid="tag-row"]').first().locator('a[href*="locate"]');
-    await expect(locateLink).toHaveAttribute('href', '#locate?epc=10019');
+    // The locate affordance is a <button> that assigns window.location.hash, not
+    // an <a href>. The old test asserted toHaveAttribute('href', …), which no
+    // element here can satisfy — assert the resulting navigation instead (below).
 
     // Capture logs before navigation
     const logsBeforeClick = await page.evaluate(() => window.__TEST_LOGS__);
     console.log('Logs before click:', logsBeforeClick.filter(l => l.includes('targetEPC')));
 
-    await locateLink.click();
+    await locateButton.click();
 
     // Wait for configuration spinner to disappear if present
     await page.waitForSelector('h2:text("Configuring Reader")', { state: 'detached', timeout: 10000 }).catch(() => {});
@@ -89,8 +96,9 @@ test.describe('Locate Navigation Tests @hardware', () => {
     const url = page.url();
     expect(url).toContain('#locate?epc=10019');
 
-    // Verify the input shows the correct EPC
-    const epcInput = page.locator('[data-testid="locate-epc-input"]');
+    // Verify the input shows the correct EPC. The test id is `target-epc-display`
+    // — `locate-epc-input` has never existed (TRA-1088).
+    const epcInput = page.locator('[data-testid="target-epc-display"]');
     await expect(epcInput).toHaveValue('10019');
 
     // Check logs to verify hardware received correct targetEPC
@@ -119,8 +127,10 @@ test.describe('Locate Navigation Tests @hardware', () => {
     // Give time for navigation and mode configuration
     await page.waitForTimeout(2000);
 
-    // Verify we're on locate tab
-    await expect(page.locator('h2').first()).toContainText('Locate Item');
+    // Verify we're on locate tab. The screen no longer prints its own heading
+    // (TRA-1071) — `h2` now resolves to the "Configuring Reader" spinner, so the
+    // old 'Locate Item' assertion could never pass. Header title is the identity.
+    await expect(page.getByTestId('page-title')).toContainText('Locate');
 
     // Verify EPC is set in input - use the correct data-testid
     const epcInput = await page.locator('[data-testid="target-epc-display"]');
