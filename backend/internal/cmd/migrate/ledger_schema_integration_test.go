@@ -1,20 +1,21 @@
 //go:build integration
 // +build integration
 
-// TRA-1069 — the migration ledger must live in a fixed schema.
+// TRA-1069 — everything this runner touches lives in the trakrf schema,
+// including the migration ledger.
 //
 // golang-migrate's postgres driver locates schema_migrations via
-// CURRENT_SCHEMA() when Config.SchemaName is empty. Our connection strings
-// carry search_path=trakrf,public, and on a fresh database the trakrf schema
-// does not exist yet — so CURRENT_SCHEMA() resolves to public on the first
-// run and to trakrf on every run afterwards (migration 000001 creates the
-// schema). That produces two independent ledgers: the first records the real
-// history, the second starts empty at version 0 and tries to replay the whole
-// stack. The observable symptom is a table that silently never gets created
-// while the ledger reports a clean, fully-applied version.
+// CURRENT_SCHEMA() when Config.SchemaName is empty. Our connection strings carry
+// search_path=trakrf,public, and on a fresh database the trakrf schema does not
+// exist yet — so CURRENT_SCHEMA() resolves to public on the first run and to
+// trakrf on every run afterwards (migration 000001 creates the schema). That
+// produces two independent ledgers: the first records the real history, the second
+// starts empty at version 0 and replays the whole stack. The observable symptom is
+// a table that silently never gets created while the ledger reports a clean,
+// fully-applied version.
 //
-// "public" is the expected home: preview and prod were both verified to keep
-// their ledger there, as does a fresh database's first run.
+// The runner closes both halves: it creates the schema before golang-migrate looks
+// for its ledger, and pins the ledger's schema explicitly.
 package migrate_test
 
 import (
@@ -144,7 +145,7 @@ func ledgerSchemas(ctx context.Context, t *testing.T, dbURL string) []string {
 }
 
 // wantLedgerSchema is where the ledger must stay, on every run, forever.
-const wantLedgerSchema = "public"
+const wantLedgerSchema = "trakrf"
 
 // TestLedgerStaysInOneSchema is the regression test for TRA-1069. Running
 // migrate twice against a fresh database must leave exactly one ledger, in
@@ -176,16 +177,15 @@ func TestLedgerStaysInOneSchema(t *testing.T) {
 	}
 }
 
-// TestDDLLandsInTrakrfDespiteHostileSearchPath asserts the outcome ADR 0003
-// protects: after migrating with a caller whose search_path excludes trakrf, the
-// application tables are still in trakrf.
+// TestDDLLandsInTrakrfDespiteHostileSearchPath checks the runner's search_path
+// override end to end: migrating from a connection that asks for public only must
+// still put every object in trakrf, and leave nothing behind in public.
 //
-// Honest about what this does and does not prove. Migrations 000001-000038 each
-// carry their own `SET search_path = trakrf, public`, so today they would land
-// correctly even without the runner-level override — this passes either way. It
-// earns its keep as a guard for the convention going forward: the first
-// header-less migration that lands somewhere else fails here. The override itself
-// is unit-tested in search_path_test.go, where it can actually fail.
+// This is why the override belongs in the runner rather than in each migration.
+// Enforcing it per-file was tried and abandoned during TRA-1069: 17 of the
+// existing migrations carry no `SET search_path` header because they are fully
+// schema-qualified instead, so a lint demanding the header would have required
+// editing already-applied migrations.
 func TestDDLLandsInTrakrfDespiteHostileSearchPath(t *testing.T) {
 	ctx := context.Background()
 
@@ -211,21 +211,49 @@ func TestDDLLandsInTrakrfDespiteHostileSearchPath(t *testing.T) {
 	}
 	defer conn.Close(ctx)
 
-	// Spot-check tables from migrations that create them unqualified.
+	// Comprehensive rather than a spot-check: public must hold the ledger and
+	// nothing else. Any application table there means some migration let the
+	// caller's search_path decide where its DDL landed.
+	rows, err := conn.Query(ctx, `
+		SELECT tablename FROM pg_tables
+		WHERE schemaname = 'public' AND tablename <> 'schema_migrations'
+		ORDER BY tablename`)
+	if err != nil {
+		t.Fatalf("listing public tables failed: %v", err)
+	}
+	var strays []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			rows.Close()
+			t.Fatalf("scan failed: %v", err)
+		}
+		strays = append(strays, name)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterating public tables failed: %v", err)
+	}
+	if len(strays) > 0 {
+		t.Errorf("these tables landed in public: %v\n"+
+			"A migration must be explicit about placement — either declare "+
+			"`SET search_path = trakrf, public;` or schema-qualify its objects — so the "+
+			"caller's session cannot decide (ADR 0003).", strays)
+	}
+
+	// Sanity-check the converse: the application tables really are in trakrf.
 	for _, table := range []string{"organizations", "assets", "refresh_tokens"} {
 		var schema string
-		err := conn.QueryRow(ctx, `
-			SELECT schemaname FROM pg_tables WHERE tablename = $1`, table).Scan(&schema)
-		if err != nil {
+		if err := conn.QueryRow(ctx, `
+			SELECT schemaname FROM pg_tables WHERE tablename = $1`, table).Scan(&schema); err != nil {
 			t.Fatalf("locating %q failed: %v", table, err)
 		}
 		if schema != "trakrf" {
-			t.Errorf("table %q landed in schema %q, want trakrf "+
-				"(the caller's search_path leaked into DDL placement)", table, schema)
+			t.Errorf("table %q is in schema %q, want trakrf", table, schema)
 		}
 	}
 
-	// And the ledger is still pinned independently of all of the above.
+	// And the ledger is pinned independently of all of the above.
 	if got := ledgerSchemas(ctx, t, dbURL); len(got) != 1 || got[0] != wantLedgerSchema {
 		t.Fatalf("ledger schemas = %v, want [%s]", got, wantLedgerSchema)
 	}
@@ -244,7 +272,7 @@ func TestStrayLedgerIsReported(t *testing.T) {
 		t.Fatalf("first migrate run failed: %v", err)
 	}
 
-	// Simulate the legacy state: a second ledger in trakrf, left behind by a run
+	// Simulate the legacy state: a legacy ledger in public, left behind by a run
 	// whose CURRENT_SCHEMA() resolved to trakrf after migration 000001 created
 	// the schema.
 	conn, err := pgx.Connect(ctx, dbURL)
@@ -252,9 +280,9 @@ func TestStrayLedgerIsReported(t *testing.T) {
 		t.Fatalf("connect failed: %v", err)
 	}
 	if _, err := conn.Exec(ctx, `
-		CREATE TABLE trakrf.schema_migrations
+		CREATE TABLE public.schema_migrations
 			(version bigint not null primary key, dirty boolean not null);
-		INSERT INTO trakrf.schema_migrations (version, dirty) VALUES (10, false)`); err != nil {
+		INSERT INTO public.schema_migrations (version, dirty) VALUES (10, false)`); err != nil {
 		conn.Close(ctx)
 		t.Fatalf("seeding stray ledger failed: %v", err)
 	}
@@ -262,9 +290,9 @@ func TestStrayLedgerIsReported(t *testing.T) {
 
 	err = migrate.Run(ctx, buildinfo.Info{Version: "test"})
 	if err == nil {
-		t.Fatal("migrate succeeded with a stray ledger in trakrf; want an error naming it")
+		t.Fatal("migrate succeeded with a stray ledger in public; want an error naming it")
 	}
-	if !strings.Contains(err.Error(), "trakrf.schema_migrations") {
+	if !strings.Contains(err.Error(), "public.schema_migrations") {
 		t.Fatalf("error should name the stray ledger and its schema, got: %v", err)
 	}
 	// The reported version is what makes the split diagnosable.

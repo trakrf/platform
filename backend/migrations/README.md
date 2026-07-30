@@ -35,28 +35,22 @@ Or browse via the tag on GitHub: <https://github.com/trakrf/platform/releases/ta
   `CREATE SCHEMA IF NOT EXISTS`, etc. — guards against double-apply on
   recovery scenarios.
 
-## The ledger lives in `public.schema_migrations` (TRA-1069)
+## The schema and its ledger are owned by `./server migrate` (TRA-1069)
 
-golang-migrate records applied versions in a `schema_migrations` table. Its
-schema is **pinned to `public`** in `internal/cmd/migrate` — do not let it be
-resolved dynamically.
+`internal/cmd/migrate` is the only thing that applies migrations — the integration
+harness calls into it rather than shelling out to the `migrate` CLI. Before
+golang-migrate runs it:
 
-Unpinned, the postgres driver locates that table with `CURRENT_SCHEMA()`. Every
-connection string here carries `search_path=trakrf,public`, and migration
-`000001` creates the `trakrf` schema — so `CURRENT_SCHEMA()` yields `public` on a
-fresh database's first run and `trakrf` on every run after it. The ledger moves,
-the new location starts empty at version 0, and the whole stack replays onto an
-already-populated schema. The failure is quiet: it dies partway with an
-"already exists" error, and forcing a version to unstick it leaves a ledger that
-reports clean while the schema is missing objects. That is how a local database
-ended up without `trakrf.refresh_tokens` while reporting a clean version 38.
+1. creates the `trakrf` schema if absent, because the driver resolves its
+   `schema_migrations` location *before* migration `000001` could create it;
+2. sets its own `search_path`, so unqualified DDL never depends on the caller's
+   DSN or role;
+3. pins the ledger to `trakrf.schema_migrations`, so `DROP SCHEMA trakrf CASCADE`
+   takes the ledger with it and leaves a genuinely empty database;
+4. refuses to run if a `schema_migrations` exists in another schema — a split
+   history that would otherwise report a clean version over a mismatched schema.
 
-`public` is the pinned schema because it is where the ledger already lives in
-preview and prod, and where a fresh database's first run puts it.
-
-`./server migrate` refuses to run if it finds a `schema_migrations` table in any
-other schema, and names both. Anything invoking the bare `migrate` CLI must pin
-the same location (see `ledger_pin` in `backend/justfile`).
+Do not add another path that applies migrations. See `docs/adr/0003`.
 
 ## Required GUC
 

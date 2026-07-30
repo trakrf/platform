@@ -14,16 +14,9 @@ AutoUpdate=registry
 [Service]
 Type=oneshot
 RemainAfterExit=no
-# Wait for Postgres, pin the DB search_path, then relocate a pre-TRA-1069
-# migration ledger into the schema `/server migrate` now pins (public).
-#
-# The trakrf schema is created by migration 000001 and is no longer pre-created
-# here: it only ever existed so CURRENT_SCHEMA() would resolve to trakrf and
-# golang-migrate would keep schema_migrations there. The ledger schema is pinned
-# in Go now (TRA-1069), so a box provisioned under the old rule needs its ledger
-# moved — ALTER TABLE IF EXISTS, so a fresh volume is a no-op.
-#
-# The relocation runs without ON_ERROR_STOP on purpose: if a box somehow has a
-# ledger in both schemas, `/server migrate` refuses to run and names both, which
-# is a far better diagnostic than a bare "already exists" aborting ExecStartPre.
-ExecStartPre=/bin/sh -c 'for i in $(seq 1 30); do podman exec timescaledb pg_isready -U postgres -q && break || sleep 2; done; podman exec timescaledb psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "ALTER DATABASE postgres SET search_path = trakrf, public;"; podman exec timescaledb psql -U postgres -d postgres -c "ALTER TABLE IF EXISTS trakrf.schema_migrations SET SCHEMA public;" || true'
+# Wait for Postgres, then pre-create the trakrf schema + pin the DB search_path.
+# Required so golang-migrate's schema_migrations table always lands in `trakrf`
+# (on a vanilla DB, trakrf doesn't exist at first connect, so CURRENT_SCHEMA()
+# would otherwise resolve to public on run 1 and trakrf on run 2 — losing the
+# version and replaying migrations). See backend/justfile.
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 30); do podman exec timescaledb pg_isready -U postgres -q && break || sleep 2; done; podman exec timescaledb psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS trakrf; ALTER DATABASE postgres SET search_path = trakrf, public;"'

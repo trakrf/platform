@@ -6,14 +6,6 @@ set fallback := true
 pg_url_local := env("PG_URL_LOCAL", "")
 pg_url_cloud := env("PG_URL_CLOUD", "")
 
-# Pins golang-migrate's ledger to public.schema_migrations for the bare
-# `migrate` CLI (TRA-1069). `./server migrate` pins this in Go; the CLI would
-# otherwise locate the ledger with CURRENT_SCHEMA(), which resolves to public on
-# a fresh database and trakrf once migration 000001 has created that schema —
-# splitting the migration history across two tables. Append to a database URL
-# that already carries a query string.
-ledger_pin := "&x-migrations-table=%22public%22.%22schema_migrations%22&x-migrations-table-quoted=true"
-
 # List all available recipes
 default:
     @just --list
@@ -126,10 +118,9 @@ test-contract:
         "ALTER DATABASE ${SCHEMA_DB} SET app.obfuscation_key = '6f626675736361746f72746573746b657920303132333435363738396162636465';"
 
     # 3. Migrate (PG_URL_LOCAL exported above, re-evaluated by just migrate).
-    # Migration 000001 creates the trakrf schema; nothing needs to pre-create it.
-    # (It used to be pre-created here so CURRENT_SCHEMA() would resolve to
-    # 'trakrf' on the first migrate connection and keep schema_migrations in one
-    # place — `./server migrate` now pins the ledger schema itself, TRA-1069.)
+    # The trakrf schema used to be pre-created here, so CURRENT_SCHEMA() would
+    # resolve to 'trakrf' and keep schema_migrations in one place. `./server
+    # migrate` now creates the schema and pins its ledger itself (TRA-1069).
     echo "🔄 Migrating ${SCHEMA_DB}..."
     just migrate
 
@@ -460,13 +451,13 @@ migrate-up: migrate
 # Roll back last migration
 migrate-down:
     @echo "⏪ Rolling back last migration..."
-    docker compose exec backend sh -c 'migrate -path /app/migrations -database "$PG_URL{{ledger_pin}}" down 1'
+    docker compose exec backend sh -c 'migrate -path /app/migrations -database "$PG_URL" down 1'
     @echo "✅ Rollback complete"
 
 # Show current migration version
 migrate-status:
     @echo "📊 Migration status:"
-    docker compose exec backend sh -c 'migrate -path /app/migrations -database "$PG_URL{{ledger_pin}}" version'
+    docker compose exec backend sh -c 'migrate -path /app/migrations -database "$PG_URL" version'
 
 # Create new migration file
 migrate-create name:
@@ -481,7 +472,7 @@ migrate-create name:
 # over forcing it into agreement.
 migrate-force version:
     @echo "⚠️  Forcing migration version to {{version}}"
-    docker compose exec backend sh -c 'migrate -path /app/migrations -database "$PG_URL{{ledger_pin}}" force {{version}}'
+    docker compose exec backend sh -c 'migrate -path /app/migrations -database "$PG_URL" force {{version}}'
 
 # TRA-720: schema-diff between the legacy 44-migration stack (pre-tra-720 tag)
 # and the new 10-file stack. Both are applied to ephemeral databases;

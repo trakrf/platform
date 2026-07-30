@@ -23,50 +23,32 @@ import (
 	"github.com/trakrf/platform/backend/migrations"
 )
 
-// ledgerSchema pins the schema that holds golang-migrate's schema_migrations
-// bookkeeping table (TRA-1069).
-//
-// Left unset, the postgres driver locates the ledger with CURRENT_SCHEMA().
-// Every connection string in this project carries search_path=trakrf,public and
-// migration 000001 creates the trakrf schema, so CURRENT_SCHEMA() returns
-// "public" on a fresh database's first run and "trakrf" on every run after it.
-// The ledger silently relocates, the new location starts empty at version 0,
-// and the entire stack is replayed against an already-populated schema.
-//
-// "public" rather than "trakrf" because that is where the ledger already lives
-// in every provisioned environment — preview and prod were both verified during
-// TRA-1069 — and where a fresh database's first run puts it today. Pinning to
-// trakrf would orphan those ledgers and replay migration 000001 on live data.
-const ledgerSchema = "public"
+// appSchema owns everything this runner touches: the application objects and the
+// migration ledger that tracks them.
+const appSchema = "trakrf"
 
-// ddlSearchPath is the search_path this runner imposes on every connection it
-// opens, and therefore the single point that decides where a migration's
-// unqualified DDL lands (ADR 0003).
+// ledgerSchema pins the schema holding golang-migrate's schema_migrations table
+// (TRA-1069). Left unset, the postgres driver locates it with CURRENT_SCHEMA(),
+// which on a fresh database resolves to public — trakrf does not exist until
+// migration 000001 creates it — and to trakrf on every run afterwards. The ledger
+// silently relocates, the new one starts at version 0, and the whole stack
+// replays onto a populated schema.
 //
-// Migrations are replayable artifacts. Letting ambient session state — a DSN
-// parameter, a role default, an interactive session — decide their DDL target
-// is how objects end up in the wrong schema silently, which is the same class of
-// defect as TRA-1069. Setting it here means placement is a property of the
-// runner: one authoritative value, in code, rather than a line repeated in every
-// migration file and duplicated by whatever the caller's role happens to say.
+// It lives in appSchema, not public, so that schema and its bookkeeping are one
+// unit. That matters for the documented rebuild path: DROP SCHEMA trakrf CASCADE
+// takes the ledger with it, leaving a genuinely empty database. A ledger in public
+// would survive the drop still claiming version 38, and the next migrate would
+// report "no pending migrations" against an empty schema — TRA-1069 reproduced by
+// the reset procedure itself.
+const ledgerSchema = appSchema
+
+// ddlSearchPath is imposed on every connection this runner opens, so a
+// migration's unqualified DDL always resolves to the application schema no matter
+// what the caller's DSN or role default says (ADR 0003).
 //
-// Files 000001-000038 also carry their own `SET search_path = trakrf, public`
-// header. Those stay (they set the same value, and rewriting applied migrations
-// buys nothing), but new migrations do not need one.
+// One line here means no migration has to declare it and no lint has to enforce
+// that it did.
 const ddlSearchPath = "trakrf, public"
-
-// buildPoolConfig parses pgURL and imposes this runner's DDL search_path on
-// every connection the pool opens, overriding whatever the DSN or the role
-// default says. RuntimeParams is sent as a startup parameter, so it applies to
-// each pooled connection rather than only the first.
-func buildPoolConfig(pgURL string) (*pgxpool.Config, error) {
-	config, err := pgxpool.ParseConfig(pgURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse PG_URL: %w", err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = ddlSearchPath
-	return config, nil
-}
 
 // strayLedger is a schema_migrations table found outside ledgerSchema.
 type strayLedger struct {
@@ -147,21 +129,30 @@ func strayLedgerError(strays []strayLedger) error {
 	return fmt.Errorf("%s", b.String())
 }
 
-// Run applies all pending embedded migrations to the database identified
-// by the PG_URL environment variable, then returns. A nil return means
-// success (including the "no pending migrations" case).
+// Run applies all pending embedded migrations to the database identified by the
+// PG_URL environment variable, then returns. A nil return means success
+// (including the "no pending migrations" case).
 func Run(ctx context.Context, info buildinfo.Info) error {
-	log := logger.Get()
-
 	pgURL := os.Getenv("PG_URL")
 	if pgURL == "" {
 		return fmt.Errorf("PG_URL environment variable not set")
 	}
+	return RunURL(ctx, pgURL, info)
+}
 
-	config, err := buildPoolConfig(pgURL)
+// RunURL is Run against an explicit database URL. It exists so that everything
+// which migrates goes through this one implementation rather than growing a
+// second one: the integration harness used to shell out to the bare `migrate`
+// CLI, which meant the schema bootstrap, the ledger pin and the split-history
+// preflight all had to be duplicated there — or, as in TRA-1069, not be.
+func RunURL(ctx context.Context, pgURL string, info buildinfo.Info) error {
+	log := logger.Get()
+
+	config, err := pgxpool.ParseConfig(pgURL)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to parse PG_URL: %w", err)
 	}
+	config.ConnConfig.RuntimeParams["search_path"] = ddlSearchPath
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
@@ -181,6 +172,17 @@ func Run(ctx context.Context, info buildinfo.Info) error {
 	}
 	if len(strays) > 0 {
 		return strayLedgerError(strays)
+	}
+
+	// Create the schema before golang-migrate looks for its ledger. This is the
+	// one thing that cannot be left to a migration: the driver resolves the ledger
+	// location, and creates the table, before migration 000001 runs. Without this
+	// the ledger lands wherever CURRENT_SCHEMA() happens to point on a database
+	// that does not have the schema yet — the root of TRA-1069. Idempotent, and
+	// migration 000001 still declares it for a hand-applied run.
+	if _, err := pool.Exec(ctx,
+		"CREATE SCHEMA IF NOT EXISTS "+pgx.Identifier{appSchema}.Sanitize()); err != nil {
+		return fmt.Errorf("failed to ensure schema %s exists: %w", appSchema, err)
 	}
 
 	db := stdlib.OpenDBFromPool(pool)
