@@ -35,11 +35,14 @@ const appSchema = "trakrf"
 // replays onto a populated schema.
 //
 // It lives in appSchema, not public, so that schema and its bookkeeping are one
-// unit. That matters for the documented rebuild path: DROP SCHEMA trakrf CASCADE
+// unit. That matters for the local/dev reset path: DROP SCHEMA trakrf CASCADE
 // takes the ledger with it, leaving a genuinely empty database. A ledger in public
 // would survive the drop still claiming version 38, and the next migrate would
 // report "no pending migrations" against an empty schema — TRA-1069 reproduced by
 // the reset procedure itself.
+//
+// That reset is for development databases only, and is deliberately not offered
+// as recovery advice anywhere an operator might meet it mid-incident (TRA-1084).
 const ledgerSchema = appSchema
 
 // ddlSearchPath is imposed on every connection this runner opens, so a
@@ -95,37 +98,95 @@ func findStrayLedgers(ctx context.Context, pool *pgxpool.Pool) ([]strayLedger, e
 
 	strays := make([]strayLedger, 0, len(schemas))
 	for _, schema := range schemas {
-		stray := strayLedger{schema: schema}
-		table := pgx.Identifier{schema, postgres.DefaultMigrationsTable}.Sanitize()
-		// A ledger table with no row is a version-0 placeholder; report it as
-		// version 0 rather than failing the whole preflight on ErrNoRows.
-		err := pool.QueryRow(ctx,
-			"SELECT version, dirty FROM "+table+" LIMIT 1").Scan(&stray.version, &stray.dirty)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("failed to read stray migration ledger %s: %w", table, err)
+		stray, err := readLedger(ctx, pool, schema)
+		if err != nil {
+			return nil, err
 		}
-		strays = append(strays, stray)
+		strays = append(strays, *stray)
 	}
 	return strays, nil
 }
 
-// strayLedgerError renders an actionable message for a split migration history.
-// Recovery is a human decision — reconcile the two histories or rebuild the
-// schema — so this reports what was found rather than guessing.
-func strayLedgerError(strays []strayLedger) error {
+// readLedger reads version/dirty from the schema_migrations table in schema.
+// The table is assumed to exist; callers that are not sure use findLedger.
+func readLedger(ctx context.Context, pool *pgxpool.Pool, schema string) (*strayLedger, error) {
+	ledger := strayLedger{schema: schema}
+	table := pgx.Identifier{schema, postgres.DefaultMigrationsTable}.Sanitize()
+	// A ledger table with no row is a version-0 placeholder; report it as
+	// version 0 rather than failing the whole preflight on ErrNoRows.
+	err := pool.QueryRow(ctx,
+		"SELECT version, dirty FROM "+table+" LIMIT 1").Scan(&ledger.version, &ledger.dirty)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("failed to read migration ledger %s: %w", table, err)
+	}
+	return &ledger, nil
+}
+
+// findLedger returns the ledger in schema, or nil when there is none.
+//
+// Whether the authoritative ledger exists is what separates "this database's
+// history simply predates the pin and needs relocating" from "two divergent
+// histories need reconciling" (TRA-1084), so the refusal message needs to know.
+func findLedger(ctx context.Context, pool *pgxpool.Pool, schema string) (*strayLedger, error) {
+	var exists bool
+	if err := pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM pg_tables WHERE tablename = $1 AND schemaname = $2
+		)`, postgres.DefaultMigrationsTable, schema).Scan(&exists); err != nil {
+		return nil, fmt.Errorf("failed to check for the %s migration ledger: %w", schema, err)
+	}
+	if !exists {
+		return nil, nil
+	}
+	return readLedger(ctx, pool, schema)
+}
+
+// strayLedgerError renders an actionable message for a ledger found outside
+// ledgerSchema. Two quite different situations reach here and they do NOT share
+// a remedy, so the message branches on whether the authoritative ledger exists
+// (TRA-1084):
+//
+//   - Authoritative ledger absent. The stray is simply this database's real
+//     history, predating the pin — every database created before TRA-1069 looks
+//     like this, prod included. Relocating the table is the whole fix, so name
+//     the exact statement.
+//   - Both present. A genuinely split history, where neither version describes
+//     the schema on disk on its own. That is a human judgement call about which
+//     history to keep, so report both and stop.
+//
+// Deliberately suggests nothing destructive. This text is read by whoever is
+// looking at a failed migrate Job, which on a live database is the worst
+// possible moment to be handed a DROP. Failing safe — old pod still serving,
+// database untouched — is the point of the preflight, and advice that undoes it
+// on being followed would defeat it.
+func strayLedgerError(strays []strayLedger, authoritative *strayLedger) error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "refusing to migrate: found %d migration ledger(s) outside schema %q, "+
-		"meaning this database has a split migration history (TRA-1069)",
+	fmt.Fprintf(&b, "refusing to migrate: found %d migration ledger(s) outside schema %q (TRA-1069)",
 		len(strays), ledgerSchema)
 	for _, s := range strays {
 		fmt.Fprintf(&b, "\n  %s.%s: version=%d dirty=%t",
 			s.schema, postgres.DefaultMigrationsTable, s.version, s.dirty)
 	}
-	fmt.Fprintf(&b, "\n  %s.%s is authoritative. A stray ledger means some migrations were "+
-		"recorded against a different history, so the version reported here does not describe "+
-		"the schema on disk. Reconcile the two by hand, or rebuild the schema "+
-		"(DROP SCHEMA trakrf CASCADE plus the stray ledger, then migrate); then drop the stray table.",
-		ledgerSchema, postgres.DefaultMigrationsTable)
+
+	if authoritative == nil {
+		fmt.Fprintf(&b, "\n  %s.%s does not exist, so the ledger above is this database's real "+
+			"migration history — it predates the pin to %q and only needs to be moved:",
+			ledgerSchema, postgres.DefaultMigrationsTable, ledgerSchema)
+		for _, s := range strays {
+			fmt.Fprintf(&b, "\n      ALTER TABLE %s.%s SET SCHEMA %s;",
+				s.schema, postgres.DefaultMigrationsTable, ledgerSchema)
+		}
+		fmt.Fprintf(&b, "\n  That is metadata-only, instant, and preserves both version and "+
+			"dirty. Re-run migrate afterwards; it resumes from the version above.")
+		return fmt.Errorf("%s", b.String())
+	}
+
+	fmt.Fprintf(&b, "\n  %s.%s: version=%d dirty=%t (authoritative)",
+		ledgerSchema, postgres.DefaultMigrationsTable, authoritative.version, authoritative.dirty)
+	fmt.Fprintf(&b, "\n  Both ledgers exist, so some migrations were recorded against a different "+
+		"history and neither version on its own describes the schema on disk. Reconcile by hand: "+
+		"compare both versions against the objects actually present, settle on one history in %q, "+
+		"then drop the other table.", ledgerSchema)
 	return fmt.Errorf("%s", b.String())
 }
 
@@ -171,7 +232,11 @@ func RunURL(ctx context.Context, pgURL string, info buildinfo.Info) error {
 		return err
 	}
 	if len(strays) > 0 {
-		return strayLedgerError(strays)
+		authoritative, err := findLedger(ctx, pool, ledgerSchema)
+		if err != nil {
+			return err
+		}
+		return strayLedgerError(strays, authoritative)
 	}
 
 	// Create the schema before golang-migrate looks for its ledger. This is the
