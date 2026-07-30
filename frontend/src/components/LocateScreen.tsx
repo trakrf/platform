@@ -107,49 +107,60 @@ const LocateScreen: React.FC = () => {
     setInputEPC(storedEPC);
   }, [storedEPC]);
   
+  const isScanning = readerState === ReaderState.SCANNING;
+
+  // What the screen reports must follow the read stream, not the reader's state
+  // machine. getFilteredRSSI() already floors to DEFAULT_RSSI once readings go
+  // stale (>1s), so it is the single source of truth for "are we hearing the
+  // target tag right now" — the same data the Statistics panel renders.
+  //
+  // Gating the gauge and Status on SCANNING instead let the two halves of the
+  // screen disagree: any non-SCANNING state with reads still arriving (observed
+  // live with the reader in ERROR at 14 Hz) printed "No signal" and "Idle" next
+  // to a live dBm value. On a tag finder "No signal" means "the item is not
+  // here", so that is a false negative on the primary function of the screen
+  // (TRA-1080).
+  const displayRSSI = getFilteredRSSI();
+  const hasLiveSignal = displayRSSI > DEFAULT_RSSI;
+  const isSearching = isScanning || hasLiveSignal;
+
   // UI just observes trigger state changes - rfidManager handles the actual trigger operations
   useEffect(() => {
-    const isScanning = readerState === ReaderState.SCANNING;
     // Update UI messages based on trigger and locate state
     if (triggerState && isScanning) {
       setStatusMessage('Searching...');
     } else if (!triggerState && !isScanning && peakRSSI > DEFAULT_RSSI) {
       setStatusMessage(`Last search - Peak RSSI: ${peakRSSI} dBm`);
     }
-  }, [triggerState, readerState, peakRSSI, setStatusMessage]);
-  
-  // Force re-render every 250ms while scanning to check for stale data
-  // This ensures the UI updates when data becomes stale (> 1s old) even without new reads
+  }, [triggerState, isScanning, peakRSSI, setStatusMessage]);
+
+  // Force re-render every 250ms while a signal is being reported, so the
+  // display drops back to "No signal" once readings go stale even though no
+  // new read arrives to trigger a render.
   const [, forceUpdate] = React.useReducer(x => x + 1, 0);
   useEffect(() => {
-    if (readerState === ReaderState.SCANNING) {
+    if (isSearching) {
       const interval = setInterval(forceUpdate, 250);
       return () => clearInterval(interval);
     }
-  }, [readerState]);
-
-  // Get display RSSI - recalculated on every render for real-time streaming
-  const displayRSSI = readerState === ReaderState.SCANNING ? getFilteredRSSI() : DEFAULT_RSSI;
+  }, [isSearching]);
 
   // Update audio feedback when RSSI changes
   useEffect(() => {
-    const isScanning = readerState === ReaderState.SCANNING;
-
-    if (!isScanning) {
-      // Not scanning - stop all sounds
+    if (!isSearching) {
+      // Neither scanning nor hearing the tag - stop all sounds
       stopBeeping();
       return;
     }
 
-    // Scanning - check if we have signal
-    if (displayRSSI > DEFAULT_RSSI) {
+    if (hasLiveSignal) {
       // Have signal - use proximity tone based on RSSI
       updateProximity(displayRSSI);
     } else {
-      // No signal - play "searching" tick pattern
+      // Scanning but nothing heard yet - play "searching" tick pattern
       startSearching();
     }
-  }, [readerState, displayRSSI, updateProximity, startSearching, stopBeeping]);
+  }, [isSearching, hasLiveSignal, displayRSSI, updateProximity, startSearching, stopBeeping]);
   
   // Format RSSI for display
   const formatRSSI = (value: number) => {
@@ -335,8 +346,8 @@ const LocateScreen: React.FC = () => {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600 dark:text-gray-400">Status:</span>
-              <span className={`font-semibold ${readerState === ReaderState.SCANNING ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                {readerState === ReaderState.SCANNING ? 'Searching' : 'Idle'}
+              <span className={`font-semibold ${isSearching ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                {isSearching ? 'Searching' : 'Idle'}
               </span>
             </div>
           </div>
