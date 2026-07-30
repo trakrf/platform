@@ -176,24 +176,33 @@ describe('TabNavigation', () => {
   });
 
   describe('device management under Settings (TRA-930)', () => {
-    it('should not show Scan Devices, Output Devices, or Live Reads as top-level items', () => {
+    // This used to assert the absence of the pre-TRA-930 label strings ("Scan
+    // Devices", "Output Devices", "Live Reads"), which passed only because
+    // nothing rendered those words — it never checked nesting. TRA-1071 renamed
+    // the Live feed entry to "Live Reads", making that assertion false and the
+    // gap visible. Assert the actual claim instead: these entries live inside the
+    // Settings sub-group, not alongside the top-level tabs.
+    it('nests the device-management entries under Settings rather than top level', () => {
       useOrgStore.setState({ currentRole: 'owner' });
       render(<TabNavigation />);
 
-      // Old top-level labels are gone; replaced by Settings sub-options.
-      expect(screen.queryByText('Scan Devices')).not.toBeInTheDocument();
-      expect(screen.queryByText('Output Devices')).not.toBeInTheDocument();
-      expect(screen.queryByText('Live Reads')).not.toBeInTheDocument();
+      const subnav = screen.getByTestId('device-management-subnav');
+      expect(subnav).toContainElement(screen.getByTestId('menu-item-scan-devices'));
+      expect(subnav).toContainElement(screen.getByTestId('menu-item-live-reads'));
+
+      // Genuinely top-level tabs must not have been swept into the sub-group.
+      expect(subnav).not.toContainElement(screen.getByTestId('menu-item-scan'));
+      expect(subnav).not.toContainElement(screen.getByTestId('menu-item-settings'));
     });
 
     // These set a real signed-in org with the geofence grant: Outputs is
     // capability-gated as well as role-gated, and signed-out hides it outright.
-    it('should show Readers, Live feed, and Outputs sub-options for an operator', () => {
+    it('should show Readers, Live Reads, and Outputs sub-options for an operator', () => {
       setCapabilities(['geofence'], 'operator');
       render(<TabNavigation />);
 
       expect(screen.getByText('Readers')).toBeInTheDocument();
-      expect(screen.getByText('Live feed')).toBeInTheDocument();
+      expect(screen.getByText('Live Reads')).toBeInTheDocument();
       expect(screen.getByText('Outputs')).toBeInTheDocument();
     });
 
@@ -212,7 +221,7 @@ describe('TabNavigation', () => {
       render(<TabNavigation />);
 
       expect(screen.queryByText('Readers')).not.toBeInTheDocument();
-      expect(screen.queryByText('Live feed')).not.toBeInTheDocument();
+      expect(screen.queryByText('Live Reads')).not.toBeInTheDocument();
       expect(screen.queryByText('Outputs')).not.toBeInTheDocument();
       // The Settings entry itself remains visible to everyone.
       expect(screen.getByText('Settings')).toBeInTheDocument();
@@ -227,7 +236,7 @@ describe('TabNavigation', () => {
       fireEvent.click(screen.getByText('Readers').closest('button')!);
       expect(mockSetActiveTab).toHaveBeenCalledWith('scan-devices');
 
-      fireEvent.click(screen.getByText('Live feed').closest('button')!);
+      fireEvent.click(screen.getByText('Live Reads').closest('button')!);
       expect(mockSetActiveTab).toHaveBeenCalledWith('live-reads');
 
       fireEvent.click(screen.getByText('Outputs').closest('button')!);
@@ -402,7 +411,7 @@ describe('TabNavigation', () => {
       expect(screen.queryByText('Kits')).not.toBeInTheDocument();
       // Role-gated: hidden because there is no role.
       expect(screen.queryByText('Readers')).not.toBeInTheDocument();
-      expect(screen.queryByText('Live feed')).not.toBeInTheDocument();
+      expect(screen.queryByText('Live Reads')).not.toBeInTheDocument();
     });
 
     it('renders no lock on the ungated core', () => {

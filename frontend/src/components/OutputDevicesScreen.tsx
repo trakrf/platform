@@ -10,6 +10,7 @@ import { OutputDeviceFormModal, OutputDeviceEditPanel } from '@/components/outpu
 import { PaidGate } from '@/components/entitlement';
 import { validateName } from '@/lib/location/validators';
 import type { OutputDevice, OutputDeviceType } from '@/types/outputdevices';
+import { NAV_LABELS } from '@/lib/routing/navLabels';
 
 // Editing happens inline via a single-open row expander (TRA-938): the config
 // form plus test-fire/reset controls open under the row rather than in a modal.
@@ -67,7 +68,9 @@ export default function OutputDevicesScreen() {
   return (
     <div className="h-full flex flex-col p-2">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Output Devices</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
+          {NAV_LABELS['output-devices']}
+        </h1>
         <PaidGate surface="outputs-crud">
           <button
             type="button"

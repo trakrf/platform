@@ -21,6 +21,7 @@ vi.mock('@/hooks/capability/useCapability', async (importOriginal) => ({
 
 import TabNavigation from '@/components/TabNavigation';
 import { PAGE_TITLES } from '@/components/Header';
+import { NAV_LABELS } from '@/lib/routing/navLabels';
 import { useUIStore, useDeviceStore, useOrgStore } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
 
@@ -28,6 +29,10 @@ import { ReaderState } from '@/worker/types/reader';
  * Tabs whose screen owns its own heading instead of appearing in PAGE_TITLES.
  * Listed explicitly so adding a nav entry without a page title is a decision
  * someone made here, not a blank header nobody noticed.
+ *
+ * The ones in NAV_LABELS take their heading text from that shared constant, so
+ * they cannot drift from the sidebar. `kits` is a dark POC surface and
+ * `org-geofence-defaults` has no page-level heading; neither is worth a name.
  */
 const SCREEN_OWNS_HEADING = new Set([
   'kits',
@@ -78,6 +83,20 @@ describe('page title / nav label parity', () => {
 
     // Guard against the assertion loop silently covering nothing.
     expect(checked.length).toBeGreaterThan(5);
+  });
+
+  /**
+   * The three device-management surfaces have no PAGE_TITLES entry, so their own
+   * heading is the page identity. They render it from NAV_LABELS, which is also
+   * what the sidebar renders — this pins that constant to what the user actually
+   * sees, so the two cannot be changed apart.
+   */
+  it('renders the sidebar from the same labels those screens title themselves with', () => {
+    const labels = navLabels();
+
+    Object.entries(NAV_LABELS).forEach(([id, label]) => {
+      expect(labels.get(id), `nav entry "${id}" should render its NAV_LABELS text`).toBe(label);
+    });
   });
 
   it('accounts for every sidebar entry, by title or by an owned heading', () => {

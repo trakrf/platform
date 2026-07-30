@@ -13,6 +13,7 @@ import type { ReactElement, ReactNode } from 'react';
 import ScanDevicesScreen from './ScanDevicesScreen';
 import { useScanDevices, useScanDeviceMutations } from '@/hooks/scandevices';
 import { useAuthStore } from '@/stores/authStore';
+import { NAV_LABELS } from '@/lib/routing/navLabels';
 import type { ScanDevice } from '@/types/scandevices';
 
 vi.mock('@/hooks/scandevices');
@@ -72,6 +73,7 @@ describe('ScanDevicesScreen flat list', () => {
     render(<ScanDevicesScreen />);
     expect(screen.getByText('Dock Reader 1')).toBeInTheDocument();
   });
+
 
   it('has no scan-point tree expansion control', () => {
     render(<ScanDevicesScreen />);
@@ -192,5 +194,34 @@ describe('ScanDevicesScreen row expander (TRA-938)', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('edit-panel')).not.toBeInTheDocument();
     });
+  });
+});
+
+/**
+ * This screen owns its heading (it has no PAGE_TITLES entry), so the heading has
+ * to read as the sidebar entry that opens it — "Readers", not the
+ * technically-correct-but-nobody-says-it "Scan Devices" (TRA-1071).
+ *
+ * Deliberately does not set `isAuthenticated`: the heading renders regardless,
+ * and flipping auth wakes tagStore's subscription over whatever an earlier test
+ * file left behind (TRA-1079).
+ */
+describe('ScanDevicesScreen heading', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (useScanDevices as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      scanDevices: [],
+      isLoading: false,
+    });
+    (useScanDeviceMutations as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      delete: vi.fn(),
+    });
+  });
+  afterEach(() => cleanup());
+
+  it('titles itself with the sidebar label', () => {
+    render(<ScanDevicesScreen />);
+    expect(screen.getByRole('heading', { name: NAV_LABELS['scan-devices'] })).toBeInTheDocument();
+    expect(screen.queryByText('Scan Devices')).not.toBeInTheDocument();
   });
 });

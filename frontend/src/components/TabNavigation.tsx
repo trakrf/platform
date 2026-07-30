@@ -5,6 +5,7 @@ import { ReaderState } from '@/worker/types/reader';
 import { Package2, Search, Settings, HelpCircle, Package, MapPinned, BarChart3, RadioTower, Radio, Lock } from 'lucide-react';
 import { appVersion } from '@/version';
 import { capabilityEntryForRoute } from '@/components/capability/registry';
+import { NAV_LABELS } from '@/lib/routing/navLabels';
 import { useCapabilityNavGate } from '@/hooks/capability/useCapability';
 
 interface NavItemProps {
@@ -101,7 +102,7 @@ export default function TabNavigation() {
   const currentRole = useOrgStore((state) => state.currentRole);
   const { setActiveTab } = useUIStore.getState();
 
-  // Device management (Readers, Outputs, Live feed) lives under Settings and is
+  // Device management (Readers, Outputs, Live Reads) lives under Settings and is
   // reachable by Operator and above. Org/user/billing settings stay owner/admin
   // only — those are gated separately in OrgSwitcher.
   const canManageDevices =
@@ -286,12 +287,15 @@ export default function TabNavigation() {
           />
 
           {/* Device-management sub-options under Settings — Operator and above.
-              Live feed lives in the Readers area, alongside the reader list. */}
+              Live Reads lives in the Readers area, alongside the reader list. */}
           {canManageDevices && (
-            <div className="ml-4 pl-3 border-l border-gray-200 dark:border-gray-700 space-y-2">
+            <div
+              data-testid="device-management-subnav"
+              className="ml-4 pl-3 border-l border-gray-200 dark:border-gray-700 space-y-2"
+            >
               <NavItem
                 id="scan-devices"
-                label="Readers"
+                label={NAV_LABELS['scan-devices']}
                 isActive={activeTab === 'scan-devices'}
                 onClick={() => handleTabClick('scan-devices')}
                 icon={<RadioTower className="w-5 h-5" />}
@@ -300,7 +304,7 @@ export default function TabNavigation() {
 
               <NavItem
                 id="live-reads"
-                label="Live feed"
+                label={NAV_LABELS['live-reads']}
                 isActive={activeTab === 'live-reads'}
                 onClick={() => handleTabClick('live-reads')}
                 icon={<Radio className="w-5 h-5" />}
