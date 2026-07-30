@@ -9,6 +9,7 @@ import { ScanDeviceFormModal, ScanDeviceEditPanel } from '@/components/scandevic
 import { PaidGate } from '@/components/entitlement';
 import { validateName } from '@/lib/location/validators';
 import type { ScanDevice } from '@/types/scandevices';
+import { NAV_LABELS } from '@/lib/routing/navLabels';
 
 // The reader list is flat (TRA-931): scan_devices only, no scan_point tree.
 // Editing happens inline via a single-open row expander (TRA-938) — the
@@ -45,7 +46,9 @@ export default function ScanDevicesScreen() {
   return (
     <div className="h-full flex flex-col p-2">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Scan Devices</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
+          {NAV_LABELS['scan-devices']}
+        </h1>
         <PaidGate surface="readers-crud">
           <button
             type="button"

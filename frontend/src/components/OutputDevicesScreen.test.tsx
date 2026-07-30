@@ -13,6 +13,7 @@ import type { ReactElement, ReactNode } from 'react';
 import OutputDevicesScreen from './OutputDevicesScreen';
 import { useOutputDevices, useOutputDeviceMutations } from '@/hooks/outputdevices';
 import { useAuthStore } from '@/stores/authStore';
+import { NAV_LABELS } from '@/lib/routing/navLabels';
 import type { OutputDevice } from '@/types/outputdevices';
 
 vi.mock('@/hooks/outputdevices');
@@ -268,5 +269,37 @@ describe('OutputDevicesScreen row expander (TRA-938)', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('edit-panel')).not.toBeInTheDocument();
     });
+  });
+});
+
+/**
+ * This screen owns its heading (no PAGE_TITLES entry), so it must read as the
+ * sidebar entry that opens it — "Outputs", not "Output Devices" (TRA-1071).
+ *
+ * Deliberately does not set `isAuthenticated`: the heading renders regardless,
+ * and flipping auth wakes tagStore's subscription over whatever an earlier test
+ * file left behind (TRA-1079).
+ */
+describe('OutputDevicesScreen heading', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (useOutputDevices as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      outputDevices: [],
+      isLoading: false,
+    });
+    (useOutputDeviceMutations as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      delete: vi.fn(),
+      test: vi.fn(),
+      reset: vi.fn(),
+    });
+  });
+  afterEach(() => cleanup());
+
+  it('titles itself with the sidebar label', () => {
+    render(<OutputDevicesScreen />);
+    expect(
+      screen.getByRole('heading', { name: NAV_LABELS['output-devices'] })
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Output Devices')).not.toBeInTheDocument();
   });
 });
