@@ -83,7 +83,11 @@ of replaying.
 * golang-migrate keeps no checksums — its ledger is one `(version, dirty)` row and
   `Up()` never opens files at or below the current version — so editing an applied
   migration is undetectable. That is how three migrations folded into `000009`
-  silently never ran. TRA-1077 adds the guard Flyway would have given us.
+  silently never ran. TRA-1077 added the guard Flyway would have given us:
+  `backend/migrations/checksums.txt` plus `TestMigrationChecksums`, which fails the
+  build when a recorded migration is edited or deleted. It is a source-level guard,
+  not a runtime one — it catches the edit in review, it cannot reconcile a database
+  that already diverged.
 
 ## Notes on scope
 
