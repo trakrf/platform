@@ -299,4 +299,66 @@ func TestStrayLedgerIsReported(t *testing.T) {
 	if !strings.Contains(err.Error(), "version=10") {
 		t.Fatalf("error should report the stray ledger's version, got: %v", err)
 	}
+	// Both ledgers exist here, so this is a genuine split: the message must send
+	// the operator to reconcile, not offer a one-liner that would pick a winner
+	// for them.
+	if !strings.Contains(err.Error(), "Reconcile by hand") {
+		t.Fatalf("both-ledgers error should call for manual reconciliation, got: %v", err)
+	}
+	assertNoDestructiveAdvice(t, err)
+}
+
+// assertNoDestructiveAdvice guards TRA-1084: this text is read by whoever is
+// staring at a failed migrate Job, and on a live database DROP SCHEMA … CASCADE
+// is a data-loss command. The preflight's whole value is that it fails safe, so
+// no branch of it may recommend something destructive.
+func assertNoDestructiveAdvice(t *testing.T, err error) {
+	t.Helper()
+	for _, forbidden := range []string{"DROP SCHEMA", "DROP DATABASE", "CASCADE"} {
+		if strings.Contains(strings.ToUpper(err.Error()), forbidden) {
+			t.Fatalf("refusal message must not suggest %q, got: %v", forbidden, err)
+		}
+	}
+}
+
+// TestPreTRA1069LedgerIsOfferedRelocation covers the shape every database
+// created before the ledger pin actually has — prod included: a ledger in public
+// and no trakrf ledger at all. Nothing is split, so the fix is to move the table,
+// and the refusal must say so rather than leaving the operator to invent one
+// (TRA-1084).
+func TestPreTRA1069LedgerIsOfferedRelocation(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := provisionLedgerTestDB(ctx, t)
+	t.Setenv("PG_URL", dbURL)
+
+	// Note this database is never migrated: the ledger sits in public and the
+	// trakrf schema does not exist, which is exactly the pre-pin state.
+	conn, err := pgx.Connect(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("connect failed: %v", err)
+	}
+	if _, err := conn.Exec(ctx, `
+		CREATE TABLE public.schema_migrations
+			(version bigint not null primary key, dirty boolean not null);
+		INSERT INTO public.schema_migrations (version, dirty) VALUES (10, false)`); err != nil {
+		conn.Close(ctx)
+		t.Fatalf("seeding legacy ledger failed: %v", err)
+	}
+	conn.Close(ctx)
+
+	err = migrate.Run(ctx, buildinfo.Info{Version: "test"})
+	if err == nil {
+		t.Fatal("migrate succeeded with a legacy ledger in public; want a refusal")
+	}
+	// The runnable statement is the point: an operator should be able to copy it
+	// out of the log rather than derive it under pressure.
+	want := "ALTER TABLE public.schema_migrations SET SCHEMA trakrf;"
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("refusal should name %q, got: %v", want, err)
+	}
+	if !strings.Contains(err.Error(), "version=10") {
+		t.Fatalf("refusal should report the ledger's version, got: %v", err)
+	}
+	assertNoDestructiveAdvice(t, err)
 }
