@@ -52,6 +52,37 @@ golang-migrate runs it:
 
 Do not add another path that applies migrations. See `docs/adr/0003`.
 
+## Applied migrations are immutable (TRA-1077)
+
+`checksums.txt` records the SHA-256 of every file in this directory, and
+`TestMigrationChecksums` re-derives and diffs it on every CI run. No database
+is involved; it runs in milliseconds inside the existing backend test job.
+
+This exists because golang-migrate cannot catch the mistake itself. Its ledger
+is one `(version, dirty)` row with no file hashes, and `Up()` only opens files
+*after* the recorded version — so editing a migration that has already been
+applied is undetectable at runtime, and the new DDL silently never reaches any
+database that recorded that version. That is exactly how TRA-1069 happened.
+
+So:
+
+- **Adding a migration** — regenerate the manifest and commit it with the
+  migration:
+
+      just backend migrate-checksums
+
+  The diff should be new lines only.
+- **Changing something already applied** — you can't. Add a forward migration.
+  A changed hash on an existing line in a `checksums.txt` diff is a red flag,
+  not a formality: it means either an applied migration was edited, or the
+  regeneration was used to paper over one.
+- **Deleting a migration** — same answer. Removing a file desynchronizes every
+  database that already recorded that version; the test fails on the missing
+  entry.
+
+The guard is source-level. It stops the edit from reaching main; it cannot
+repair a database that already applied the pre-edit version.
+
 ## Required GUC
 
 `trakrf.generate_obfuscated_id()` reads `app.obfuscation_key` via

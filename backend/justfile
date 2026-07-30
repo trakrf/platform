@@ -464,6 +464,16 @@ migrate-create name:
     @echo "📝 Creating new migration: {{name}}"
     docker compose exec backend sh -c 'migrate create -ext sql -dir /app/migrations -seq {{name}}'
 
+# Record the current migration files in migrations/checksums.txt (TRA-1077)
+#
+# Run this when you ADD a migration. The resulting diff should show new lines
+# only — a changed hash on an existing line means an already-applied migration
+# was edited, which no database will ever re-read. Add a forward migration
+# instead of regenerating over it.
+migrate-checksums:
+    @go test ./migrations/ -run TestMigrationChecksums -update-checksums
+    @echo "✅ migrations/checksums.txt updated — review the diff"
+
 # Force migration to specific version (dangerous)
 #
 # Forcing stamps a version without applying anything, so it is also how a schema
