@@ -7,6 +7,144 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-30
+
+Eight weeks of `main` promoted to production in one release: 27 migrations
+(`000011` … `000038`), capability gating, webhooks, kits, asset dwell, and the
+Scan-tab rework. Prod moves from `v1.2.0` (schema version 10) to schema
+version 38.
+
+Nothing in this release is customer-visibly breaking on production. The
+capability surfaces introduced here are new — no existing org loses access to
+anything it had (see *Capability gating* below).
+
+### Upgrading
+
+**Databases created before this release hold their migration ledger in
+`public` and must move it before migrating** (TRA-1069). `./server migrate`
+detects this and refuses rather than replaying onto a populated schema, so the
+failure is safe — the old process keeps serving and the database is untouched.
+The fix is metadata-only and preserves both version and dirty flag:
+
+```sql
+ALTER TABLE public.schema_migrations SET SCHEMA trakrf;
+```
+
+Run it only *after* the new image is deployed and its migrate step has failed
+the preflight; relocating ahead of the new binary leaves the old code unable to
+find its ledger.
+
+Two post-migration steps are not automatic:
+
+- **Backfill the continuous aggregate.** `000027` creates `asset_scan_latest`
+  `WITH NO DATA`, so the asset-locations report reads empty until
+  `CALL refresh_continuous_aggregate('trakrf.asset_scan_latest', NULL, NULL);`
+  has run once.
+- **Grant capabilities.** There is no backfill — every organization, existing
+  and new, starts with zero grants.
+
+### Added
+
+- **Capability gating** (TRA-1024 → TRA-1025 → TRA-1026, TRA-1027, TRA-1065).
+  A `capabilities` vocabulary with per-org grants and an `org_capability_set()`
+  set-returning function (`000036`); `RequireCap` middleware and a
+  `capability_required` error type, with the caller's capability set on
+  `/users/me`; a frontend registry that drives nav and route gating from that
+  set and fails closed; and superadmin grant management via a whole-set
+  `PUT /orgs/{id}/capabilities`. `kitting` joins the vocabulary in `000038`.
+  Grants are opt-in per organization with **no backfill**. The gated surfaces
+  (`geofence` → Outputs and Geofence defaults, `mustering`, `kitting`) all ship
+  in this release, so a locked tile marks a feature arriving, not one removed.
+- **Webhooks v1** (TRA-1043, `000035`) — delta-only `asset.moved` delivery, one
+  webhook per organization, with signature verification.
+- **Kits** (TRA-1032, TRA-1033, `000029`/`000031`) — `kits`, `kit_members` and
+  `kit_verifications`, plus internal create/verify/lookup endpoints and client.
+  Gated behind `kitting`, which is granted to nobody by default, so Kits ships
+  switched off.
+- **Asset dwell on the asset-locations report** (TRA-1023, `000037`) —
+  `dwell_started_at` and `dwell_seconds`, measured as the observed span of a
+  stay rather than wall-clock age.
+- **`asset_scan_latest` continuous aggregate** (TRA-1022, `000026`–`000028`) —
+  materializes latest-scan-per-asset, replacing the `DISTINCT ON` query that
+  could crash under RLS. Ships with a refresh policy and, from `000037`, an
+  index for the dwell columns.
+- **Geofence and output devices** (TRA-901, TRA-903, TRA-906, TRA-991,
+  TRA-1028) — a real-time boundary geofence engine, alarm event log
+  (`000013`), output/actuator devices bound to logical locations
+  (`000014`/`000016`/`000032`/`000033`), Shelly Gen4 firing over MQTT for a
+  firewall-friendly path, and `Gpo.Set` on the reader mqtt-rpc contract.
+- **`trakrf` CLI** (TRA-307) — generated from the public OpenAPI spec.
+- **Scan tab** (TRA-1029, TRA-1031, TRA-1036, TRA-1038) — Inventory becomes
+  Scan, with a session-local barcode/RFID mode toggle, a persisted status
+  filter, and WYSIWYG save semantics: Save persists exactly the rows the view
+  shows, with reconciliation-only "missing" rows explicitly excluded.
+- **Signup hardening** (TRA-970, TRA-971, `000025`) — non-production signup is
+  gated, and organization contact details plus an owner are required.
+- **`readerd`** (TRA-1002, TRA-1015) — `/API` entity transport, golden CS463
+  device definitions, and self-bootstrap of the EventID when none is enabled.
+- **BLE ingestion** (TRA-926) — BLE advertisement model and iBeacon hex decoder.
+- **`tag_scans` compression and retention** (TRA-921, `000030`) — compress
+  after 2 days, drop after 7. `asset_scans` is deliberately left uncompressed:
+  TimescaleDB does not enforce RLS on compressed chunks.
+- **Migration integrity guard** (TRA-1077) — a checksum manifest fails the
+  build when an already-applied migration is edited. Adding a migration now
+  requires `just backend migrate-checksums`.
+- **Infra ops passthrough** (TRA-1053) — `just ops`, `just psql` and
+  `just logs` forward to the infra repo's justfile rather than reimplementing
+  kubectl.
+- Subscriptions schema (`000022`), muster events (`000024`), normalized tag
+  values for leading-zero/case-insensitive matching (`000017`), and
+  `list_active_scan_topics` (`000021`).
+
+### Changed
+
+- **Signed-out navigation is decided in one place** (TRA-1057). `ProtectedRoute`
+  is gone; `routePolicy.ts` resolves auth → entitlement → capability → role.
+- **One organization admin surface** (TRA-1058). `OrgModal`'s manage mode is
+  retired in favour of a single org-settings surface; superadmins edit, plain
+  admins see a read-only badge.
+- **The migration ledger is pinned to `trakrf.schema_migrations`** (TRA-1069)
+  rather than resolved through `CURRENT_SCHEMA()`, and the runner creates the
+  schema before golang-migrate looks for its ledger. See *Upgrading*.
+- `alarm_devices` is renamed to `output_devices` (`000016`), reflecting that the
+  devices are general-purpose outputs rather than alarms specifically.
+- Live Reads moves stats below the tag list and consolidates the header
+  (TRA-1010).
+- In-app Help names the surfaces the app actually has (TRA-1071), following the
+  tab renames.
+
+### Fixed
+
+- **Split migration histories are detected and refused** (TRA-1069) instead of
+  silently replaying onto a populated schema and reporting a clean version that
+  does not describe the schema on disk.
+- **Stale chunk 404s after every deploy** (TRA-1054) — nested lazy imports
+  bypassed `lazyWithRetry`, crashing Scan and Locate.
+- **`DISTINCT ON` over `asset_scans` 500ing under RLS** (TRA-1021) — the
+  TimescaleDB SkipScan optimization could abort the query; superseded by the
+  continuous aggregate above.
+- OAuth2 `client_id` and `client_secret` are shown in the API-key create modal
+  (TRA-1019); they are unrecoverable afterwards.
+- Geofence alarms no longer re-fire for tags already inside the zone when the
+  engine restarts (TRA-991).
+- Frontend test isolation and a vitest deadlock (TRA-1050, TRA-1052) — unit
+  tests no longer reach the network, and test files no longer leak state into
+  each other.
+
+### Removed
+
+- The Home and Barcode tabs (TRA-1029, TRA-1031). Legacy hash routes
+  (`#home`, `#inventory`, `#barcode`) redirect to `#scan`, so bookmarks survive.
+- `scan_points.is_boundary` (`000018`) and `scans.external_key` (`000020`).
+- The `tag_scan` trigger superseded by the ingestion path (`000012`).
+
+## [1.2.0] - 2026-05-30
+
+Entries below accumulated under `[Unreleased]` without ever being cut into
+per-release sections, and are grouped here under the release that carried them
+to production. Some of them shipped earlier, in [1.1.0] or [1.1.1] — that
+boundary is left unreconstructed rather than guessed at.
+
 ### Fixed
 - TRA-708 (BB32 follow-up, no spec shape change): two stale test fails on `main` that the TRA-707 cycle flagged as pre-existing were each broken by a different prior PR rather than always-pre-existing. (a) `TestPutAsset_MetadataNonObject_Returns400` broke when TRA-678 tightened `UpdateAssetRequest.Metadata` from `*any` to `*map[string]any` — `encoding/json` now intercepts a non-object body value as `*json.UnmarshalTypeError` before the TRA-619 runtime type-assert can run, and `RespondDecodeError` was routing non-time-target mismatches through the generic `bad_request` fallback (no `fields[]`). The public spec declares `metadata` as `type: object`, so a non-object is a schema violation, not a parse error — same shape as date-format mismatches. `RespondDecodeError` now has a map-target branch (mirroring the time-target branch) that emits `validation_error / invalid_value` keyed on the JSON-leaf field with message `"{field} must be a JSON object"`. (b) `TestPostAsset_MissingNameEmitsTooShort` and `TestPostLocation_MissingNameEmitsTooShort` broke when TRA-692 §1.2 introduced the presence overlay that promotes a collapsed `too_short` back to `required` for omitted length-bearing required fields; the tests still asserted the pre-TRA-692 `too_short` contract. Renamed to `MissingNameEmitsRequired` and updated to assert `code=required` with nil params. Docs (`errors.md`) already match the post-TRA-692 contract.
 
