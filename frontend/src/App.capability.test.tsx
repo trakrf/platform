@@ -210,9 +210,38 @@ describe('App capability route gating', () => {
     setCapabilities(['kitting']);
     window.location.hash = '#kits';
     useUIStore.setState({ activeTab: 'kits' } as never);
+    const t0 = Date.now();
     render(<App />);
 
-    await waitFor(() => expect(screen.getByTestId('kits-screen')).toBeInTheDocument());
+    const t93 = (globalThis as unknown as { __t93?: { scheduled: number; fired: number } }).__t93;
+    const t93start = { s: t93?.scheduled ?? 0, f: t93?.fired ?? 0 };
+    const snapshot = () => ({
+      elapsedMs: Date.now() - t0,
+      timersScheduledDuringWait: (t93?.scheduled ?? 0) - t93start.s,
+      timersFiredDuringWait: (t93?.fired ?? 0) - t93start.f,
+      content: document.querySelector('.flex-1.p-2')?.innerHTML.slice(0, 600) ?? '<no content node>',
+      capabilities: useOrgStore.getState().currentOrg?.capabilities ?? null,
+      orgId: useOrgStore.getState().currentOrg?.id ?? null,
+      isAuthenticated: useAuthStore.getState().isAuthenticated,
+      hasToken: !!useAuthStore.getState().token,
+      profile: useAuthStore.getState().profile,
+      activeTab: useUIStore.getState().activeTab,
+      hash: window.location.hash,
+      loadedKits: loaded.kits,
+      hasScanScreen: !!document.querySelector('[data-testid="scan-screen"]'),
+      hasUpsell: !!document.querySelector('[data-testid^="capability-upsell"]'),
+      containers: document.body.children.length,
+      bodyLen: document.body.innerHTML.length,
+    });
+
+    try {
+      await waitFor(() => expect(screen.getByTestId('kits-screen')).toBeInTheDocument());
+    } catch (e) {
+      console.error('[TRA-1093 PROBE] FAIL ' + JSON.stringify(snapshot()));
+      console.error('[TRA-1093 PROBE] BODY ' + document.body.innerHTML.slice(0, 4000));
+      throw e;
+    }
+    console.error('[TRA-1093 PROBE] OK ' + JSON.stringify(snapshot()));
     expect(useUIStore.getState().activeTab).toBe('kits');
   });
 });
