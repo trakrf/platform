@@ -15,6 +15,7 @@ const loaded = vi.hoisted(() => ({
   outputDevices: 0,
   geofenceDefaults: 0,
   kits: 0,
+  kitsFactoryAt: 0,
 }));
 
 vi.mock('@/components/mustering/MusteringScreen', () => {
@@ -31,6 +32,7 @@ vi.mock('@/components/OrgGeofenceDefaultsScreen', () => {
 });
 vi.mock('@/components/kits/KitsScreen', () => {
   loaded.kits += 1;
+  loaded.kitsFactoryAt = Date.now(); // TRA-1093 probe
   return { default: () => <div data-testid="kits-screen" /> };
 });
 vi.mock('@/lib/openreplay', async (importOriginal) => ({
@@ -228,19 +230,37 @@ describe('App capability route gating', () => {
       activeTab: useUIStore.getState().activeTab,
       hash: window.location.hash,
       loadedKits: loaded.kits,
+      kitsFactoryOffsetMs: loaded.kitsFactoryAt ? loaded.kitsFactoryAt - t0 : null,
       hasScanScreen: !!document.querySelector('[data-testid="scan-screen"]'),
       hasUpsell: !!document.querySelector('[data-testid^="capability-upsell"]'),
       containers: document.body.children.length,
       bodyLen: document.body.innerHTML.length,
     });
 
+    // TRA-1093 probe: record how the tab-content region evolves during the wait,
+    // so a failure distinguishes "gate resolved elsewhere" from "lazy chunk not
+    // committed yet".
+    const timeline: string[] = [];
+    let last = '';
+    const sampler = setInterval(() => {
+      const c = document.querySelector('.flex-1.p-2')?.innerHTML.slice(0, 120) ?? '<none>';
+      if (c !== last) {
+        timeline.push(`+${Date.now() - t0}ms ${c}`);
+        last = c;
+      }
+    }, 5);
+
     try {
       await waitFor(() => expect(screen.getByTestId('kits-screen')).toBeInTheDocument());
     } catch (e) {
+      clearInterval(sampler);
+      console.error('[TRA-1093 PROBE] TIMELINE ' + JSON.stringify(timeline));
       console.error('[TRA-1093 PROBE] FAIL ' + JSON.stringify(snapshot()));
       console.error('[TRA-1093 PROBE] BODY ' + document.body.innerHTML.slice(0, 4000));
       throw e;
     }
+    clearInterval(sampler);
+    console.error('[TRA-1093 PROBE] TIMELINE ' + JSON.stringify(timeline));
     console.error('[TRA-1093 PROBE] OK ' + JSON.stringify(snapshot()));
     expect(useUIStore.getState().activeTab).toBe('kits');
   });
