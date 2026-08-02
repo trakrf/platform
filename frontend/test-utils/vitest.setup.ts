@@ -83,31 +83,6 @@ beforeEach(() => {
   cleanup();
 });
 
-/*
- * TRA-1093 PROBE (temporary): quantify event-loop pressure from leaked async
- * chains. Counts every setTimeout scheduled and fired process-wide so a test can
- * report the rate during its own wait window. Remove once the ticket lands.
- */
-// Install exactly once per process: the setup file is evaluated per test file,
-// and re-wrapping would nest 168 layers deep and become its own slowdown.
-const g = globalThis as unknown as { __t93?: { scheduled: number; fired: number } };
-if (!g.__t93) {
-  const t93 = { scheduled: 0, fired: 0 };
-  g.__t93 = t93;
-  const nativeSetTimeout = globalThis.setTimeout;
-  globalThis.setTimeout = ((fn: (...a: unknown[]) => void, ms?: number, ...rest: unknown[]) => {
-    t93.scheduled += 1;
-    return nativeSetTimeout(
-      (...args: unknown[]) => {
-        t93.fired += 1;
-        return typeof fn === 'function' ? fn(...args) : fn;
-      },
-      ms,
-      ...rest
-    );
-  }) as typeof globalThis.setTimeout;
-}
-
 const blockedMessage = (url: string) =>
   `[vitest] Blocked real network request to ${url}. Unit tests must not hit the ` +
   `network — mock the API module with vi.mock(), or stub fetch for this test. ` +

@@ -15,7 +15,6 @@ const loaded = vi.hoisted(() => ({
   outputDevices: 0,
   geofenceDefaults: 0,
   kits: 0,
-  kitsFactoryAt: 0,
 }));
 
 vi.mock('@/components/mustering/MusteringScreen', () => {
@@ -32,7 +31,6 @@ vi.mock('@/components/OrgGeofenceDefaultsScreen', () => {
 });
 vi.mock('@/components/kits/KitsScreen', () => {
   loaded.kits += 1;
-  loaded.kitsFactoryAt = Date.now(); // TRA-1093 probe
   return { default: () => <div data-testid="kits-screen" /> };
 });
 vi.mock('@/lib/openreplay', async (importOriginal) => ({
@@ -212,69 +210,30 @@ describe('App capability route gating', () => {
     setCapabilities(['kitting']);
     window.location.hash = '#kits';
     useUIStore.setState({ activeTab: 'kits' } as never);
-    const t0 = Date.now();
     render(<App />);
 
-    const t93 = (globalThis as unknown as { __t93?: { scheduled: number; fired: number } }).__t93;
-    const t93start = { s: t93?.scheduled ?? 0, f: t93?.fired ?? 0 };
-    const snapshot = () => ({
-      elapsedMs: Date.now() - t0,
-      timersScheduledDuringWait: (t93?.scheduled ?? 0) - t93start.s,
-      timersFiredDuringWait: (t93?.fired ?? 0) - t93start.f,
-      content: document.querySelector('.flex-1.p-2')?.innerHTML.slice(0, 600) ?? '<no content node>',
-      capabilities: useOrgStore.getState().currentOrg?.capabilities ?? null,
-      orgId: useOrgStore.getState().currentOrg?.id ?? null,
-      isAuthenticated: useAuthStore.getState().isAuthenticated,
-      hasToken: !!useAuthStore.getState().token,
-      profile: useAuthStore.getState().profile,
-      activeTab: useUIStore.getState().activeTab,
-      hash: window.location.hash,
-      loadedKits: loaded.kits,
-      kitsFactoryOffsetMs: loaded.kitsFactoryAt ? loaded.kitsFactoryAt - t0 : null,
-      hasScanScreen: !!document.querySelector('[data-testid="scan-screen"]'),
-      hasUpsell: !!document.querySelector('[data-testid^="capability-upsell"]'),
-      containers: document.body.children.length,
-      bodyLen: document.body.innerHTML.length,
-    });
-
-    // TRA-1093 probe: record how the tab-content region evolves during the wait,
-    // so a failure distinguishes "gate resolved elsewhere" from "lazy chunk not
-    // committed yet".
-    const timeline: string[] = [];
-    let last = '';
-    const sampler = setInterval(() => {
-      const c = document.querySelector('.flex-1.p-2')?.innerHTML.slice(0, 120) ?? '<none>';
-      if (c !== last) {
-        timeline.push(`+${Date.now() - t0}ms ${c}`);
-        last = c;
-      }
-    }, 5);
-
-    // TRA-1093 probe: waiting far past the 1000ms default turns every CI run,
-    // not just a red one, into a full-information sample. If the screen appears
-    // at, say, 1400ms then the default budget was simply too tight (timing). If
-    // it never appears in 15s then the route resolved elsewhere (state).
-    let appeared = false;
+    // TRA-1093: this assertion went intermittently red in CI for months, and a
+    // bare "Unable to find an element" is not enough to act on — three tickets
+    // were spent guessing at it. Dump what the route gate actually reads, plus
+    // whether the lazy module was ever requested. Correct capabilities with
+    // `lazyModuleRequested` true means the route resolved and only the render
+    // budget was missed; anything else means the gate sent the route elsewhere.
     try {
-      await waitFor(() => expect(screen.getByTestId('kits-screen')).toBeInTheDocument(), {
-        timeout: 15000,
-        interval: 10,
-      });
-      appeared = true;
-    } catch {
-      appeared = false;
+      await waitFor(() => expect(screen.getByTestId('kits-screen')).toBeInTheDocument());
+    } catch (error) {
+      console.error(
+        '[TRA-1093] kits-screen never rendered: ' +
+          JSON.stringify({
+            capabilities: useOrgStore.getState().currentOrg?.capabilities ?? null,
+            isAuthenticated: useAuthStore.getState().isAuthenticated,
+            activeTab: useUIStore.getState().activeTab,
+            hash: window.location.hash,
+            lazyModuleRequested: loaded.kits === 1,
+            content: document.querySelector('.flex-1.p-2')?.innerHTML.slice(0, 300) ?? '<none>',
+          })
+      );
+      throw error;
     }
-    clearInterval(sampler);
-    console.error(
-      '[TRA-1093 PROBE] RESULT ' +
-        JSON.stringify({ appeared, wouldFailAtDefaultBudget: !appeared || Date.now() - t0 > 1000, ...snapshot() })
-    );
-    console.error('[TRA-1093 PROBE] TIMELINE ' + JSON.stringify(timeline));
-    if (!appeared) {
-      console.error('[TRA-1093 PROBE] BODY ' + document.body.innerHTML.slice(0, 4000));
-    }
-
-    expect(appeared).toBe(true);
     expect(useUIStore.getState().activeTab).toBe('kits');
   });
 });
