@@ -206,6 +206,68 @@ describe('TagStore - Auth Guard for Lookup', () => {
   });
 });
 
+describe('TagStore - failed lookups do not self-retry (TRA-1093)', () => {
+  beforeEach(() => {
+    useTagStore.setState({
+      tags: [],
+      _lookupQueue: new Set<string>(),
+      _isLookupInProgress: false,
+      _lookupTimer: null,
+    });
+    useAuthStore.setState({ isAuthenticated: true });
+    vi.clearAllMocks();
+  });
+
+  /**
+   * The error path re-queues the failed batch, and the `finally` block used to
+   * immediately re-flush whenever the queue was non-empty. Together those form a
+   * closed loop with no backoff and no cap: ~930 attempts/second for as long as
+   * the API stays unhealthy.
+   *
+   * In the browser that is a self-inflicted request storm during any backend
+   * outage. In the unit suite the loop outlives the test file that started it —
+   * `singleFork: true` keeps the process alive across all 168 files — and its
+   * console/RPC traffic starves later files' event loops. That is what made
+   * `App.capability.test.tsx` miss its 1000ms `waitFor` budget intermittently.
+   */
+  it('stops after one failed attempt instead of re-flushing forever', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(ensureOrgContext).mockRejectedValue(new Error('No organization context.'));
+
+    useTagStore.getState()._lookupQueue.add('EPC001');
+    await useTagStore.getState()._flushLookupQueue();
+
+    expect(ensureOrgContext).toHaveBeenCalledTimes(1);
+
+    // Give any self-scheduled retry a generous window to fire. Before the fix
+    // this window held hundreds of attempts.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    expect(ensureOrgContext).toHaveBeenCalledTimes(1);
+    // The batch is still queued, so a later scan or login can retry it.
+    expect(useTagStore.getState()._lookupQueue.has('EPC001')).toBe(true);
+  });
+
+  it('still re-flushes when another caller queues work mid-flight', async () => {
+    vi.mocked(ensureOrgContext).mockResolvedValue(42);
+    let call = 0;
+    vi.mocked(lookupApi.byTags).mockImplementation(async () => {
+      // On the first flush only: work arrives while that flush is in progress —
+      // the race the immediate re-flush exists for. It must still be picked up.
+      if (++call === 1) useTagStore.getState()._lookupQueue.add('EPC002');
+      return { data: { data: {} } } as never;
+    });
+
+    useTagStore.getState()._lookupQueue.add('EPC001');
+    await useTagStore.getState()._flushLookupQueue();
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(lookupApi.byTags).toHaveBeenCalledTimes(2);
+    expect(useTagStore.getState()._lookupQueue.size).toBe(0);
+  });
+});
+
 describe('TagStore - Tag Classification (TRA-312)', () => {
   beforeEach(() => {
     // Clear tags and location cache

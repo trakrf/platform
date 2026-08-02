@@ -413,6 +413,8 @@ export const useTagStore = create<TagState>()(
       _lookupTimer: null,
     });
 
+    let requeuedAfterError = false;
+
     try {
       await ensureOrgContext();
       const response = await lookupApi.byTags({ type: 'rfid', values: epcs });
@@ -458,14 +460,25 @@ export const useTagStore = create<TagState>()(
       }
     } catch (error) {
       console.error('[TagStore] _flushLookupQueue: API error', error);
-      // On error, re-queue the EPCs for retry on next batch
+      // On error, re-queue the EPCs for retry on next batch — the next scan,
+      // the next login, or the next explicit refreshAssetEnrichment().
       epcs.forEach(epc => get()._lookupQueue.add(epc));
+      requeuedAfterError = true;
     } finally {
       set({ _isLookupInProgress: false });
 
-      // Check if items were added to queue while we were processing
-      // This handles the race condition where multiple callers try to flush
-      if (get()._lookupQueue.size > 0) {
+      // Check if items were added to queue while we were processing.
+      // This handles the race condition where multiple callers try to flush.
+      //
+      // TRA-1093: deliberately NOT rescheduled when the queue is only non-empty
+      // because *we* just put the failed batch back. Pairing the error re-queue
+      // with this immediate re-flush is a closed loop: the batch fails, gets
+      // re-queued, is immediately retried, fails again. Measured at ~930
+      // iterations/second with no backoff and no cap, running for as long as the
+      // API stays unhealthy — a self-inflicted request storm in production, and
+      // in the unit suite a chain that outlives its test file and starves later
+      // files' event loops (that was the CI flake this ticket was filed for).
+      if (!requeuedAfterError && get()._lookupQueue.size > 0) {
         // Schedule another flush (use setTimeout to avoid stack overflow)
         setTimeout(() => get()._flushLookupQueue(), 0);
       }

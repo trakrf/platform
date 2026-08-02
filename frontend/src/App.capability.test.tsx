@@ -212,7 +212,28 @@ describe('App capability route gating', () => {
     useUIStore.setState({ activeTab: 'kits' } as never);
     render(<App />);
 
-    await waitFor(() => expect(screen.getByTestId('kits-screen')).toBeInTheDocument());
+    // TRA-1093: this assertion went intermittently red in CI for months, and a
+    // bare "Unable to find an element" is not enough to act on — three tickets
+    // were spent guessing at it. Dump what the route gate actually reads, plus
+    // whether the lazy module was ever requested. Correct capabilities with
+    // `lazyModuleRequested` true means the route resolved and only the render
+    // budget was missed; anything else means the gate sent the route elsewhere.
+    try {
+      await waitFor(() => expect(screen.getByTestId('kits-screen')).toBeInTheDocument());
+    } catch (error) {
+      console.error(
+        '[TRA-1093] kits-screen never rendered: ' +
+          JSON.stringify({
+            capabilities: useOrgStore.getState().currentOrg?.capabilities ?? null,
+            isAuthenticated: useAuthStore.getState().isAuthenticated,
+            activeTab: useUIStore.getState().activeTab,
+            hash: window.location.hash,
+            lazyModuleRequested: loaded.kits === 1,
+            content: document.querySelector('.flex-1.p-2')?.innerHTML.slice(0, 300) ?? '<none>',
+          })
+      );
+      throw error;
+    }
     expect(useUIStore.getState().activeTab).toBe('kits');
   });
 });
