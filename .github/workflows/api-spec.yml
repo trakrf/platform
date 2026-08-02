@@ -9,15 +9,22 @@ name: API Spec
 # Mirrors the docker-build.yml pattern: trigger on every PR, then detect
 # changes via dorny/paths-filter and short-circuit to a fast no-op when the
 # heavy work is unnecessary.
-
+#
+# `preview` is included for the same reason as lint.yml (TRA-1094): it is the
+# composition of every open PR, and spec drift is a composition failure this
+# workflow is uniquely placed to catch. Two PRs can each regenerate the spec
+# correctly against their own base and still produce a merged spec matching
+# neither committed copy. Push events skip the paths-filter gate below, so
+# every preview push runs the full regenerate-and-diff.
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, preview]
 
 concurrency:
   group: api-spec-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # See lint.yml: superseded preview compositions are dead, main runs are not.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/preview' }}
 
 permissions:
   contents: read
