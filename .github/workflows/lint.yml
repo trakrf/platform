@@ -1,13 +1,22 @@
 name: Lint and Test
 
+# `preview` is the N-way composition of every open non-draft PR, rebuilt by
+# sync-preview.yml on each PR open/sync/close. Running the suite against it is
+# what replaces the "require branches to be up to date" rule (TRA-1094): rather
+# than re-testing each PR pairwise against a main that moves out from under it,
+# we test all open PRs merged together, continuously. Composition breakage
+# surfaces on preview instead of after the merge.
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, preview]
 
 concurrency:
   group: lint-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Preview is force-rewritten on every PR event, so a superseded run is
+  # testing a composition that no longer exists — cancel it. Main runs are
+  # never cancelled: each one is the authoritative result for that commit.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/preview' }}
 
 permissions:
   contents: read
