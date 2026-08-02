@@ -250,18 +250,31 @@ describe('App capability route gating', () => {
       }
     }, 5);
 
+    // TRA-1093 probe: waiting far past the 1000ms default turns every CI run,
+    // not just a red one, into a full-information sample. If the screen appears
+    // at, say, 1400ms then the default budget was simply too tight (timing). If
+    // it never appears in 15s then the route resolved elsewhere (state).
+    let appeared = false;
     try {
-      await waitFor(() => expect(screen.getByTestId('kits-screen')).toBeInTheDocument());
-    } catch (e) {
-      clearInterval(sampler);
-      console.error('[TRA-1093 PROBE] TIMELINE ' + JSON.stringify(timeline));
-      console.error('[TRA-1093 PROBE] FAIL ' + JSON.stringify(snapshot()));
-      console.error('[TRA-1093 PROBE] BODY ' + document.body.innerHTML.slice(0, 4000));
-      throw e;
+      await waitFor(() => expect(screen.getByTestId('kits-screen')).toBeInTheDocument(), {
+        timeout: 15000,
+        interval: 10,
+      });
+      appeared = true;
+    } catch {
+      appeared = false;
     }
     clearInterval(sampler);
+    console.error(
+      '[TRA-1093 PROBE] RESULT ' +
+        JSON.stringify({ appeared, wouldFailAtDefaultBudget: !appeared || Date.now() - t0 > 1000, ...snapshot() })
+    );
     console.error('[TRA-1093 PROBE] TIMELINE ' + JSON.stringify(timeline));
-    console.error('[TRA-1093 PROBE] OK ' + JSON.stringify(snapshot()));
+    if (!appeared) {
+      console.error('[TRA-1093 PROBE] BODY ' + document.body.innerHTML.slice(0, 4000));
+    }
+
+    expect(appeared).toBe(true);
     expect(useUIStore.getState().activeTab).toBe('kits');
   });
 });
