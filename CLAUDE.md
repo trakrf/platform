@@ -4,38 +4,38 @@
 - **Backend**: `go mod`, `go get`
 - **Frontend**: `pnpm` exclusively (`pnpm dlx` instead of `npx`)
 
-## Working Directory
-- **Always run commands from the project root** — use `just frontend <cmd>` / `just backend <cmd>` delegation rather than `cd`-ing into subdirectories
-
 ## Task Runner (Just)
-- Root delegates: `just frontend <cmd>`, `just backend <cmd>`
-- Combined: `just lint`, `just test`, `just validate` runs both workspaces
-- Workspace justfiles have `set fallback := true` for root recipes
-- From workspace dirs, unqualified commands run local recipes
+- **Run everything from the project root** — delegate with `just <workspace> <cmd>` rather than `cd`-ing in
+- Workspaces: `frontend`, `backend`, `cli`, `database` (aliases `fe`, `be`, `db`)
+- Combined across all four: `just lint`, `just test`, `just build`, `just validate`
+- Every workspace justfile sets `fallback := true`, so root recipes still resolve from inside one
 
 ## Cluster Ops
-- `just ops <recipe> [args]` forwards to the trakrf/infra justfile — `just ops` lists what's available
-- Shortcuts for the common ones: `just gcp-auth`, `just psql preview`, `just logs prod 1h`
-- Cluster/namespace/pod knowledge stays in infra; never reimplement a kubectl incantation here
-- Infra checkout is `TRAKRF_INFRA_DIR`, else a sibling `infra/` — set it in `.env.local` if yours is elsewhere
+- `just ops <recipe> [args]` forwards to the trakrf/infra justfile; bare `just ops` lists what's available
+- Shortcuts: `just gcp-auth`, `just psql preview`, `just logs prod 1h`
+- Cluster/namespace/pod knowledge stays in infra — never reimplement a kubectl incantation here
+- Infra checkout is `TRAKRF_INFRA_DIR`, else a sibling `infra/`; set it in `.env.local` if yours is elsewhere
 
 ## Git Workflow
 - **Never push directly to main** — all changes via PR
-- Branch naming: `feature/add-xyz`, `fix/broken-xyz`, `docs/update-xyz`
+- **Never squash merge** — `gh pr merge --merge`
+- Branch naming: `<type>/tra-NNNN-slug`, e.g. `feat/tra-1065-kitting-capability`, `fix/broken-xyz`, `chore/...`, `docs/...`
 - Conventional commits: `feat:`, `fix:`, `docs:`, `chore:`
 - Prefer incremental commits over amending
+
+## Migrations
+- Adding a migration **requires** `just backend migrate-checksums` — CI fails without it, and applied migrations are immutable
+
+## Testing
+- Playwright e2e **never runs in CI** — green CI does not mean e2e passes; run it against preview yourself
 
 ## Preview Deployments
 - Opening/updating a PR auto-deploys to `https://app.preview.trakrf.id`
 - See `.github/workflows/sync-preview.yml` for details
 
 ## Stack
-- Go backend, React/TypeScript frontend, TimescaleDB
-- Read `PLANNING.md` for architecture and project context
+- Go backend, React/TypeScript frontend, TimescaleDB, Go CLI, MQTT ingestion (`mqtt-rpc/`)
+- Architecture context: `README.md`, `docs/architecture-decisions.md`, `docs/adr/`, `docs/logical-schema.md`
 
 ## Worktrees
-- Git worktrees live in `.claude/worktrees/` — where the native `EnterWorktree` tool writes and where `claude -w` resume looks. The superpowers worktree skill defers to the native tool. Covered by the `.claude/` gitignore; no symlink.
-
-## Verification
-- Run relevant tests before claiming completion
-- Report actual test results — no false optimism
+- Git worktrees live in `.claude/worktrees/` (gitignored) — where the native `EnterWorktree` tool writes
