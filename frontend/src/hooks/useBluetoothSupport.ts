@@ -77,7 +77,9 @@ const BLUEFY_URL = 'https://apps.apple.com/us/app/bluefy-web-ble-browser/id14928
  *              disabled" — so "no banner" proves nothing on its own.
  *   - linux  — the flag and BlueZ >= 5.41 caveats are repeated from the ticket,
  *              not measured. Version-dependent.
- *   - ios    — Bluefy is free (App Store listing checked 2026-08-04: Free, no
+ *   - ios    — verified on an iPad, 2026-08-04. Safari raises the banner with
+ *              this row's copy, and the bluefy:// link opens the page in Bluefy.
+ *              Bluefy is free (App Store listing checked the same day: Free, no
  *              in-app purchases).
  *
  * WebBLE (apps.apple.com/us/app/webble/id1193531073) is the other
