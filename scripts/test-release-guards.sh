@@ -168,6 +168,125 @@ out=$(cd "$fixture" && "$resolve" no-such-ref 2>&1) && status=0 || status=$?
 expect_status "refuses an unresolvable ref" 1 "$status"
 expect "names the unresolvable ref" "no-such-ref" "$out"
 
+# ---------------------------------------------------------------------------
+echo
+echo "extract-image-version.sh"
+# ---------------------------------------------------------------------------
+extract="$repo_root/scripts/extract-image-version.sh"
+
+# Shapes below are trimmed from real `docker buildx imagetools inspect
+# --format '{{ json .Image }}'` output, verified 2026-08-04.
+
+# What our published images actually look like: amd64 + arm64 merged (TRA-909).
+multiarch='{
+  "linux/amd64": {"created":"2026-08-04T00:00:00Z","architecture":"amd64","os":"linux",
+    "config":{"Labels":{"id.trakrf.app-version":"v1.3.0","org.opencontainers.image.version":"sha-aa9822b"}}},
+  "linux/arm64": {"created":"2026-08-04T00:00:00Z","architecture":"arm64","os":"linux",
+    "config":{"Labels":{"id.trakrf.app-version":"v1.3.0","org.opencontainers.image.version":"sha-aa9822b"}}}
+}'
+out=$(printf '%s' "$multiarch" | "$extract" 2>&1)
+expect "reads the label from a multi-arch manifest" "v1.3.0" "$out"
+if [ "$out" = "v1.3.0" ]; then
+    echo "  ✓ multi-arch result is exactly the version"
+    pass=$((pass + 1))
+else
+    echo "  ✗ multi-arch result is exactly the version (got '$out')"
+    fail=$((fail + 1))
+fi
+
+# Does not confuse itself with metadata-action's key, which holds the image tag.
+if [ "$out" = "sha-aa9822b" ]; then
+    echo "  ✗ must not read org.opencontainers.image.version"
+    fail=$((fail + 1))
+else
+    echo "  ✓ does not read org.opencontainers.image.version"
+    pass=$((pass + 1))
+fi
+
+# The single-platform shape, for robustness.
+single='{"created":"2026-08-04T00:00:00Z","architecture":"amd64","os":"linux",
+  "config":{"Labels":{"id.trakrf.app-version":"v1.3.0"}}}'
+out=$(printf '%s' "$single" | "$extract" 2>&1)
+expect "reads the label from a single-platform image" "v1.3.0" "$out"
+
+# An image built before this change has no such label — must come back empty so
+# assert-release-version.sh fails closed rather than promoting it.
+nolabel='{
+  "linux/amd64": {"config":{"Labels":{"org.opencontainers.image.version":"sha-aa9822b"}}},
+  "linux/arm64": {"config":{"Labels":{"org.opencontainers.image.version":"sha-aa9822b"}}}
+}'
+out=$(printf '%s' "$nolabel" | "$extract" 2>&1)
+if [ -z "$out" ]; then
+    echo "  ✓ returns empty when the label is absent"
+    pass=$((pass + 1))
+else
+    echo "  ✗ returns empty when the label is absent (got '$out')"
+    fail=$((fail + 1))
+fi
+
+# No Labels map at all.
+nolabels='{"linux/amd64": {"config":{}}, "linux/arm64": {"config":{}}}'
+out=$(printf '%s' "$nolabels" | "$extract" 2>&1)
+if [ -z "$out" ]; then
+    echo "  ✓ returns empty when there are no labels at all"
+    pass=$((pass + 1))
+else
+    echo "  ✗ returns empty when there are no labels at all (got '$out')"
+    fail=$((fail + 1))
+fi
+
+# Arches that disagree mean the version is not a fact about the image.
+disagree='{
+  "linux/amd64": {"config":{"Labels":{"id.trakrf.app-version":"v1.3.0"}}},
+  "linux/arm64": {"config":{"Labels":{"id.trakrf.app-version":"v1.2.0"}}}
+}'
+out=$(printf '%s' "$disagree" | "$extract" 2>&1)
+if [ -z "$out" ]; then
+    echo "  ✓ returns empty when platforms disagree"
+    pass=$((pass + 1))
+else
+    echo "  ✗ returns empty when platforms disagree (got '$out')"
+    fail=$((fail + 1))
+fi
+
+# One arch labelled and one not is also a disagreement.
+partial='{
+  "linux/amd64": {"config":{"Labels":{"id.trakrf.app-version":"v1.3.0"}}},
+  "linux/arm64": {"config":{"Labels":{}}}
+}'
+out=$(printf '%s' "$partial" | "$extract" 2>&1)
+if [ -z "$out" ]; then
+    echo "  ✓ returns empty when only one platform is labelled"
+    pass=$((pass + 1))
+else
+    echo "  ✗ returns empty when only one platform is labelled (got '$out')"
+    fail=$((fail + 1))
+fi
+
+# End to end, mirroring exactly what promote-prod.yml does: capture into a
+# variable, then pass it quoted so an empty value stays one empty argument.
+version=$(printf '%s' "$multiarch" | "$extract")
+"$assert" "$version" >/dev/null 2>&1 && status=0 || status=$?
+expect_status "chained extract -> assert accepts a released image" 0 "$status"
+
+version=$(printf '%s' "$nolabel" | "$extract")
+"$assert" "$version" >/dev/null 2>&1 && status=0 || status=$?
+expect_status "chained extract -> assert refuses an unlabelled image" 1 "$status"
+
+version=$(printf '%s' "$disagree" | "$extract")
+"$assert" "$version" >/dev/null 2>&1 && status=0 || status=$?
+expect_status "chained extract -> assert refuses a disagreeing manifest" 1 "$status"
+
+# A dev-shaped version reaching the label is still refused end to end — this is
+# the v1.3.0 near-miss in full.
+devbuild='{
+  "linux/amd64": {"config":{"Labels":{"id.trakrf.app-version":"v1.2.0-559-gaa9822bb"}}},
+  "linux/arm64": {"config":{"Labels":{"id.trakrf.app-version":"v1.2.0-559-gaa9822bb"}}}
+}'
+version=$(printf '%s' "$devbuild" | "$extract")
+"$assert" "$version" >/dev/null 2>&1 && status=0 || status=$?
+expect_status "chained extract -> assert refuses a merge-then-tag image" 1 "$status"
+
 echo
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]
