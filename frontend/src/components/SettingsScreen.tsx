@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useDeviceStore, useSettingsStore, useTagStore, useUIStore } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
 import { useBluetoothSupport } from '@/hooks/useBluetoothSupport';
+import { connectErrorMessage } from '@/hooks/connectErrorMessage';
 import { Bluetooth, Zap, Settings2, Info, RefreshCw, ChevronDown, ChevronUp, Smartphone, WifiOff, Battery, Bug } from 'lucide-react';
 import { ConnectIcon } from '@/components/icons/ConnectIcon';
 import toast from 'react-hot-toast';
@@ -90,14 +91,7 @@ export default function SettingsScreen() {
         await disconnect();
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '';
-      if (errorMessage.includes('timeout')) {
-        toast.error('Connection timed out. Please try again.');
-      } else if (errorMessage.includes('disconnected')) {
-        toast.error('Reader disconnected unexpectedly');
-      } else {
-        toast.error('Failed to connect to reader');
-      }
+      toast.error(connectErrorMessage(error));
       console.error('Connection error:', error);
     }
   };
