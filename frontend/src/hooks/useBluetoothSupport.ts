@@ -60,7 +60,15 @@ const BLUEFY_URL = 'https://apps.apple.com/us/app/bluefy-web-ble-browser/id14928
  * apart the way they had before TRA-1078.
  *
  * Verification status as of 2026-08-04:
- *   - windows / android — all Chromium, high confidence.
+ *   - android — platform detection confirmed on a Pixel 8 Pro: Firefox for
+ *              Android (the one Android browser with no Web Bluetooth) raises
+ *              the banner with this row's copy, so `userAgentData.platform`
+ *              resolves to android on real hardware. The browser list itself is
+ *              from MDN browser-compat-data: Chrome Android is an explicit 56+,
+ *              while Edge / Opera / Samsung Internet are `mirror` entries —
+ *              inherited from upstream Chromium rather than independently
+ *              measured. Chrome leads the list because it is the verified one.
+ *   - windows — all Chromium, high confidence.
  *   - macos  — Edge and Opera on macOS are Chromium and are expected to work,
  *              but this was NOT confirmed on real hardware. If a check on a Mac
  *              says otherwise, narrow this one string.
