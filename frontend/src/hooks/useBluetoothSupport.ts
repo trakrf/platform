@@ -68,7 +68,12 @@ const BLUEFY_URL = 'https://apps.apple.com/us/app/bluefy-web-ble-browser/id14928
  *              while Edge / Opera / Samsung Internet are `mirror` entries —
  *              inherited from upstream Chromium rather than independently
  *              measured. Chrome leads the list because it is the verified one.
- *   - windows — all Chromium, high confidence.
+ *   - windows — NOT verified, and not verifiable here: the only Windows box has
+ *              no working Bluetooth driver since a hardware swap. The list is
+ *              the same Chromium browsers that were confirmed on macOS by real
+ *              connects, and Windows has no per-app Bluetooth permission model
+ *              to trip over, so the risk is low — but it is inferred, not
+ *              measured. Say so rather than letting it read as checked.
  *   - macos  — fully verified on a MacBook Pro, 2026-08-04. Safari and Firefox
  *              raise the banner with this row's copy; Chrome, Edge and Opera
  *              each connected to a CS108 and read tags. The bar was a real
