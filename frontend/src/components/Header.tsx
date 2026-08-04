@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useDeviceStore, useUIStore, useAuthStore } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
+import { useBluetoothSupport } from '@/hooks/useBluetoothSupport';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { Battery, BatteryLow, BatteryMedium, BatteryFull, Plug, Unplug, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -92,7 +93,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
   const mockBatteryPercentage = MOCK_TESTING ? 75 : batteryPercentage;
   const mockReaderState = MOCK_TESTING ? ReaderState.CONNECTED : readerState;
 
-  const [isBrowserSupported, setIsBrowserSupported] = useState(true);
+  const { supported: isBrowserSupported } = useBluetoothSupport();
   const [isDebounced, setIsDebounced] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [isBlinking, setIsBlinking] = useState(false);
@@ -138,23 +139,6 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
       console.error('Disconnect error:', error);
     }
   };
-
-  useEffect(() => {
-    const checkSupport = () => {
-      const hasBluetoothAPI = typeof navigator !== 'undefined' && !!navigator.bluetooth;
-      const isMocked = typeof window !== 'undefined' && !!window.__webBluetoothBridged;
-      setIsBrowserSupported(hasBluetoothAPI || isMocked);
-    };
-
-    checkSupport();
-
-    const handleMockReady = () => checkSupport();
-    window.addEventListener('webBluetoothMockReady', handleMockReady);
-
-    return () => {
-      window.removeEventListener('webBluetoothMockReady', handleMockReady);
-    };
-  }, []);
 
   useEffect(() => {
     if (readerState === ReaderState.DISCONNECTED && isBrowserSupported) {

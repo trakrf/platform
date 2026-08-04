@@ -33,7 +33,6 @@ export default function InventoryScreen() {
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [selectedExportFormat, setSelectedExportFormat] = useState<ExportFormat>('csv');
-  const [isBrowserSupported, setIsBrowserSupported] = useState(true);
   const [showClearPulse, setShowClearPulse] = useState(false);
 
 
@@ -374,16 +373,10 @@ export default function InventoryScreen() {
     fileInputRef.current?.click();
   }, [isAuthenticated, fileInputRef]);
 
-  useEffect(() => {
-    const hasBluetoothAPI = typeof navigator !== 'undefined' && !!navigator.bluetooth;
-    const isMocked = typeof window !== 'undefined' && !!window.__webBluetoothBridged;
-    setIsBrowserSupported(hasBluetoothAPI || isMocked);
-  }, []);
-
   return (
     <div className="h-full flex flex-col p-2 md:p-3 space-y-2">
       <ConfigurationSpinner readerState={readerState} mode={scanTabMode === 'barcode' ? 'Barcode' : 'RFID'} />
-      <BrowserSupportBanner isSupported={isBrowserSupported} readerState={readerState} />
+      <BrowserSupportBanner />
 
       <input
         ref={fileInputRef}

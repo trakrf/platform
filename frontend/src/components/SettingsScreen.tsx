@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDeviceStore, useSettingsStore, useTagStore, useUIStore } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
+import { useBluetoothSupport } from '@/hooks/useBluetoothSupport';
 import { Bluetooth, Zap, Settings2, Info, RefreshCw, ChevronDown, ChevronUp, Smartphone, WifiOff, Battery, Bug } from 'lucide-react';
 import { ConnectIcon } from '@/components/icons/ConnectIcon';
 import toast from 'react-hot-toast';
@@ -19,7 +20,7 @@ export default function SettingsScreen() {
   
   const [rfPower, setLocalRfPower] = useState(useSettingsStore.getState().rfid?.transmitPower ?? 30);
   const [isAdvancedExpanded, setIsAdvancedExpanded] = useState(false);
-  const [isBrowserSupported, setIsBrowserSupported] = useState(true);
+  const { supported: isBrowserSupported } = useBluetoothSupport();
   const [isDebounced, setIsDebounced] = useState(false);
   const [isBlinking, setIsBlinking] = useState(false);
   const [selectedSession, setSelectedSession] = useState('S1');
@@ -55,24 +56,6 @@ export default function SettingsScreen() {
     return () => {
       unsubDeviceStore();
       unsubSettingsStore();
-    };
-  }, []);
-  
-  // Check browser support
-  useEffect(() => {
-    const checkSupport = () => {
-      const hasBluetoothAPI = typeof navigator !== 'undefined' && !!navigator.bluetooth;
-      const isMocked = typeof window !== 'undefined' && !!window.__webBluetoothBridged;
-      setIsBrowserSupported(hasBluetoothAPI || isMocked);
-    };
-    
-    checkSupport();
-    
-    const handleMockReady = () => checkSupport();
-    window.addEventListener('webBluetoothMockReady', handleMockReady);
-    
-    return () => {
-      window.removeEventListener('webBluetoothMockReady', handleMockReady);
     };
   }, []);
   

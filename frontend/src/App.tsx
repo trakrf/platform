@@ -196,40 +196,6 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    try {
-      const hasBluetoothAPI = typeof navigator !== 'undefined' && navigator.bluetooth;
-      const isMocked = typeof window !== 'undefined' && !!(window as unknown as { __webBluetoothBridged?: boolean }).__webBluetoothBridged;
-
-      if (!hasBluetoothAPI && !isMocked && typeof window !== 'undefined') {
-        console.warn('Web Bluetooth is not supported in this browser.');
-        const bluetoothMessage = document.createElement('div');
-        bluetoothMessage.className = 'p-4 bg-amber-100 border border-amber-300 rounded-md text-amber-800 mb-4';
-        bluetoothMessage.innerHTML = 'Web Bluetooth is not supported in this browser. Please use Chrome, Edge, or Opera on desktop, or Chrome for Android.';
-
-        const contentDiv = document.querySelector('.max-w-5xl');
-        if (contentDiv && !contentDiv.querySelector('.bg-amber-100')) {
-          contentDiv.insertBefore(bluetoothMessage, contentDiv.firstChild);
-        }
-      }
-    } catch (error) {
-      console.warn('Error checking Bluetooth support:', error);
-    }
-
-    const handleMockReady = () => {
-      const warningBanner = document.querySelector('.bg-amber-100');
-      if (warningBanner) {
-        warningBanner.remove();
-      }
-    };
-
-    window.addEventListener('webBluetoothMockReady', handleMockReady);
-
-    return () => {
-      window.removeEventListener('webBluetoothMockReady', handleMockReady);
-    };
-  }, []);
-
   const renderTabContent = () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tabComponents: Record<string, React.ComponentType<any>> = {

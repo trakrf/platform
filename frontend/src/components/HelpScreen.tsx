@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, HelpCircle, Package2, Search, ScanLine, Settings, AlertCircle, Zap } from 'lucide-react';
 import { useUIStore } from '@/stores';
+import { useBluetoothSupport } from '@/hooks/useBluetoothSupport';
 
 interface FAQItem {
   question: string;
@@ -52,6 +53,10 @@ export default function HelpScreen() {
 
   const [openItems, setOpenItems] = useState<Set<string>>(new Set());
 
+  // Help and the Scan-tab banner answer "which browser?" from the same place,
+  // so the advice cannot drift between them the way it had before TRA-1078.
+  const { recommendation } = useBluetoothSupport();
+
   const toggleItem = (itemId: string) => {
     const newOpenItems = new Set(openItems);
     if (newOpenItems.has(itemId)) {
@@ -72,9 +77,9 @@ export default function HelpScreen() {
       items: [
         {
           question: 'Which browser should I use?',
-          answer: `Use Chrome, Edge, or Opera.
+          answer: `Use ${recommendation.browsers}.
 
-Safari and Firefox can't connect to your scanner - they don't support the Bluetooth features this app needs.`
+${recommendation.note}${recommendation.links.map((link) => `\n\n${link.label}: ${link.url}`).join('')}`
         },
         {
           question: 'How do I connect my scanner?',
@@ -218,7 +223,7 @@ Turn ON "Auto-clear after Save" and the list empties each time you save.`
         {
           question: 'Scanner won\'t connect',
           answer: `1. Make sure scanner has green light
-2. Using Chrome, Edge, or Opera? (Required!)
+2. Using ${recommendation.browsers}? (Required!)
 3. Turn scanner off and on
 4. Refresh the webpage`
         },
@@ -290,7 +295,7 @@ Turn ON "Auto-clear after Save" and the list empties each time you save.`
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 m-6 p-4 rounded-lg">
           <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">Remember</h3>
           <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-            <li>• Must use Chrome, Edge, or Opera</li>
+            <li>• Must use {recommendation.browsers}</li>
             <li>• Connect scanner first before anything else</li>
             <li>• Hold trigger button to scan</li>
             <li>• After you upload a list: Green = Found, Red = Missing</li>

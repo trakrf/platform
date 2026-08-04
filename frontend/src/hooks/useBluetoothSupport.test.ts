@@ -1,0 +1,207 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
+import { detectBluetoothSupport, useBluetoothSupport } from '@/hooks/useBluetoothSupport';
+import {
+  setBluetoothEnvironment,
+  restoreBluetoothEnvironment,
+  USER_AGENTS,
+} from '../../test-utils/bluetoothEnvironment';
+
+/**
+ * The gate is capability-based (`navigator.bluetooth`) and must stay that way —
+ * these tests never let a UA string change `supported`, only the wording of the
+ * advice. TRA-1078.
+ */
+
+const UA = USER_AGENTS;
+
+const setEnvironment = setBluetoothEnvironment;
+
+describe('detectBluetoothSupport', () => {
+  afterEach(() => {
+    restoreBluetoothEnvironment();
+  });
+
+  describe('the capability gate', () => {
+    it('reports supported when navigator.bluetooth exists', () => {
+      setEnvironment({ ua: UA.macChrome, bluetooth: true });
+
+      const { supported, reason } = detectBluetoothSupport();
+
+      expect(supported).toBe(true);
+      expect(reason).toBeNull();
+    });
+
+    it('reports supported when only the mock bridge is present', () => {
+      // ble-mcp-test injects the bridge without ever defining navigator.bluetooth.
+      setEnvironment({ ua: UA.macChrome, bluetooth: false, bridged: true });
+
+      expect(detectBluetoothSupport().supported).toBe(true);
+    });
+
+    it('keeps the mock bridge supported over plain http', () => {
+      // Playwright runs against http://localhost in some configurations; the
+      // bridge answer must outrank the secure-context diagnosis.
+      setEnvironment({ ua: UA.macChrome, bridged: true, secureContext: false });
+
+      expect(detectBluetoothSupport().supported).toBe(true);
+    });
+
+    it('reports unsupported on a browser without the API', () => {
+      setEnvironment({ ua: UA.macSafari, bluetooth: false });
+
+      expect(detectBluetoothSupport().supported).toBe(false);
+    });
+
+    it('does not let an iOS user agent flip a working API to unsupported', () => {
+      setEnvironment({ ua: UA.iphone, bluetooth: true });
+
+      expect(detectBluetoothSupport().supported).toBe(true);
+    });
+  });
+
+  describe('reasons', () => {
+    it('blames the insecure context rather than the browser over plain http', () => {
+      setEnvironment({ ua: UA.macChrome, bluetooth: false, secureContext: false });
+
+      const { reason, recommendation } = detectBluetoothSupport();
+
+      expect(reason).toBe('insecure-context');
+      expect(recommendation.note).toMatch(/https/i);
+    });
+
+    it('blames WebKit on iOS rather than the browser choice', () => {
+      setEnvironment({ ua: UA.iphone, bluetooth: false });
+
+      expect(detectBluetoothSupport().reason).toBe('ios-webkit');
+    });
+
+    it('blames the browser everywhere else', () => {
+      setEnvironment({ ua: UA.macSafari, bluetooth: false });
+
+      expect(detectBluetoothSupport().reason).toBe('unsupported-browser');
+    });
+  });
+
+  describe('platform detection', () => {
+    it('reads the platform from userAgentData when Chromium provides it', () => {
+      setEnvironment({ ua: UA.macChrome, userAgentDataPlatform: 'Windows' });
+
+      expect(detectBluetoothSupport().platform).toBe('windows');
+    });
+
+    it('falls back to the user agent string when userAgentData is absent', () => {
+      setEnvironment({ ua: UA.linux });
+
+      expect(detectBluetoothSupport().platform).toBe('linux');
+    });
+
+    it('reads Android from the user agent before Linux', () => {
+      // The Android UA contains "Linux"; order matters.
+      setEnvironment({ ua: UA.android });
+
+      expect(detectBluetoothSupport().platform).toBe('android');
+    });
+
+    it('detects an iPad running in desktop mode as iOS', () => {
+      setEnvironment({ ua: UA.ipadDesktopMode, maxTouchPoints: 5 });
+
+      expect(detectBluetoothSupport().platform).toBe('ios');
+    });
+
+    it('does not mistake a touchscreen Mac laptop for an iPad', () => {
+      setEnvironment({ ua: UA.macChrome, maxTouchPoints: 0 });
+
+      expect(detectBluetoothSupport().platform).toBe('macos');
+    });
+  });
+
+  describe('recommendations', () => {
+    it('names Bluefy with a store link on iOS', () => {
+      setEnvironment({ ua: UA.iphone });
+
+      const { recommendation } = detectBluetoothSupport();
+
+      expect(recommendation.browsers).toMatch(/Bluefy/);
+      expect(recommendation.links.map((l) => l.url)).toContain(
+        'https://apps.apple.com/us/app/bluefy-web-ble-browser/id1492822055'
+      );
+    });
+
+    it('does not call Bluefy paid, and does not frame it as a cost', () => {
+      // An earlier revision of TRA-1078 said Bluefy was paid. It is free, and
+      // the copy must not reintroduce a cost objection to work around.
+      setEnvironment({ ua: UA.iphone });
+
+      const { recommendation } = detectBluetoothSupport();
+      const copy = `${recommendation.browsers} ${recommendation.note}`;
+
+      expect(copy).not.toMatch(/paid|purchase|\$|costs?\b/i);
+      expect(copy).toMatch(/free/i);
+    });
+
+    it('never tells an iOS user to switch to Chrome', () => {
+      // Apple forbids non-WebKit engines, so Chrome for iOS is equally dead.
+      setEnvironment({ ua: UA.iphone });
+
+      expect(detectBluetoothSupport().recommendation.browsers).not.toMatch(/Chrome/);
+    });
+
+    it('names the Chromium browsers on desktop', () => {
+      setEnvironment({ ua: UA.windows });
+
+      expect(detectBluetoothSupport().recommendation.browsers).toMatch(/Chrome/);
+    });
+
+    it('mentions the BlueZ and flag caveats on Linux', () => {
+      setEnvironment({ ua: UA.linux });
+
+      const { recommendation } = detectBluetoothSupport();
+
+      expect(recommendation.note).toMatch(/BlueZ/);
+    });
+
+    it('still answers which browsers to use on a supported browser', () => {
+      // Help asks the question regardless of whether the user is stuck.
+      setEnvironment({ ua: UA.macChrome, bluetooth: true });
+
+      const { supported, recommendation } = detectBluetoothSupport();
+
+      expect(supported).toBe(true);
+      expect(recommendation.browsers).toMatch(/Chrome/);
+      expect(recommendation.note).not.toHaveLength(0);
+    });
+  });
+});
+
+describe('useBluetoothSupport', () => {
+  beforeEach(() => {
+    setEnvironment({ ua: UA.macChrome, bluetooth: false });
+  });
+
+  afterEach(() => {
+    restoreBluetoothEnvironment();
+  });
+
+  it('re-checks when the mock bridge announces itself', () => {
+    const { result } = renderHook(() => useBluetoothSupport());
+    expect(result.current.supported).toBe(false);
+
+    act(() => {
+      window.__webBluetoothBridged = true;
+      window.dispatchEvent(new Event('webBluetoothMockReady'));
+    });
+
+    expect(result.current.supported).toBe(true);
+  });
+
+  it('stops listening once unmounted', () => {
+    const removeSpy = vi.spyOn(window, 'removeEventListener');
+
+    const { unmount } = renderHook(() => useBluetoothSupport());
+    unmount();
+
+    expect(removeSpy).toHaveBeenCalledWith('webBluetoothMockReady', expect.any(Function));
+    removeSpy.mockRestore();
+  });
+});
