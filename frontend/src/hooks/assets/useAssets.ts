@@ -10,39 +10,62 @@ export interface UseAssetsOptions {
   refetchOnMount?: boolean;
 }
 
+const PAGE_SIZE = 100;
+
+/**
+ * Fetch every asset by walking the pages (TRA-1098).
+ *
+ * The assets screen renders the whole cached set and paginates it in the
+ * browser, so a single page left the table, the result count, the stat tiles
+ * and every export silently short. Mirrors fetchAllLocations. The backend
+ * clamps limit at 200.
+ */
+async function fetchAllAssets(signal?: AbortSignal) {
+  const firstPage = await assetsApi.list({ limit: PAGE_SIZE, offset: 0, signal });
+  const all = [...firstPage.data.data];
+  const totalCount = firstPage.data.total_count;
+
+  let offset = 0;
+  while (all.length < totalCount) {
+    offset += PAGE_SIZE;
+    const page = await assetsApi.list({ limit: PAGE_SIZE, offset, signal });
+    // Safety: a total_count the pages cannot satisfy (rows deleted mid-walk)
+    // must not spin forever.
+    if (page.data.data.length === 0) break;
+    all.push(...page.data.data);
+  }
+
+  // count is "rows in this response", and the response is now every page.
+  return { ...firstPage.data, data: all, count: all.length, total_count: totalCount };
+}
+
 export function useAssets(options: UseAssetsOptions = {}) {
   const { enabled = true, refetchOnMount = true } = options;
 
-  const pagination = useAssetStore((state) => state.pagination);
   const currentOrg = useOrgStore((state) => state.currentOrg);
 
   const query = useQuery({
-    queryKey: ['assets', currentOrg?.id, pagination.currentPage, pagination.pageSize],
+    queryKey: ['assets', currentOrg?.id],
     queryFn: async ({ signal }) => {
       // Capture org ID at request time
       const orgIdAtFetch = currentOrg?.id;
 
-      const offset = (pagination.currentPage - 1) * pagination.pageSize;
-      const response = await assetsApi.list({
-        limit: pagination.pageSize,
-        offset,
-        signal,
-      });
+      const response = await fetchAllAssets(signal);
 
       // Validate org hasn't changed before updating store
       const currentOrgId = useOrgStore.getState().currentOrg?.id;
       if (currentOrgId !== orgIdAtFetch) {
         // Return data but skip store update - org changed during fetch
-        return response.data;
+        return response;
       }
 
-      const normalized = response.data.data.map(normalizeAsset);
+      const normalized = response.data.map(normalizeAsset);
       // Replace, don't union: the screen renders the cache, so a stale entry
       // the server no longer returns would show as an extra row (TRA-1070).
       useAssetStore.getState().setAssets(normalized);
       // Re-enrich tags with newly loaded assets
       useTagStore.getState().refreshAssetEnrichment();
-      return { ...response.data, data: normalized };
+      return { ...response, data: normalized };
     },
     enabled,
     refetchOnMount,

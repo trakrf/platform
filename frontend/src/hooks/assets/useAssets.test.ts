@@ -64,10 +64,68 @@ describe('useAssets', () => {
     expect(result.current.totalCount).toBe(1);
     expect(assetsApi.list).toHaveBeenCalledWith(
       expect.objectContaining({
-        limit: 25,
+        limit: 100,
         offset: 0,
       })
     );
+  });
+
+  it('fetches every page until the total count is reached', async () => {
+    // TRA-1098: the screen renders the whole cached set, so a single page
+    // leaves the table, the result count, the stat tiles and every export
+    // silently short.
+    const page = (from: number, size: number) =>
+      Array.from({ length: size }, (_, i) => ({
+        ...mockAsset,
+        id: from + i,
+        external_key: `LAP-${from + i}`,
+      }));
+
+    vi.mocked(assetsApi.list).mockImplementation((params: any) =>
+      Promise.resolve({
+        data: {
+          data: params.offset === 0 ? page(1, 100) : page(101, 20),
+          count: params.offset === 0 ? 100 : 20,
+          offset: params.offset,
+          total_count: 120,
+        },
+      } as any)
+    );
+
+    const { result } = renderHook(() => useAssets(), { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.assets).toHaveLength(120);
+    expect(result.current.totalCount).toBe(120);
+    expect(useAssetStore.getState().getFilteredAssets()).toHaveLength(120);
+    expect(assetsApi.list).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops paging when a page comes back empty', async () => {
+    // A total_count the pages cannot satisfy — rows deleted mid-walk — must
+    // not spin forever.
+    vi.mocked(assetsApi.list).mockImplementation((params: any) =>
+      Promise.resolve({
+        data: {
+          data: params.offset === 0 ? [mockAsset] : [],
+          count: params.offset === 0 ? 1 : 0,
+          offset: params.offset,
+          total_count: 500,
+        },
+      } as any)
+    );
+
+    const { result } = renderHook(() => useAssets(), { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.assets).toHaveLength(1);
+    expect(assetsApi.list).toHaveBeenCalledTimes(2);
   });
 
   it('replaces cached assets the list response no longer contains', async () => {
