@@ -62,9 +62,14 @@ const BLUEFY_URL = 'https://apps.apple.com/us/app/bluefy-web-ble-browser/id14928
  *   - linux  — the flag and BlueZ >= 5.41 caveats are repeated from the ticket,
  *              not measured. Version-dependent.
  *   - ios    — Bluefy is free (App Store listing checked 2026-08-04: Free, no
- *              in-app purchases). WebBLE is the other WebKit+native-BLE browser
- *              but its price is unverified, so it is deliberately not named
- *              here; add a second link once someone has checked.
+ *              in-app purchases).
+ *
+ * WebBLE (apps.apple.com/us/app/webble/id1193531073) is the other
+ * WebKit+native-BLE browser and is deliberately NOT recommended: checked
+ * 2026-08-04, it is paid and poorly rated. Sending a stuck user to a paid app
+ * with bad reviews is worse than sending them nowhere, and Bluefy being free
+ * makes it unnecessary. Do not add it back as a "second option" — see the guard
+ * in useBluetoothSupport.test.ts.
  */
 const RECOMMENDATIONS: Record<Platform, BluetoothRecommendation> = {
   windows: {

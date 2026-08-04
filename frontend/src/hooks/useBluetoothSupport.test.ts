@@ -140,6 +140,21 @@ describe('detectBluetoothSupport', () => {
       expect(copy).toMatch(/free/i);
     });
 
+    it('never recommends WebBLE', () => {
+      // Checked 2026-08-04: WebBLE is paid and poorly rated. Sending a stuck
+      // user to a paid app with bad reviews is worse than sending them nowhere,
+      // and Bluefy being free makes it unnecessary. This guard exists because
+      // "Bluefy or WebBLE" reads like an obvious improvement to anyone who has
+      // not looked at the listing.
+      setEnvironment({ ua: UA.iphone });
+
+      const { recommendation } = detectBluetoothSupport();
+      const copy = `${recommendation.browsers} ${recommendation.note}`;
+
+      expect(copy).not.toMatch(/WebBLE/i);
+      expect(recommendation.links.map((link) => link.url).join(' ')).not.toMatch(/webble/i);
+    });
+
     it('never tells an iOS user to switch to Chrome', () => {
       // Apple forbids non-WebKit engines, so Chrome for iOS is equally dead.
       setEnvironment({ ua: UA.iphone });
