@@ -172,7 +172,6 @@ docker-compose.override.yml
 .docker/
 
 # CSW symlink (local installation)
-spec/csw
 tmp/
 
 # openapi-generator-cli: auto-created on `pnpm dlx openapi-generator-cli` runs
