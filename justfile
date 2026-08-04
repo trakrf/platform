@@ -39,7 +39,7 @@ alias be := backend
 
 lint: (frontend "lint") (backend "lint") (cli "lint")
 
-test: test-ops (frontend "test") (backend "test") (cli "test")
+test: test-ops test-release-guards (frontend "test") (backend "test") (cli "test")
 
 build: (frontend "build") (backend "build") (cli "build")
 
@@ -103,6 +103,11 @@ logs *ARGS:
 # Test the passthrough against a stub infra justfile (no cluster access needed)
 test-ops:
     @./scripts/test-ops-passthrough.sh
+
+# TRA-1085: the promote-prod release guards — source-ref resolution and the
+# clean-vX.Y.Z version check. Pure bash, no registry or cluster needed.
+test-release-guards:
+    @./scripts/test-release-guards.sh
 
 # ============================================================================
 # Full Stack Development

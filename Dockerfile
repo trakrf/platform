@@ -123,6 +123,25 @@ RUN BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) && \
 FROM alpine:3.20 AS production
 RUN apk --no-cache add ca-certificates
 
+# TRA-1085: republish the platform version as an OCI label so it can be read
+# straight off the registry with `docker buildx imagetools inspect`, without
+# pulling and running the image. promote-prod uses it to refuse an image whose
+# version isn't a clean vX.Y.Z — i.e. one built before its release tag existed.
+# Until now APP_VERSION survived only as a Go -ldflags value inside the binary,
+# which is unreadable from a manifest.
+#
+# Deliberately NOT org.opencontainers.image.version: docker/metadata-action
+# already emits that key holding the image *tag* (sha-aa9822b), and
+# build-push-action applies its labels after this one, so the value here would
+# be silently overwritten with the wrong thing.
+#
+# The fallback chain is copied from build-meta's /version above so the label and
+# what /health reports can never disagree.
+ARG APP_VERSION=
+ARG BUILD_TAG=
+ARG RAILWAY_GIT_BRANCH=
+LABEL id.trakrf.app-version="${APP_VERSION:-${BUILD_TAG:-${RAILWAY_GIT_BRANCH:-dev}}}"
+
 WORKDIR /app
 
 # Copy server binary (migrations are embedded via go:embed)

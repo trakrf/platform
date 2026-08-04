@@ -13,6 +13,16 @@ on:
     # `preview` tag is gated on `refs/heads/preview`. Prod uses semver tags
     # — no path for `preview` to promote into a stable ref.
     branches: [main, preview]
+    # TRA-1085: build on release tags too. APP_VERSION is `git describe` at
+    # BUILD time and promote-prod never rebuilds, so the natural order — merge,
+    # then tag — bakes a dev-shaped version (v1.2.0-559-gaa9822bb) into the
+    # image permanently and /health reports it for the life of the release.
+    # Building on the tag re-resolves describe against the tag itself and
+    # republishes the same immutable sha-<short> with a clean vX.Y.Z, removing
+    # the "tag, then manually re-run the build" folklore that recovered v1.3.0.
+    # Neither floating tag is touched here: metadata-action gates `latest` on
+    # is_default_branch and `preview` on refs/heads/preview, both false on a tag.
+    tags: ['v*']
 
 concurrency:
   group: docker-build-${{ github.ref }}

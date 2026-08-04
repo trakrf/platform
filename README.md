@@ -331,6 +331,12 @@ DELETE /api/v1/accounts/:account_id/users/:user_id       # Remove user from acco
 
 Full API documentation coming soon at `/api/docs`.
 
+## Releasing
+
+See [docs/releasing.md](docs/releasing.md) for the production release runbook —
+tag-before-build, promotion, the migration-ledger relocation ordering,
+post-deploy verification and rollback.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines on:

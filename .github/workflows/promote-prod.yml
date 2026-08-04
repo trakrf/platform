@@ -15,8 +15,8 @@ on:
   workflow_dispatch:
     inputs:
       source:
-        description: 'Source image tag to promote to :prod (e.g. sha-c372f81, or latest)'
-        required: true
+        description: 'Git ref to promote — a release tag (v1.3.0), a branch, or a full SHA. Leave empty for current main. An existing sha-xxxxxxx / latest image tag is also accepted.'
+        required: false
         type: string
 
 permissions:
@@ -32,17 +32,29 @@ jobs:
   promote:
     runs-on: ubuntu-latest
     steps:
-      - name: Validate source tag
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history + tags: resolve-promote-source.sh resolves release tags
+          # and ancestry-checks against origin/main. A shallow clone has neither.
+          fetch-depth: 0
+
+      - name: Resolve source image tag
+        id: resolve
         env:
           SOURCE: ${{ inputs.source }}
         run: |
-          # Only main-derived tags may be promoted: an immutable sha-<hex> tag
-          # or `latest`. Blocks fat-fingering a non-prod ref like `preview` or
-          # `gke-preprod` onto :prod.
-          if [[ ! "${SOURCE}" =~ ^(sha-[0-9a-f]{7,40}|latest)$ ]]; then
-            echo "::error::Refusing to promote '${SOURCE}'. Expected sha-<hex> or latest." >&2
-            exit 1
-          fi
+          set -euo pipefail
+          # TRA-1085: the operator names a git ref; the script works out the
+          # image tag. The old inline regex lived here and now lives in the
+          # script, which is unit-tested (scripts/test-release-guards.sh) —
+          # `git rev-parse --short` returns 8 characters while
+          # docker/metadata-action publishes 7, and getting that wrong is what
+          # failed the first v1.3.0 promotion. Ancestry against origin/main is
+          # what preserves the old rule that only main-derived images promote.
+          tag=$(./scripts/resolve-promote-source.sh "${SOURCE}")
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "Resolved '${SOURCE:-<empty, using main>}' -> ${tag}"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -53,7 +65,7 @@ jobs:
 
       - name: Promote source to :prod
         env:
-          SOURCE: ${{ inputs.source }}
+          SOURCE: ${{ steps.resolve.outputs.tag }}
         run: |
           set -euo pipefail
           IMAGE="ghcr.io/trakrf/backend"
@@ -62,6 +74,21 @@ jobs:
           # creating a :prod tag that resolves to nothing.
           echo "Resolving ${IMAGE}:${SOURCE} ..."
           docker buildx imagetools inspect "${IMAGE}:${SOURCE}"
+
+          # TRA-1085: refuse an image built before its release tag existed.
+          # APP_VERSION is `git describe` at BUILD time and nothing rebuilds on
+          # promote, so merge-then-tag bakes a dev version in permanently and
+          # /health would report it for the life of the release. The label is
+          # stamped by the Dockerfile's production stage; metadata-action's
+          # org.opencontainers.image.version holds the image TAG, not this.
+          # Note `.Image` is keyed by platform on a multi-arch manifest, which
+          # ours always is (TRA-909) — extract-image-version.sh handles that
+          # shape and requires every arch to agree.
+          echo "Reading id.trakrf.app-version from ${IMAGE}:${SOURCE} ..."
+          APP_VERSION=$(docker buildx imagetools inspect "${IMAGE}:${SOURCE}" \
+            --format '{{ json .Image }}' | ./scripts/extract-image-version.sh)
+          echo "Image reports version: ${APP_VERSION:-<none>}"
+          ./scripts/assert-release-version.sh "${APP_VERSION}"
 
           # Pure manifest re-tag — copies the source manifest to :prod, no rebuild.
           docker buildx imagetools create --tag "${IMAGE}:prod" "${IMAGE}:${SOURCE}"
