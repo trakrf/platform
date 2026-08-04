@@ -69,9 +69,13 @@ const BLUEFY_URL = 'https://apps.apple.com/us/app/bluefy-web-ble-browser/id14928
  *              inherited from upstream Chromium rather than independently
  *              measured. Chrome leads the list because it is the verified one.
  *   - windows — all Chromium, high confidence.
- *   - macos  — Edge and Opera on macOS are Chromium and are expected to work,
- *              but this was NOT confirmed on real hardware. If a check on a Mac
- *              says otherwise, narrow this one string.
+ *   - macos  — detection confirmed on a MacBook Pro: Safari and Firefox both
+ *              raise the banner with this row's copy. The browser list is only
+ *              half settled — Chrome works, and Edge and Opera are Chromium so
+ *              are expected to, but that was NOT confirmed. Note that "no
+ *              banner" would not settle it either: Brave exposes
+ *              navigator.bluetooth and then fails the connect outright, so the
+ *              only test that counts is a real connect to a reader.
  *   - linux  — the flag and BlueZ >= 5.41 caveats are repeated from the ticket,
  *              not measured. Version-dependent.
  *   - ios    — Bluefy is free (App Store listing checked 2026-08-04: Free, no
