@@ -21,6 +21,32 @@ describe('connectErrorMessage', () => {
     expect(message).toMatch(/brave:\/\/flags/);
   });
 
+  it('blames the machine, not the reader, when there is no working adapter', () => {
+    // Captured from Edge on a Windows mini PC whose Bluetooth driver has never
+    // worked, 2026-08-04. The API is present so no banner fires, and this used
+    // to surface as "Failed to connect to reader" — which points the user at
+    // the scanner when the scanner is fine.
+    const message = connectErrorMessage(
+      new DOMException('Bluetooth adapter not available.', 'NotFoundError')
+    );
+
+    expect(message).toMatch(/computer|system/i);
+    expect(message).not.toMatch(/reader/i);
+  });
+
+  it('does not confuse a cancelled chooser with a missing adapter', () => {
+    // Both are NotFoundError, so matching on the name rather than the message
+    // would collapse these two into one wrong answer.
+    const cancelled = connectErrorMessage(
+      new DOMException('User cancelled the requestDevice() chooser.', 'NotFoundError')
+    );
+    const noAdapter = connectErrorMessage(
+      new DOMException('Bluetooth adapter not available.', 'NotFoundError')
+    );
+
+    expect(cancelled).not.toBe(noAdapter);
+  });
+
   it('keeps the timeout case', () => {
     expect(connectErrorMessage(new Error('connection timeout after 10s'))).toMatch(/timed out/i);
   });

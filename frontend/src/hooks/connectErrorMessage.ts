@@ -44,6 +44,15 @@ export function connectErrorMessage(error: unknown): string {
     return 'Brave blocks Web Bluetooth by default. Turn it on at brave://flags (search for Bluetooth), or use Chrome, Edge, or Opera.';
   }
 
+  // No usable Bluetooth radio: switched off, disabled, or a driver that never
+  // worked. Captured from Edge on Windows, 2026-08-04. The API is present so no
+  // banner fires, and the old generic message pointed the user at the scanner
+  // when the scanner was fine. Matched on the message rather than the name,
+  // because a cancelled chooser is a NotFoundError too.
+  if (message.includes('adapter not available')) {
+    return "Bluetooth isn't available on this computer. Check that it's switched on in your system settings.";
+  }
+
   // Dismissing the browser's device chooser lands here too. Reporting that as a
   // failure blames the reader for something the user chose to do.
   if (message.includes('User cancelled') || message.includes('cancelled the requestDevice')) {
