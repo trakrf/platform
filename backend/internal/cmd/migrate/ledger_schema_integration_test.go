@@ -30,6 +30,7 @@ import (
 
 	"github.com/trakrf/platform/backend/internal/buildinfo"
 	"github.com/trakrf/platform/backend/internal/cmd/migrate"
+	"github.com/trakrf/platform/backend/internal/testutil"
 )
 
 // ledgerTestDB is a throwaway database, dropped and recreated per run. It is
@@ -79,7 +80,16 @@ func provisionLedgerTestDB(ctx context.Context, t *testing.T) string {
 
 	conn, err := pgx.Connect(ctx, admin)
 	if err != nil {
-		t.Skipf("no local postgres available (%v)", err)
+		// TRA-1085: fail, do not skip. This suite is part of the pre-release
+		// check, and `go test -tags=integration ./internal/cmd/migrate/` once
+		// reported "ok ... 0.009s" while every test in it SKIPped on a bad
+		// password — a check that passes by not running.
+		if testutil.AllowDBSkip() {
+			t.Skipf("no local postgres available (%v); skipping because %s=1", err, testutil.AllowDBSkipEnv)
+		}
+		t.Fatalf("no local postgres available (%v).\n"+
+			"Start one with `just database up`, or set %s=1 to skip instead.",
+			err, testutil.AllowDBSkipEnv)
 	}
 	defer conn.Close(ctx)
 
