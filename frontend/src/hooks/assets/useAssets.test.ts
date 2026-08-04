@@ -70,6 +70,54 @@ describe('useAssets', () => {
     );
   });
 
+  it('replaces cached assets the list response no longer contains', async () => {
+    // TRA-1070: a stale entry — left by a previous org, a re-seeded local
+    // database, or an asset deleted elsewhere — must not survive a list fetch.
+    // It renders as a duplicate row because it carries the same external_key
+    // and name as the asset the server did return, under a different id.
+    useAssetStore
+      .getState()
+      .addAssets([{ ...mockAsset, id: 99 }]);
+
+    vi.mocked(assetsApi.list).mockResolvedValue({
+      data: { data: [mockAsset], count: 1, offset: 0, total_count: 1 },
+    } as any);
+
+    const { result } = renderHook(() => useAssets(), { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(
+      useAssetStore
+        .getState()
+        .getFilteredAssets()
+        .map((asset) => asset.id)
+    ).toEqual([1]);
+  });
+
+  it('does not duplicate assets when the query function runs twice', async () => {
+    // React.StrictMode double-invokes effects in development. Two identical
+    // list responses must leave the cache holding one copy of each asset.
+    vi.mocked(assetsApi.list).mockResolvedValue({
+      data: { data: [mockAsset], count: 1, offset: 0, total_count: 1 },
+    } as any);
+
+    const { result, rerender } = renderHook(() => useAssets(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    await result.current.refetch();
+    rerender();
+
+    expect(useAssetStore.getState().getFilteredAssets()).toHaveLength(1);
+  });
+
   it('should not fetch when enabled is false', () => {
     const { result } = renderHook(() => useAssets({ enabled: false }), {
       wrapper: createWrapper(),
