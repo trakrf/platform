@@ -22,12 +22,16 @@ export interface BluetoothEnvironment {
   maxTouchPoints?: number;
   /** Chromium's `navigator.userAgentData.platform`; absent on WebKit and Gecko. */
   userAgentDataPlatform?: string;
+  /** Page URL. jsdom serves http://localhost:3000/, which is not a secure origin. */
+  href?: string;
 }
 
 /** Descriptors as they were before the first override, so restore is exact. */
 const originalNavigator = new Map<Overridable, PropertyDescriptor | undefined>();
 let originalSecureContext: PropertyDescriptor | undefined;
 let capturedSecureContext = false;
+let originalLocation: PropertyDescriptor | undefined;
+let capturedLocation = false;
 
 function overrideNavigator(property: Overridable, value: unknown) {
   if (!originalNavigator.has(property)) {
@@ -44,7 +48,22 @@ export function setBluetoothEnvironment(environment: BluetoothEnvironment = {}) 
     secureContext = true,
     maxTouchPoints = 0,
     userAgentDataPlatform,
+    href,
   } = environment;
+
+  if (href !== undefined) {
+    if (!capturedLocation) {
+      originalLocation = Object.getOwnPropertyDescriptor(window, 'location');
+      capturedLocation = true;
+    }
+    // Only `location.href` is read by the code under test, so a plain object is
+    // enough — and assigning to the real jsdom Location throws on navigation.
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, href },
+      configurable: true,
+      writable: true,
+    });
+  }
 
   overrideNavigator('userAgent', ua);
   overrideNavigator('maxTouchPoints', maxTouchPoints);
@@ -83,6 +102,16 @@ export function restoreBluetoothEnvironment() {
     }
     capturedSecureContext = false;
     originalSecureContext = undefined;
+  }
+
+  if (capturedLocation) {
+    if (originalLocation) {
+      Object.defineProperty(window, 'location', originalLocation);
+    } else {
+      delete (window as unknown as Record<string, unknown>).location;
+    }
+    capturedLocation = false;
+    originalLocation = undefined;
   }
 
   window.__webBluetoothBridged = undefined;

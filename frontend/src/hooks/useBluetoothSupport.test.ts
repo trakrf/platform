@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { detectBluetoothSupport, useBluetoothSupport } from '@/hooks/useBluetoothSupport';
+import {
+  detectBluetoothSupport,
+  useBluetoothSupport,
+  bluefyLinkFor,
+} from '@/hooks/useBluetoothSupport';
 import {
   setBluetoothEnvironment,
   restoreBluetoothEnvironment,
@@ -176,6 +180,31 @@ describe('detectBluetoothSupport', () => {
       expect(recommendation.note).toMatch(/BlueZ/);
     });
 
+    it('offers to reopen the current page in Bluefy on iOS', () => {
+      setEnvironment({ ua: UA.iphone, href: 'https://app.trakrf.id/?tab=scan' });
+
+      expect(detectBluetoothSupport().recommendation.openInBrowserUrl).toBe(
+        'bluefy://app.trakrf.id/?tab=scan'
+      );
+    });
+
+    it('offers no reopen link on a platform with no such browser', () => {
+      setEnvironment({ ua: UA.macSafari, href: 'https://app.trakrf.id/' });
+
+      expect(detectBluetoothSupport().recommendation.openInBrowserUrl).toBeUndefined();
+    });
+
+    it('offers no reopen link when the page itself is the problem', () => {
+      // Bluefy requires https, so handing it an http URL just moves the same
+      // failure into a second browser.
+      setEnvironment({ ua: UA.iphone, href: 'http://app.trakrf.id/', secureContext: false });
+
+      const { reason, recommendation } = detectBluetoothSupport();
+
+      expect(reason).toBe('insecure-context');
+      expect(recommendation.openInBrowserUrl).toBeUndefined();
+    });
+
     it('still answers which browsers to use on a supported browser', () => {
       // Help asks the question regardless of whether the user is stuck.
       setEnvironment({ ua: UA.macChrome, bluetooth: true });
@@ -186,6 +215,25 @@ describe('detectBluetoothSupport', () => {
       expect(recommendation.browsers).toMatch(/Chrome/);
       expect(recommendation.note).not.toHaveLength(0);
     });
+  });
+});
+
+describe('bluefyLinkFor', () => {
+  // Verified on a real iPad, 2026-08-04: `bluefy://` prompts and opens Bluefy,
+  // `bluefy://app.preview.trakrf.id` prompts with the host attached, and
+  // `bluefys://` errors — there is no TLS variant, https is implied.
+  it('swaps the https scheme for bluefy', () => {
+    expect(bluefyLinkFor('https://app.trakrf.id/')).toBe('bluefy://app.trakrf.id/');
+  });
+
+  it('carries the path, query and hash across', () => {
+    expect(bluefyLinkFor('https://app.trakrf.id/scan?tab=rfid#tags')).toBe(
+      'bluefy://app.trakrf.id/scan?tab=rfid#tags'
+    );
+  });
+
+  it('refuses an http page, which Bluefy cannot use either', () => {
+    expect(bluefyLinkFor('http://app.trakrf.id/')).toBeUndefined();
   });
 });
 

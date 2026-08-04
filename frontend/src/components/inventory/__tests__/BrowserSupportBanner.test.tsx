@@ -56,6 +56,40 @@ describe('BrowserSupportBanner', () => {
     expect(document.body.textContent).toMatch(/Chrome[^.]*cannot reach Bluetooth/);
   });
 
+  it('makes the browser name itself a link that reopens the page in Bluefy', () => {
+    // For the user who already installed Bluefy and opened a bookmark in
+    // Safari out of habit — the App Store link is no use to them.
+    setEnvironment({ ua: USER_AGENTS.iphone, href: 'https://app.trakrf.id/?tab=scan' });
+
+    renderBanner();
+
+    expect(screen.getByRole('link', { name: 'Bluefy' })).toHaveAttribute(
+      'href',
+      'bluefy://app.trakrf.id/?tab=scan'
+    );
+  });
+
+  it('still offers the App Store alongside the reopen link', () => {
+    // Installation cannot be detected on iOS, so both paths are always shown
+    // rather than guessed between.
+    setEnvironment({ ua: USER_AGENTS.iphone, href: 'https://app.trakrf.id/' });
+
+    renderBanner();
+
+    expect(screen.getByRole('link', { name: /App Store/i })).toHaveAttribute(
+      'href',
+      'https://apps.apple.com/us/app/bluefy-web-ble-browser/id1492822055'
+    );
+  });
+
+  it('leaves the browser name as plain text when there is nothing to open', () => {
+    setEnvironment({ ua: USER_AGENTS.macSafari, href: 'https://app.trakrf.id/' });
+
+    renderBanner();
+
+    expect(screen.queryByRole('link', { name: /Chrome/ })).toBeNull();
+  });
+
   it('names the browsers to switch to on an unsupported desktop browser', () => {
     setEnvironment({ ua: USER_AGENTS.macChrome });
 

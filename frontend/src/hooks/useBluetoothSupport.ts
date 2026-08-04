@@ -38,6 +38,11 @@ export interface BluetoothRecommendation {
   note: string;
   /** Where to get them, when there is somewhere to send the user. */
   links: BluetoothRecommendationLink[];
+  /**
+   * Deep link that reopens the current page in the recommended browser, for a
+   * user who already has it installed. Absent unless one exists and would work.
+   */
+  openInBrowserUrl?: string;
 }
 
 export interface BluetoothSupport {
@@ -103,6 +108,27 @@ const RECOMMENDATIONS: Record<Platform, BluetoothRecommendation> = {
     links: [],
   },
 };
+
+/**
+ * Bluefy's custom URL scheme, so an iOS user who already installed it can jump
+ * straight over instead of reinstalling from the App Store.
+ *
+ * Verified on a real iPad, 2026-08-04: `bluefy://` prompts "Open this page in
+ * Bluefy?" and opens the app; `bluefy://app.preview.trakrf.id` prompts with the
+ * host attached; `bluefys://` errors. There is no TLS variant because https is
+ * implied — Bluefy only loads secure origins, which is also why an http page
+ * gets no link at all rather than one that fails on arrival.
+ *
+ * iOS gives a web page no way to ask whether an app is installed, so this is
+ * offered alongside the App Store link rather than instead of it. Do not try to
+ * detect installation with a scheme-plus-timeout race: it is unreliable, and on
+ * modern iOS the "address is invalid" dialog fires anyway.
+ */
+export function bluefyLinkFor(href: string): string | undefined {
+  const HTTPS = 'https://';
+  if (!href.startsWith(HTTPS)) return undefined;
+  return `bluefy://${href.slice(HTTPS.length)}`;
+}
 
 const INSECURE_CONTEXT_NOTE =
   'Bluetooth is only available over a secure connection. Open this app at an https:// address (or on localhost) and reload — your browser is fine.';
@@ -187,12 +213,19 @@ export function detectBluetoothSupport(): BluetoothSupport {
     };
   }
 
-  return {
-    supported: false,
-    reason: platform === 'ios' ? 'ios-webkit' : 'unsupported-browser',
-    recommendation,
-    platform,
-  };
+  if (platform === 'ios') {
+    const openInBrowserUrl =
+      typeof window === 'undefined' ? undefined : bluefyLinkFor(window.location.href);
+
+    return {
+      supported: false,
+      reason: 'ios-webkit',
+      recommendation: { ...recommendation, openInBrowserUrl },
+      platform,
+    };
+  }
+
+  return { supported: false, reason: 'unsupported-browser', recommendation, platform };
 }
 
 /**

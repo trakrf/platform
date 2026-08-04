@@ -29,11 +29,24 @@ export function BrowserSupportBanner() {
             <span className="text-amber-800 dark:text-amber-200 font-medium text-sm">
               {HEADLINES[reason]}
             </span>
-            {reason !== 'insecure-context' && (
-              <span className="text-amber-700 dark:text-amber-300 ml-2 text-sm">
-                {recommendation.browsers}
-              </span>
-            )}
+            {reason !== 'insecure-context' &&
+              (recommendation.openInBrowserUrl ? (
+                // Already installed it and opened a bookmark in Safari out of
+                // habit? Tapping the name jumps straight across. iOS cannot
+                // tell us whether it is installed, so the App Store link below
+                // stays regardless.
+                <a
+                  href={recommendation.openInBrowserUrl}
+                  title={`Open this page in ${recommendation.browsers}`}
+                  className="text-amber-800 dark:text-amber-200 ml-2 text-sm font-medium underline"
+                >
+                  {recommendation.browsers}
+                </a>
+              ) : (
+                <span className="text-amber-700 dark:text-amber-300 ml-2 text-sm">
+                  {recommendation.browsers}
+                </span>
+              ))}
             <p className="text-amber-700 dark:text-amber-300 text-sm mt-1">{recommendation.note}</p>
             {recommendation.links.length > 0 && (
               <p className="mt-1">
