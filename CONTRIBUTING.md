@@ -191,24 +191,31 @@ for the three-axis versioning rationale (platform vs API contract vs spec).
 
 ### Steps
 
+**The full procedure is [`docs/releasing.md`](docs/releasing.md)** — the backup,
+the ledger relocation ordering, promotion, the post-deploy checks and rollback.
+Follow it rather than the summary here.
+
+The shape of it:
+
 1. Update `CHANGELOG.md` — move items from `## [Unreleased]` to a new
    `## [vX.Y.Z] - YYYY-MM-DD` section.
-2. Tag and push:
+2. **Tag first, then let the build run.** `APP_VERSION` is `git describe` at
+   *build* time and promoting never rebuilds, so merging and then tagging bakes
+   a dev-shaped version into the image permanently:
    ```bash
    git tag vX.Y.Z
-   git push --tags
+   git push origin vX.Y.Z
    ```
-3. CI (`.github/workflows/docker-build.yml`) computes
-   `git describe --tags --always --dirty`, bakes it into the backend binary
-   (`-X main.version`) and the frontend bundle (`VITE_APP_VERSION`), and
-   publishes `ghcr.io/trakrf/backend:sha-<short>` plus the standard tag set.
-4. Deploy:
-   - **Railway prod** — pinned to a semver tag. The tag push triggers
-     Railway's auto-rebuild from source. No further action.
-   - **GKE prod** (post TRA-351 cutover) — bump the image tag in
-     `trakrf-infra/helm/trakrf-backend/values-gke.yaml` and merge; ArgoCD
-     syncs. Two-repo dance is automatable via Option 1 (auto-PR from tag
-     push) per TRA-485 — until then it is manual.
+3. `.github/workflows/docker-build.yml` triggers on the tag, bakes the version
+   into the backend binary (`-X main.version`) and the frontend bundle
+   (`VITE_APP_VERSION`), and publishes `ghcr.io/trakrf/backend:sha-<short>`.
+4. Promote, once that build is green. `promote-prod` re-tags the manifest —
+   there is no rebuild — and refuses an image whose version is not a clean
+   `vX.Y.Z`:
+   ```bash
+   gh workflow run promote-prod.yml -f source=vX.Y.Z
+   ```
+   ArgoCD Image Updater then picks up the new digest; expect up to ~2 minutes.
 5. Verify post-deploy:
    ```bash
    curl https://app.trakrf.id/health | jq '.version, .commit, .tag'
