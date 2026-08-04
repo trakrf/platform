@@ -43,6 +43,7 @@ export interface AssetStore {
 
   // ============ Cache Actions ============
   addAssets: (assets: Asset[]) => void;
+  setAssets: (assets: Asset[]) => void;
   addAsset: (asset: Asset) => void;
   updateCachedAsset: (id: number, updates: Partial<Asset>) => void;
   removeAsset: (id: number) => void;

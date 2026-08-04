@@ -37,7 +37,9 @@ export function useAssets(options: UseAssetsOptions = {}) {
       }
 
       const normalized = response.data.data.map(normalizeAsset);
-      useAssetStore.getState().addAssets(normalized);
+      // Replace, don't union: the screen renders the cache, so a stale entry
+      // the server no longer returns would show as an extra row (TRA-1070).
+      useAssetStore.getState().setAssets(normalized);
       // Re-enrich tags with newly loaded assets
       useTagStore.getState().refreshAssetEnrichment();
       return { ...response.data, data: normalized };

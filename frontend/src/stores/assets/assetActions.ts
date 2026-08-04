@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import type { Asset, AssetFilters, SortState } from '@/types/assets';
+import type { Asset, AssetCache, AssetFilters, SortState } from '@/types/assets';
 
 /**
  * Asset store action methods
@@ -42,6 +42,43 @@ export function createCacheActions(
         newCache.lastFetched = Date.now();
 
         return { cache: newCache };
+      }),
+
+    /**
+     * Replace the cached asset set with a list response (TRA-1070)
+     *
+     * The assets screen, its result count and its stat tiles all render the
+     * cache, so the cache has to hold exactly what the server returned.
+     * addAssets unions instead, which keeps entries the server no longer
+     * returns — from a previous org, a re-seeded local database, or an asset
+     * deleted elsewhere — on screen for the cache's hour-long TTL. Those show
+     * up as duplicate rows whenever a stale entry carries the same
+     * external_key under a different id. Mirrors setLocations in the locations
+     * store, which is why the locations screen never had this defect.
+     */
+    setAssets: (assets: Asset[]) =>
+      set((state: any) => {
+        const cache: AssetCache = {
+          byId: new Map(),
+          byExternalKey: new Map(),
+          activeIds: new Set(),
+          allIds: [],
+          lastFetched: Date.now(),
+          ttl: state.cache.ttl,
+        };
+
+        assets.forEach((asset) => {
+          cache.byId.set(asset.id, asset);
+          cache.byExternalKey.set(asset.external_key, asset);
+
+          if (asset.is_active) {
+            cache.activeIds.add(asset.id);
+          }
+        });
+
+        cache.allIds = Array.from(cache.byId.keys());
+
+        return { cache };
       }),
 
     /**
