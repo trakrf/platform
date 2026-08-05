@@ -3,6 +3,7 @@ package testutil
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -25,12 +26,17 @@ const (
 	testAppPassword = "trakrf_test_app"
 )
 
+// GetPostgresURL returns a superuser connection to the maintenance database.
+// The harness drops and recreates trakrf_test on every run and creates cluster
+// roles, so it needs privileges the application deliberately does not have.
+//
+// It reads PG_ADMIN_URL rather than PG_URL: since TRA-1075, PG_URL is the
+// non-superuser trakrf-app role on the trakrf database, and neither the role
+// nor the database is any use here.
 func GetPostgresURL() string {
-	pgURL := os.Getenv("PG_URL")
-	if pgURL != "" {
-		pgURL = strings.Replace(pgURL, "timescaledb", "localhost", 1)
-		pgURL = strings.Replace(pgURL, "/postgres?", "/postgres?", 1)
-		return pgURL
+	adminURL := os.Getenv("PG_ADMIN_URL")
+	if adminURL != "" {
+		return strings.Replace(adminURL, "timescaledb", "localhost", 1)
 	}
 	return "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable"
 }
@@ -42,8 +48,22 @@ func GetTestDatabaseURL() string {
 		return testURL
 	}
 
-	pgURL := GetPostgresURL()
-	return strings.Replace(pgURL, "/postgres?", "/trakrf_test?", 1)
+	return withDatabase(GetPostgresURL(), "trakrf_test")
+}
+
+// withDatabase swaps the database name in a postgres URL, leaving userinfo,
+// host, port and query string alone. It replaces a literal "/postgres?" match,
+// which silently produced the wrong URL the moment the admin URL pointed
+// anywhere other than a database named postgres.
+func withDatabase(pgURL, dbName string) string {
+	u, err := url.Parse(pgURL)
+	if err != nil {
+		// Not parseable as a URL; nothing sensible to swap. Hand it back and
+		// let the connection attempt report the real problem.
+		return pgURL
+	}
+	u.Path = "/" + dbName
+	return u.String()
 }
 
 // SetupTestDatabase returns a *storage.Storage whose methods run on the

@@ -3,7 +3,14 @@
 set fallback := true
 
 # Get database URLs from environment (loaded by direnv from .env.local)
+#
+# Two roles, matching CNPG and the local bootstrap (TRA-1075): pg_url_local is
+# `trakrf-app`, which has CRUD and nothing else so RLS is evaluated against it;
+# pg_url_migrate_local is `trakrf-migrate`, which owns the schema and is the
+# only one of the two that can run DDL.
 pg_url_local := env("PG_URL_LOCAL", "")
+pg_url_migrate := env("PG_URL_MIGRATE", "")
+pg_url_migrate_local := env("PG_URL_MIGRATE_LOCAL", "")
 pg_url_cloud := env("PG_URL_CLOUD", "")
 
 # List all available recipes
@@ -59,16 +66,32 @@ test-integration *args:
 #   - With set -euo pipefail, a non-zero schemathesis exit (findings) will fail
 #     the recipe. That's correct gate behavior — the report is still written to
 #     backend/contract-tests/.
+#   - Three roles, same split as every other environment (TRA-1075): postgres
+#     creates the database and seeds it (the seed spans orgs, so it has to be
+#     exempt from RLS), trakrf-migrate migrates, and the backend under test
+#     serves as trakrf-app. Running the server under test as a superuser would
+#     mean the contract suite never exercised a single policy.
 test-contract:
     #!/usr/bin/env bash
     set -euo pipefail
     REPO_ROOT="$(git rev-parse --show-toplevel)"
     SCHEMA_DB="trakrf_schemathesis"
     PG_PASSWORD="${POSTGRES_PASSWORD:-postgres}"
-    # URL-encode the password so chars like '#' don't get parsed as URL fragments
-    PG_PASSWORD_ENC="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$PG_PASSWORD")"
+    APP_ROLE="trakrf-app"
+    MIGRATE_ROLE="trakrf-migrate"
+    APP_PASSWORD="${PG_APP_PASSWORD:-trakrf-app}"
+    MIGRATE_PASSWORD="${PG_MIGRATE_PASSWORD:-trakrf-migrate}"
+    OBFUSCATION_KEY="${OBFUSCATION_KEY:-6f626675736361746f72746573746b657920303132333435363738396162636465}"
+    # URL-encode passwords so chars like '#' don't get parsed as URL fragments
+    urlenc() { python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
+    PG_PASSWORD_ENC="$(urlenc "$PG_PASSWORD")"
+    APP_PASSWORD_ENC="$(urlenc "$APP_PASSWORD")"
+    MIGRATE_PASSWORD_ENC="$(urlenc "$MIGRATE_PASSWORD")"
     PG_URL_ROOT="postgres://postgres:${PG_PASSWORD_ENC}@localhost:5432/postgres?sslmode=disable"
-    export PG_URL_LOCAL="postgres://postgres:${PG_PASSWORD_ENC}@localhost:5432/${SCHEMA_DB}?sslmode=disable"
+    # Superuser on the contract DB — used for seeding and for the bootstrap SQL.
+    PG_URL_ADMIN_DB="postgres://postgres:${PG_PASSWORD_ENC}@localhost:5432/${SCHEMA_DB}?sslmode=disable"
+    PG_URL_APP="postgres://${APP_ROLE}:${APP_PASSWORD_ENC}@localhost:5432/${SCHEMA_DB}?sslmode=disable"
+    export PG_URL_MIGRATE_LOCAL="postgres://${MIGRATE_ROLE}:${MIGRATE_PASSWORD_ENC}@localhost:5432/${SCHEMA_DB}?sslmode=disable"
 
     cleanup() {
         if [ -n "${BACKEND_PID:-}" ]; then
@@ -100,41 +123,57 @@ test-contract:
         exit 1
     fi
 
-    # 2. (Re)create the contract-test DB. Terminate any lingering sessions
-    # first (e.g. an interrupted prior run) so DROP DATABASE doesn't error.
+    # 2. (Re)create the contract-test DB with the same two-role shape as every
+    # other environment (database/sql/, TRA-1075). Terminate any lingering
+    # sessions first (e.g. an interrupted prior run) so DROP DATABASE doesn't
+    # error, and drop before creating so the roles' grants land on a clean
+    # schema.
     #
-    # Pin search_path=trakrf,public at the database level (not on the connection
-    # URL) so every connection — migrate, backend, psql for seeding — sees the
-    # same path.
+    # 02-schema.sql pins search_path and the obfuscation key at the database
+    # level rather than on any connection URL, so migrate, backend and psql all
+    # see the same path.
     echo "🗄  Recreating ${SCHEMA_DB}..."
     psql "$PG_URL_ROOT" -v ON_ERROR_STOP=1 -c \
         "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='${SCHEMA_DB}';" >/dev/null
     psql "$PG_URL_ROOT" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS ${SCHEMA_DB};"
-    psql "$PG_URL_ROOT" -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${SCHEMA_DB};"
-    psql "$PG_URL_ROOT" -v ON_ERROR_STOP=1 -c \
-        "ALTER DATABASE ${SCHEMA_DB} SET search_path = trakrf, public;"
-    # Set obfuscation key required by trakrf.generate_obfuscated_id() (TRA-720).
-    psql "$PG_URL_ROOT" -v ON_ERROR_STOP=1 -c \
-        "ALTER DATABASE ${SCHEMA_DB} SET app.obfuscation_key = '6f626675736361746f72746573746b657920303132333435363738396162636465';"
+    psql "$PG_URL_ROOT" -v ON_ERROR_STOP=1 -q \
+        -v db_name="$SCHEMA_DB" \
+        -v app_role="$APP_ROLE" -v app_password="$APP_PASSWORD" \
+        -v migrate_role="$MIGRATE_ROLE" -v migrate_password="$MIGRATE_PASSWORD" \
+        -f "$REPO_ROOT/database/sql/01-roles.sql"
+    psql "$PG_URL_ADMIN_DB" -v ON_ERROR_STOP=1 -q \
+        -v db_name="$SCHEMA_DB" \
+        -v app_role="$APP_ROLE" -v migrate_role="$MIGRATE_ROLE" \
+        -v obfuscation_key="$OBFUSCATION_KEY" \
+        -f "$REPO_ROOT/database/sql/02-schema.sql"
 
-    # 3. Migrate (PG_URL_LOCAL exported above, re-evaluated by just migrate).
-    # The trakrf schema used to be pre-created here, so CURRENT_SCHEMA() would
-    # resolve to 'trakrf' and keep schema_migrations in one place. `./server
-    # migrate` now creates the schema and pins its ledger itself (TRA-1069).
+    # 3. Migrate as trakrf-migrate (PG_URL_MIGRATE_LOCAL exported above,
+    # re-evaluated by just migrate). The trakrf schema used to be pre-created
+    # here so CURRENT_SCHEMA() would resolve to 'trakrf' and keep
+    # schema_migrations in one place. `./server migrate` now creates the schema
+    # and pins its ledger itself (TRA-1069); 02-schema.sql creates it only to
+    # fix its owner and hang default privileges off it.
     echo "🔄 Migrating ${SCHEMA_DB}..."
     just migrate
 
-    # 4. Seed
+    # 4. Seed as the superuser. The seed spans several orgs by design, so it
+    # cannot run under the app role's policies.
     echo "🌱 Loading contract-test seed..."
-    psql "$PG_URL_LOCAL" -v ON_ERROR_STOP=1 -f "$REPO_ROOT/backend/database/seeds/contract_test_seed.sql"
+    psql "$PG_URL_ADMIN_DB" -v ON_ERROR_STOP=1 -f "$REPO_ROOT/backend/database/seeds/contract_test_seed.sql"
 
-    # 5. Start backend in background on port 8081
+    # 4a. Grant the app role CRUD on everything the migrations just created.
+    # 02-schema.sql's default privileges already cover it; this is what makes
+    # the recipe survive a database that was migrated before it was bootstrapped.
+    psql "$PG_URL_ADMIN_DB" -v ON_ERROR_STOP=1 -q \
+        -v app_role="$APP_ROLE" -f "$REPO_ROOT/database/sql/03-grants.sql"
+
+    # 5. Start backend in background on port 8081, as the RLS-enforced app role
     if ss -lnt 'sport = :8081' 2>/dev/null | grep -q ":8081"; then
         echo "❌ Port 8081 already in use — stop the other listener and retry" >&2
         exit 1
     fi
     echo "🚀 Starting backend on :8081 with APP_ENV=test..."
-    PG_URL="$PG_URL_LOCAL" \
+    PG_URL="$PG_URL_APP" \
     APP_ENV=test \
     JWT_SECRET="${JWT_SECRET:-dev-secret-change-in-production}" \
     BACKEND_PORT=8081 \
@@ -440,9 +479,12 @@ shell:
 # ============================================================================
 
 # Run database migrations using the embedded set (./server migrate)
+#
+# Runs as trakrf-migrate, not trakrf-app: the app role has no CREATE anywhere,
+# which is exactly what makes RLS meaningful for it (TRA-1075).
 migrate:
     @echo "🔄 Running database migrations..."
-    @env PG_URL="{{pg_url_local}}" go run . migrate
+    @env PG_URL="{{pg_url_migrate_local}}" go run . migrate
     @echo "✅ Migrations complete"
 
 # Alias for consistency
@@ -451,13 +493,13 @@ migrate-up: migrate
 # Roll back last migration
 migrate-down:
     @echo "⏪ Rolling back last migration..."
-    docker compose exec backend sh -c 'migrate -path /app/migrations -database "$PG_URL" down 1'
+    docker compose exec -e PG_URL="{{pg_url_migrate}}" backend sh -c 'migrate -path /app/migrations -database "$PG_URL" down 1'
     @echo "✅ Rollback complete"
 
 # Show current migration version
 migrate-status:
     @echo "📊 Migration status:"
-    docker compose exec backend sh -c 'migrate -path /app/migrations -database "$PG_URL" version'
+    docker compose exec -e PG_URL="{{pg_url_migrate}}" backend sh -c 'migrate -path /app/migrations -database "$PG_URL" version'
 
 # Create new migration file
 migrate-create name:
@@ -482,7 +524,7 @@ migrate-checksums:
 # over forcing it into agreement.
 migrate-force version:
     @echo "⚠️  Forcing migration version to {{version}}"
-    docker compose exec backend sh -c 'migrate -path /app/migrations -database "$PG_URL" force {{version}}'
+    docker compose exec -e PG_URL="{{pg_url_migrate}}" backend sh -c 'migrate -path /app/migrations -database "$PG_URL" force {{version}}'
 
 # TRA-720: schema-diff between the legacy 44-migration stack (pre-tra-720 tag)
 # and the new 10-file stack. Both are applied to ephemeral databases;

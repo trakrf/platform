@@ -49,8 +49,14 @@ go test ./... -short
 
 ## Environment Variables
 
-- `PG_URL` - Postgres connection string (default: `postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable`)
-- `TEST_PG_URL` - Test database connection string (default: derived from PG_URL with `trakrf_test` database)
+- `PG_ADMIN_URL` - **superuser** connection to the maintenance database (default:
+  `postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable`). The harness
+  drops and recreates `trakrf_test` and creates the `trakrf_test_app` role, so it needs
+  privileges the application deliberately does not have. Not `PG_URL`: since TRA-1075 that
+  is the non-superuser `trakrf-app` role on the `trakrf` database, and neither is any use
+  here.
+- `TEST_PG_URL` - Test database connection string (default: derived from `PG_ADMIN_URL` with
+  the database name swapped for `trakrf_test`)
 
 ## Architecture
 
