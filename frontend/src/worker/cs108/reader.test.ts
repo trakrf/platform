@@ -7,7 +7,7 @@ import { NotificationManager } from './notification/manager.js';
 import { IDLE_SEQUENCE } from './system/sequences.js';
 import { INVENTORY_CONFIG_SEQUENCE } from './rfid/inventory/sequences.js';
 import { BARCODE_CONFIG_SEQUENCE } from './barcode/sequences.js';
-import { LOCATE_CONFIG_SEQUENCE } from './rfid/locate/sequences.js';
+import { LOCATE_CONFIG_SEQUENCE, locateSettingsSequence } from './rfid/locate/sequences.js';
 import type { CS108Packet } from './type.js';
 
 // Mock all dependencies
@@ -488,6 +488,85 @@ describe('CS108Reader', () => {
       // Should call executeSequence for power setting
       expect(commandManagerMock.executeSequence).toHaveBeenCalled(
       );
+    });
+  });
+
+  /**
+   * TRA-1091 — characterisation only, no behaviour change.
+   *
+   * The ticket hypothesises that when the Locate deep link races the command
+   * mutex and setSettings throws, the tag mask is never applied and the reader
+   * searches UNFILTERED (a false positive on a tag finder). These tests pin
+   * down what the code actually does on that path, so the hypothesis can be
+   * confirmed or closed without guessing. They assert current behaviour; none
+   * of them is a fix.
+   */
+  describe('LOCATE tag mask sourcing (TRA-1091)', () => {
+    const TARGET_EPC = 'E280689400000000001018DD';
+
+    // Last N commands of a mode sequence — buildModeSequences() appends the
+    // mask sequence last.
+    const maskTail = (sequence: unknown[], length: number) => sequence.slice(-length);
+
+    const lastModeSequence = () => {
+      const calls = (commandManagerMock.executeSequence as Mock).mock.calls;
+      return calls[calls.length - 1][0];
+    };
+
+    beforeEach(async () => {
+      await reader.connect();
+      postMessageSpy.mockClear();
+    });
+
+    it('builds the mask into the LOCATE mode sequence itself, from the settings passed to setMode', async () => {
+      // This is the deep-link path: App.tsx puts the EPC in the settings store,
+      // DeviceManager snapshots the store and hands it to setMode(). No
+      // separate setSettings() call is needed for the mask to reach hardware.
+      (commandManagerMock.executeSequence as Mock).mockClear();
+
+      await reader.setMode(ReaderMode.LOCATE, { rfid: { targetEPC: TARGET_EPC } });
+
+      const expected = locateSettingsSequence(TARGET_EPC);
+      expect(maskTail(lastModeSequence(), expected.length)).toEqual(expected);
+    });
+
+    it('still builds the mask when a concurrent setSettings() fails with the mutex error', async () => {
+      // Reproduce the reported interleaving: the settings push loses the race
+      // and rejects with the plain mutex Error (which does NOT contain
+      // "aborted", so setSettings re-throws rather than swallowing it), while
+      // the mode change proceeds.
+      const mutexError = new Error('Command already active - executeCommand called concurrently');
+      (commandManagerMock.executeSequence as Mock).mockRejectedValueOnce(mutexError);
+
+      await expect(
+        reader.setSettings({ rfid: { transmitPower: 25, targetEPC: TARGET_EPC } })
+      ).rejects.toThrow('Command already active');
+
+      (commandManagerMock.executeSequence as Mock).mockClear();
+
+      await reader.setMode(ReaderMode.LOCATE, { rfid: { targetEPC: TARGET_EPC } });
+
+      const expected = locateSettingsSequence(TARGET_EPC);
+      expect(maskTail(lastModeSequence(), expected.length)).toEqual(expected);
+    });
+
+    it('installs an all-zero mask with tag select ENABLED when the EPC is missing — it does not search unfiltered', async () => {
+      // buildModeSequences() coerces a missing targetEPC to '' rather than
+      // undefined, and locateSettingsSequence('') pads to 24 zeros instead of
+      // returning []. So "Building LOCATE with targetEPC: none" configures the
+      // reader to match an all-zero EPC — nothing responds. That is a false
+      // NEGATIVE, the opposite of the unfiltered-search failure mode.
+      (commandManagerMock.executeSequence as Mock).mockClear();
+
+      await reader.setMode(ReaderMode.LOCATE, { rfid: { targetEPC: '' } });
+
+      const emptyMask = locateSettingsSequence('');
+      expect(emptyMask.length).toBeGreaterThan(0);
+      expect(maskTail(lastModeSequence(), emptyMask.length)).toEqual(emptyMask);
+
+      // Only an undefined EPC would skip masking altogether, and the reader
+      // never passes undefined.
+      expect(locateSettingsSequence(undefined)).toEqual([]);
     });
   });
 
