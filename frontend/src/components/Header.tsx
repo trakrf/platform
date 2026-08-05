@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useDeviceStore, useUIStore, useAuthStore } from '@/stores';
+import { useDeviceStore, useUIStore, useAuthStore, type TabType } from '@/stores';
+import { NAV_LABELS } from '@/lib/routing/navLabels';
+import { capabilityEntryForRoute } from '@/components/capability/registry';
 import { ReaderState } from '@/worker/types/reader';
 import { useBluetoothSupport } from '@/hooks/useBluetoothSupport';
 import { connectErrorMessage } from '@/hooks/connectErrorMessage';
@@ -31,6 +33,36 @@ export const PAGE_TITLES = {
   'create-org': { title: "Create Organization", subtitle: "Set up a new organization" },
   'accept-invite': { title: "Accept Invite", subtitle: "Join an organization" }
 } as const;
+
+/**
+ * What the header bar shows for a tab.
+ *
+ * `PAGE_TITLES` where the tab has an entry. Where it does not, the label the
+ * sidebar renders — `scan-devices`, `live-reads` and `output-devices` deliberately
+ * own their in-page heading (TRA-1071), but that is no reason for the top-left of
+ * the app to be blank where every other tab names itself (TRA-1082). `kits` was
+ * the worse case: no page title *and* no in-screen heading, so it named itself
+ * nowhere.
+ *
+ * Both fallback sources are the same strings the sidebar renders — `NAV_LABELS`
+ * for the device surfaces, the capability registry for the gated ones — so a
+ * header title cannot drift from the entry the user clicked to get here.
+ * `pageTitleNavParity.test.tsx` holds that for every entry the sidebar can show.
+ *
+ * A subtitle is only what the ⓘ button has to say, and not every surface has
+ * something; Header omits the button rather than opening an empty tooltip.
+ */
+export function resolvePageTitle(tab: TabType): { title: string; subtitle: string } {
+  const page = PAGE_TITLES[tab as keyof typeof PAGE_TITLES];
+  if (page) return page;
+
+  const capabilityEntry = capabilityEntryForRoute(tab);
+
+  return {
+    title: NAV_LABELS[tab as keyof typeof NAV_LABELS] ?? capabilityEntry?.label ?? "",
+    subtitle: capabilityEntry?.tooltip ?? "",
+  };
+}
 
 const TriggerIndicator = ({ isDown }: { isDown: boolean }) => {
   return (
@@ -145,7 +177,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
     }
   }, [readerState, isBrowserSupported]);
 
-  const currentPage = PAGE_TITLES[activeTab as keyof typeof PAGE_TITLES] || { title: "", subtitle: "" };
+  const currentPage = resolvePageTitle(activeTab);
 
   const shouldShowConnectButton = activeTab !== 'help';
 
@@ -173,27 +205,30 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
 
             <div className="flex items-center gap-1.5">
               <h1 data-testid="page-title" className="text-base md:text-xl font-semibold text-gray-900 dark:text-gray-100">{currentPage.title}</h1>
-              <div className="relative flex items-center">
-                <button
-                  onClick={() => setShowInfoTooltip(!showInfoTooltip)}
-                  className="hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors p-0.5"
-                  aria-label="Show page info"
-                >
-                  <Info className="w-4 h-4 text-gray-400 dark:text-gray-500 block translate-y-px" />
-                </button>
-                {showInfoTooltip && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={() => setShowInfoTooltip(false)}
-                    />
-                    <div className="absolute left-0 top-full mt-2 z-20 bg-gray-900 dark:bg-gray-700 text-white text-sm rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">
-                      {currentPage.subtitle}
-                      <div className="absolute left-4 -top-1 w-2 h-2 bg-gray-900 dark:bg-gray-700 transform rotate-45"></div>
-                    </div>
-                  </>
-                )}
-              </div>
+              {/* No subtitle, no affordance — the button would open an empty tooltip. */}
+              {currentPage.subtitle && (
+                <div className="relative flex items-center">
+                  <button
+                    onClick={() => setShowInfoTooltip(!showInfoTooltip)}
+                    className="hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors p-0.5"
+                    aria-label="Show page info"
+                  >
+                    <Info className="w-4 h-4 text-gray-400 dark:text-gray-500 block translate-y-px" />
+                  </button>
+                  {showInfoTooltip && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setShowInfoTooltip(false)}
+                      />
+                      <div className="absolute left-0 top-full mt-2 z-20 bg-gray-900 dark:bg-gray-700 text-white text-sm rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">
+                        {currentPage.subtitle}
+                        <div className="absolute left-4 -top-1 w-2 h-2 bg-gray-900 dark:bg-gray-700 transform rotate-45"></div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

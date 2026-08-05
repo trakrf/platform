@@ -1,4 +1,4 @@
-// LiveReadsFeed — the reusable tag-presence inventory (TRA-936/937), modeled on
+// LiveReadsFeed — the reusable tag-presence feed (TRA-936/937), modeled on
 // Impinj ItemTest's Inventory view: one row per present tag with read count,
 // RSSI aggregates (last/avg/min/max), first/last seen and a live "age" that
 // drives a smooth staleness gradient. A header session timer and a footer

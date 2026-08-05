@@ -20,28 +20,10 @@ vi.mock('@/hooks/capability/useCapability', async (importOriginal) => ({
 }));
 
 import TabNavigation from '@/components/TabNavigation';
-import { PAGE_TITLES } from '@/components/Header';
+import { PAGE_TITLES, resolvePageTitle } from '@/components/Header';
 import { NAV_LABELS } from '@/lib/routing/navLabels';
-import { useUIStore, useDeviceStore, useOrgStore } from '@/stores';
+import { useUIStore, useDeviceStore, useOrgStore, type TabType } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
-
-/**
- * Tabs whose screen owns its own heading instead of appearing in PAGE_TITLES.
- * Listed explicitly so adding a nav entry without a page title is a decision
- * someone made here, not a blank header nobody noticed.
- *
- * The ones in NAV_LABELS take their heading text from that shared constant, so
- * they cannot drift from the sidebar. `kits` is a dark POC surface and
- * `org-geofence-defaults` has no page-level heading; neither is worth a name.
- */
-const SCREEN_OWNS_HEADING = new Set([
-  'kits',
-  'mustering',
-  'scan-devices',
-  'live-reads',
-  'output-devices',
-  'org-geofence-defaults',
-]);
 
 /** tab id -> sidebar label, for every entry the sidebar can show. */
 function navLabels(): Map<string, string> {
@@ -99,15 +81,21 @@ describe('page title / nav label parity', () => {
     });
   });
 
-  it('accounts for every sidebar entry, by title or by an owned heading', () => {
+  /**
+   * Every sidebar entry resolves to a header title, and it is the label the user
+   * clicked (TRA-1082). Before this, a tab with no PAGE_TITLES entry rendered a
+   * blank header — `scan-devices`, `live-reads`, `output-devices` and `kits` all
+   * did. There is no opt-out list any more: a new nav entry that names nothing
+   * in the header goes red here.
+   */
+  it('resolves a header title for every sidebar entry, reading as its nav label', () => {
     const labels = navLabels();
 
-    labels.forEach((_label, id) => {
-      const accounted =
-        id in PAGE_TITLES || SCREEN_OWNS_HEADING.has(id);
-      expect(accounted, `nav entry "${id}" has no page title and is not listed as owning one`).toBe(
-        true
-      );
+    labels.forEach((label, id) => {
+      expect(
+        resolvePageTitle(id as TabType).title,
+        `nav entry "${id}" should title the header with its own label`
+      ).toBe(label);
     });
   });
 });
