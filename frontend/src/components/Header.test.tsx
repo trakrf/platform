@@ -94,6 +94,35 @@ describe('Header page titles', () => {
     expect(screen.getByText(expectedTitle)).toBeInTheDocument();
   });
 
+  /**
+   * TRA-1082: these surfaces have no PAGE_TITLES entry — their screen owns the
+   * in-page heading — but the header still has to name the page, the way it does
+   * on every other tab. The name comes from the same nav label the sidebar
+   * renders, so the two cannot drift.
+   */
+  it.each([
+    ['scan-devices', 'Readers'],
+    ['live-reads', 'Live Reads'],
+    ['output-devices', 'Outputs'],
+    ['kits', 'Kits'],
+  ])('titles the %s tab "%s" from its nav label', (tab, expectedTitle) => {
+    useUIStore.setState({ activeTab: tab as any });
+    render(<Header onMenuToggle={() => {}} isMobileMenuOpen={false} />);
+    expect(screen.getByTestId('page-title')).toHaveTextContent(expectedTitle);
+  });
+
+  it('offers page info where there is a subtitle to show', () => {
+    useUIStore.setState({ activeTab: 'scan' });
+    render(<Header onMenuToggle={() => {}} isMobileMenuOpen={false} />);
+    expect(screen.getByLabelText('Show page info')).toBeInTheDocument();
+  });
+
+  it('drops the info button on a page with no subtitle', () => {
+    useUIStore.setState({ activeTab: 'live-reads' as any });
+    render(<Header onMenuToggle={() => {}} isMobileMenuOpen={false} />);
+    expect(screen.queryByLabelText('Show page info')).not.toBeInTheDocument();
+  });
+
   it('renders empty title for an unknown tab (fallback is blank, not "Inventory")', () => {
     useUIStore.setState({ activeTab: 'some-unknown-future-tab' as any });
     const { container } = render(<Header onMenuToggle={() => {}} isMobileMenuOpen={false} />);

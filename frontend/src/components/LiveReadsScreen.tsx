@@ -1,6 +1,6 @@
 // LiveReadsScreen — global reader live-view / coverage diagnostic (TRA-902).
 //
-// Shows a live tag-presence inventory across every fixed reader (TRA-936),
+// Shows live tag presence across every fixed reader (TRA-936),
 // whether or not a tag maps to a registered asset, so an operator can tune
 // antenna placement and the RSSI threshold. Presence + read-count/RSSI
 // aggregation are server-authoritative, streamed over the backend SSE proxy and
@@ -30,7 +30,7 @@ export default function LiveReadsScreen() {
           {NAV_LABELS['live-reads']}
         </h1>
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          Live tag inventory — every tag in range (registered or not) with read count and RSSI,
+          Live tag feed — every tag in range (registered or not) with read count and RSSI,
           for antenna &amp; RSSI coverage tuning. A tag drops out after 30s of silence.
         </p>
       </div>
