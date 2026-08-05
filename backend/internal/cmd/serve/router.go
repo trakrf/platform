@@ -173,7 +173,18 @@ func setupRouter(
 
 		orgsHandler.RegisterRoutes(r, store, requireCap(capability.Geofence))
 		orgsHandler.RegisterMeRoutes(r)
-		usersHandler.RegisterRoutes(r)
+		// TRA-1103: the /api/v1/users CRUD surface is cross-org back office and
+		// is superadmin-gated per route. It previously carried session auth and
+		// nothing else, which let any logged-in user enumerate every account and
+		// retarget another user's email into a password-reset takeover. Not
+		// behind paidGate, matching the superadmin org surfaces — an operator
+		// must still be able to act on a lapsed org.
+		//
+		// Registration order matters here: /api/v1/users/me is registered above
+		// by RegisterMeRoutes and stays open to any session. chi prefers the
+		// static "me" segment over {id}, so the self-service route is unaffected
+		// by this gate. Keep the two registrations in this order and this group.
+		usersHandler.RegisterRoutes(r, middleware.RequireSuperadmin(store))
 		assetsHandler.RegisterRoutes(r, paidGate)
 		inventoryHandler.RegisterRoutes(r)
 		reportsHandler.RegisterRoutes(r)

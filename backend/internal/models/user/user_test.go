@@ -18,14 +18,3 @@ func TestUserStruct(t *testing.T) {
 		t.Errorf("expected email 'test@example.com', got %s", user.Email)
 	}
 }
-
-func TestCreateUserRequest(t *testing.T) {
-	req := CreateUserRequest{
-		Email: "test@example.com",
-		Name:  "Test User",
-	}
-
-	if req.Email == "" {
-		t.Error("email should not be empty")
-	}
-}

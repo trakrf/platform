@@ -22,12 +22,10 @@ type User struct {
 	LastOrgID    *int `json:"last_org_id,omitempty"`
 }
 
-// CreateUserRequest for POST /api/v1/users
-type CreateUserRequest struct {
-	Email        string `json:"email" validate:"required,email"`
-	Name         string `json:"name" validate:"required,min=1,max=255"`
-	PasswordHash string `json:"password_hash" validate:"required,min=8"` // Temporary, Phase 5 will hash
-}
+// CreateUserRequest is gone with POST /api/v1/users (TRA-1103). It carried a
+// `password_hash` the storage layer stored verbatim, so the value became the
+// bcrypt hash and could never verify against itself. Users are created by signup
+// and the org invitation flow, which also establish org membership.
 
 // UpdateUserRequest for PUT /api/v1/users/:id
 type UpdateUserRequest struct {

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/trakrf/platform/backend/internal/models"
-	"github.com/trakrf/platform/backend/internal/models/user"
 	"github.com/trakrf/platform/backend/internal/testutil"
 )
 
@@ -25,11 +24,7 @@ func TestReInviteAfterCancel(t *testing.T) {
 		t.Fatalf("create org: %v", err)
 	}
 
-	inviter, err := store.CreateUser(ctx, user.CreateUserRequest{
-		Email:        "admin@example.com",
-		Name:         "Admin",
-		PasswordHash: "password-hash",
-	})
+	inviter := insertUser(t, store, "admin@example.com", "Admin")
 	if err != nil {
 		t.Fatalf("create inviter: %v", err)
 	}
@@ -79,11 +74,7 @@ func TestDuplicateLiveInviteRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create org: %v", err)
 	}
-	inviter, err := store.CreateUser(ctx, user.CreateUserRequest{
-		Email:        "admin@dup.example.com",
-		Name:         "Admin",
-		PasswordHash: "password-hash",
-	})
+	inviter := insertUser(t, store, "admin@dup.example.com", "Admin")
 	if err != nil {
 		t.Fatalf("create inviter: %v", err)
 	}
