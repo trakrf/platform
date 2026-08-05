@@ -4,7 +4,8 @@
 
 import { useState } from 'react';
 import { Menu } from '@headlessui/react';
-import { ChevronDown, Plus, Check, Settings, Users, Key, LogOut, Building2, Webhook, User } from 'lucide-react';
+// UserIcon, not User: the `User` type is imported below and the icon would shadow it.
+import { ChevronDown, Plus, Check, Settings, Users, Key, LogOut, Building2, Webhook, User as UserIcon } from 'lucide-react';
 import { useOrgStore, useAuthStore } from '@/stores';
 import { useOrgSwitch } from '@/hooks/orgs/useOrgSwitch';
 import { RoleBadge } from './RoleBadge';
@@ -100,7 +101,7 @@ export function OrgSwitcher({ user, onLogout }: OrgSwitcherProps) {
                   active ? 'bg-gray-100 dark:bg-gray-700' : ''
                 } group flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-900 dark:text-gray-100 transition-colors`}
               >
-                <User className="w-4 h-4" />
+                <UserIcon className="w-4 h-4" />
                 Profile
               </button>
             )}
