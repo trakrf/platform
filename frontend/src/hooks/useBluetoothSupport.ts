@@ -68,12 +68,17 @@ const BLUEFY_URL = 'https://apps.apple.com/us/app/bluefy-web-ble-browser/id14928
  *              while Edge / Opera / Samsung Internet are `mirror` entries —
  *              inherited from upstream Chromium rather than independently
  *              measured. Chrome leads the list because it is the verified one.
- *   - windows — NOT verified, and not verifiable here: the only Windows box has
- *              no working Bluetooth driver since a hardware swap. The list is
- *              the same Chromium browsers that were confirmed on macOS by real
- *              connects, and Windows has no per-app Bluetooth permission model
- *              to trip over, so the risk is low — but it is inferred, not
- *              measured. Say so rather than letting it read as checked.
+ *   - windows — verified on a GMKtec M6 once its MediaTek driver was installed,
+ *              2026-08-04: Edge connects to a CS108 and works. But note the
+ *              prerequisite this row's copy does NOT mention — the scanner must
+ *              first be paired in Windows Bluetooth settings. Until it is, the
+ *              chooser still finds it (we filter on the CS108 service UUID, so
+ *              the right device is offered) but shows it unnamed, because
+ *              Windows will not surface the GAP name before bonding — and
+ *              selecting it fails with NetworkError. macOS needs none of this.
+ *              Tracked separately; do not paper over it with a connect-error
+ *              branch, because that NetworkError is Chromium's generic GATT
+ *              failure and equally means "scanner is off" or "out of range".
  *   - macos  — browser list fully verified on a MacBook Pro, 2026-08-04: Chrome,
  *              Edge and Opera each connected to a CS108 and read tags, and
  *              Safari and Firefox raise the banner. The bar was a real connect,
