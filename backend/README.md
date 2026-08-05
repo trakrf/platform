@@ -93,10 +93,16 @@ backend/
 }
 ```
 
-#### Users (CRUD)
+#### Users (CRUD) — superadmin only
+
+Cross-org back-office identity surface. Every route below requires
+`users.is_superadmin`; any other session gets `403`. A user editing their own
+profile uses `PATCH /api/v1/users/me` instead, which takes the id from session
+claims and never from the path (TRA-958/TRA-1103).
+
 | Method | Endpoint | Description | Query Params | Request Body | Response |
 |--------|----------|-------------|--------------|--------------|----------|
-| GET | `/api/v1/users` | List users | `?page=1&per_page=20` | - | `200` - Users + pagination |
+| GET | `/api/v1/users` | List users (all orgs) | `?page=1&per_page=20` | - | `200` - Users + pagination |
 | GET | `/api/v1/users/{id}` | Get user by ID | - | - | `200` - Single user |
 | POST | `/api/v1/users` | Create new user | - | User object | `201` - Created user |
 | PUT | `/api/v1/users/{id}` | Update user | - | User update object | `200` - Updated user |
@@ -264,6 +270,7 @@ curl -X POST localhost:8080/api/v1/auth/login \
 # Protected endpoints (requires JWT token)
 TOKEN="your-jwt-token-here"
 
+# Superadmin-only — a regular session gets 403 here (see Users CRUD above)
 curl localhost:8080/api/v1/users \
   -H "Authorization: Bearer $TOKEN"
 

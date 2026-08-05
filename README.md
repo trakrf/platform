@@ -315,7 +315,9 @@ PUT    /api/v1/accounts/:id     # Update account
 DELETE /api/v1/accounts/:id     # Soft delete account
 ```
 
-### Users
+### Users (superadmin only)
+Cross-org back office. Every route requires `is_superadmin`; any other session
+gets 403. Self-service profile edits go through `PATCH /api/v1/users/me`.
 ```bash
 GET    /api/v1/users            # List all users (paginated)
 GET    /api/v1/users/:id        # Get user by ID
