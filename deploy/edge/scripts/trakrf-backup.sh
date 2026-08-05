@@ -10,7 +10,7 @@ KEEP=14
 ts=$(date -u +%Y%m%d-%H%M%S)
 mkdir -p "$OUT"
 
-podman exec timescaledb pg_dump -U postgres -d postgres | gzip > "$OUT/trakrf-$ts.sql.gz"
+podman exec timescaledb pg_dump -U postgres -d trakrf | gzip > "$OUT/trakrf-$ts.sql.gz"
 
 # prune oldest beyond KEEP
 ls -1t "$OUT"/trakrf-*.sql.gz 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r rm -f

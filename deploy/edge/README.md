@@ -38,7 +38,7 @@ TimescaleDB data stays on the Podman named volume `timescale_data`.
 | `scripts/trakrf-backup.sh` | `pg_dump` → `/srv/trakrf/backups` |
 | `systemd/trakrf-backup.{service,timer}` | daily backup user timer |
 | `install.sh` | deploy `config/`+`quadlets/`+`scripts/`+`systemd/` → `/srv/trakrf`, link + reload units, enable backup timer |
-| `db-init.sh` | one-time DB bootstrap (trakrf schema, search_path, obfuscation key) |
+| `db-init.sh` | one-time DB bootstrap (roles, `trakrf` database, grants, search_path, obfuscation key) — applies `database/sql/` from the repo root |
 | `smoke-test.sh` | broker→subscriber→ingest proof |
 | `secrets/*.example` | templates; real secrets live only on the box under `/srv/trakrf/secrets/` |
 
@@ -55,10 +55,21 @@ sudo sysctl --system            # lets rootless Traefik bind :443
 sudo mkdir -p /srv/trakrf && sudo chown "$(id -un):$(id -gn)" /srv/trakrf
 mkdir -p /srv/trakrf/secrets/mosquitto /srv/trakrf/secrets/traefik/certs
 
-# 3. Secrets -> /srv/trakrf/secrets/.env  (runtime reads here)
-cp deploy/edge/secrets/.env.example /srv/trakrf/secrets/.env
+# 3. Secrets -> /srv/trakrf/secrets/  (runtime reads here)
+#    Three Postgres passwords: the superuser (db-init, pg_dump, psql) and one
+#    each for the two application roles. The stack never connects as postgres —
+#    a superuser bypasses row-level security, so the box would prove nothing
+#    about whether the policies hold (TRA-1075). Hex passwords need no
+#    URL-encoding, which is why openssl rand -hex is used here.
+cp deploy/edge/secrets/.env.example         /srv/trakrf/secrets/.env
+cp deploy/edge/secrets/migrate.env.example  /srv/trakrf/secrets/migrate.env
 PGPW=$(openssl rand -hex 16); MQPW=$(openssl rand -hex 12)
-sed -i "s|POSTGRES_PASSWORD=CHANGEME|POSTGRES_PASSWORD=$PGPW|;s|postgres://postgres:CHANGEME@|postgres://postgres:$PGPW@|" /srv/trakrf/secrets/.env
+APPPW=$(openssl rand -hex 16); MIGPW=$(openssl rand -hex 16)
+sed -i "s|POSTGRES_PASSWORD=CHANGEME|POSTGRES_PASSWORD=$PGPW|" /srv/trakrf/secrets/.env
+sed -i "s|PG_APP_PASSWORD=CHANGEME|PG_APP_PASSWORD=$APPPW|" /srv/trakrf/secrets/.env
+sed -i "s|PG_MIGRATE_PASSWORD=CHANGEME|PG_MIGRATE_PASSWORD=$MIGPW|" /srv/trakrf/secrets/.env
+sed -i "s|postgres://trakrf-app:CHANGEME@|postgres://trakrf-app:$APPPW@|" /srv/trakrf/secrets/.env
+sed -i "s|postgres://trakrf-migrate:CHANGEME@|postgres://trakrf-migrate:$MIGPW@|" /srv/trakrf/secrets/migrate.env
 sed -i "s|mqtt://trakrf-mqtt:CHANGEME@|mqtt://trakrf-mqtt:$MQPW@|" /srv/trakrf/secrets/.env
 sed -i "s|JWT_SECRET=CHANGEME|JWT_SECRET=$(openssl rand -hex 32)|" /srv/trakrf/secrets/.env
 sed -i "s|OBFUSCATION_KEY=CHANGEME|OBFUSCATION_KEY=$(openssl rand -hex 32)|" /srv/trakrf/secrets/.env
@@ -74,7 +85,7 @@ podman unshare chown 1883:1883 /srv/trakrf/secrets/mosquitto/passwd
 # 4. Deploy + start (Timescale must be up before db-init/migrate)
 deploy/edge/install.sh                 # config+quadlets+scripts+systemd -> /srv/trakrf; links units; enables backup timer
 systemctl --user start timescaledb.service
-deploy/edge/db-init.sh                 # schema + search_path + obfuscation key
+deploy/edge/db-init.sh                 # roles + trakrf database + grants + search_path + obfuscation key
 systemctl --user start traefik.service # pulls up migrate -> backend via deps
 systemctl --user enable --now podman-auto-update.timer
 
@@ -85,6 +96,66 @@ deploy/edge/smoke-test.sh
 
 On a box whose volume is already initialized, a reboot self-starts everything
 (linger + `Restart=always` + `[Install] WantedBy=default.target`).
+
+## Converting a box that predates the two-role split (TRA-1075)
+
+A box brought up before this change keeps its data in the `postgres` database
+and connects as the superuser. The conversion below **builds a fresh, empty
+`trakrf` database** and cuts the stack over to it.
+
+> **This box is not a scratch environment.** It backs presale demos, so whatever
+> demo content is set up on it is real work that would have to be redone.
+> Carrying the existing rows into `trakrf` is **not** covered here: the load has
+> to run as `trakrf-migrate` for the new objects to have the right owner, and
+> TimescaleDB hypertables need `timescaledb_pre_restore()` /
+> `timescaledb_post_restore()` around it. Neither has been rehearsed against
+> this box. If the demo content matters, work that path out first — do not
+> improvise it here.
+
+**Not urgent.** The old shape still works. What it does not do is exercise
+row-level security, which is the entire reason for the change: until the box is
+converted, a missing `WithOrgTx` looks healthy on it.
+
+Nothing below is destructive — the `postgres` database is left exactly as it
+was, so rollback is a two-line edit and a restart. But see the rotation warning
+under step 0: left alone, the daily timer will eventually age those dumps out.
+
+```bash
+# 0. Take a dump of the CURRENT data and put it somewhere the timer cannot
+#    reach. After install.sh lands, nothing on the box can dump `postgres`
+#    any more — the backup recipe hardcodes -d trakrf.
+podman exec timescaledb pg_dump -U postgres -d postgres \
+  | gzip > ~/trakrf-preconvert-$(date -u +%Y%m%d).sql.gz
+#    NOT /srv/trakrf/backups: post-conversion dumps of the (empty) trakrf
+#    database share that directory's trakrf-*.sql.gz glob, so the 14-day
+#    prune evicts the good ones after two weeks of daily runs.
+
+# 1. Stop everything that writes.
+systemctl --user stop backend.service migrate.service
+
+# 2. Add the new secrets (see step 3 of the bring-up above for generating them):
+#    PG_APP_PASSWORD, PG_MIGRATE_PASSWORD and the rewritten PG_URL in .env,
+#    plus a new /srv/trakrf/secrets/migrate.env.
+
+# 3. Create the roles and the trakrf database.
+deploy/edge/db-init.sh
+
+# 4. Bring it back up. migrate.service builds the schema in trakrf, as
+#    trakrf-migrate, from version 0.
+deploy/edge/install.sh                 # picks up the migrate.container change
+systemctl --user daemon-reload
+systemctl --user start traefik.service
+
+# 5. Verify.
+curl -fsS http://127.0.0.1:8080/health
+deploy/edge/smoke-test.sh              # reseeds the contract-test fixture
+```
+
+**Rollback:** put the old superuser `PG_URL` back in `.env`, remove
+`migrate.env`, restart. The `postgres` database still has everything it had —
+that, not the backup directory, is the real rollback. Drop it only once the
+converted box has been exercised and you are sure the demo content is either
+carried over or genuinely not wanted.
 
 ## Migrating an existing box (deploy/edge bind-mounts → /srv/trakrf)
 
