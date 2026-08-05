@@ -113,6 +113,7 @@ func TestRouterRegistration(t *testing.T) {
 		{"DELETE", "/api/v1/orgs/1/invitations/5"},
 		{"POST", "/api/v1/orgs/1/invitations/5/resend"},
 		{"GET", "/api/v1/users/me"},
+		{"PATCH", "/api/v1/users/me"},
 		{"POST", "/api/v1/users/me/current-org"},
 		{"GET", "/api/v1/users"},
 		{"GET", "/api/v1/reads/stream"},
@@ -355,8 +356,10 @@ func TestRouter_AuditedStatic_405WithCorrectAllow(t *testing.T) {
 		{"/api/v1/orgs/me", http.MethodPatch, "GET, HEAD"},
 		{"/api/v1/orgs/me", http.MethodPut, "GET, HEAD"},
 		{"/api/v1/orgs/me", http.MethodDelete, "GET, HEAD"},
-		{"/api/v1/users/me", http.MethodPut, "GET, HEAD"},
-		{"/api/v1/users/me", http.MethodDelete, "GET, HEAD"},
+		// TRA-958: PATCH is a live method here now, so it must appear in Allow
+		// and must not itself be a 405 case.
+		{"/api/v1/users/me", http.MethodPut, "GET, PATCH, HEAD"},
+		{"/api/v1/users/me", http.MethodDelete, "GET, PATCH, HEAD"},
 		{"/api/v1/users/me/current-org", http.MethodGet, "POST"},
 		{"/api/v1/users/me/current-org", http.MethodDelete, "POST"},
 		{"/api/v1/reports/asset-locations", http.MethodPut, "GET, HEAD"},
