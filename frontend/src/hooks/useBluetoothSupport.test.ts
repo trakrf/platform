@@ -222,18 +222,38 @@ describe('bluefyLinkFor', () => {
   // Verified on a real iPad, 2026-08-04: `bluefy://` prompts and opens Bluefy,
   // `bluefy://app.preview.trakrf.id` prompts with the host attached, and
   // `bluefys://` errors — there is no TLS variant, https is implied.
+  const ORIGIN = 'https://app.trakrf.id';
+
   it('swaps the https scheme for bluefy', () => {
-    expect(bluefyLinkFor('https://app.trakrf.id/')).toBe('bluefy://app.trakrf.id/');
+    expect(bluefyLinkFor('https://app.trakrf.id/', ORIGIN)).toBe('bluefy://app.trakrf.id/');
   });
 
   it('carries the path, query and hash across', () => {
-    expect(bluefyLinkFor('https://app.trakrf.id/scan?tab=rfid#tags')).toBe(
+    expect(bluefyLinkFor('https://app.trakrf.id/scan?tab=rfid#tags', ORIGIN)).toBe(
       'bluefy://app.trakrf.id/scan?tab=rfid#tags'
     );
   });
 
   it('refuses an http page, which Bluefy cannot use either', () => {
-    expect(bluefyLinkFor('http://app.trakrf.id/')).toBeUndefined();
+    expect(bluefyLinkFor('http://app.trakrf.id/', 'http://app.trakrf.id')).toBeUndefined();
+  });
+
+  it('refuses a host that is not the page we are on', () => {
+    // This only ever reopens the current page. Anything else is somebody
+    // steering the scheme handler somewhere we did not intend.
+    expect(bluefyLinkFor('https://evil.example/scan', ORIGIN)).toBeUndefined();
+  });
+
+  it('is not fooled by a host smuggled into the credentials', () => {
+    // `https://app.trakrf.id@evil.example/` parses to host evil.example, so
+    // stripping credentials is not enough on its own — the origin check is
+    // what actually closes this.
+    expect(bluefyLinkFor('https://app.trakrf.id@evil.example/', ORIGIN)).toBeUndefined();
+  });
+
+  it('refuses a string that is not a URL at all', () => {
+    expect(bluefyLinkFor('https:/ /not a url', ORIGIN)).toBeUndefined();
+    expect(bluefyLinkFor('', ORIGIN)).toBeUndefined();
   });
 });
 

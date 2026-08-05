@@ -26,6 +26,15 @@ export interface BluetoothEnvironment {
   href?: string;
 }
 
+/** `location.origin` lives on the prototype, so a spread of Location loses it. */
+function originOf(href: string): string {
+  try {
+    return new URL(href).origin;
+  } catch {
+    return '';
+  }
+}
+
 /** Descriptors as they were before the first override, so restore is exact. */
 const originalNavigator = new Map<Overridable, PropertyDescriptor | undefined>();
 let originalSecureContext: PropertyDescriptor | undefined;
@@ -59,7 +68,7 @@ export function setBluetoothEnvironment(environment: BluetoothEnvironment = {}) 
     // Only `location.href` is read by the code under test, so a plain object is
     // enough — and assigning to the real jsdom Location throws on navigation.
     Object.defineProperty(window, 'location', {
-      value: { ...window.location, href },
+      value: { ...window.location, href, origin: originOf(href) },
       configurable: true,
       writable: true,
     });

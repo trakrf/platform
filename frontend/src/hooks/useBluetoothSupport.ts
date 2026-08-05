@@ -151,10 +151,32 @@ const RECOMMENDATIONS: Record<Platform, BluetoothRecommendation> = {
  * detect installation with a scheme-plus-timeout race: it is unreliable, and on
  * modern iOS the "address is invalid" dialog fires anyway.
  */
-export function bluefyLinkFor(href: string): string | undefined {
-  const HTTPS = 'https://';
-  if (!href.startsWith(HTTPS)) return undefined;
-  return `bluefy://${href.slice(HTTPS.length)}`;
+export function bluefyLinkFor(
+  href: string,
+  origin: string = typeof window === 'undefined' ? '' : window.location.origin
+): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(href);
+  } catch {
+    return undefined;
+  }
+
+  // Bluefy only loads secure origins, so an http page would just move the same
+  // failure into a second browser.
+  if (url.protocol !== 'https:') return undefined;
+
+  // This reopens *the page you are on*, so the only origin it may ever produce
+  // is the one already loaded. Without this the authority comes from the input:
+  // `https://app.trakrf.id@evil.com/` parses to host evil.com, and stripping
+  // credentials would not save us. CodeQL flags the location -> href flow for
+  // exactly this reason, and it is right that the guard belongs here rather
+  // than in an unwritten assumption about who calls this.
+  if (url.origin !== origin) return undefined;
+
+  // Rebuilt from parsed components so nothing in the input can smuggle its way
+  // into the authority.
+  return `bluefy://${url.host}${url.pathname}${url.search}${url.hash}`;
 }
 
 const INSECURE_CONTEXT_NOTE =
