@@ -100,30 +100,21 @@ On a box whose volume is already initialized, a reboot self-starts everything
 ## Converting a box that predates the two-role split (TRA-1075)
 
 A box brought up before this change keeps its data in the `postgres` database
-and connects as the superuser. There is no in-place rename — `postgres` is the
-maintenance database and cannot be renamed out from under the cluster — so the
-conversion is a dump and load into the new `trakrf` database. Budget a few
-minutes of downtime; the data is small.
+and connects as the superuser. The conversion below **builds a fresh, empty
+`trakrf` database** and cuts the stack over to it. It does not move the old rows
+across, by design: a demo box's contents are seeded, not earned. Anything on
+here that would hurt to lose is in the wrong environment — durable data lives on
+GKE.
 
 **Not urgent.** The old shape still works. What it does not do is exercise
 row-level security, which is the entire reason for the change: until the box is
 converted, a missing `WithOrgTx` looks healthy on it.
 
-The steps below build an **empty** `trakrf` database and cut the stack over to
-it. That is normally what a demo box wants — its contents are seeded, not
-earned. Moving existing rows across is a separate job and is **not** covered
-here: a schema-and-data dump has to be reloaded as `trakrf-migrate` for the new
-objects to have the right owner, and TimescaleDB hypertables need its own
-`timescaledb_pre_restore()` / `timescaledb_post_restore()` procedure around the
-load. Neither has been rehearsed against this box — do not improvise it against
-data anyone still wants.
+Nothing here is destructive. The `postgres` database is left exactly as it was,
+so rollback is a two-line edit and a restart (see below) — there is no dump to
+take first and nothing to restore.
 
 ```bash
-# 0. Take a fresh backup first — this is the rollback.
-systemctl --user start trakrf-backup.service   # NB: now dumps -d trakrf, so run
-ls -1t /srv/trakrf/backups/*.sql.gz | head -1  # this BEFORE deploying the change,
-                                               # or dump -d postgres by hand.
-
 # 1. Stop everything that writes.
 systemctl --user stop backend.service migrate.service
 
@@ -145,9 +136,11 @@ curl -fsS http://127.0.0.1:8080/health
 deploy/edge/smoke-test.sh              # reseeds the contract-test fixture
 ```
 
-Rollback is to put the old superuser `PG_URL` back in `.env`, remove
-`migrate.env`, and restart — the `postgres` database is untouched by all of the
-above. Drop it only once the converted box has been exercised.
+**Rollback:** put the old superuser `PG_URL` back in `.env`, remove
+`migrate.env`, restart. The `postgres` database still has everything it had.
+Drop it once the converted box has been exercised — until then the daily backup
+is dumping the new `trakrf` database, so the old dumps age out of
+`/srv/trakrf/backups` on the usual 14-day rotation.
 
 ## Migrating an existing box (deploy/edge bind-mounts → /srv/trakrf)
 
