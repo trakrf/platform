@@ -82,9 +82,11 @@ const BLUEFY_URL = 'https://apps.apple.com/us/app/bluefy-web-ble-browser/id14928
  *              Tracked separately; do not paper over it with a connect-error
  *              branch, because that NetworkError is Chromium's generic GATT
  *              failure and equally means "scanner is off" or "out of range".
- *   - macos  — browser list fully verified on a MacBook Pro, 2026-08-04: Chrome,
- *              Edge and Opera each connected to a CS108 and read tags, and
- *              Safari and Firefox raise the banner. The bar was a real connect,
+ *   - macos  — fully verified on a MacBook Pro, 2026-08-04: Chrome, Edge and
+ *              Opera each connected to a CS108 and read tags, Safari and Firefox
+ *              raise the banner, and navigator.userAgentData.platform reads
+ *              'macOS' — checked directly, since this row's copy cannot prove it
+ *              (see below). The bar was a real connect,
  *              not an absent banner: Brave exposes navigator.bluetooth, passes
  *              the gate, and then fails with "Web Bluetooth API globally
  *              disabled" — so "no banner" proves nothing on its own.
@@ -94,11 +96,12 @@ const BLUEFY_URL = 'https://apps.apple.com/us/app/bluefy-web-ble-browser/id14928
  * on screen confirms the path renders but NOT which of the three produced it —
  * a fallthrough to `unknown` looks exactly the same. Only ios ("Bluefy"),
  * android ("...or Samsung Internet") and linux ("Chrome or Chromium") are
- * self-identifying. To check the others, read navigator.userAgentData.platform
- * directly rather than inferring it from the banner — which is how windows was
- * confirmed ('Windows', 2026-08-04). macos is the one row still unconfirmed on
- * this axis; its copy renders correctly but is indistinguishable from a
- * fallthrough to unknown, and nobody has read the value on a Mac.
+ * self-identifying. The other two were confirmed by reading
+ * navigator.userAgentData.platform directly on real hardware — 'Windows' and
+ * 'macOS', both 2026-08-04 — rather than by trusting what appeared on screen.
+ * Do the same for any row added later: identical copy makes a fallthrough to
+ * unknown invisible, and a detection bug would hide behind advice that still
+ * happens to read correctly.
  *   - linux  — the flag and BlueZ >= 5.41 caveats are repeated from the ticket,
  *              not measured. Version-dependent.
  *   - ios    — verified on an iPad, 2026-08-04. Safari raises the banner with
