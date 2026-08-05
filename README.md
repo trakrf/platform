@@ -318,10 +318,10 @@ DELETE /api/v1/accounts/:id     # Soft delete account
 ### Users (superadmin only)
 Cross-org back office. Every route requires `is_superadmin`; any other session
 gets 403. Self-service profile edits go through `PATCH /api/v1/users/me`.
+No POST: removed in TRA-1103 — users are created by signup and org invitations.
 ```bash
 GET    /api/v1/users            # List all users (paginated)
 GET    /api/v1/users/:id        # Get user by ID
-POST   /api/v1/users            # Create new user
 PUT    /api/v1/users/:id        # Update user
 DELETE /api/v1/users/:id        # Soft delete user
 ```

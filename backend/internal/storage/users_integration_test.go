@@ -14,22 +14,15 @@ import (
 
 // TRA-958: UpdateUser used to fall through to a wrapped pgx error on a unique
 // violation, which made the 409 branch in the users handlers unreachable and
-// surfaced a colliding email as a 500. CreateUser already mapped it.
+// surfaced a colliding email as a 500.
 func TestUpdateUser_DuplicateEmailReturnsSentinel(t *testing.T) {
 	store := testutil.SetupTestDatabase(t)
 	ctx := context.Background()
 
-	taken, err := store.CreateUser(ctx, user.CreateUserRequest{
-		Email: "taken-tra958@example.com", Name: "Taken", PasswordHash: "stub-hash",
-	})
-	require.NoError(t, err)
-	require.NotNil(t, taken)
+	// The email this test collides with; the row exists only to occupy it.
+	insertUser(t, store, "taken-tra958@example.com", "Taken")
 
-	mover, err := store.CreateUser(ctx, user.CreateUserRequest{
-		Email: "mover-tra958@example.com", Name: "Mover", PasswordHash: "stub-hash",
-	})
-	require.NoError(t, err)
-	require.NotNil(t, mover)
+	mover := insertUser(t, store, "mover-tra958@example.com", "Mover")
 
 	email := "taken-tra958@example.com"
 	got, err := store.UpdateUser(ctx, mover.ID, user.UpdateUserRequest{Email: &email})
@@ -43,11 +36,7 @@ func TestUpdateUser_RenameSucceeds(t *testing.T) {
 	store := testutil.SetupTestDatabase(t)
 	ctx := context.Background()
 
-	created, err := store.CreateUser(ctx, user.CreateUserRequest{
-		Email: "rename-tra958@example.com", Name: "Before", PasswordHash: "stub-hash",
-	})
-	require.NoError(t, err)
-	require.NotNil(t, created)
+	created := insertUser(t, store, "rename-tra958@example.com", "Before")
 
 	name := "After"
 	got, err := store.UpdateUser(ctx, created.ID, user.UpdateUserRequest{Name: &name})

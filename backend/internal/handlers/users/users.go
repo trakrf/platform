@@ -116,54 +116,26 @@ func (handler *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"data": u})
 }
 
-// @Summary Create user
-// @Description Superadmin-only (TRA-1103). Back-office user creation; the self-service path is signup/invitation.
-// @Tags users,internal
-// @Accept json
-// @Produce json
-// @Param request body user.CreateUserRequest true "User data"
-// @Success 201 {object} map[string]any "data: user.User"
-// @Failure 400 {object} modelerrors.ErrorResponse "Invalid JSON or validation error"
-// @Failure 401 {object} modelerrors.ErrorResponse "Unauthorized"
-// @Failure 403 {object} modelerrors.ErrorResponse "Superadmin privileges required"
-// @Failure 409 {object} modelerrors.ErrorResponse "Email already exists"
-// @Failure 415 {object} modelerrors.ErrorResponse "unsupported_media_type"
-// @Failure 500 {object} modelerrors.ErrorResponse "Internal server error"
-// @Security SessionAuth
-// @Router /api/v1/users [post]
-func (handler *Handler) Create(w http.ResponseWriter, r *http.Request) {
-	var request user.CreateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrBadRequest,
-			err.Error(), middleware.GetRequestID(r.Context()))
-
-		return
-	}
-
-	if err := validate.Struct(request); err != nil {
-		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
-			err.Error(), middleware.GetRequestID(r.Context()))
-
-		return
-	}
-
-	u, err := handler.storage.CreateUser(r.Context(), request)
-	if err != nil {
-		if errors.Is(err, modelerrors.ErrUserDuplicateEmail) {
-			httputil.WriteJSONError(w, r, http.StatusConflict, modelerrors.ErrConflict,
-				apierrors.UserCreateEmailExists, middleware.GetRequestID(r.Context()))
-
-			return
-		}
-		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
-			apierrors.UserCreateFailed, middleware.GetRequestID(r.Context()))
-
-		return
-	}
-
-	w.Header().Set("Location", "/api/v1/users/"+strconv.Itoa(u.ID))
-	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": u})
-}
+// POST /api/v1/users is deliberately absent (TRA-1103).
+//
+// It existed as ungated CRUD scaffolding and had no callers anywhere — not the
+// SPA, not the CLI, and never the public spec. Two things made removing it
+// better than keeping it:
+//
+//   - It could not produce a working account. The request carried a
+//     `password_hash` field that storage wrote verbatim into
+//     users.password_hash, so the submitted value became the bcrypt hash and
+//     could never verify against itself. Every account it created was unable to
+//     log in — confirmed live against preview, which returned 401 for a
+//     freshly created user.
+//   - It could not produce a *useful* account either. It inserted into
+//     trakrf.users alone and never wrote an org_users row, so the result
+//     belonged to no org and could do nothing even once it could authenticate.
+//
+// Real user creation happens through signup and the org invitation flow, which
+// establish org membership. Directory-style provisioning is expected to arrive
+// as SAML/OIDC rather than a REST create endpoint, so restoring this one would
+// be building the thing we would then have to deprecate.
 
 // @Summary Update user
 // @Description Superadmin-only (TRA-1103). Editing your own profile goes through PATCH /api/v1/users/me.
@@ -289,7 +261,6 @@ func (handler *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 func (handler *Handler) RegisterRoutes(r chi.Router, superadmin func(http.Handler) http.Handler) {
 	r.With(superadmin).Get("/api/v1/users", handler.List)
 	r.With(superadmin).Get("/api/v1/users/{id}", handler.Get)
-	r.With(superadmin).Post("/api/v1/users", handler.Create)
 	r.With(superadmin).Put("/api/v1/users/{id}", handler.Update)
 	r.With(superadmin).Delete("/api/v1/users/{id}", handler.Delete)
 }

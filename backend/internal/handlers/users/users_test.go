@@ -46,7 +46,6 @@ func TestRegisterRoutes_EveryRouteIsGated(t *testing.T) {
 	}{
 		{"list", http.MethodGet, "/api/v1/users"},
 		{"get", http.MethodGet, "/api/v1/users/123"},
-		{"create", http.MethodPost, "/api/v1/users"},
 		{"update", http.MethodPut, "/api/v1/users/123"},
 		{"delete", http.MethodDelete, "/api/v1/users/123"},
 	}
@@ -63,5 +62,28 @@ func TestRegisterRoutes_EveryRouteIsGated(t *testing.T) {
 					route.method, route.path, w.Code, gateSentinel)
 			}
 		})
+	}
+}
+
+// TRA-1103: POST /api/v1/users was removed, not gated. It had no callers, it
+// stored the submitted `password_hash` verbatim so the accounts it made could
+// never log in, and it wrote no org_users row so they belonged to no org.
+// Pinned here because "restore the CRUD create for symmetry" is an easy and
+// wrong instinct — reviving it needs to fail a test, not just pass review.
+func TestRegisterRoutes_CreateIsNotRegistered(t *testing.T) {
+	handler := users.NewHandler(nil)
+	r := chi.NewRouter()
+	handler.RegisterRoutes(r, sentinelGate)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader("{}"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code == gateSentinel {
+		t.Fatal("POST /api/v1/users is registered again — it was removed in TRA-1103")
+	}
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("POST /api/v1/users: got %d, want %d", w.Code, http.StatusMethodNotAllowed)
 	}
 }

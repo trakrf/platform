@@ -135,30 +135,10 @@ func (s *Storage) GetUserByEmail(ctx context.Context, email string) (*user.User,
 	return &usr, nil
 }
 
-// CreateUser inserts a new user with the provided details.
-func (s *Storage) CreateUser(ctx context.Context, request user.CreateUserRequest) (*user.User, error) {
-	query := `
-		INSERT INTO trakrf.users (email, name, password_hash)
-		VALUES ($1, $2, $3)
-		RETURNING id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at,
-		          is_superadmin, last_org_id
-	`
-
-	var usr user.User
-	err := s.pool.QueryRow(ctx, query, request.Email, request.Name, request.PasswordHash).Scan(
-		&usr.ID, &usr.Email, &usr.Name, &usr.PasswordHash, &usr.LastLoginAt,
-		&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt,
-		&usr.IsSuperadmin, &usr.LastOrgID)
-
-	if err != nil {
-		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-			return nil, errors.ErrUserDuplicateEmail
-		}
-		return nil, fmt.Errorf("failed to create user: %w", err)
-	}
-
-	return &usr, nil
-}
+// CreateUser is gone with POST /api/v1/users (TRA-1103). Its only production
+// caller was that handler; user creation lives in the auth service's signup and
+// invitation-accept paths, which hash the password properly and write the
+// org_users row that makes the account usable.
 
 // UpdateUser updates a user with the provided partial fields.
 func (s *Storage) UpdateUser(ctx context.Context, id int, request user.UpdateUserRequest) (*user.User, error) {

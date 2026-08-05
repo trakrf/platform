@@ -93,8 +93,6 @@ func usersRoutes() []usersRoute {
 	return []usersRoute{
 		{"list", http.MethodGet, func(int) string { return "/api/v1/users" }, ""},
 		{"get", http.MethodGet, func(id int) string { return fmt.Sprintf("/api/v1/users/%d", id) }, ""},
-		{"create", http.MethodPost, func(int) string { return "/api/v1/users" },
-			`{"name":"Created","email":"created@example.com","password_hash":"correct-horse-battery"}`},
 		{"update", http.MethodPut, func(id int) string { return fmt.Sprintf("/api/v1/users/%d", id) },
 			`{"name":"Renamed","email":"attacker@example.com"}`},
 		{"delete", http.MethodDelete, func(id int) string { return fmt.Sprintf("/api/v1/users/%d", id) }, ""},
@@ -187,12 +185,6 @@ func TestUsersRoutes_Superadmin(t *testing.T) {
 	t.Run("get", func(t *testing.T) {
 		w := call(t, store, token, http.MethodGet, fmt.Sprintf("/api/v1/users/%d", targetID), "")
 		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	})
-
-	t.Run("create", func(t *testing.T) {
-		w := call(t, store, token, http.MethodPost, "/api/v1/users",
-			`{"name":"New Person","email":"new-person@example.com","password_hash":"correct-horse-battery"}`)
-		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 	})
 
 	t.Run("update", func(t *testing.T) {
