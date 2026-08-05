@@ -531,8 +531,9 @@ migrate-force version:
 # pg_dump --schema-only outputs are diffed.
 #
 # Requires the pre-tra-720 git tag to exist (Task 13 Step 1 creates it).
-# Requires PG_URL_LOCAL to be a Postgres URL pointing at the local docker DB,
-# with sufficient privileges to CREATE/DROP databases.
+# Requires PG_URL_MIGRATE_LOCAL to be a Postgres URL pointing at the local
+# docker DB. That is the migrate role, which carries CREATEDB; PG_URL_LOCAL is
+# the app role and cannot create or drop a database (TRA-1075).
 #
 # Usage: just backend db-diff-old-vs-new
 db-diff-old-vs-new:
@@ -548,18 +549,19 @@ db-diff-old-vs-new:
         exit 1
     fi
 
-    # Derive per-DB URLs by string-replacing the dbname in PG_URL_LOCAL.
-    # PG_URL_LOCAL format: postgres://user:pwd@host:port/<dbname>?<query>
+    # Derive per-DB URLs by string-replacing the dbname in PG_URL_MIGRATE_LOCAL.
+    # Format: postgres://user:pwd@host:port/<dbname>?<query>
     # Use sed -E with a host-anchored pattern so we don't accidentally
     # replace the username (which may equal the dbname, e.g. "postgres").
-    OLD_URL=$(echo "$PG_URL_LOCAL" | sed -E "s|^(postgres://[^@]+@[^/]+/)[^?]+|\1${OLD_DB}|")
-    NEW_URL=$(echo "$PG_URL_LOCAL" | sed -E "s|^(postgres://[^@]+@[^/]+/)[^?]+|\1${NEW_DB}|")
+    ADMIN_URL="{{pg_url_migrate_local}}"
+    OLD_URL=$(echo "$ADMIN_URL" | sed -E "s|^(postgres://[^@]+@[^/]+/)[^?]+|\1${OLD_DB}|")
+    NEW_URL=$(echo "$ADMIN_URL" | sed -E "s|^(postgres://[^@]+@[^/]+/)[^?]+|\1${NEW_DB}|")
 
-    psql "$PG_URL_LOCAL" -c "DROP DATABASE IF EXISTS $OLD_DB;"
-    psql "$PG_URL_LOCAL" -c "DROP DATABASE IF EXISTS $NEW_DB;"
-    psql "$PG_URL_LOCAL" -c "CREATE DATABASE $OLD_DB;"
-    psql "$PG_URL_LOCAL" -c "CREATE DATABASE $NEW_DB;"
-    psql "$PG_URL_LOCAL" -c "ALTER DATABASE $NEW_DB SET app.obfuscation_key = '6f626675736361746f72746573746b657920303132333435363738396162636465';"
+    psql "$ADMIN_URL" -c "DROP DATABASE IF EXISTS $OLD_DB;"
+    psql "$ADMIN_URL" -c "DROP DATABASE IF EXISTS $NEW_DB;"
+    psql "$ADMIN_URL" -c "CREATE DATABASE $OLD_DB;"
+    psql "$ADMIN_URL" -c "CREATE DATABASE $NEW_DB;"
+    psql "$ADMIN_URL" -c "ALTER DATABASE $NEW_DB SET app.obfuscation_key = '6f626675736361746f72746573746b657920303132333435363738396162636465';"
 
     # Extract legacy migrations to a sibling worktree.
     rm -rf "$LEGACY_WORKTREE"
@@ -594,7 +596,10 @@ db-diff-old-vs-new:
 #   --truncate    TRUNCATE target entity tables before pull (for local-dev-copy)
 #
 # Example:
-#   just backend db-pull-nk "$PG_URL_PREVIEW" "$PG_URL_LOCAL" --truncate
+#   just backend db-pull-nk "$PG_URL_PREVIEW" "$PG_URL_MIGRATE_LOCAL" --truncate
+#
+# The target must be the migrate role: --truncate needs table ownership, which
+# the app role deliberately does not have (TRA-1075).
 db-pull-nk source-url target-url *flags='':
     #!/usr/bin/env bash
     set -euo pipefail
