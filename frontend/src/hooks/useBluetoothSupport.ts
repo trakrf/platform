@@ -74,12 +74,21 @@ const BLUEFY_URL = 'https://apps.apple.com/us/app/bluefy-web-ble-browser/id14928
  *              connects, and Windows has no per-app Bluetooth permission model
  *              to trip over, so the risk is low — but it is inferred, not
  *              measured. Say so rather than letting it read as checked.
- *   - macos  — fully verified on a MacBook Pro, 2026-08-04. Safari and Firefox
- *              raise the banner with this row's copy; Chrome, Edge and Opera
- *              each connected to a CS108 and read tags. The bar was a real
- *              connect, not an absent banner: Brave exposes navigator.bluetooth,
- *              passes the gate, and then fails with "Web Bluetooth API globally
+ *   - macos  — browser list fully verified on a MacBook Pro, 2026-08-04: Chrome,
+ *              Edge and Opera each connected to a CS108 and read tags, and
+ *              Safari and Firefox raise the banner. The bar was a real connect,
+ *              not an absent banner: Brave exposes navigator.bluetooth, passes
+ *              the gate, and then fails with "Web Bluetooth API globally
  *              disabled" — so "no banner" proves nothing on its own.
+ *
+ * Note what the rendered copy can and cannot prove. macos, windows and unknown
+ * are deliberately word-for-word identical, so seeing "Chrome, Edge, or Opera"
+ * on screen confirms the path renders but NOT which of the three produced it —
+ * a fallthrough to `unknown` looks exactly the same. Only ios ("Bluefy"),
+ * android ("...or Samsung Internet") and linux ("Chrome or Chromium") are
+ * self-identifying, which is why those two are the rows recorded as
+ * detection-confirmed. To check the others, read navigator.userAgentData
+ * .platform directly rather than inferring it from the banner.
  *   - linux  — the flag and BlueZ >= 5.41 caveats are repeated from the ticket,
  *              not measured. Version-dependent.
  *   - ios    — verified on an iPad, 2026-08-04. Safari raises the banner with
