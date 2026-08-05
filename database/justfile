@@ -6,6 +6,19 @@ set fallback := true
 default:
     @just --list
 
+# Postgres role/database names. Same values as helm/trakrf-db in trakrf/infra —
+# local dev is only representative if the shape matches (TRA-1075).
+app_role := "trakrf-app"
+migrate_role := "trakrf-migrate"
+db_name := "trakrf"
+
+# Passwords and the surrogate-id Feistel key. Defaults are deliberately
+# well-known: a fresh clone with no .env.local still gets a working stack, and
+# nothing here ever reaches a deployed environment. Override in .env.local.
+app_password := env("PG_APP_PASSWORD", "trakrf-app")
+migrate_password := env("PG_MIGRATE_PASSWORD", "trakrf-migrate")
+obfuscation_key := env("OBFUSCATION_KEY", "6f626675736361746f72746573746b657920303132333435363738396162636465")
+
 # Start TimescaleDB container
 up:
     docker compose up -d timescaledb
@@ -13,11 +26,44 @@ up:
     @for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do \
         if docker compose exec timescaledb pg_isready -U postgres > /dev/null 2>&1; then \
             echo "✅ Database is ready"; \
+            just init; \
             exit 0; \
         fi; \
         sleep 2; \
     done; \
     echo "⚠️  Database is starting but not ready yet. Run 'just database status' to check."
+
+# Bootstrap the non-superuser roles, the trakrf database and its grants.
+#
+# Idempotent, and run on every `up` — a superuser bypasses row-level security,
+# so a stack connecting as `postgres` never evaluates a policy and a missing
+# WithOrgTx looks healthy until it reaches preview (TRA-1075). The SQL is the
+# local mirror of the CNPG init in trakrf/infra; see database/sql/ for what
+# each file does.
+#
+# Re-run it by hand after converting a database whose objects predate the split
+# — 03-grants.sql is what picks those up.
+init:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # psql runs inside the container, so no host postgresql-client is needed and
+    # the SQL arrives on stdin rather than as a bind-mounted path.
+    run_sql() {
+        docker compose exec -T timescaledb psql -U postgres -v ON_ERROR_STOP=1 -q "$@"
+    }
+    echo "🔐 Bootstrapping roles + {{db_name}} database..."
+    run_sql -d postgres \
+        -v db_name={{db_name}} \
+        -v app_role={{app_role}} -v app_password={{app_password}} \
+        -v migrate_role={{migrate_role}} -v migrate_password={{migrate_password}} \
+        < sql/01-roles.sql
+    run_sql -d {{db_name}} \
+        -v db_name={{db_name}} \
+        -v app_role={{app_role}} -v migrate_role={{migrate_role}} \
+        -v obfuscation_key={{obfuscation_key}} \
+        < sql/02-schema.sql
+    run_sql -d {{db_name}} -v app_role={{app_role}} < sql/03-grants.sql
+    echo "✅ {{db_name}}: owned by {{migrate_role}}, served by {{app_role}} (no superuser, no BYPASSRLS)"
 
 # Stop database container
 down:
@@ -27,9 +73,20 @@ down:
 logs:
     docker compose logs -f timescaledb
 
-# Interactive psql shell
+# Interactive psql shell (superuser, on the application database).
+#
+# No PGOPTIONS: `just database init` sets search_path on the database itself, so
+# every session gets it. Connecting as postgres here is deliberate — this is the
+# admin shell, and it is the one place a superuser is the right tool. The
+# application connects as {{app_role}}, which is what makes RLS fire.
 psql:
-    docker compose exec -it -e PGOPTIONS="-c search_path=trakrf,public" timescaledb psql -U postgres
+    docker compose exec -it timescaledb psql -U postgres -d {{db_name}}
+
+# Interactive psql shell as the RLS-enforced app role — what the backend sees.
+# Rows you cannot find here are rows the backend cannot find either.
+psql-app:
+    docker compose exec -it -e PGPASSWORD={{app_password}} timescaledb \
+        psql -h localhost -U {{app_role}} -d {{db_name}}
 
 # Alias for psql
 alias shell := psql
@@ -51,6 +108,7 @@ reset:
     echo "⏳ Waiting for database to initialize..."
     for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
         if docker compose exec timescaledb pg_isready -U postgres > /dev/null 2>&1; then
+            just init
             echo "✅ Database reset complete"
             exit 0
         fi
