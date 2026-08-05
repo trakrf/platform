@@ -69,7 +69,10 @@ const BLUEFY_URL = 'https://apps.apple.com/us/app/bluefy-web-ble-browser/id14928
  *              inherited from upstream Chromium rather than independently
  *              measured. Chrome leads the list because it is the verified one.
  *   - windows — verified on a GMKtec M6 once its MediaTek driver was installed,
- *              2026-08-04: Edge connects to a CS108 and works. But note the
+ *              2026-08-04: Edge connects to a CS108 and works, and
+ *              navigator.userAgentData.platform reads 'Windows' — checked
+ *              directly, because this row's copy cannot prove it (see below).
+ *              But note the
  *              prerequisite this row's copy does NOT mention — the scanner must
  *              first be paired in Windows Bluetooth settings. Until it is, the
  *              chooser still finds it (we filter on the CS108 service UUID, so
@@ -91,9 +94,11 @@ const BLUEFY_URL = 'https://apps.apple.com/us/app/bluefy-web-ble-browser/id14928
  * on screen confirms the path renders but NOT which of the three produced it —
  * a fallthrough to `unknown` looks exactly the same. Only ios ("Bluefy"),
  * android ("...or Samsung Internet") and linux ("Chrome or Chromium") are
- * self-identifying, which is why those two are the rows recorded as
- * detection-confirmed. To check the others, read navigator.userAgentData
- * .platform directly rather than inferring it from the banner.
+ * self-identifying. To check the others, read navigator.userAgentData.platform
+ * directly rather than inferring it from the banner — which is how windows was
+ * confirmed ('Windows', 2026-08-04). macos is the one row still unconfirmed on
+ * this axis; its copy renders correctly but is indistinguishable from a
+ * fallthrough to unknown, and nobody has read the value on a Mac.
  *   - linux  — the flag and BlueZ >= 5.41 caveats are repeated from the ticket,
  *              not measured. Version-dependent.
  *   - ios    — verified on an iPad, 2026-08-04. Safari raises the banner with
