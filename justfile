@@ -39,7 +39,7 @@ alias be := backend
 
 lint: (frontend "lint") (backend "lint") (cli "lint")
 
-test: test-ops test-release-guards (frontend "test") (backend "test") (cli "test")
+test: test-ops test-release-guards test-db-init (frontend "test") (backend "test") (cli "test")
 
 build: (frontend "build") (backend "build") (cli "build")
 
@@ -108,6 +108,11 @@ test-ops:
 # clean-vX.Y.Z version check. Pure bash, no registry or cluster needed.
 test-release-guards:
     @./scripts/test-release-guards.sh
+
+# TRA-1075: the local + edge database bootstrap keeps its non-superuser posture.
+# Text assertions over database/sql/ and the env templates — no database needed.
+test-db-init:
+    @./scripts/test-db-init.sh
 
 # ============================================================================
 # Full Stack Development
