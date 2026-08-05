@@ -8,6 +8,7 @@ import { IDLE_SEQUENCE } from './system/sequences.js';
 import { INVENTORY_CONFIG_SEQUENCE } from './rfid/inventory/sequences.js';
 import { BARCODE_CONFIG_SEQUENCE } from './barcode/sequences.js';
 import { LOCATE_CONFIG_SEQUENCE, locateSettingsSequence } from './rfid/locate/sequences.js';
+import { removeLeadingZeros } from '../../utils/reconciliationUtils';
 import type { CS108Packet } from './type.js';
 
 // Mock all dependencies
@@ -596,6 +597,50 @@ describe('CS108Reader', () => {
 
       const expected = locateSettingsSequence(EPC_128_B);
       expect(maskTail(lastModeSequence(), expected.length)).toEqual(expected);
+    });
+
+    /**
+     * Two real 128-bit tags off the operator's bench, read by the fixed
+     * reader. They differ only in the final hex char — inside the 32-bit tail
+     * the 96-bit mask never covers.
+     */
+    describe('real 128-bit bench tags', () => {
+      const TAG_633 = '00000000000000000000533034313633';
+      const TAG_634 = '00000000000000000000533034313634';
+
+      it('collide under the 96-bit mask when the full EPC is entered by hand', () => {
+        // Identical through hex char 24, so identical masks. Locate one and
+        // the reader reports the other: a false positive.
+        expect(TAG_633.slice(0, 24)).toBe(TAG_634.slice(0, 24));
+        expect(locateSettingsSequence(TAG_633)).toEqual(locateSettingsSequence(TAG_634));
+      });
+
+      it('are unfindable via the Scan-tab Locate link, which sends the leading-zero-stripped EPC', () => {
+        // InventoryTableRow sends `tag.displayEpc || tag.epc`, and displayEpc
+        // is removeLeadingZeros(epc) unless showLeadingZeros is on (default
+        // off). locateSettingsSequence then padStart(24)s it back — which
+        // exactly reverses the stripping for a 96-bit EPC, but cannot for a
+        // 128-bit one. The mask ends up on the wrong 96 bits entirely.
+        const deepLinked = removeLeadingZeros(TAG_633);
+        expect(deepLinked).toBe('533034313633');
+
+        expect(locateSettingsSequence(deepLinked))
+          .not.toEqual(locateSettingsSequence(TAG_633));
+
+        // What actually gets masked: the stripped value re-padded to 24, which
+        // is not the tag's leading 96 bits.
+        expect(locateSettingsSequence(deepLinked))
+          .toEqual(locateSettingsSequence('000000000000533034313633'));
+        expect(TAG_633.slice(0, 24)).toBe('000000000000000000005330');
+      });
+
+      it('round-trips correctly for a 96-bit EPC, which is why this went unnoticed', () => {
+        // padStart(24) is an exact inverse of the stripping at 96 bits, so
+        // every 24-char tag — all 1.13M reads in preview — works fine.
+        const epc96 = '000000000000000012345678';
+        expect(locateSettingsSequence(removeLeadingZeros(epc96)))
+          .toEqual(locateSettingsSequence(epc96));
+      });
     });
   });
 
