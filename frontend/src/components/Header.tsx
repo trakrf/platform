@@ -30,6 +30,7 @@ export const PAGE_TITLES = {
   'org-members': { title: "Members", subtitle: "Manage organization members" },
   'org-settings': { title: "Organization Settings", subtitle: "Configure your organization" },
   'webhooks': { title: "Webhooks", subtitle: "Send asset.moved events to your systems" },
+  profile: { title: "Profile", subtitle: "Your display name and sign-in email" },
   'create-org': { title: "Create Organization", subtitle: "Set up a new organization" },
   'accept-invite': { title: "Accept Invite", subtitle: "Join an organization" }
 } as const;

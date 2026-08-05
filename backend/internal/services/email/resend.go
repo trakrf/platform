@@ -8,41 +8,21 @@ import (
 
 	"github.com/resend/resend-go/v2"
 	"github.com/rs/zerolog/log"
+	"github.com/trakrf/platform/backend/internal/util/emailcheck"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
 
-// reservedTestDomains are RFC 2606 / RFC 6761 addresses reserved for documentation
-// and testing. No real user can own one, so we never attempt to send to them —
-// this prevents e2e fixtures from burning Resend quota.
-var reservedTestDomains = map[string]struct{}{
-	"example.com": {},
-	"example.net": {},
-	"example.org": {},
-}
-
-var reservedTestSuffixes = []string{".test", ".invalid", ".example"}
-
+// isReservedTestRecipient reports whether addr is an RFC 2606 / RFC 6761
+// documentation-or-testing address. No real user can own one, so we never
+// attempt to send to them — this keeps e2e fixtures from burning Resend quota.
+//
+// The list lives in emailcheck because deliverability checking needs the same
+// answer (TRA-958): example.com publishes a null MX, so anything validating it
+// for real would reject the addresses this suite is built on. One list, both
+// behaviours.
 func isReservedTestRecipient(addr string) bool {
-	at := strings.LastIndex(addr, "@")
-	if at < 0 || at == len(addr)-1 {
-		return false
-	}
-	domain := strings.ToLower(strings.TrimSpace(addr[at+1:]))
-	if _, ok := reservedTestDomains[domain]; ok {
-		return true
-	}
-	for _, s := range reservedTestSuffixes {
-		if strings.HasSuffix(domain, s) {
-			return true
-		}
-	}
-	for d := range reservedTestDomains {
-		if strings.HasSuffix(domain, "."+d) {
-			return true
-		}
-	}
-	return false
+	return emailcheck.IsReservedTestDomain(addr)
 }
 
 // Client wraps the Resend email client
@@ -123,6 +103,45 @@ func (c *Client) SendPasswordResetEmail(toEmail, resetURL, token string) error {
 
 	if err != nil {
 		return fmt.Errorf("failed to send password reset email: %w", err)
+	}
+
+	return nil
+}
+
+// SendEmailChangedNotification tells the PREVIOUS address that the account's
+// sign-in email was changed (TRA-958).
+//
+// It goes to the old address deliberately. That is the address the account
+// holder can still read when the new one was a typo, and the one an attacker
+// does not control after a session hijack — so it is the only channel that
+// reaches the real owner in either failure mode. There is no self-service undo:
+// recovery is "contact support", which is a deliberate call given how rare this
+// is (see the PR for TRA-958).
+func (c *Client) SendEmailChangedNotification(toOldEmail, newEmail string) error {
+	if isReservedTestRecipient(toOldEmail) {
+		log.Info().
+			Str("to", toOldEmail).
+			Str("kind", "email_changed").
+			Str("app_env", os.Getenv("APP_ENV")).
+			Msg("email send stubbed: reserved test-fixture recipient")
+		return nil
+	}
+
+	_, err := c.client.Emails.Send(&resend.SendEmailRequest{
+		From:    "TrakRF <noreply@trakrf.id>",
+		To:      []string{toOldEmail},
+		Subject: fmt.Sprintf("%s Your sign-in email was changed", getEmailPrefix()),
+		Html: fmt.Sprintf(`
+			<h2>Your sign-in email was changed</h2>
+			<p>The email address on your TrakRF account was changed to <strong>%s</strong>.</p>
+			<p>You'll need to use the new address to sign in from now on. This message was sent to your previous address because it is the one we know still reaches you.</p>
+			<p><strong>If you didn't make this change</strong>, or you mistyped the new address, reply to this email or contact support — we can restore the previous address for you.</p>
+			%s
+		`, newEmail, getEnvironmentNotice()),
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to send email-changed notification: %w", err)
 	}
 
 	return nil

@@ -236,3 +236,19 @@ func TestSendOrgDeletedNotification_StubsReservedDomain(t *testing.T) {
 		t.Fatalf("expected nil error for reserved recipient, got %v", err)
 	}
 }
+
+// TRA-958: the "your email address changed" notice goes to the OLD address —
+// the one the account holder can still read if the new one was a typo, and the
+// one an attacker does not control after a session hijack. Like every other
+// send, a reserved test recipient must stub out rather than burn Resend quota.
+func TestSendEmailChangedNotification_StubsReservedDomain(t *testing.T) {
+	t.Setenv("RESEND_API_KEY", "invalid-key-should-never-be-used")
+	c := NewClient()
+
+	if err := c.SendEmailChangedNotification(
+		"fixture@example.com",
+		"new-address@example.com",
+	); err != nil {
+		t.Fatalf("expected nil error for reserved recipient, got %v", err)
+	}
+}

@@ -337,7 +337,10 @@ func setupRouter(
 
 		// Live static endpoints with a single supported method.
 		register405Static(r, "/api/v1/orgs/me", []string{http.MethodGet})
-		register405Static(r, "/api/v1/users/me", []string{http.MethodGet})
+		// PATCH is the self-service profile edit (TRA-958). Leaving it out of
+		// `allowed` makes the guard intercept it with a 405 before the handler
+		// ever runs.
+		register405Static(r, "/api/v1/users/me", []string{http.MethodGet, http.MethodPatch})
 		register405Static(r, "/api/v1/users/me/current-org", []string{http.MethodPost})
 		register405Static(r, "/api/v1/reports/asset-locations", []string{http.MethodGet})
 		register405Static(r, "/api/v1/assets/bulk", []string{http.MethodPost})

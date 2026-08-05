@@ -49,6 +49,8 @@ export const ROUTE_REQUIRES_AUTH: ReadonlySet<TabType> = new Set<TabType>([
   'api-keys',
   'webhooks',
   'admin-orgs',
+  // Not org-scoped, but there is no profile to edit without an account.
+  'profile',
 ]);
 
 /**

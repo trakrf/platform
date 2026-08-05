@@ -68,11 +68,14 @@ const (
 	UserUpdateInvalidJSON    = "Invalid JSON"
 	UserUpdateValidationFail = "Validation failed"
 	UserUpdateEmailExists    = "Email already exists"
-	UserUpdateFailed         = "Failed to update user"
-	UserUpdateNotFound       = "User not found"
-	UserDeleteInvalidID      = "Invalid user ID"
-	UserDeleteNotFound       = "User not found"
-	UserDeleteFailed         = "Failed to delete user"
+	// TRA-958: the domain does not resolve or publishes no mail route, so this
+	// address could never receive the sign-in mail it is about to become.
+	UserUpdateEmailUndeliverable = "That email domain can't receive mail — check the address for a typo"
+	UserUpdateFailed             = "Failed to update user"
+	UserUpdateNotFound           = "User not found"
+	UserDeleteInvalidID          = "Invalid user ID"
+	UserDeleteNotFound           = "User not found"
+	UserDeleteFailed             = "Failed to delete user"
 )
 
 const (

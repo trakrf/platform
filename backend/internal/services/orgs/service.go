@@ -25,6 +25,25 @@ func NewService(db *pgxpool.Pool, storage *storage.Storage, emailClient *email.C
 	return &Service{db: db, storage: storage, emailClient: emailClient}
 }
 
+// NotifyEmailChanged tells a user's PREVIOUS address that their sign-in email
+// moved (TRA-958). Callers pass the address the account used *before* the
+// update. Returns whether a send was attempted, so tests can assert the path
+// without an interface seam (same idiom as notifyTrialSignup's count).
+//
+// Best-effort by design: a mail failure must not fail the profile edit that
+// already committed, matching how invitation sends are handled.
+func (s *Service) NotifyEmailChanged(oldEmail, newEmail string) bool {
+	if s.emailClient == nil {
+		return false
+	}
+	if err := s.emailClient.SendEmailChangedNotification(oldEmail, newEmail); err != nil {
+		// Logged, not returned: the email is already changed, and failing the
+		// request here would report a rollback that did not happen.
+		fmt.Printf("warning: failed to send email-changed notification: %v\n", err)
+	}
+	return true
+}
+
 // CreateOrgWithAdmin creates a new team org and makes the creator an admin.
 // creatorEmail is used only for the best-effort superadmin notification (TRA-977).
 func (s *Service) CreateOrgWithAdmin(ctx context.Context, name string, creatorUserID int, creatorEmail string) (*organization.Organization, error) {
