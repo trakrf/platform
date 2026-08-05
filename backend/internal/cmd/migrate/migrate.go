@@ -239,6 +239,23 @@ func RunURL(ctx context.Context, pgURL string, info buildinfo.Info) error {
 		return strayLedgerError(strays, authoritative)
 	}
 
+	// Second preflight, and it has to precede every write below — the schema
+	// creation as much as golang-migrate itself. An object the migrating role does
+	// not own cannot be replaced by it, so a migration touching one aborts partway
+	// and leaves the ledger dirty, at which point every later run refuses to start
+	// and the deploy is wedged until a superuser intervenes (TRA-1104).
+	//
+	// Refusing here inverts that: nothing is written, the ledger stays clean, the
+	// running pod keeps serving, and the operator gets the offending object plus
+	// the exact repair statement instead of `must be owner of function`.
+	drifts, err := findOwnershipDrift(ctx, pool)
+	if err != nil {
+		return err
+	}
+	if len(drifts) > 0 {
+		return ownershipDriftError(drifts, currentRole(ctx, pool))
+	}
+
 	// Create the schema before golang-migrate looks for its ledger. This is the
 	// one thing that cannot be left to a migration: the driver resolves the ledger
 	// location, and creates the table, before migration 000001 runs. Without this

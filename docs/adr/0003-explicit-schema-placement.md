@@ -1,8 +1,16 @@
-# ADR 0003 — One thing runs migrations, and it owns the schema and its ledger
+# ADR 0003 — One thing runs migrations, and it owns the schema, its ledger, and every object in them
 
-Date: 2026-07-30
+Date: 2026-07-30, amended 2026-08-05
 Status: Accepted
-Tracking: TRA-1069 (shipped), TRA-1075 (local + edge non-superuser roles), TRA-1077 (migration checksum guard)
+Tracking: TRA-1069 (shipped), TRA-1075 (local + edge non-superuser roles), TRA-1077 (migration checksum guard), TRA-1104 (ownership asserted — amendment), TRA-1105 (closing the drift generator, infra)
+
+> **2026-08-05 amendment — an extension, not a reversal.** Everything decided on
+> 2026-07-30 stands unchanged. This record already made the migrating role the
+> owner of the schema and its ledger; TRA-1104 showed that ownership was modelled
+> but never *asserted*, and a deployed environment had quietly drifted from it.
+> The amendment adds that assertion and extends the same scope from "the schema
+> and its ledger" to "every object in them". It lives inline rather than in a
+> separate ADR because it is this decision carried through, not a new one.
 
 ## Context
 
@@ -34,6 +42,53 @@ environment. The deeper problem was that there were **two implementations** of
 "run the migrations" — the `./server migrate` subcommand and a bare `migrate` CLI
 invocation in the test harness — so anything learned had to be taught twice, and
 wasn't.
+
+### Ownership was modelled but never asserted (TRA-1104)
+
+Six days after this record was accepted, `trakrf.normalize_tag_value(text)` on
+preview turned out to be owned by `postgres`. Every other object in the schema was
+owned by `trakrf-migrate` — the model above held everywhere else, and nothing had
+noticed the one exception, because no migration had ever tried to *replace* that
+function until `000039` did.
+
+The failure chain matters, because none of it looks like a migration failure from
+outside:
+
+1. `ERROR: must be owner of function normalize_tag_value`
+2. The migration aborts partway; golang-migrate leaves `version=39, dirty=true`
+3. A dirty ledger makes every later migrate run refuse to start
+4. The migrate Job is an ArgoCD **PreSync hook**, so the Deployment is never
+   updated — no new ReplicaSet, and the old pod keeps serving
+5. ArgoCD reports **OutOfSync / Healthy**, not a crashloop
+
+Preview served a stale build for over an hour with green CI on every affected
+commit, found only because someone checked `/version.json` by hand.
+
+**The repair is not available to the thing that needs it.** `CREATE OR REPLACE`,
+`DROP`, and `ALTER … OWNER TO` all require ownership — exactly what is missing — so
+the migrating role is locked out of every verb that could fix it. Measured rather
+than reasoned about:
+
+```sql
+BEGIN;
+CREATE FUNCTION trakrf._probe(v text) ... ;   -- as postgres, so postgres owns it
+SET ROLE "trakrf-migrate";
+ALTER FUNCTION trakrf._probe(text) OWNER TO "trakrf-migrate";
+-- ERROR:  must be owner of function _probe
+ROLLBACK;
+```
+
+Only a superuser or the current owner can break the loop. Any design expecting the
+migration or the runner to *fix* ownership expects something Postgres will not
+permit.
+
+**The drift comes from the ops path.** `just ops psql <env>` connects as
+`postgres`, a superuser, so any hand-run DDL creates an object the migrating role
+can never replace. It works perfectly until the first migration touches it, which
+may be months later and will look like that migration's fault. Same family as
+infra#118, where a schema rebuild wiped default privileges: the deployed schema
+drifting from what the role model assumes, with the consequence deferred to
+whoever next deploys.
 
 ## Decision
 
@@ -67,6 +122,25 @@ real; reporting success over one is how TRA-1069 stayed invisible. This also mak
 the one-time ledger relocation below safe to forget: the Job fails loudly instead
 of replaying.
 
+**Every object in `trakrf` is owned by the migrating role, and the runner asserts
+it before writing anything** (TRA-1104). Three parts, and the order matters:
+
+* **Assert, do not repair.** The runner cannot fix ownership and must not pretend
+  to. It reports every offending object with the exact `ALTER` that repairs it,
+  says plainly that the repair needs superuser or owner rights, and stops.
+* **Refuse before the first write** — before the `CREATE SCHEMA` above, before
+  golang-migrate resolves its ledger. A preflight running after the ledger exists
+  has already lost the property worth having: on refusal nothing is written, the
+  ledger stays clean, and the old pod keeps serving.
+* **Ownership means `pg_has_role`, not equality.** Postgres accepts an ownership
+  check from a member of the owning role, so a role hierarchy that would have
+  migrated fine must not be reported as drift. The same predicate covers
+  superusers, which are implicit members of every role.
+
+Hand-running DDL as a superuser against a deployed database is what creates this
+condition. It is a mutation of the schema's role model, not a read-only
+convenience.
+
 ## Consequences
 
 * **Preview and prod need a one-time relocation** — their ledgers are in `public`
@@ -88,6 +162,20 @@ of replaying.
   build when a recorded migration is edited or deleted. It is a source-level guard,
   not a runtime one — it catches the edit in review, it cannot reconcile a database
   that already diverged.
+* **The wedge becomes a refusal.** The costly part of TRA-1104 was never the
+  failing statement — it was the dirty ledger, the silent hour, and needing
+  superuser access to recover. A refusal before the first write costs a failed
+  deploy and a one-line repair.
+* **The ownership preflight detects; it does not prevent.** While the ops path
+  connects as a superuser, new drift can appear at any time, and the preflight
+  fires at the *next* deploy — possibly long after the session that caused it.
+  Closing the generator is infra's half (TRA-1105) and is not done here.
+* **A false positive would fail a deploy that would have succeeded.** That is why
+  the role-membership case is tested rather than assumed. A guard that cries wolf
+  on a correctly-owned schema gets disabled, and then guards nothing.
+* **Local development is unaffected** by the ownership half: local and the
+  integration harness migrate as `postgres`, and a superuser sees no drift by
+  construction.
 
 ## Notes on scope
 
@@ -115,8 +203,26 @@ can shadow a table and execute as the definer. So the schema name can never full
 leave the SQL, and treating it as an identifier rather than a configuration point
 is the honest position. Its migration-bootstrapping half shipped as TRA-1069.
 
-TRA-1075 (non-superuser roles for local dev and edge) survives this record but is
-no longer justified by `search_path` — nothing here depends on the role. It stands
-on its own argument: a superuser bypasses RLS, so every policy goes untested
-locally until it reaches a deployed environment. The integration harness already
-proved the posture with `trakrf_test_app` (TRA-874).
+TRA-1075 (non-superuser roles for local dev and edge) survives this record. It is
+not justified by `search_path` — nothing about placement depends on the role — and
+it stands on its own argument: a superuser bypasses RLS, so every policy goes
+untested locally until it reaches a deployed environment. The integration harness
+already proved the posture with `trakrf_test_app` (TRA-874).
+
+The 2026-08-05 amendment gives it a second, independent justification. Placement
+still does not depend on the role, exactly as recorded above; ownership does, and
+ownership is new scope rather than a revision. The migrating role's identity is
+load-bearing for it: the role decides which objects the runner can replace, and a
+superuser session is precisely what quietly creates objects it cannot. That is the
+same shape as the RLS argument — a superuser hides a constraint a deployed
+environment will later enforce.
+
+Ownership is not privileges. This record governs who owns objects in `trakrf`;
+`GRANT`s drift independently and by a different mechanism (infra#118), and
+asserting ownership is not a substitute for asserting privileges.
+
+An earlier draft of the ownership check carried an explicit superuser exemption
+alongside the `pg_has_role` test. Mutation testing could not kill it: each clause
+masked defects in the other, and the test asserting the superuser exemption could
+not be made to fail. It was removed. Redundant belt-and-braces in a guard is not
+free — it hides which clause is load-bearing, and takes a test down with it.
