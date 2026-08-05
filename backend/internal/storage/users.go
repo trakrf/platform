@@ -199,6 +199,12 @@ func (s *Storage) UpdateUser(ctx context.Context, id int, request user.UpdateUse
 		if err == pgx.ErrNoRows {
 			return nil, nil
 		}
+		// Same mapping CreateUser does above: a colliding email is a 409 for
+		// the caller, not a 500. Without it the handlers' duplicate-email
+		// branch is unreachable (TRA-958).
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+			return nil, errors.ErrUserDuplicateEmail
+		}
 		return nil, fmt.Errorf("failed to update user: %w", err)
 	}
 
