@@ -101,20 +101,35 @@ On a box whose volume is already initialized, a reboot self-starts everything
 
 A box brought up before this change keeps its data in the `postgres` database
 and connects as the superuser. The conversion below **builds a fresh, empty
-`trakrf` database** and cuts the stack over to it. It does not move the old rows
-across, by design: a demo box's contents are seeded, not earned. Anything on
-here that would hurt to lose is in the wrong environment — durable data lives on
-GKE.
+`trakrf` database** and cuts the stack over to it.
+
+> **This box is not a scratch environment.** It backs presale demos, so whatever
+> demo content is set up on it is real work that would have to be redone.
+> Carrying the existing rows into `trakrf` is **not** covered here: the load has
+> to run as `trakrf-migrate` for the new objects to have the right owner, and
+> TimescaleDB hypertables need `timescaledb_pre_restore()` /
+> `timescaledb_post_restore()` around it. Neither has been rehearsed against
+> this box. If the demo content matters, work that path out first — do not
+> improvise it here.
 
 **Not urgent.** The old shape still works. What it does not do is exercise
 row-level security, which is the entire reason for the change: until the box is
 converted, a missing `WithOrgTx` looks healthy on it.
 
-Nothing here is destructive. The `postgres` database is left exactly as it was,
-so rollback is a two-line edit and a restart (see below) — there is no dump to
-take first and nothing to restore.
+Nothing below is destructive — the `postgres` database is left exactly as it
+was, so rollback is a two-line edit and a restart. But see the rotation warning
+under step 0: left alone, the daily timer will eventually age those dumps out.
 
 ```bash
+# 0. Take a dump of the CURRENT data and put it somewhere the timer cannot
+#    reach. After install.sh lands, nothing on the box can dump `postgres`
+#    any more — the backup recipe hardcodes -d trakrf.
+podman exec timescaledb pg_dump -U postgres -d postgres \
+  | gzip > ~/trakrf-preconvert-$(date -u +%Y%m%d).sql.gz
+#    NOT /srv/trakrf/backups: post-conversion dumps of the (empty) trakrf
+#    database share that directory's trakrf-*.sql.gz glob, so the 14-day
+#    prune evicts the good ones after two weeks of daily runs.
+
 # 1. Stop everything that writes.
 systemctl --user stop backend.service migrate.service
 
@@ -137,10 +152,10 @@ deploy/edge/smoke-test.sh              # reseeds the contract-test fixture
 ```
 
 **Rollback:** put the old superuser `PG_URL` back in `.env`, remove
-`migrate.env`, restart. The `postgres` database still has everything it had.
-Drop it once the converted box has been exercised — until then the daily backup
-is dumping the new `trakrf` database, so the old dumps age out of
-`/srv/trakrf/backups` on the usual 14-day rotation.
+`migrate.env`, restart. The `postgres` database still has everything it had —
+that, not the backup directory, is the real rollback. Drop it only once the
+converted box has been exercised and you are sure the demo content is either
+carried over or genuinely not wanted.
 
 ## Migrating an existing box (deploy/edge bind-mounts → /srv/trakrf)
 
