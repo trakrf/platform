@@ -531,17 +531,18 @@ describe('CS108Reader', () => {
       expect(maskTail(lastModeSequence(), expected.length)).toEqual(expected);
     });
 
-    it('still builds the mask when a concurrent setSettings() fails with the mutex error', async () => {
+    it('treats the mutex collision as benign and still builds the mask', async () => {
       // Reproduce the reported interleaving: the settings push loses the race
-      // and rejects with the plain mutex Error (which does NOT contain
-      // "aborted", so setSettings re-throws rather than swallowing it), while
-      // the mode change proceeds.
+      // and rejects with the plain mutex Error. It contains no "aborted", so
+      // it used to miss setSettings' graceful branch and surface as ERROR on
+      // the primary Locate path. It is now swallowed like an abort, because
+      // the mode change applies the mask this call could not.
       const mutexError = new Error('Command already active - executeCommand called concurrently');
       (commandManagerMock.executeSequence as Mock).mockRejectedValueOnce(mutexError);
 
       await expect(
         reader.setSettings({ rfid: { transmitPower: 25, targetEPC: TARGET_EPC } })
-      ).rejects.toThrow('Command already active');
+      ).resolves.toBeUndefined();
 
       (commandManagerMock.executeSequence as Mock).mockClear();
 
@@ -549,6 +550,16 @@ describe('CS108Reader', () => {
 
       const expected = locateSettingsSequence(TARGET_EPC);
       expect(maskTail(lastModeSequence(), expected.length)).toEqual(expected);
+    });
+
+    it('still re-throws genuine hardware failures', async () => {
+      // The benign-collision branch must not swallow real errors.
+      (commandManagerMock.executeSequence as Mock)
+        .mockRejectedValueOnce(new Error('Hardware command failed'));
+
+      await expect(
+        reader.setSettings({ rfid: { transmitPower: 25 } })
+      ).rejects.toThrow('Hardware command failed');
     });
 
     it('installs an all-zero mask with tag select ENABLED when the EPC is missing — it does not search unfiltered', async () => {
