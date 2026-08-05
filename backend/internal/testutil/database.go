@@ -52,9 +52,10 @@ func GetTestDatabaseURL() string {
 }
 
 // withDatabase swaps the database name in a postgres URL, leaving userinfo,
-// host, port and query string alone. It replaces a literal "/postgres?" match,
-// which silently produced the wrong URL the moment the admin URL pointed
-// anywhere other than a database named postgres.
+// host, port and query string alone. This used to be a string replace of a
+// literal "/postgres?", which silently returned the URL unchanged — and so
+// pointed the whole harness at the wrong database — the moment the admin URL
+// named anything other than a database called postgres.
 func withDatabase(pgURL, dbName string) string {
 	u, err := url.Parse(pgURL)
 	if err != nil {
