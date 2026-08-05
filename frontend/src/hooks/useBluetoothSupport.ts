@@ -102,8 +102,18 @@ const BLUEFY_URL = 'https://apps.apple.com/us/app/bluefy-web-ble-browser/id14928
  * Do the same for any row added later: identical copy makes a fallthrough to
  * unknown invisible, and a detection bug would hide behind advice that still
  * happens to read correctly.
- *   - linux  — the flag and BlueZ >= 5.41 caveats are repeated from the ticket,
- *              not measured. Version-dependent.
+ *   - linux  — verified on an Intel NUC6 running Ubuntu with Chrome stable,
+ *              2026-08-04, and the flag caveat is REAL rather than folklore.
+ *              Without chrome://flags/#enable-experimental-web-platform-features
+ *              navigator.bluetooth is absent, so the banner fires — and this
+ *              note is what told the tester to set the flag, after which a CS108
+ *              connected and scanned tags. Do not tidy that sentence away for
+ *              sounding alarmist; it is load-bearing.
+ *              The BlueZ >= 5.41 threshold is a different matter: still
+ *              unverified, and NOT settleable by observation. A machine that
+ *              works proves only that its own version suffices, never that 5.41
+ *              is the floor. Changing that number needs the Chromium source or
+ *              a deliberately downgraded stack, not another passing test.
  *   - ios    — verified on an iPad, 2026-08-04. Safari raises the banner with
  *              this row's copy, and the bluefy:// link opens the page in Bluefy.
  *              Bluefy is free (App Store listing checked the same day: Free, no
