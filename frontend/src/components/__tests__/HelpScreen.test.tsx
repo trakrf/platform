@@ -23,6 +23,11 @@ vi.mock('@/hooks/capability/useCapability', async (importOriginal) => ({
 import HelpScreen from '@/components/HelpScreen';
 import TabNavigation from '@/components/TabNavigation';
 import { useUIStore, useDeviceStore, useOrgStore } from '@/stores';
+import {
+  setBluetoothEnvironment,
+  restoreBluetoothEnvironment,
+  USER_AGENTS,
+} from '../../../test-utils/bluetoothEnvironment';
 import { ReaderState } from '@/worker/types/reader';
 
 /** Every nav label the sidebar can show — owner role, every gated entry open. */
@@ -75,5 +80,49 @@ describe('HelpScreen nav vocabulary', () => {
     // no longer exists anywhere in the app — sound is a toolbar toggle now.
     expect(helpText).not.toMatch(/My Items/);
     expect(helpText).not.toMatch(/Buzzer Volume/);
+  });
+});
+
+/**
+ * Help and the Scan-tab banner both answer "which browser?", and before
+ * TRA-1078 they answered it from two hand-synced strings. These tests bind Help
+ * to the hook so a change to the recommendation can never land in one place
+ * only.
+ */
+describe('HelpScreen browser guidance', () => {
+  const setUserAgent = (ua: string) => setBluetoothEnvironment({ ua });
+
+  beforeEach(() => {
+    useUIStore.setState({ activeTab: 'help' });
+    useDeviceStore.setState({ readerState: ReaderState.DISCONNECTED });
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreBluetoothEnvironment();
+  });
+
+  it('answers the browser question from the hook, not a hardcoded list', () => {
+    setUserAgent(USER_AGENTS.windows);
+
+    expect(renderHelpText()).toMatch(/Chrome, Edge, or Opera/);
+  });
+
+  it('tells an iPad user about Bluefy rather than Chrome', () => {
+    setUserAgent(USER_AGENTS.iphone);
+
+    const helpText = renderHelpText();
+
+    expect(helpText).toMatch(/Bluefy/);
+    // The "Required!" troubleshooting step and the Remember list restate the
+    // same fact; on iOS none of them may still be demanding a desktop browser.
+    expect(helpText).not.toMatch(/Must use Chrome, Edge, or Opera/);
+    expect(helpText).not.toMatch(/Using Chrome, Edge, or Opera\?/);
+  });
+
+  it('never describes Bluefy as paid', () => {
+    setUserAgent(USER_AGENTS.iphone);
+
+    expect(renderHelpText()).not.toMatch(/paid|purchase/i);
   });
 });
