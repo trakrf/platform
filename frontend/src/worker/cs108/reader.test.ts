@@ -568,6 +568,35 @@ describe('CS108Reader', () => {
       // never passes undefined.
       expect(locateSettingsSequence(undefined)).toEqual([]);
     });
+
+    it('masks only the leading 96 bits of a 128-bit EPC, so any tag sharing that prefix matches', async () => {
+      // locateSettingsSequence writes TAGMSK_0_3/4_7/8_11 — three 32-bit
+      // registers, 96 bits — and sets TAGMSK_LEN to STANDARD_96. There is no
+      // TAGMSK_12_15 register defined and no 128-bit length constant, so the
+      // trailing 32 bits of a 128-bit EPC are never masked.
+      //
+      // These two EPCs differ ONLY in their last 8 hex chars, which is where
+      // most schemes put the serial. They produce byte-identical mask
+      // sequences, so the reader cannot tell them apart.
+      const EPC_128_A = 'E28011700000020F8B1C0B39AAAAAAAA';
+      const EPC_128_B = 'E28011700000020F8B1C0B39BBBBBBBB';
+      expect(EPC_128_A).toHaveLength(32);
+
+      expect(locateSettingsSequence(EPC_128_A)).toEqual(locateSettingsSequence(EPC_128_B));
+
+      // And the mask they share is exactly the 96-bit (24 hex char) prefix.
+      expect(locateSettingsSequence(EPC_128_A)).toEqual(
+        locateSettingsSequence(EPC_128_A.slice(0, 24))
+      );
+
+      // The mode sequence inherits that, so Locate on a 128-bit tag is a
+      // prefix search, not an exact match.
+      (commandManagerMock.executeSequence as Mock).mockClear();
+      await reader.setMode(ReaderMode.LOCATE, { rfid: { targetEPC: EPC_128_A } });
+
+      const expected = locateSettingsSequence(EPC_128_B);
+      expect(maskTail(lastModeSequence(), expected.length)).toEqual(expected);
+    });
   });
 
   describe('startScanning()', () => {
