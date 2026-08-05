@@ -44,7 +44,7 @@ platform/
 cat > .env << EOF
 POSTGRES_PASSWORD=postgres
 POSTGRES_DB=postgres
-PG_URL=postgresql://postgres:postgres@timescaledb:5432/postgres?sslmode=disable
+PG_URL=postgres://trakrf-app:trakrf-app@timescaledb:5432/trakrf?sslmode=disable
 BACKEND_PORT=8080
 BACKEND_LOG_LEVEL=info
 EOF
@@ -57,13 +57,22 @@ EOF
 direnv allow
 ```
 
+**Database roles.** The local stack mirrors what preview and prod run on: a
+`trakrf` database owned by `trakrf-migrate` (DDL), served by `trakrf-app`
+(CRUD only — not a superuser, no `BYPASSRLS`, owns nothing). `just database up`
+creates both. This is deliberate: a superuser bypasses row-level security, so
+connecting as `postgres` means no policy is ever evaluated locally and a missing
+`WithOrgTx` looks healthy until it reaches a deployed environment. If you hit a
+permission error, that is the signal working — don't put `postgres` back in
+`PG_URL_LOCAL`. See `database/sql/` and ADR 0003.
+
 **2. Start full stack**
 ```bash
 # Start database + backend with hot-reload
 # This will:
-#   1. Start TimescaleDB
-#   2. Run database migrations automatically
-#   3. Start backend with Air hot-reload
+#   1. Start TimescaleDB and bootstrap the trakrf database + roles
+#   2. Run database migrations automatically (as trakrf-migrate)
+#   3. Start backend with Air hot-reload (as trakrf-app)
 just dev
 
 # Backend will be available at http://localhost:8080

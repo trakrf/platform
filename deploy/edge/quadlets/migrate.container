@@ -8,15 +8,20 @@ ContainerName=trakrf-migrate
 Image=ghcr.io/trakrf/backend:preview
 Network=trakrf.network
 EnvironmentFile=/srv/trakrf/secrets/.env
+# Migrations run as trakrf-migrate, which owns the schema; the shared .env
+# above serves the backend as trakrf-app, which has CRUD and no CREATE at all
+# (TRA-1075). Loading this second overrides PG_URL for this unit only — later
+# EnvironmentFile= entries win.
+EnvironmentFile=/srv/trakrf/secrets/migrate.env
 Exec=/server migrate
 AutoUpdate=registry
 
 [Service]
 Type=oneshot
 RemainAfterExit=no
-# Wait for Postgres, then pre-create the trakrf schema + pin the DB search_path.
-# Required so golang-migrate's schema_migrations table always lands in `trakrf`
-# (on a vanilla DB, trakrf doesn't exist at first connect, so CURRENT_SCHEMA()
-# would otherwise resolve to public on run 1 and trakrf on run 2 — losing the
-# version and replaying migrations). See backend/justfile.
-ExecStartPre=/bin/sh -c 'for i in $(seq 1 30); do podman exec timescaledb pg_isready -U postgres -q && break || sleep 2; done; podman exec timescaledb psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS trakrf; ALTER DATABASE postgres SET search_path = trakrf, public;"'
+# Wait for Postgres to accept connections. The schema pre-create that used to
+# live here is gone: it existed to steer golang-migrate's CURRENT_SCHEMA() at
+# the ledger, and `./server migrate` now creates the schema and pins the ledger
+# itself (ADR 0003). db-init.sh creates the schema once, with an owner, which
+# this unit must not contradict.
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 30); do podman exec timescaledb pg_isready -U postgres -q && break || sleep 2; done'

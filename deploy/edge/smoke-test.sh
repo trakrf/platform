@@ -18,9 +18,9 @@ MQPW=$(grep -oP 'trakrf-mqtt:\K[^@]+' /srv/trakrf/secrets/.env)
 
 echo "1) DB bootstrap + seed (idempotent)"
 deploy/edge/db-init.sh
-podman exec -i timescaledb psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+podman exec -i timescaledb psql -U postgres -d trakrf -v ON_ERROR_STOP=1 \
   < backend/database/seeds/contract_test_seed.sql >/dev/null
-echo "   tag $EPC -> asset = $(podman exec timescaledb psql -U postgres -tAc "SELECT asset_id IS NOT NULL FROM trakrf.tags WHERE value='$EPC'")"
+echo "   tag $EPC -> asset = $(podman exec timescaledb psql -U postgres -d trakrf -tAc "SELECT asset_id IS NOT NULL FROM trakrf.tags WHERE value='$EPC'")"
 
 echo "2) publish synthetic CS463 read on trakrf.id/$CAP"
 NOW_US=$(( $(date +%s) * 1000000 ))
@@ -35,6 +35,6 @@ else
   echo "   FAIL: read not seen by subscriber"; exit 1
 fi
 
-N=$(podman exec timescaledb psql -U postgres -tAc \
+N=$(podman exec timescaledb psql -U postgres -d trakrf -tAc \
   "SELECT count(*) FROM trakrf.asset_scans WHERE asset_id=(SELECT asset_id FROM trakrf.tags WHERE value='$EPC')")
 echo "4) asset_scans for this asset: $N  (0 until a scan_point is registered for '$CAP' — hardware or fixture)"

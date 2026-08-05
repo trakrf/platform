@@ -15,6 +15,21 @@ USER_UNIT_DIR="$HOME/.config/systemd/user"
   exit 1
 }
 
+# migrate.container loads secrets/migrate.env on top of secrets/.env so that one
+# unit connects as trakrf-migrate (TRA-1075). This script never creates secrets,
+# and a missing env file fails the container at start — with backend behind
+# Requires=migrate.service, that takes the whole stack down. Fail here, where the
+# message can say what to do, rather than there with a podman path error.
+[ -f "$ROOT/secrets/migrate.env" ] || {
+  echo "ERROR: $ROOT/secrets/migrate.env missing — migrate.container needs it."
+  echo "  cp deploy/edge/secrets/migrate.env.example $ROOT/secrets/migrate.env"
+  echo "  then set its password to match PG_MIGRATE_PASSWORD in $ROOT/secrets/.env."
+  echo "  Converting an existing box? See 'Converting a box that predates the"
+  echo "  two-role split' in deploy/edge/README.md — the roles and the trakrf"
+  echo "  database must exist (db-init.sh) before the stack will come up."
+  exit 1
+}
+
 mkdir -p "$ROOT"/{quadlets,config,scripts,systemd,secrets,backups} "$QUADLET_DIR" "$USER_UNIT_DIR"
 
 # 1. Sync repo -> /srv/trakrf (NEVER secrets/). Everything the runtime reads lives here,
