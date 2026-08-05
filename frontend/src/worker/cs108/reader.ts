@@ -602,6 +602,18 @@ class CS108Reader extends BaseReader {
           // Settings are already stored, will be used next time
           return;
         }
+        // Same situation, different error type (TRA-1091). A concurrent
+        // setMode() — the Locate deep link dispatches both from one click —
+        // leaves the command mutex held, and CommandManager rejects with a
+        // plain Error whose message contains no "aborted", so it misses the
+        // branch above and used to surface as ERROR on the primary Locate
+        // path. It is benign for the same reason: the settings are already
+        // stored, and buildModeSequences() reads the tag mask back out of
+        // them, so the mode change applies what this call could not.
+        if (error instanceof Error && error.message.includes('Command already active')) {
+          logger.debug('[Reader] Settings application skipped (command in flight, mode change in progress)');
+          return;
+        }
         logger.error('[Reader] Failed to apply hardware settings:', error);
         throw error;
       }
@@ -630,10 +642,14 @@ class CS108Reader extends BaseReader {
       throw new Error(`Cannot start scanning from state ${this.readerState}`);
     }
 
-    // Note: LOCATE mode without EPC filter will return all tags like INVENTORY
-    // The UI layer should prevent this scenario for better UX
+    // LOCATE without an EPC hears NOTHING - it does not fall back to INVENTORY.
+    // buildModeSequences() coerces a missing targetEPC to '', and
+    // locateSettingsSequence('') pads that to 24 zeros rather than skipping the
+    // mask, so the reader is configured to match an all-zero EPC with tag
+    // select enabled. Confirmed on hardware (TRA-1091): an all-zero mask
+    // produces no reads at all. The UI layer should still prevent this.
     if (this.readerMode === ReaderMode.LOCATE && !this.readerSettings.rfid?.targetEPC) {
-      logger.warn('[Reader] Starting LOCATE mode without targetEPC - will receive all tags');
+      logger.warn('[Reader] Starting LOCATE mode without targetEPC - all-zero tag mask, no tags will match');
     }
 
     try {

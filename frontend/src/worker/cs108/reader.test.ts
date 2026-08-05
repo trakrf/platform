@@ -7,7 +7,8 @@ import { NotificationManager } from './notification/manager.js';
 import { IDLE_SEQUENCE } from './system/sequences.js';
 import { INVENTORY_CONFIG_SEQUENCE } from './rfid/inventory/sequences.js';
 import { BARCODE_CONFIG_SEQUENCE } from './barcode/sequences.js';
-import { LOCATE_CONFIG_SEQUENCE } from './rfid/locate/sequences.js';
+import { LOCATE_CONFIG_SEQUENCE, locateSettingsSequence } from './rfid/locate/sequences.js';
+import { removeLeadingZeros } from '../../utils/reconciliationUtils';
 import type { CS108Packet } from './type.js';
 
 // Mock all dependencies
@@ -488,6 +489,169 @@ describe('CS108Reader', () => {
       // Should call executeSequence for power setting
       expect(commandManagerMock.executeSequence).toHaveBeenCalled(
       );
+    });
+  });
+
+  /**
+   * TRA-1091 — characterisation only, no behaviour change.
+   *
+   * The ticket hypothesises that when the Locate deep link races the command
+   * mutex and setSettings throws, the tag mask is never applied and the reader
+   * searches UNFILTERED (a false positive on a tag finder). These tests pin
+   * down what the code actually does on that path, so the hypothesis can be
+   * confirmed or closed without guessing. They assert current behaviour; none
+   * of them is a fix.
+   */
+  describe('LOCATE tag mask sourcing (TRA-1091)', () => {
+    const TARGET_EPC = 'E280689400000000001018DD';
+
+    // Last N commands of a mode sequence — buildModeSequences() appends the
+    // mask sequence last.
+    const maskTail = (sequence: unknown[], length: number) => sequence.slice(-length);
+
+    const lastModeSequence = () => {
+      const calls = (commandManagerMock.executeSequence as Mock).mock.calls;
+      return calls[calls.length - 1][0];
+    };
+
+    beforeEach(async () => {
+      await reader.connect();
+      postMessageSpy.mockClear();
+    });
+
+    it('builds the mask into the LOCATE mode sequence itself, from the settings passed to setMode', async () => {
+      // This is the deep-link path: App.tsx puts the EPC in the settings store,
+      // DeviceManager snapshots the store and hands it to setMode(). No
+      // separate setSettings() call is needed for the mask to reach hardware.
+      (commandManagerMock.executeSequence as Mock).mockClear();
+
+      await reader.setMode(ReaderMode.LOCATE, { rfid: { targetEPC: TARGET_EPC } });
+
+      const expected = locateSettingsSequence(TARGET_EPC);
+      expect(maskTail(lastModeSequence(), expected.length)).toEqual(expected);
+    });
+
+    it('treats the mutex collision as benign and still builds the mask', async () => {
+      // Reproduce the reported interleaving: the settings push loses the race
+      // and rejects with the plain mutex Error. It contains no "aborted", so
+      // it used to miss setSettings' graceful branch and surface as ERROR on
+      // the primary Locate path. It is now swallowed like an abort, because
+      // the mode change applies the mask this call could not.
+      const mutexError = new Error('Command already active - executeCommand called concurrently');
+      (commandManagerMock.executeSequence as Mock).mockRejectedValueOnce(mutexError);
+
+      await expect(
+        reader.setSettings({ rfid: { transmitPower: 25, targetEPC: TARGET_EPC } })
+      ).resolves.toBeUndefined();
+
+      (commandManagerMock.executeSequence as Mock).mockClear();
+
+      await reader.setMode(ReaderMode.LOCATE, { rfid: { targetEPC: TARGET_EPC } });
+
+      const expected = locateSettingsSequence(TARGET_EPC);
+      expect(maskTail(lastModeSequence(), expected.length)).toEqual(expected);
+    });
+
+    it('still re-throws genuine hardware failures', async () => {
+      // The benign-collision branch must not swallow real errors.
+      (commandManagerMock.executeSequence as Mock)
+        .mockRejectedValueOnce(new Error('Hardware command failed'));
+
+      await expect(
+        reader.setSettings({ rfid: { transmitPower: 25 } })
+      ).rejects.toThrow('Hardware command failed');
+    });
+
+    it('installs an all-zero mask with tag select ENABLED when the EPC is missing — it does not search unfiltered', async () => {
+      // buildModeSequences() coerces a missing targetEPC to '' rather than
+      // undefined, and locateSettingsSequence('') pads to 24 zeros instead of
+      // returning []. So "Building LOCATE with targetEPC: none" configures the
+      // reader to match an all-zero EPC — nothing responds. That is a false
+      // NEGATIVE, the opposite of the unfiltered-search failure mode.
+      (commandManagerMock.executeSequence as Mock).mockClear();
+
+      await reader.setMode(ReaderMode.LOCATE, { rfid: { targetEPC: '' } });
+
+      const emptyMask = locateSettingsSequence('');
+      expect(emptyMask.length).toBeGreaterThan(0);
+      expect(maskTail(lastModeSequence(), emptyMask.length)).toEqual(emptyMask);
+
+      // Only an undefined EPC would skip masking altogether, and the reader
+      // never passes undefined.
+      expect(locateSettingsSequence(undefined)).toEqual([]);
+    });
+
+    it('masks only the leading 96 bits of a 128-bit EPC, so any tag sharing that prefix matches', async () => {
+      // locateSettingsSequence writes TAGMSK_0_3/4_7/8_11 — three 32-bit
+      // registers, 96 bits — and sets TAGMSK_LEN to STANDARD_96. There is no
+      // TAGMSK_12_15 register defined and no 128-bit length constant, so the
+      // trailing 32 bits of a 128-bit EPC are never masked.
+      //
+      // These two EPCs differ ONLY in their last 8 hex chars, which is where
+      // most schemes put the serial. They produce byte-identical mask
+      // sequences, so the reader cannot tell them apart.
+      const EPC_128_A = 'E28011700000020F8B1C0B39AAAAAAAA';
+      const EPC_128_B = 'E28011700000020F8B1C0B39BBBBBBBB';
+      expect(EPC_128_A).toHaveLength(32);
+
+      expect(locateSettingsSequence(EPC_128_A)).toEqual(locateSettingsSequence(EPC_128_B));
+
+      // And the mask they share is exactly the 96-bit (24 hex char) prefix.
+      expect(locateSettingsSequence(EPC_128_A)).toEqual(
+        locateSettingsSequence(EPC_128_A.slice(0, 24))
+      );
+
+      // The mode sequence inherits that, so Locate on a 128-bit tag is a
+      // prefix search, not an exact match.
+      (commandManagerMock.executeSequence as Mock).mockClear();
+      await reader.setMode(ReaderMode.LOCATE, { rfid: { targetEPC: EPC_128_A } });
+
+      const expected = locateSettingsSequence(EPC_128_B);
+      expect(maskTail(lastModeSequence(), expected.length)).toEqual(expected);
+    });
+
+    /**
+     * Two real 128-bit tags off the operator's bench, read by the fixed
+     * reader. They differ only in the final hex char — inside the 32-bit tail
+     * the 96-bit mask never covers.
+     */
+    describe('real 128-bit bench tags', () => {
+      const TAG_633 = '00000000000000000000533034313633';
+      const TAG_634 = '00000000000000000000533034313634';
+
+      it('collide under the 96-bit mask when the full EPC is entered by hand', () => {
+        // Identical through hex char 24, so identical masks. Locate one and
+        // the reader reports the other: a false positive.
+        expect(TAG_633.slice(0, 24)).toBe(TAG_634.slice(0, 24));
+        expect(locateSettingsSequence(TAG_633)).toEqual(locateSettingsSequence(TAG_634));
+      });
+
+      it('are unfindable via the Scan-tab Locate link, which sends the leading-zero-stripped EPC', () => {
+        // InventoryTableRow sends `tag.displayEpc || tag.epc`, and displayEpc
+        // is removeLeadingZeros(epc) unless showLeadingZeros is on (default
+        // off). locateSettingsSequence then padStart(24)s it back — which
+        // exactly reverses the stripping for a 96-bit EPC, but cannot for a
+        // 128-bit one. The mask ends up on the wrong 96 bits entirely.
+        const deepLinked = removeLeadingZeros(TAG_633);
+        expect(deepLinked).toBe('533034313633');
+
+        expect(locateSettingsSequence(deepLinked))
+          .not.toEqual(locateSettingsSequence(TAG_633));
+
+        // What actually gets masked: the stripped value re-padded to 24, which
+        // is not the tag's leading 96 bits.
+        expect(locateSettingsSequence(deepLinked))
+          .toEqual(locateSettingsSequence('000000000000533034313633'));
+        expect(TAG_633.slice(0, 24)).toBe('000000000000000000005330');
+      });
+
+      it('round-trips correctly for a 96-bit EPC, which is why this went unnoticed', () => {
+        // padStart(24) is an exact inverse of the stripping at 96 bits, so
+        // every 24-char tag — all 1.13M reads in preview — works fine.
+        const epc96 = '000000000000000012345678';
+        expect(locateSettingsSequence(removeLeadingZeros(epc96)))
+          .toEqual(locateSettingsSequence(epc96));
+      });
     });
   });
 
