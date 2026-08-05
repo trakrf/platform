@@ -4,11 +4,14 @@
 package orgs_test
 
 import (
+	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -155,4 +158,49 @@ func TestUpdateMe_EmptyPatchIsNoOp(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	assert.Equal(t, "noop-tra958@example.com", body.Data.Email)
+}
+
+// requireWorkingDNS skips when the resolver cannot answer. The guard fails open
+// on transient DNS trouble by design, so without a resolver this test would see
+// a 200 and report a failure that says nothing about the code.
+func requireWorkingDNS(t *testing.T) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if _, err := net.DefaultResolver.LookupHost(ctx, "trakrf.id"); err != nil {
+		t.Skipf("no working DNS in this environment, skipping domain-guard test: %v", err)
+	}
+}
+
+// TRA-958: first-level typo guard. A domain that cannot receive mail is
+// rejected at submit time rather than becoming a sign-in address nobody can
+// read.
+//
+// The fixture is a nonexistent subdomain of a domain we control, not an
+// RFC 2606 name: .invalid and .example are reserved test domains, which the
+// guard deliberately exempts so the rest of the suite keeps working. That
+// exemption is exactly what makes them useless here.
+func TestUpdateMe_RejectsUndeliverableEmailDomain(t *testing.T) {
+	requireWorkingDNS(t)
+	t.Setenv("JWT_SECRET", "test-secret-update-me")
+	store := testutil.SetupTestDatabase(t)
+	pool := store.Pool().(*pgxpool.Pool)
+
+	token := seedSessionUser(t, pool, "typo-tra958@example.com", false)
+	rec := patchMe(t, newMeRouter(t, store), token, `{"email":"someone@no-such-host-tra958.trakrf.id"}`)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+	assert.Contains(t, rec.Body.String(), "can't receive mail")
+}
+
+// The guard must not reject a name-only edit — it should not even look.
+func TestUpdateMe_NameOnlyEditSkipsDomainCheck(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-update-me")
+	store := testutil.SetupTestDatabase(t)
+	pool := store.Pool().(*pgxpool.Pool)
+
+	token := seedSessionUser(t, pool, "nameonly-tra958@example.com", false)
+	rec := patchMe(t, newMeRouter(t, store), token, `{"name":"Still Fine"}`)
+
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 }
