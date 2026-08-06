@@ -35,7 +35,7 @@ test.describe('Consolidated Inventory Tests', () => {
     console.log('[Inventory] Setting up shared connection for all tests...');
     sharedPage = await browser.newPage();
 
-    // Connect from Home tab first (IDLE mode)
+    // '/' lands on the Scan tab, so connect configures INVENTORY (TRA-1029)
     await sharedPage.goto('/');
     await connectToDevice(sharedPage);
 

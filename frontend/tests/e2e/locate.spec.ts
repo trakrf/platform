@@ -113,7 +113,8 @@ test.describe('Locate Functionality Tests @hardware', () => {
       if (/error|warning/i.test(msg.type())) console.log('[Browser Console]', msg.type(), msg.text());
     });
 
-    // Simply connect from Home tab - IDLE mode is fine
+    // '/' lands on the Scan tab, so connect configures INVENTORY (TRA-1029);
+    // the Locate navigation below switches the reader to LOCATE.
     await sharedPage.goto('/');
     await connectToDevice(sharedPage);
 

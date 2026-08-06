@@ -8,6 +8,7 @@ import type { Page } from '@playwright/test';
 import { getE2EConfig } from '../e2e.config';
 import type { ConsoleMessage } from './console-utils';
 import type { WindowWithStores } from '../types';
+import { getReaderMode } from './device-state';
 
 const config = getE2EConfig();
 
@@ -98,6 +99,31 @@ export async function expectTagCount(
   });
   
   expect(storeCount).toBe(expectedCount);
+}
+
+/**
+ * Assert the reader settles into an expected mode.
+ *
+ * Mode changes are heavyweight on real hardware: setMode() aborts the running
+ * sequence, runs the IDLE teardown, reconfigures, and only then emits
+ * READER_MODE_CHANGED. Measured Inventory -> Idle on a CS108 is ~650ms, so a
+ * fixed sleep races the transition (TRA-1101). Poll instead.
+ *
+ * @param page - Playwright page
+ * @param expectedMode - ReaderMode value, e.g. 'Idle' or 'Inventory'
+ * @param timeout - How long to allow the transition to land
+ */
+export async function expectReaderMode(
+  page: Page,
+  expectedMode: string,
+  timeout: number = 10000
+): Promise<void> {
+  await expect
+    .poll(() => getReaderMode(page), {
+      timeout,
+      message: `Expected reader to settle in ${expectedMode} mode`
+    })
+    .toBe(expectedMode);
 }
 
 /**
