@@ -27,10 +27,10 @@ describe('DeviceStore', () => {
     const { result } = renderHook(() => useDeviceStore());
     
     act(() => {
-      result.current.setDeviceName('CS108Reader2603A7');
+      result.current.setDeviceName('CS108ReaderAABBCC');
     });
     
-    expect(result.current.deviceName).toBe('CS108Reader2603A7');
+    expect(result.current.deviceName).toBe('CS108ReaderAABBCC');
   });
 
   it('should update battery percentage', () => {

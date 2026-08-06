@@ -237,7 +237,7 @@ describe('detectBluetoothSupport', () => {
 
     it('quotes the label Edge actually shows, since that is the confirmed fact', () => {
       // Screenshotted on the GMKtec M6 with the CS108 removed from Bluetooth
-      // settings, 2026-08-06: "Unknown or unsupported device (6C:79:B8:26:03:A7)".
+      // settings, 2026-08-06: "Unknown or unsupported device (6C:79:B8:XX:XX:XX)".
       // A customer reading "unsupported" next to a hex string cancels the dialog.
       setEnvironment({ ua: UA.windows });
 
@@ -269,10 +269,34 @@ describe('detectBluetoothSupport', () => {
       expect(helpStep).toMatch(/may need to/i);
     });
 
+    it('warns that the app must let go before Windows can pair the scanner', () => {
+      // A BLE peripheral accepts one central at a time. Observed 2026-08-06:
+      // with the browser still connected, Settings' discovery does not list the
+      // reader at all. Without this the pairing advice fails silently — the user
+      // follows it, sees an empty list, and concludes Help is wrong.
+      setEnvironment({ ua: UA.windows });
+
+      expect(detectBluetoothSupport().setupPrerequisite?.helpStep).toMatch(/disconnect/i);
+    });
+
+    it('gives the user a way to check they picked the right reader', () => {
+      // The hex the chooser shows is the reader's Bluetooth address, and it is
+      // printed on the serial-number label on the back of the antenna as
+      // "BT Mac Addr: 6C 79 B8 XX XX XX". With two CS108s in a room that label
+      // is the only way to tell them apart, so "it is the right device" is not
+      // something Help can assert on the user's behalf.
+      setEnvironment({ ua: UA.windows });
+
+      const helpStep = detectBluetoothSupport().setupPrerequisite?.helpStep ?? '';
+
+      expect(helpStep).toMatch(/BT Mac Addr/i);
+      expect(helpStep).toMatch(/label/i);
+    });
+
     it('keeps the PIN, because Windows stops and asks for one', () => {
       // Regression guard rather than a red-green cycle — the copy already says
       // it. Screenshotted 2026-08-06: pairing the CS108 from Settings prompts
-      // "Enter the PIN for CS108Reader2603A7", and 0000 is what it wants. Trim
+      // "Enter the PIN for CS108Reader<last 3 bytes>", and 0000 is what it wants. Trim
       // this as clutter and a user is stranded at a prompt with no answer.
       setEnvironment({ ua: UA.windows });
 

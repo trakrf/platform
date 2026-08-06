@@ -177,13 +177,32 @@ const RECOMMENDATIONS: Record<Platform, BluetoothRecommendation> = {
  * the only entry (TRA-1100), and the copy is worded around two observations on
  * the same GMKtec M6 / Windows 11 25H2 / Edge box that do not agree.
  *
+ * (Addresses below are masked past the CSL OUI — 6C:79:B8 is shared by every
+ * CS108, the rest identifies one specific reader and does not belong in source.)
+ *
  * CONFIRMED, both runs — the chooser lists the CS108 *unnamed*. We filter on the
  * CS108 service UUID so the right device is offered, but Windows will not
  * surface the GAP name before bonding, and Edge fills the gap with
- * "Unknown or unsupported device (6C:79:B8:26:03:A7)". That literal wording is
+ * "Unknown or unsupported device (6C:79:B8:XX:XX:XX)". That literal wording is
  * the reason this entry exists at all: a customer reading "unsupported" beside a
  * hex string concludes they have the wrong device and cancels the dialog. It is
  * the one thing here we can state flatly.
+ *
+ * The hex is not noise, which is what makes this recoverable rather than merely
+ * alarming: it is the reader's Bluetooth address, printed on the serial-number
+ * label on the back of the antenna as "BT Mac Addr: 6C 79 B8 XX XX XX". So the
+ * copy sends the user to the label instead of asserting on their behalf that
+ * the listed device is theirs — which Help cannot know, and which is plainly
+ * wrong once a second CS108 is switched on in the same room. The bonded name
+ * corroborates it: "CS108Reader<last 3 bytes>" carries the tail of that same
+ * address.
+ *
+ * The copy also tells the user to disconnect from the app before pairing in
+ * Settings, and that sentence is load-bearing. A BLE peripheral accepts one
+ * central at a time, so while the browser holds the reader, Settings' discovery
+ * does not list it at all (observed 2026-08-06). Without the warning the advice
+ * fails silently: the user follows it, finds an empty list, and concludes Help
+ * is wrong rather than that they need to let go first.
  *
  * UNSETTLED — whether OS-level pairing is ever actually *required*.
  *   - 2026-08-04: a CS108 never paired in Settings → Bluetooth & devices failed
@@ -202,14 +221,14 @@ const RECOMMENDATIONS: Record<Platform, BluetoothRecommendation> = {
  * It does still point at Settings → Bluetooth & devices, because that step earns
  * its place whether or not it is ever required. CONFIRMED by screenshot
  * 2026-08-06: after pairing there, the browser chooser reads
- * "CS108Reader2603A7 - Paired" where it had read "Unknown or unsupported device
- * (6C:79:B8:26:03:A7)". Windows also demands a PIN during that pairing —
- * "Enter the PIN for CS108Reader2603A7", answered with 0000 — which is why the
+ * "CS108Reader<last 3 bytes> - Paired" where it had read "Unknown or unsupported
+ * device (6C:79:B8:XX:XX:XX)". Windows also demands a PIN during that pairing —
+ * "Enter the PIN for CS108Reader<last 3 bytes>", answered with 0000 — which is why the
  * copy carries the PIN rather than leaving the user stuck at the prompt. So the
  * sentence is not a blind maybe: it buys a legible device name on any machine.
  *
  * That same session exposed something this PR does not try to fix. Windows
- * Settings' own "Add a device" scan lists the reader as "CS108Reader2603A7"
+ * Settings' own "Add a device" scan lists the reader as "CS108Reader<last 3 bytes>"
  * *without* any prior bonding, so the CS108 clearly advertises a usable name and
  * the OS can read it. Only Chromium's pre-bond chooser cannot. That asymmetry
  * suggests the unnamed device may be fixable at the source — a scan-response vs
@@ -238,7 +257,7 @@ const RECOMMENDATIONS: Record<Platform, BluetoothRecommendation> = {
 const SETUP_PREREQUISITES: Partial<Record<Platform, BluetoothSetupPrerequisite>> = {
   windows: {
     helpStep:
-      'On Windows your scanner shows up as "Unknown or unsupported device" followed by a string of numbers, rather than by name. That is normal, and it is the right device — select it and click Pair. Adding it in Settings → Bluetooth & devices first (PIN 0000 if it asks) makes it show up by name instead, and you may need to do that anyway if it will not connect.',
+      'On Windows your scanner shows up as "Unknown or unsupported device" followed by a string of numbers, rather than by name. That is normal — those numbers are the scanner\'s Bluetooth address. Check them against "BT Mac Addr" on the label on the back of the antenna, then select it and click Pair.\n\nAdding it in Settings → Bluetooth & devices first (PIN 0000 if it asks) makes it show up by name instead, and you may need to do that anyway if it will not connect. Disconnect from this app before you try — Windows cannot find the scanner while the app is holding it.',
     connectHint:
       'If this is your first time connecting this scanner on Windows, you may need to pair it in Settings → Bluetooth & devices first.',
   },
