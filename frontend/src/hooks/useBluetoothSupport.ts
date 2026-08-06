@@ -200,10 +200,23 @@ const RECOMMENDATIONS: Record<Platform, BluetoothRecommendation> = {
  * did not happen the second time.
  *
  * It does still point at Settings → Bluetooth & devices, because that step earns
- * its place whether or not it is required: once Windows has bonded the scanner
- * it can read the GAP name, so the chooser stops calling it "Unknown or
- * unsupported device" and lists it properly. That is a concrete payoff on any
- * machine, which is what keeps the sentence from being a blind maybe.
+ * its place whether or not it is ever required. CONFIRMED by screenshot
+ * 2026-08-06: after pairing there, the browser chooser reads
+ * "CS108Reader2603A7 - Paired" where it had read "Unknown or unsupported device
+ * (6C:79:B8:26:03:A7)". Windows also demands a PIN during that pairing —
+ * "Enter the PIN for CS108Reader2603A7", answered with 0000 — which is why the
+ * copy carries the PIN rather than leaving the user stuck at the prompt. So the
+ * sentence is not a blind maybe: it buys a legible device name on any machine.
+ *
+ * That same session exposed something this PR does not try to fix. Windows
+ * Settings' own "Add a device" scan lists the reader as "CS108Reader2603A7"
+ * *without* any prior bonding, so the CS108 clearly advertises a usable name and
+ * the OS can read it. Only Chromium's pre-bond chooser cannot. That asymmetry
+ * suggests the unnamed device may be fixable at the source — a scan-response vs
+ * advertisement-payload question, or how Chromium's WinRT advertisement watcher
+ * is configured — rather than being something we are stuck explaining in Help.
+ * Worth its own ticket; it is out of scope here, and this entry is the interim
+ * answer either way.
  *
  * macOS needs none of it: Chrome, Edge and Opera on a MacBook Pro each connected
  * and read tags with no OS-level pairing at all, so this is Windows-specific

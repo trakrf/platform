@@ -269,6 +269,16 @@ describe('detectBluetoothSupport', () => {
       expect(helpStep).toMatch(/may need to/i);
     });
 
+    it('keeps the PIN, because Windows stops and asks for one', () => {
+      // Regression guard rather than a red-green cycle — the copy already says
+      // it. Screenshotted 2026-08-06: pairing the CS108 from Settings prompts
+      // "Enter the PIN for CS108Reader2603A7", and 0000 is what it wants. Trim
+      // this as clutter and a user is stranded at a prompt with no answer.
+      setEnvironment({ ua: UA.windows });
+
+      expect(detectBluetoothSupport().setupPrerequisite?.helpStep).toMatch(/0000/);
+    });
+
     it('says what adding it in system settings buys you, so the step is not a blind maybe', () => {
       // Once Windows has bonded the scanner it can read the GAP name, so the
       // chooser stops saying "Unknown or unsupported device". That is a reason
