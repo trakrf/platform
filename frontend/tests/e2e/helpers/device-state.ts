@@ -14,15 +14,24 @@ const constantsContent = fs.readFileSync(constantsPath, 'utf-8');
 const readerStateMatch = constantsContent.match(/export const ReaderState = \{[\s\S]*?\} as const/)?.[0];
 if (!readerStateMatch) throw new Error('Could not find ReaderState const');
 
+const readerModeMatch = constantsContent.match(/export const ReaderMode = \{[\s\S]*?\} as const/)?.[0];
+if (!readerModeMatch) throw new Error('Could not find ReaderMode const');
+
 // Extract the const values as an object
-const ReaderState: Record<string, string> = {};
-const constLines = readerStateMatch.split('\n').slice(1, -1); // Skip first and last lines
-constLines.forEach(line => {
-  const match = line.match(/\s*(\w+):\s*['"]([^'"]+)['"]/);
-  if (match) {
-    ReaderState[match[1]] = match[2];
-  }
-});
+function parseConstBlock(block: string): Record<string, string> {
+  const values: Record<string, string> = {};
+  const constLines = block.split('\n').slice(1, -1); // Skip first and last lines
+  constLines.forEach(line => {
+    const match = line.match(/\s*(\w+):\s*['"]([^'"]+)['"]/);
+    if (match) {
+      values[match[1]] = match[2];
+    }
+  });
+  return values;
+}
+
+const ReaderState = parseConstBlock(readerStateMatch);
+const ReaderMode = parseConstBlock(readerModeMatch);
 
 /**
  * Get the current reader state from the device store
@@ -63,6 +72,18 @@ export async function waitForReaderState(
   }
   
   return false;
+}
+
+/**
+ * Get the current reader mode from the device store
+ * Mirrors the worker's READER_MODE_CHANGED events (Idle, Inventory, Locate, ...)
+ */
+export async function getReaderMode(page: Page): Promise<string | null> {
+  const mode = await page.evaluate(() => {
+    const deviceStore = (window as WindowWithStores).__ZUSTAND_STORES__?.deviceStore;
+    return deviceStore?.getState().readerMode ?? null;
+  });
+  return mode as string | null;
 }
 
 /**
@@ -121,5 +142,5 @@ export async function getDeviceDebugState(page: Page): Promise<{
   });
 }
 
-// Export the dynamically loaded ReaderState for use in tests
-export { ReaderState };
+// Export the dynamically loaded ReaderState/ReaderMode for use in tests
+export { ReaderState, ReaderMode };

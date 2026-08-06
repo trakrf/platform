@@ -4,15 +4,21 @@
  * Tests BLE connection management with real CS108 hardware
  * Requires physical CS108 device via bridge server
  *
- * IMPORTANT: Connection tests must NOT navigate to Scan or Locate tabs
- * These tabs trigger mode changes which are heavyweight operations.
- * Only test on Home, Settings, or Help tabs to keep tests lightweight.
+ * IMPORTANT: reader mode follows the active tab (DeviceManager.resolveModeForTab).
+ * Scan/Kits resolve to INVENTORY, Locate to LOCATE, Assets to BARCODE, and
+ * everything else to IDLE. Since TRA-1029 the app lands on Scan, so connecting
+ * from '/' configures INVENTORY — there is no longer a "connect in IDLE" tab.
+ *
+ * Mode changes are heavyweight on real hardware (~650ms teardown + reconfigure),
+ * so keep tab hops to a minimum and always wait for the mode with
+ * expectReaderMode() rather than a fixed sleep (TRA-1101).
  */
 
 import { test, expect, Page } from '@playwright/test';
 import { connectToDevice, disconnectDevice } from './helpers/connection';
-import { expectConnectionState, expectBatteryPercentage } from './helpers/assertions';
+import { expectConnectionState, expectBatteryPercentage, expectReaderMode } from './helpers/assertions';
 import { setupConsoleMonitoring } from './helpers/console-utils';
+import { getReaderState } from './helpers/device-state';
 import { getE2EConfig } from './e2e.config';
 import {
   simulateTriggerPress,
@@ -44,8 +50,8 @@ test.describe('Connection Operations @hardware', () => {
       logAllErrors: true
     });
 
-    // Connect to device ONCE (from Home tab, not Inventory)
-    // Stay on Home tab to avoid triggering INVENTORY mode
+    // Connect to device ONCE. '/' resolves to the Scan tab (TRA-1029), so the
+    // reader is configured for INVENTORY as part of the connect flow.
     await connectToDevice(sharedPage);
     console.log('✅ [beforeAll] Connected to device');
   });
@@ -72,7 +78,10 @@ test.describe('Connection Operations @hardware', () => {
   });
 
   test('should connect and initialize with correct state @critical', async () => {
-    // Core verification: connect, setMode(IDLE) is called, store receives updates
+    // Core verification: connect resolves the mode from the active tab and the
+    // store receives worker updates. Landing tab is Scan, so that is INVENTORY.
+    await expectReaderMode(sharedPage, 'Inventory');
+
     const deviceState = await sharedPage.evaluate(() => {
       const deviceStore = window.__ZUSTAND_STORES__?.deviceStore;
       return deviceStore?.getState();
@@ -81,7 +90,6 @@ test.describe('Connection Operations @hardware', () => {
     // Verify connection state
     expect(deviceState.isConnected).toBe(true);
     expect(deviceState.readerState).toBe('Connected');
-    expect(deviceState.readerMode).toBe('Idle'); // setMode(IDLE) was called on connect
 
     // Verify battery level was received
     expect(deviceState.batteryPercentage).toBeGreaterThanOrEqual(0);
@@ -91,40 +99,29 @@ test.describe('Connection Operations @hardware', () => {
   });
 
   test('should verify setMode calls and store updates on navigation @critical', async () => {
-    // Verify Home → Settings navigation keeps IDLE mode
-    // Core: setMode(IDLE) is called on tab changes, store gets proper updates
+    // Core: the reader mode tracks the active tab in both directions, and the
+    // store gets the worker's mode updates. Leaving a scanning tab must power
+    // the RF stage back down — a reader left in INVENTORY while the UI sits on
+    // a non-scanning tab is battery drain plus unrequested reads.
 
-    // Navigate to Settings
+    // Scan (INVENTORY) → Settings: reader must drop to IDLE
     await sharedPage.click('button[data-testid="menu-item-settings"]');
-    await sharedPage.waitForTimeout(500);
+    await expectReaderMode(sharedPage, 'Idle');
+    expect(await getReaderState(sharedPage)).toBe('Connected');
 
-    const settingsState = await sharedPage.evaluate(() => {
-      const deviceStore = window.__ZUSTAND_STORES__?.deviceStore;
-      return {
-        readerMode: deviceStore?.getState()?.readerMode,
-        readerState: deviceStore?.getState()?.readerState
-      };
-    });
+    // Settings → Help: both non-scanning, so IDLE is held (no mode churn)
+    await sharedPage.click('button[data-testid="menu-item-help"]');
+    await expectReaderMode(sharedPage, 'Idle');
 
-    // Should remain IDLE - Settings doesn't trigger mode change
-    expect(settingsState.readerMode).toBe('Idle');
-    expect(settingsState.readerState).toBe('Connected');
+    // Help → Scan: back to a scanning tab, reader reconfigures to INVENTORY
+    await sharedPage.click('button[data-testid="menu-item-scan"]');
+    await expectReaderMode(sharedPage, 'Inventory');
 
-    // Navigate back to Settings
+    // Return to Settings (IDLE) so the trigger test below starts from a
+    // non-scanning tab and does not fight a mode change mid-test.
     await sharedPage.click('button[data-testid="menu-item-settings"]');
-    await sharedPage.waitForTimeout(500);
-
-    const homeState = await sharedPage.evaluate(() => {
-      const deviceStore = window.__ZUSTAND_STORES__?.deviceStore;
-      return {
-        readerMode: deviceStore?.getState()?.readerMode,
-        readerState: deviceStore?.getState()?.readerState
-      };
-    });
-
-    // Still IDLE
-    expect(homeState.readerMode).toBe('Idle');
-    expect(homeState.readerState).toBe('Connected');
+    await expectReaderMode(sharedPage, 'Idle');
+    expect(await getReaderState(sharedPage)).toBe('Connected');
   });
 
   test('should update trigger state in store on press and release @critical', async () => {

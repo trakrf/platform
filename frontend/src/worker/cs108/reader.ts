@@ -231,9 +231,10 @@ class CS108Reader extends BaseReader {
     // Initialize default settings
     this.readerSettings = this.getDefaultSettings();
     
-    // BaseReader.connect() will call setMode(IDLE) after this returns
-    // So we don't need to do it here
-    
+    // Deliberately no setMode() here. DeviceManager sets the initial mode after
+    // connect, resolved from the active tab — which is INVENTORY on the default
+    // Scan tab, not IDLE (TRA-1101).
+
     logger.debug('[Reader] Connected successfully');
   }
   
