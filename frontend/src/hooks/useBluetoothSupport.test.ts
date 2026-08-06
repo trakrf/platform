@@ -225,7 +225,7 @@ describe('detectBluetoothSupport', () => {
    * an exception.
    */
   describe('the setup prerequisite', () => {
-    it('tells a Windows user to pair the scanner in system settings first', () => {
+    it('warns a Windows user that the chooser will not name the scanner', () => {
       setEnvironment({ ua: UA.windows });
 
       const { setupPrerequisite } = detectBluetoothSupport();
@@ -233,6 +233,52 @@ describe('detectBluetoothSupport', () => {
       expect(setupPrerequisite).not.toBeNull();
       expect(setupPrerequisite?.helpStep).toMatch(/pair/i);
       expect(setupPrerequisite?.helpStep).toMatch(/Bluetooth/);
+    });
+
+    it('quotes the label Edge actually shows, since that is the confirmed fact', () => {
+      // Screenshotted on the GMKtec M6 with the CS108 removed from Bluetooth
+      // settings, 2026-08-06: "Unknown or unsupported device (6C:79:B8:26:03:A7)".
+      // A customer reading "unsupported" next to a hex string cancels the dialog.
+      setEnvironment({ ua: UA.windows });
+
+      expect(detectBluetoothSupport().setupPrerequisite?.helpStep).toMatch(
+        /Unknown or unsupported device/
+      );
+    });
+
+    it('does not tell a Windows user that connecting will fail', () => {
+      // It did not fail on 2026-08-06 — selecting the unnamed device and
+      // clicking Pair connected and read tags. Stating failure as a certainty
+      // sends people into system settings for a step they may not need.
+      setEnvironment({ ua: UA.windows });
+
+      const helpStep = detectBluetoothSupport().setupPrerequisite?.helpStep ?? '';
+
+      expect(helpStep).not.toMatch(/connecting fails|will fail|cannot connect/i);
+    });
+
+    it('hedges the system-settings pairing rather than demanding it', () => {
+      // Whether Windows ever truly requires it is unsettled — see the note on
+      // SETUP_PREREQUISITES. "You may need to" is the strongest claim the
+      // evidence supports; anything firmer outruns it.
+      setEnvironment({ ua: UA.windows });
+
+      const helpStep = detectBluetoothSupport().setupPrerequisite?.helpStep ?? '';
+
+      expect(helpStep).toMatch(/Settings . Bluetooth/);
+      expect(helpStep).toMatch(/may need to/i);
+    });
+
+    it('says what adding it in system settings buys you, so the step is not a blind maybe', () => {
+      // Once Windows has bonded the scanner it can read the GAP name, so the
+      // chooser stops saying "Unknown or unsupported device". That is a reason
+      // to bother even on a machine where connecting works without it.
+      setEnvironment({ ua: UA.windows });
+
+      const helpStep = detectBluetoothSupport().setupPrerequisite?.helpStep ?? '';
+      const afterSettingsMention = helpStep.slice(helpStep.search(/Settings . Bluetooth/));
+
+      expect(afterSettingsMention).toMatch(/name/i);
     });
 
     it('asks for nothing extra on macOS', () => {

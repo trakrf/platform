@@ -173,25 +173,50 @@ const RECOMMENDATIONS: Record<Platform, BluetoothRecommendation> = {
 };
 
 /**
- * What the OS itself demands before any of the above matters. Windows is the
- * only entry, and it earns it (TRA-1100, found on a GMKtec M6 running Windows 11
- * 25H2 with Edge, 2026-08-04): a CS108 that has never been paired in Settings →
- * Bluetooth & devices cannot be connected from the browser. The chooser still
- * offers it — we filter on the CS108 service UUID, so the right device is
- * listed — but shows it *unnamed*, because Windows will not surface the GAP name
- * before bonding, and selecting it fails. Pairing it first (classic pairing,
- * default PIN 0000) makes the whole flow work. macOS needs none of it: Chrome,
- * Edge and Opera on a MacBook Pro each connected and read tags with no OS-level
- * pairing at all, so this is Windows-specific rather than a CS108 quirk.
+ * What the OS itself makes awkward before any of the above matters. Windows is
+ * the only entry (TRA-1100), and the copy is worded around two observations on
+ * the same GMKtec M6 / Windows 11 25H2 / Edge box that do not agree.
  *
- * Note what is deliberately NOT here. The failure surfaces as
+ * CONFIRMED, both runs — the chooser lists the CS108 *unnamed*. We filter on the
+ * CS108 service UUID so the right device is offered, but Windows will not
+ * surface the GAP name before bonding, and Edge fills the gap with
+ * "Unknown or unsupported device (6C:79:B8:26:03:A7)". That literal wording is
+ * the reason this entry exists at all: a customer reading "unsupported" beside a
+ * hex string concludes they have the wrong device and cancels the dialog. It is
+ * the one thing here we can state flatly.
+ *
+ * UNSETTLED — whether OS-level pairing is ever actually *required*.
+ *   - 2026-08-04: a CS108 never paired in Settings → Bluetooth & devices failed
+ *     to connect; pairing it there (classic pairing, PIN 0000) fixed it.
+ *   - 2026-08-06: the CS108 was removed from Bluetooth settings and the flow run
+ *     again. The chooser showed it unnamed as before, but selecting it and
+ *     clicking Pair connected and read 12 tags. No failure at all.
+ * The likeliest explanation is that Chromium's own chooser initiates the bond,
+ * and that the first run hit something else — or that Windows kept registry
+ * residue from the earlier pairing, which a "Remove device" does not reliably
+ * clear. Settling it needs a clean Windows install on hardware that has never
+ * seen this reader; short of that, no observation on this box can distinguish
+ * the two. So `helpStep` says "you may need to" and never asserts a failure that
+ * did not happen the second time.
+ *
+ * It does still point at Settings → Bluetooth & devices, because that step earns
+ * its place whether or not it is required: once Windows has bonded the scanner
+ * it can read the GAP name, so the chooser stops calling it "Unknown or
+ * unsupported device" and lists it properly. That is a concrete payoff on any
+ * machine, which is what keeps the sentence from being a blind maybe.
+ *
+ * macOS needs none of it: Chrome, Edge and Opera on a MacBook Pro each connected
+ * and read tags with no OS-level pairing at all, so this is Windows-specific
+ * rather than a CS108 quirk.
+ *
+ * Note what is deliberately NOT here. The 2026-08-04 failure surfaced as
  * `NetworkError: Connection attempt failed.` — Chromium's generic GATT failure,
  * which equally means the scanner is switched off, out of range, already
  * claimed by another host, or flat. So there is no branch on that exception, and
- * `connectHint` never asserts pairing is the cause. Anything stronger would be
- * wrong more often than right, and would mislead every Mac user whose reader is
- * simply off. Contrast the cases connectErrorMessage.ts does diagnose, which
- * have unambiguous single-cause messages.
+ * `connectHint` never asserts pairing is the cause. That restraint reads better
+ * now than when it was written: had we branched on it, every Mac user with a
+ * flat reader would be reading about Windows Bluetooth settings, to fix a
+ * prerequisite that may not exist.
  *
  * Only add a platform here on the strength of a real device that needed it. A
  * prerequisite invented for a platform nobody tested sends users into system
@@ -200,9 +225,9 @@ const RECOMMENDATIONS: Record<Platform, BluetoothRecommendation> = {
 const SETUP_PREREQUISITES: Partial<Record<Platform, BluetoothSetupPrerequisite>> = {
   windows: {
     helpStep:
-      'On Windows, pair your scanner once before connecting here: open Settings → Bluetooth & devices, add the CS108 (use PIN 0000 if it asks), then come back. Until you do, Windows lists the scanner without a name and connecting fails.',
+      'On Windows your scanner shows up as "Unknown or unsupported device" followed by a string of numbers, rather than by name. That is normal, and it is the right device — select it and click Pair. Adding it in Settings → Bluetooth & devices first (PIN 0000 if it asks) makes it show up by name instead, and you may need to do that anyway if it will not connect.',
     connectHint:
-      'If this is your first time connecting this scanner on Windows, try pairing it in Settings → Bluetooth & devices first.',
+      'If this is your first time connecting this scanner on Windows, you may need to pair it in Settings → Bluetooth & devices first.',
   },
 };
 
