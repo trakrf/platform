@@ -216,6 +216,89 @@ describe('detectBluetoothSupport', () => {
       expect(recommendation.note).not.toHaveLength(0);
     });
   });
+
+  /**
+   * TRA-1100. Windows will not let the browser reach a CS108 that has never been
+   * paired in Settings, and says so only as a generic NetworkError. The
+   * prerequisite is a property of the OS, not of the browser or of whether the
+   * connect has failed yet, so it is answered here rather than guessed at from
+   * an exception.
+   */
+  describe('the setup prerequisite', () => {
+    it('tells a Windows user to pair the scanner in system settings first', () => {
+      setEnvironment({ ua: UA.windows });
+
+      const { setupPrerequisite } = detectBluetoothSupport();
+
+      expect(setupPrerequisite).not.toBeNull();
+      expect(setupPrerequisite?.helpStep).toMatch(/pair/i);
+      expect(setupPrerequisite?.helpStep).toMatch(/Bluetooth/);
+    });
+
+    it('asks for nothing extra on macOS', () => {
+      // Verified on a MacBook Pro, 2026-08-04: Chrome, Edge and Opera each
+      // connected to a CS108 with no OS-level pairing at all.
+      setEnvironment({ ua: UA.macChrome });
+
+      expect(detectBluetoothSupport().setupPrerequisite).toBeNull();
+    });
+
+    it('asks for nothing extra on the platforms that were never observed needing it', () => {
+      // Only Windows was seen to require bonding. A prerequisite invented for a
+      // platform nobody tested is advice that wastes the user's time.
+      for (const ua of [UA.linux, UA.android, UA.iphone]) {
+        setEnvironment({ ua });
+
+        expect(detectBluetoothSupport().setupPrerequisite).toBeNull();
+      }
+    });
+
+    it('gives Windows a self-identifying string the other desktop rows do not have', () => {
+      // windows, macos and unknown share word-for-word identical recommendation
+      // copy, so until now nothing on screen could prove which row rendered.
+      setEnvironment({ ua: UA.windows });
+      const windows = detectBluetoothSupport().setupPrerequisite;
+
+      setEnvironment({ ua: UA.macSafari });
+      const macos = detectBluetoothSupport().setupPrerequisite;
+
+      expect(windows).not.toEqual(macos);
+    });
+
+    it('answers on Windows even when the browser already works', () => {
+      // The prerequisite is not a failure diagnosis — Help states it up front,
+      // before the user has attempted anything.
+      setEnvironment({ ua: UA.windows, bluetooth: true });
+
+      const { supported, setupPrerequisite } = detectBluetoothSupport();
+
+      expect(supported).toBe(true);
+      expect(setupPrerequisite?.helpStep).toMatch(/pair/i);
+    });
+
+    it('answers on Windows even when the browser cannot do Bluetooth at all', () => {
+      // Firefox on Windows raises the banner; Help still has to be able to state
+      // the pairing step, so this must not be gated on `supported`.
+      setEnvironment({ ua: UA.windows, bluetooth: false, secureContext: false });
+
+      const { supported, setupPrerequisite } = detectBluetoothSupport();
+
+      expect(supported).toBe(false);
+      expect(setupPrerequisite?.helpStep).toMatch(/pair/i);
+    });
+
+    it('hedges the connect-failure hint instead of diagnosing the cause', () => {
+      // "NetworkError: Connection attempt failed." is Chromium's generic GATT
+      // failure — equally a scanner that is off, out of range, or flat. Asserting
+      // that pairing is the cause would be wrong more often than right.
+      setEnvironment({ ua: UA.windows });
+
+      const hint = detectBluetoothSupport().setupPrerequisite?.connectHint ?? '';
+
+      expect(hint).toMatch(/\bif\b/i);
+      expect(hint).toMatch(/first time/i);
+    });
+  });
 });
 
 describe('bluefyLinkFor', () => {

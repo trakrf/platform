@@ -74,4 +74,49 @@ describe('connectErrorMessage', () => {
   it('survives a thrown non-Error', () => {
     expect(connectErrorMessage('just a string')).toBe('Failed to connect to reader');
   });
+
+  /**
+   * TRA-1100. On Windows an unpaired CS108 fails with Chromium's generic
+   * `NetworkError: Connection attempt failed.` — which is equally a scanner that
+   * is switched off, out of range, or already claimed by another host. The
+   * caller supplies the hint only where the platform makes it plausible, and it
+   * may only ride the message that admits it does not know.
+   */
+  describe('the first-connect hint', () => {
+    const HINT = 'If this is your first time, try pairing it in Windows first.';
+
+    it('adds the hint to the message that admits it has no diagnosis', () => {
+      const message = connectErrorMessage(
+        new DOMException('Connection Error: Connection attempt failed.', 'NetworkError'),
+        HINT
+      );
+
+      expect(message).toContain('Failed to connect to reader');
+      expect(message).toContain(HINT);
+    });
+
+    it('leaves the generic message alone when the caller offers no hint', () => {
+      expect(
+        connectErrorMessage(
+          new DOMException('Connection Error: Connection attempt failed.', 'NetworkError')
+        )
+      ).toBe('Failed to connect to reader');
+    });
+
+    it('never appends the hint to a message that already knows the cause', () => {
+      // Telling someone whose reader is switched off, or who dismissed the
+      // chooser on purpose, to go and pair something is noise at best.
+      const diagnosed = [
+        new DOMException('Web Bluetooth API globally disabled.', 'NotFoundError'),
+        new DOMException('Bluetooth adapter not available.', 'NotFoundError'),
+        new DOMException('User cancelled the requestDevice() chooser.', 'NotFoundError'),
+        new Error('connection timeout after 10s'),
+        new Error('device disconnected'),
+      ];
+
+      for (const error of diagnosed) {
+        expect(connectErrorMessage(error, HINT)).not.toContain(HINT);
+      }
+    });
+  });
 });
