@@ -216,6 +216,169 @@ describe('detectBluetoothSupport', () => {
       expect(recommendation.note).not.toHaveLength(0);
     });
   });
+
+  /**
+   * TRA-1100. Windows will not let the browser reach a CS108 that has never been
+   * paired in Settings, and says so only as a generic NetworkError. The
+   * prerequisite is a property of the OS, not of the browser or of whether the
+   * connect has failed yet, so it is answered here rather than guessed at from
+   * an exception.
+   */
+  describe('the setup prerequisite', () => {
+    it('warns a Windows user that the chooser will not name the scanner', () => {
+      setEnvironment({ ua: UA.windows });
+
+      const { setupPrerequisite } = detectBluetoothSupport();
+
+      expect(setupPrerequisite).not.toBeNull();
+      expect(setupPrerequisite?.helpStep).toMatch(/pair/i);
+      expect(setupPrerequisite?.helpStep).toMatch(/Bluetooth/);
+    });
+
+    it('quotes the label Edge actually shows, since that is the confirmed fact', () => {
+      // Screenshotted on the GMKtec M6 with the CS108 removed from Bluetooth
+      // settings, 2026-08-06: "Unknown or unsupported device (6C:79:B8:XX:XX:XX)".
+      // A customer reading "unsupported" next to a hex string cancels the dialog.
+      setEnvironment({ ua: UA.windows });
+
+      expect(detectBluetoothSupport().setupPrerequisite?.helpStep).toMatch(
+        /Unknown or unsupported device/
+      );
+    });
+
+    it('does not tell a Windows user that connecting will fail', () => {
+      // It did not fail on 2026-08-06 — selecting the unnamed device and
+      // clicking Pair connected and read tags. Stating failure as a certainty
+      // sends people into system settings for a step they may not need.
+      setEnvironment({ ua: UA.windows });
+
+      const helpStep = detectBluetoothSupport().setupPrerequisite?.helpStep ?? '';
+
+      expect(helpStep).not.toMatch(/connecting fails|will fail|cannot connect/i);
+    });
+
+    it('hedges the system-settings pairing rather than demanding it', () => {
+      // Whether Windows ever truly requires it is unsettled — see the note on
+      // SETUP_PREREQUISITES. "You may need to" is the strongest claim the
+      // evidence supports; anything firmer outruns it.
+      setEnvironment({ ua: UA.windows });
+
+      const helpStep = detectBluetoothSupport().setupPrerequisite?.helpStep ?? '';
+
+      expect(helpStep).toMatch(/Settings . Bluetooth/);
+      expect(helpStep).toMatch(/may need to/i);
+    });
+
+    it('warns that the app must let go before Windows can pair the scanner', () => {
+      // A BLE peripheral accepts one central at a time. Observed 2026-08-06:
+      // with the browser still connected, Settings' discovery does not list the
+      // reader at all. Without this the pairing advice fails silently — the user
+      // follows it, sees an empty list, and concludes Help is wrong.
+      setEnvironment({ ua: UA.windows });
+
+      expect(detectBluetoothSupport().setupPrerequisite?.helpStep).toMatch(/disconnect/i);
+    });
+
+    it('gives the user a way to check they picked the right reader', () => {
+      // The hex the chooser shows is the reader's Bluetooth address, and it is
+      // printed on the serial-number label on the back of the antenna as
+      // "BT Mac Addr: 6C 79 B8 XX XX XX". With two CS108s in a room that label
+      // is the only way to tell them apart, so "it is the right device" is not
+      // something Help can assert on the user's behalf.
+      setEnvironment({ ua: UA.windows });
+
+      const helpStep = detectBluetoothSupport().setupPrerequisite?.helpStep ?? '';
+
+      expect(helpStep).toMatch(/BT Mac Addr/i);
+      expect(helpStep).toMatch(/label/i);
+    });
+
+    it('keeps the PIN, because Windows stops and asks for one', () => {
+      // Regression guard rather than a red-green cycle — the copy already says
+      // it. Screenshotted 2026-08-06: pairing the CS108 from Settings prompts
+      // "Enter the PIN for CS108Reader<last 3 bytes>", and 0000 is what it wants. Trim
+      // this as clutter and a user is stranded at a prompt with no answer.
+      setEnvironment({ ua: UA.windows });
+
+      expect(detectBluetoothSupport().setupPrerequisite?.helpStep).toMatch(/0000/);
+    });
+
+    it('says what adding it in system settings buys you, so the step is not a blind maybe', () => {
+      // Once Windows has bonded the scanner it can read the GAP name, so the
+      // chooser stops saying "Unknown or unsupported device". That is a reason
+      // to bother even on a machine where connecting works without it.
+      setEnvironment({ ua: UA.windows });
+
+      const helpStep = detectBluetoothSupport().setupPrerequisite?.helpStep ?? '';
+      const afterSettingsMention = helpStep.slice(helpStep.search(/Settings . Bluetooth/));
+
+      expect(afterSettingsMention).toMatch(/name/i);
+    });
+
+    it('asks for nothing extra on macOS', () => {
+      // Verified on a MacBook Pro, 2026-08-04: Chrome, Edge and Opera each
+      // connected to a CS108 with no OS-level pairing at all.
+      setEnvironment({ ua: UA.macChrome });
+
+      expect(detectBluetoothSupport().setupPrerequisite).toBeNull();
+    });
+
+    it('asks for nothing extra on the platforms that were never observed needing it', () => {
+      // Only Windows was seen to require bonding. A prerequisite invented for a
+      // platform nobody tested is advice that wastes the user's time.
+      for (const ua of [UA.linux, UA.android, UA.iphone]) {
+        setEnvironment({ ua });
+
+        expect(detectBluetoothSupport().setupPrerequisite).toBeNull();
+      }
+    });
+
+    it('gives Windows a self-identifying string the other desktop rows do not have', () => {
+      // windows, macos and unknown share word-for-word identical recommendation
+      // copy, so until now nothing on screen could prove which row rendered.
+      setEnvironment({ ua: UA.windows });
+      const windows = detectBluetoothSupport().setupPrerequisite;
+
+      setEnvironment({ ua: UA.macSafari });
+      const macos = detectBluetoothSupport().setupPrerequisite;
+
+      expect(windows).not.toEqual(macos);
+    });
+
+    it('answers on Windows even when the browser already works', () => {
+      // The prerequisite is not a failure diagnosis — Help states it up front,
+      // before the user has attempted anything.
+      setEnvironment({ ua: UA.windows, bluetooth: true });
+
+      const { supported, setupPrerequisite } = detectBluetoothSupport();
+
+      expect(supported).toBe(true);
+      expect(setupPrerequisite?.helpStep).toMatch(/pair/i);
+    });
+
+    it('answers on Windows even when the browser cannot do Bluetooth at all', () => {
+      // Firefox on Windows raises the banner; Help still has to be able to state
+      // the pairing step, so this must not be gated on `supported`.
+      setEnvironment({ ua: UA.windows, bluetooth: false, secureContext: false });
+
+      const { supported, setupPrerequisite } = detectBluetoothSupport();
+
+      expect(supported).toBe(false);
+      expect(setupPrerequisite?.helpStep).toMatch(/pair/i);
+    });
+
+    it('hedges the connect-failure hint instead of diagnosing the cause', () => {
+      // "NetworkError: Connection attempt failed." is Chromium's generic GATT
+      // failure — equally a scanner that is off, out of range, or flat. Asserting
+      // that pairing is the cause would be wrong more often than right.
+      setEnvironment({ ua: UA.windows });
+
+      const hint = detectBluetoothSupport().setupPrerequisite?.connectHint ?? '';
+
+      expect(hint).toMatch(/\bif\b/i);
+      expect(hint).toMatch(/first time/i);
+    });
+  });
 });
 
 describe('bluefyLinkFor', () => {

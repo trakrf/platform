@@ -34,7 +34,15 @@ function messageOf(error: unknown): string {
   return '';
 }
 
-export function connectErrorMessage(error: unknown): string {
+/**
+ * @param firstConnectHint Platform-specific setup step to offer *only* when
+ *   nothing above recognised the failure. Callers pass
+ *   `useBluetoothSupport().setupPrerequisite?.connectHint`, which is non-null on
+ *   Windows alone (TRA-1100). It rides the generic message and nothing else: the
+ *   diagnosed branches below already know what went wrong, and appending a
+ *   pairing suggestion to "you cancelled" or "your Bluetooth is off" is noise.
+ */
+export function connectErrorMessage(error: unknown, firstConnectHint?: string): string {
   const message = messageOf(error);
 
   // Brave ships Web Bluetooth disabled behind a brave://flags toggle. Verified
@@ -67,5 +75,11 @@ export function connectErrorMessage(error: unknown): string {
     return 'Reader disconnected unexpectedly';
   }
 
-  return GENERIC;
+  // Everything unrecognised lands here, and on Windows that includes the one
+  // failure we know a specific cure for: `NetworkError: Connection attempt
+  // failed.` from a scanner that has never been paired at the OS level. It is
+  // also Chromium's generic GATT failure — a reader that is off, out of range,
+  // or flat produces exactly the same string — so the hint is appended to a
+  // message that still says it does not know, never substituted for it.
+  return firstConnectHint ? `${GENERIC}. ${firstConnectHint}` : GENERIC;
 }

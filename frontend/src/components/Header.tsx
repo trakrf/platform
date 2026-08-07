@@ -127,7 +127,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
   const mockBatteryPercentage = MOCK_TESTING ? 75 : batteryPercentage;
   const mockReaderState = MOCK_TESTING ? ReaderState.CONNECTED : readerState;
 
-  const { supported: isBrowserSupported } = useBluetoothSupport();
+  const { supported: isBrowserSupported, setupPrerequisite } = useBluetoothSupport();
   const [isDebounced, setIsDebounced] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [isBlinking, setIsBlinking] = useState(false);
@@ -151,7 +151,7 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
         setShowDisconnectModal(true);
       }
     } catch (error) {
-      toast.error(connectErrorMessage(error));
+      toast.error(connectErrorMessage(error, setupPrerequisite?.connectHint));
       console.error('Connection error:', error);
     }
   };

@@ -21,7 +21,7 @@ export default function SettingsScreen() {
   
   const [rfPower, setLocalRfPower] = useState(useSettingsStore.getState().rfid?.transmitPower ?? 30);
   const [isAdvancedExpanded, setIsAdvancedExpanded] = useState(false);
-  const { supported: isBrowserSupported } = useBluetoothSupport();
+  const { supported: isBrowserSupported, setupPrerequisite } = useBluetoothSupport();
   const [isDebounced, setIsDebounced] = useState(false);
   const [isBlinking, setIsBlinking] = useState(false);
   const [selectedSession, setSelectedSession] = useState('S1');
@@ -91,7 +91,7 @@ export default function SettingsScreen() {
         await disconnect();
       }
     } catch (error) {
-      toast.error(connectErrorMessage(error));
+      toast.error(connectErrorMessage(error, setupPrerequisite?.connectHint));
       console.error('Connection error:', error);
     }
   };

@@ -55,7 +55,13 @@ export default function HelpScreen() {
 
   // Help and the Scan-tab banner answer "which browser?" from the same place,
   // so the advice cannot drift between them the way it had before TRA-1078.
-  const { recommendation } = useBluetoothSupport();
+  // `setupPrerequisite` is the same arrangement for "what does this OS need
+  // doing first?" — non-null on Windows only (TRA-1100).
+  const { recommendation, setupPrerequisite } = useBluetoothSupport();
+
+  /** Blank on every platform that needs no setup step, so the copy reads unchanged. */
+  const prerequisiteBefore = setupPrerequisite ? `${setupPrerequisite.helpStep}\n\n` : '';
+  const prerequisiteAfter = setupPrerequisite ? `\n\n${setupPrerequisite.helpStep}` : '';
 
   const toggleItem = (itemId: string) => {
     const newOpenItems = new Set(openItems);
@@ -83,7 +89,7 @@ ${recommendation.note}${recommendation.links.map((link) => `\n\n${link.label}: $
         },
         {
           question: 'How do I connect my scanner?',
-          answer: `1. Turn on your CS108 scanner (green light)
+          answer: `${prerequisiteBefore}1. Turn on your CS108 scanner (green light)
 2. Click "Settings" on the left menu
 3. Click the blue "Connect Device" button
 4. Pick your CS108 from the popup list
@@ -225,7 +231,7 @@ Turn ON "Auto-clear after Save" and the list empties each time you save.`
           answer: `1. Make sure scanner has green light
 2. Using ${recommendation.browsers}? (Required!)
 3. Turn scanner off and on
-4. Refresh the webpage`
+4. Refresh the webpage${prerequisiteAfter}`
         },
         {
           question: 'Not finding any items',

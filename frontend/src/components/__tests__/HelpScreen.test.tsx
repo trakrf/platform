@@ -126,3 +126,48 @@ describe('HelpScreen browser guidance', () => {
     expect(renderHelpText()).not.toMatch(/paid|purchase/i);
   });
 });
+
+/**
+ * TRA-1100. Windows needs the scanner paired in system settings before the
+ * browser can reach it, and a customer following Help without that step gets an
+ * unnamed device and a failed connect. Help is where that prerequisite belongs,
+ * sourced from the same hook as the browser advice so the two cannot drift.
+ */
+describe('HelpScreen first-time setup guidance', () => {
+  beforeEach(() => {
+    useUIStore.setState({ activeTab: 'help' });
+    useDeviceStore.setState({ readerState: ReaderState.DISCONNECTED });
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreBluetoothEnvironment();
+  });
+
+  it('tells a Windows user to pair the scanner before the connect steps', () => {
+    setBluetoothEnvironment({ ua: USER_AGENTS.windows });
+
+    const helpText = renderHelpText();
+
+    expect(helpText).toMatch(/pair/i);
+    expect(helpText).toMatch(/Bluetooth/);
+  });
+
+  it('states the pairing step in troubleshooting too, where a stuck user looks', () => {
+    setBluetoothEnvironment({ ua: USER_AGENTS.windows });
+
+    const { container } = render(<HelpScreen />);
+    const troubleshooting = within(container).getByText("Scanner won't connect");
+    fireEvent.click(troubleshooting);
+
+    expect(container.textContent ?? '').toMatch(/pair/i);
+  });
+
+  it('does not tell a Mac user to pair anything', () => {
+    // Verified on a MacBook Pro, 2026-08-04: no OS-level pairing is needed, and
+    // sending a Mac user into Bluetooth settings is a dead end.
+    setBluetoothEnvironment({ ua: USER_AGENTS.macChrome });
+
+    expect(renderHelpText()).not.toMatch(/pair/i);
+  });
+});

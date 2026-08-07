@@ -45,11 +45,29 @@ export interface BluetoothRecommendation {
   openInBrowserUrl?: string;
 }
 
+/**
+ * A step the operating system demands before the browser can reach a scanner at
+ * all — distinct from `BluetoothRecommendation`, which is only ever about which
+ * browser to run. Two phrasings because the two surfaces are asking different
+ * questions, and both come from here so they cannot drift (TRA-1100).
+ */
+export interface BluetoothSetupPrerequisite {
+  /** Stated up front in Help, before the user has attempted anything. */
+  helpStep: string;
+  /**
+   * Offered after a connect has already failed, and therefore hedged: the
+   * exception that gets this far does not say what went wrong.
+   */
+  connectHint: string;
+}
+
 export interface BluetoothSupport {
   supported: boolean;
   reason: BluetoothUnsupportedReason | null;
   recommendation: BluetoothRecommendation;
   platform: Platform;
+  /** What this OS needs doing once, before the first connect. Usually nothing. */
+  setupPrerequisite: BluetoothSetupPrerequisite | null;
 }
 
 const BLUEFY_URL = 'https://apps.apple.com/us/app/bluefy-web-ble-browser/id1492822055';
@@ -72,16 +90,9 @@ const BLUEFY_URL = 'https://apps.apple.com/us/app/bluefy-web-ble-browser/id14928
  *              2026-08-04: Edge connects to a CS108 and works, and
  *              navigator.userAgentData.platform reads 'Windows' — checked
  *              directly, because this row's copy cannot prove it (see below).
- *              But note the
- *              prerequisite this row's copy does NOT mention — the scanner must
- *              first be paired in Windows Bluetooth settings. Until it is, the
- *              chooser still finds it (we filter on the CS108 service UUID, so
- *              the right device is offered) but shows it unnamed, because
- *              Windows will not surface the GAP name before bonding — and
- *              selecting it fails with NetworkError. macOS needs none of this.
- *              Tracked separately; do not paper over it with a connect-error
- *              branch, because that NetworkError is Chromium's generic GATT
- *              failure and equally means "scanner is off" or "out of range".
+ *              The pairing prerequisite Windows also imposes is NOT stated in
+ *              this row — it is a property of the OS rather than of the browser
+ *              choice, so it lives in SETUP_PREREQUISITES below (TRA-1100).
  *   - macos  — fully verified on a MacBook Pro, 2026-08-04: Chrome, Edge and
  *              Opera each connected to a CS108 and read tags, Safari and Firefox
  *              raise the banner, and navigator.userAgentData.platform reads
@@ -96,7 +107,9 @@ const BLUEFY_URL = 'https://apps.apple.com/us/app/bluefy-web-ble-browser/id14928
  * on screen confirms the path renders but NOT which of the three produced it —
  * a fallthrough to `unknown` looks exactly the same. Only ios ("Bluefy"),
  * android ("...or Samsung Internet") and linux ("Chrome or Chromium") are
- * self-identifying. The other two were confirmed by reading
+ * self-identifying. (Since TRA-1100 the windows *prerequisite* is
+ * self-identifying, but that is a separate string from this matrix, and only on
+ * the surfaces that render it.) The other two were confirmed by reading
  * navigator.userAgentData.platform directly on real hardware — 'Windows' and
  * 'macOS', both 2026-08-04 — rather than by trusting what appeared on screen.
  * Do the same for any row added later: identical copy makes a fallthrough to
@@ -156,6 +169,97 @@ const RECOMMENDATIONS: Record<Platform, BluetoothRecommendation> = {
     browsers: 'Chrome, Edge, or Opera',
     note: "Safari and Firefox can't connect to your scanner — they don't support the Bluetooth features this app needs.",
     links: [],
+  },
+};
+
+/**
+ * What the OS itself makes awkward before any of the above matters. Windows is
+ * the only entry (TRA-1100), and the copy is worded around two observations on
+ * the same GMKtec M6 / Windows 11 25H2 / Edge box that do not agree.
+ *
+ * (Addresses below are masked past the CSL OUI — 6C:79:B8 is shared by every
+ * CS108, the rest identifies one specific reader and does not belong in source.)
+ *
+ * CONFIRMED, both runs — the chooser lists the CS108 *unnamed*. We filter on the
+ * CS108 service UUID so the right device is offered, but Windows will not
+ * surface the GAP name before bonding, and Edge fills the gap with
+ * "Unknown or unsupported device (6C:79:B8:XX:XX:XX)". That literal wording is
+ * the reason this entry exists at all: a customer reading "unsupported" beside a
+ * hex string concludes they have the wrong device and cancels the dialog. It is
+ * the one thing here we can state flatly.
+ *
+ * The hex is not noise, which is what makes this recoverable rather than merely
+ * alarming: it is the reader's Bluetooth address, printed on the serial-number
+ * label on the back of the antenna as "BT Mac Addr: 6C 79 B8 XX XX XX". So the
+ * copy sends the user to the label instead of asserting on their behalf that
+ * the listed device is theirs — which Help cannot know, and which is plainly
+ * wrong once a second CS108 is switched on in the same room. The bonded name
+ * corroborates it: "CS108Reader<last 3 bytes>" carries the tail of that same
+ * address.
+ *
+ * The copy also tells the user to disconnect from the app before pairing in
+ * Settings, and that sentence is load-bearing. A BLE peripheral accepts one
+ * central at a time, so while the browser holds the reader, Settings' discovery
+ * does not list it at all (observed 2026-08-06). Without the warning the advice
+ * fails silently: the user follows it, finds an empty list, and concludes Help
+ * is wrong rather than that they need to let go first.
+ *
+ * UNSETTLED — whether OS-level pairing is ever actually *required*.
+ *   - 2026-08-04: a CS108 never paired in Settings → Bluetooth & devices failed
+ *     to connect; pairing it there (classic pairing, PIN 0000) fixed it.
+ *   - 2026-08-06: the CS108 was removed from Bluetooth settings and the flow run
+ *     again. The chooser showed it unnamed as before, but selecting it and
+ *     clicking Pair connected and read 12 tags. No failure at all.
+ * The likeliest explanation is that Chromium's own chooser initiates the bond,
+ * and that the first run hit something else — or that Windows kept registry
+ * residue from the earlier pairing, which a "Remove device" does not reliably
+ * clear. Settling it needs a clean Windows install on hardware that has never
+ * seen this reader; short of that, no observation on this box can distinguish
+ * the two. So `helpStep` says "you may need to" and never asserts a failure that
+ * did not happen the second time.
+ *
+ * It does still point at Settings → Bluetooth & devices, because that step earns
+ * its place whether or not it is ever required. CONFIRMED by screenshot
+ * 2026-08-06: after pairing there, the browser chooser reads
+ * "CS108Reader<last 3 bytes> - Paired" where it had read "Unknown or unsupported
+ * device (6C:79:B8:XX:XX:XX)". Windows also demands a PIN during that pairing —
+ * "Enter the PIN for CS108Reader<last 3 bytes>", answered with 0000 — which is why the
+ * copy carries the PIN rather than leaving the user stuck at the prompt. So the
+ * sentence is not a blind maybe: it buys a legible device name on any machine.
+ *
+ * That same session exposed something this PR does not try to fix. Windows
+ * Settings' own "Add a device" scan lists the reader as "CS108Reader<last 3 bytes>"
+ * *without* any prior bonding, so the CS108 clearly advertises a usable name and
+ * the OS can read it. Only Chromium's pre-bond chooser cannot. That asymmetry
+ * suggests the unnamed device may be fixable at the source — a scan-response vs
+ * advertisement-payload question, or how Chromium's WinRT advertisement watcher
+ * is configured — rather than being something we are stuck explaining in Help.
+ * Worth its own ticket; it is out of scope here, and this entry is the interim
+ * answer either way.
+ *
+ * macOS needs none of it: Chrome, Edge and Opera on a MacBook Pro each connected
+ * and read tags with no OS-level pairing at all, so this is Windows-specific
+ * rather than a CS108 quirk.
+ *
+ * Note what is deliberately NOT here. The 2026-08-04 failure surfaced as
+ * `NetworkError: Connection attempt failed.` — Chromium's generic GATT failure,
+ * which equally means the scanner is switched off, out of range, already
+ * claimed by another host, or flat. So there is no branch on that exception, and
+ * `connectHint` never asserts pairing is the cause. That restraint reads better
+ * now than when it was written: had we branched on it, every Mac user with a
+ * flat reader would be reading about Windows Bluetooth settings, to fix a
+ * prerequisite that may not exist.
+ *
+ * Only add a platform here on the strength of a real device that needed it. A
+ * prerequisite invented for a platform nobody tested sends users into system
+ * settings for nothing.
+ */
+const SETUP_PREREQUISITES: Partial<Record<Platform, BluetoothSetupPrerequisite>> = {
+  windows: {
+    helpStep:
+      'On Windows your scanner shows up as "Unknown or unsupported device" followed by a string of numbers, rather than by name. That is normal — those numbers are the scanner\'s Bluetooth address. Check them against "BT Mac Addr" on the label on the back of the antenna, then select it and click Pair.\n\nAdding it in Settings → Bluetooth & devices first (PIN 0000 if it asks) makes it show up by name instead, and you may need to do that anyway if it will not connect. Disconnect from this app before you try — Windows cannot find the scanner while the app is holding it.',
+    connectHint:
+      'If this is your first time connecting this scanner on Windows, you may need to pair it in Settings → Bluetooth & devices first.',
   },
 };
 
@@ -257,6 +361,11 @@ export function detectBluetoothSupport(): BluetoothSupport {
   const platform = detectPlatform();
   const recommendation = RECOMMENDATIONS[platform];
 
+  // Derived from the OS alone, so it is the same answer on every branch below —
+  // Help states it before the user has attempted anything, and a browser that
+  // cannot do Bluetooth at all does not make the pairing step untrue.
+  const setupPrerequisite = SETUP_PREREQUISITES[platform] ?? null;
+
   let hasBluetoothAPI = false;
   try {
     hasBluetoothAPI = typeof navigator !== 'undefined' && !!navigator.bluetooth;
@@ -271,7 +380,7 @@ export function detectBluetoothSupport(): BluetoothSupport {
   const isBridged = typeof window !== 'undefined' && !!window.__webBluetoothBridged;
 
   if (hasBluetoothAPI || isBridged) {
-    return { supported: true, reason: null, recommendation, platform };
+    return { supported: true, reason: null, recommendation, platform, setupPrerequisite };
   }
 
   const isSecure = typeof window === 'undefined' || window.isSecureContext !== false;
@@ -282,6 +391,7 @@ export function detectBluetoothSupport(): BluetoothSupport {
       reason: 'insecure-context',
       recommendation: { ...recommendation, note: INSECURE_CONTEXT_NOTE },
       platform,
+      setupPrerequisite,
     };
   }
 
@@ -294,10 +404,17 @@ export function detectBluetoothSupport(): BluetoothSupport {
       reason: 'ios-webkit',
       recommendation: { ...recommendation, openInBrowserUrl },
       platform,
+      setupPrerequisite,
     };
   }
 
-  return { supported: false, reason: 'unsupported-browser', recommendation, platform };
+  return {
+    supported: false,
+    reason: 'unsupported-browser',
+    recommendation,
+    platform,
+    setupPrerequisite,
+  };
 }
 
 /**
