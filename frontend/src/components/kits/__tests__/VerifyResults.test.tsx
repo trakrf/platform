@@ -139,7 +139,34 @@ describe('VerifyResults tree view', () => {
     expect(screen.getByTestId('kit-result-incomplete-5')).toHaveTextContent('10022');
     expect(screen.getByTestId('kit-result-incomplete-5')).not.toHaveTextContent('000000000000000000010022');
     fireEvent.click(row);
-    expect(onLocate).toHaveBeenCalledWith('10022');
+    // TRA-1108: display is trimmed, but Locate gets the full-width EPC. A
+    // stripped value is ambiguous between a 96-bit and a 128-bit origin, and
+    // the mask builder resolves that ambiguity by padding to 96 — wrongly,
+    // for a 128-bit tag.
+    expect(onLocate).toHaveBeenCalledWith('000000000000000000010022');
+  });
+
+  it('hands Locate the full 128-bit EPC, which trimming would make unfindable (TRA-1108)', () => {
+    const wide: VerifyResponse = {
+      kits: [
+        {
+          kit_id: 6,
+          label: '1184019',
+          result: 'incomplete',
+          metadata: {},
+          seen: [],
+          missing: [
+            { asset_id: 61, role: 'coupon', name: 'c', epcs: ['00000000000000000000533034313633'] },
+          ],
+        },
+      ],
+      unexpected: [],
+      unknown_epcs: [],
+    };
+    const onLocate = vi.fn();
+    render(<VerifyResults result={wide} onLocate={onLocate} />);
+    fireEvent.click(screen.getByTestId('kit-locate-00000000000000000000533034313633'));
+    expect(onLocate).toHaveBeenCalledWith('00000000000000000000533034313633');
   });
 
   it('does not render unknown epcs — the pair builder owns that bucket', () => {

@@ -38,6 +38,7 @@ export const RFID_REGISTERS = {
   TAGMSK_0_3: 0x0805,    // Mask values 0-3
   TAGMSK_4_7: 0x0806,    // Mask values 4-7
   TAGMSK_8_11: 0x0807,   // Mask values 8-11
+  TAGMSK_12_15: 0x0808,  // Mask values 12-15 (the 128-bit EPC tail)
 
   // Link Profile 0 Configuration (different base address - check vendor docs)
   LBT_LINK_FREQ_0: 0x0C00,  // TODO: Verify actual address
@@ -116,7 +117,8 @@ export const EPC_MEMORY_OFFSET = {
  * EPC Bit Lengths
  */
 export const EPC_BIT_LENGTH = {
-  STANDARD_96: 0x60,      // 96 bits for standard EPC
+  STANDARD_96: 0x60,      // 96 bits for standard EPC (SGTIN-96)
+  EXTENDED_128: 0x80,     // 128 bits for extended EPC (SGTIN-128)
 } as const;
 
 /**

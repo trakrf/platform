@@ -5,7 +5,7 @@
  * including the main LOCATE_SEQUENCE and dynamic EPC mask configuration.
  */
 
-import type { CommandSequence } from '../../type.js';
+import type { CommandSequence, SequenceCommand } from '../../type.js';
 import { createFirmwareCommand, CommandType } from '../firmware-command.js';
 import {
   RFID_REGISTERS,
@@ -91,11 +91,27 @@ export const LOCATE_CONFIG_SEQUENCE: CommandSequence = [
  * 1. Configure mask descriptor (enable + target SL)
  * 2. Select EPC memory bank
  * 3. Set starting bit position (after PC bits)
- * 4. Set mask length (96 bits)
- * 5. Set mask values (3 registers for 96-bit EPC)
+ * 4. Set mask length (96 or 128 bits, matching the EPC width)
+ * 5. Set mask values (3 registers for a 96-bit EPC, 4 for a 128-bit one)
  * 6. Enable search mode with mask
  *
- * @param targetEPC - Normalized EPC hex string (≤24 chars), or undefined to skip
+ * ## Mask width (TRA-1108)
+ *
+ * The width is taken from the value's own length: anything longer than 24 hex
+ * chars can only be a 128-bit EPC, so it pads out to 32 and masks all 128 bits
+ * via TAGMSK_12_15. Anything shorter pads to 24 and masks 96, which keeps a
+ * short value working as a prefix search.
+ *
+ * The width cannot be recovered any later than this. A leading-zero-stripped
+ * '533034313633' is indistinguishable between a 96-bit and a 128-bit origin,
+ * which is why the Scan-tab Locate link sends the untruncated `tag.epc`.
+ *
+ * The 96-bit branch deliberately does NOT clear TAGMSK_12_15. Per the vendor
+ * spec the firmware scans only TAGMSK_LEN bits when it builds the Select, so a
+ * value left in the tail register is inert — and leaving the primary path's
+ * byte stream untouched is the conservative choice for reader firmware.
+ *
+ * @param targetEPC - Normalized EPC hex string (≤32 chars), or undefined to skip
  * @returns Command sequence to configure tag mask for locate mode
  */
 export function locateSettingsSequence(targetEPC?: string): CommandSequence {
@@ -106,8 +122,12 @@ export function locateSettingsSequence(targetEPC?: string): CommandSequence {
   // Remove spaces and convert to uppercase
   const cleanEpc = targetEPC.replace(/\s/g, '').toUpperCase();
 
-  // Pad to 24 hex chars (96 bits) with leading zeros
-  const paddedEpc = cleanEpc.padStart(24, '0');
+  // Pad with leading zeros to whichever standard EPC width the value fits.
+  const isExtended = cleanEpc.length > 24;
+  const paddedEpc = cleanEpc.padStart(isExtended ? 32 : 24, '0');
+  const maskBitLength = isExtended
+    ? EPC_BIT_LENGTH.EXTENDED_128
+    : EPC_BIT_LENGTH.STANDARD_96;
 
   // Convert to byte array
   const bytes: number[] = [];
@@ -120,6 +140,24 @@ export function locateSettingsSequence(targetEPC?: string): CommandSequence {
   const mask0_3 = ((bytes[3] << 24) | (bytes[2] << 16) | (bytes[1] << 8) | bytes[0]) >>> 0;
   const mask4_7 = ((bytes[7] << 24) | (bytes[6] << 16) | (bytes[5] << 8) | bytes[4]) >>> 0;
   const mask8_11 = ((bytes[11] << 24) | (bytes[10] << 16) | (bytes[9] << 8) | bytes[8]) >>> 0;
+  const mask12_15 = isExtended
+    ? ((bytes[15] << 24) | (bytes[14] << 16) | (bytes[13] << 8) | bytes[12]) >>> 0
+    : undefined;
+
+  // 7b. Set mask values (bytes 12-15) — 128-bit EPCs only. This is the tail
+  // where most schemes put the serial, so without it tags off one reel share
+  // a mask and Locate reports the wrong one.
+  const extendedMaskCommands: SequenceCommand[] = isExtended
+    ? [
+        {
+          event: RFID_FIRMWARE_COMMAND,
+          payload: createFirmwareCommand(CommandType.WRITE_REGISTER, {
+            register: RFID_REGISTERS.TAGMSK_12_15,
+            value: mask12_15
+          })
+        }
+      ]
+    : [];
 
   return [
     // 1. Configure mask descriptor (enable + target SL)
@@ -151,7 +189,7 @@ export function locateSettingsSequence(targetEPC?: string): CommandSequence {
       event: RFID_FIRMWARE_COMMAND,
       payload: createFirmwareCommand(CommandType.WRITE_REGISTER, {
         register: RFID_REGISTERS.TAGMSK_LEN,
-        value: EPC_BIT_LENGTH.STANDARD_96  // 0x60 (96 bits)
+        value: maskBitLength  // 0x60 (96 bits) or 0x80 (128 bits)
       })
     },
     // 5. Set mask values (bytes 0-3)
@@ -178,6 +216,7 @@ export function locateSettingsSequence(targetEPC?: string): CommandSequence {
         value: mask8_11
       })
     },
+    ...extendedMaskCommands,
     // 8. Enable locate mode with mask
     {
       event: RFID_FIRMWARE_COMMAND,

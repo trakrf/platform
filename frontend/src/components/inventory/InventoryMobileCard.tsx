@@ -142,7 +142,8 @@ export function InventoryMobileCard({ tag, hasReconciliation, onAssetUpdated }: 
         <button
           data-testid="locate-button"
           onClick={() => {
-            const targetEPC = tag.displayEpc || tag.epc;
+            // Full-width EPC, not displayEpc — see InventoryTableRow (TRA-1108).
+            const targetEPC = tag.epc || tag.displayEpc || '';
             useTagStore.getState().selectTag(tag);
             window.location.hash = `#locate?epc=${encodeURIComponent(targetEPC)}`;
           }}

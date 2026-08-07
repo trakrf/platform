@@ -162,7 +162,11 @@ export function InventoryTableRow({ tag, hasReconciliation, onAssetUpdated }: In
           data-testid="locate-button"
           onClick={() => {
             useTagStore.getState().selectTag(tag);
-            const targetEPC = tag.displayEpc || tag.epc;
+            // Full-width EPC, not displayEpc (TRA-1108). The tag mask builder
+            // pads a deep-linked value back out to 96 bits, which reverses the
+            // leading-zero stripping for a 96-bit EPC but lands on entirely
+            // the wrong 96 bits for a 128-bit one.
+            const targetEPC = tag.epc || tag.displayEpc || '';
             window.location.hash = `#locate?epc=${encodeURIComponent(targetEPC)}`;
           }}
           className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center justify-center"
