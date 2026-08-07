@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
   inventoryApi,
@@ -33,8 +33,15 @@ function extractDetail(error: unknown): string | null {
  *   re-translate it into a misleading "org mismatch" toast on top of that).
  *   No auto-retry: the in-flight payload that tripped the guard would just
  *   trip it again.
+ * - Invalidates the reports queries on success (TRA-1117). Saving changes what
+ *   both report endpoints return, and both cache for 30s; without this, save →
+ *   navigate to Reports inside that window replays the pre-save response and
+ *   never refetches. That reads as "the save didn't happen" rather than as a
+ *   stale view, because what the report shows is the *previous* save.
  */
 export function useInventorySave() {
+  const queryClient = useQueryClient();
+
   const saveMutation = useMutation({
     mutationFn: async (data: SaveInventoryRequest): Promise<SaveInventoryResponse> => {
       // Guard: verify JWT has org context before sending
@@ -56,6 +63,13 @@ export function useInventorySave() {
       }
     },
     onSuccess: (result) => {
+      // Prefix invalidation, not an exact key. useCurrentLocations keys on
+      // ['reports', 'current-locations', orgId, fetchAll, params] and
+      // useAssetHistory on ['reports', 'asset-history', orgId, assetId, params],
+      // so every filter and pagination variant sits under its own key; an exact
+      // match would leave all but one of them serving pre-save data. Both are
+      // stale for the same reason — the save wrote the scan they derive from.
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
       toast.success(`${result.count} assets saved to ${result.location_name}`);
     },
     onError: (error: Error) => {
