@@ -27,9 +27,10 @@ const createWrapper = () => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return function Wrapper({ children }: { children: ReactNode }) {
+  const Wrapper = function Wrapper({ children }: { children: ReactNode }) {
     return React.createElement(QueryClientProvider, { client: queryClient }, children);
   };
+  return Object.assign(Wrapper, { queryClient });
 };
 
 describe('useInventorySave', () => {
@@ -156,6 +157,59 @@ describe('useInventorySave', () => {
     expect(toast.error).not.toHaveBeenCalledWith(
       expect.stringMatching(/no longer match your current organization/i),
     );
+  });
+
+  // TRA-1117: the backend now returns a saved scan immediately, but the report
+  // query caches for 30s. Without invalidation, saving and navigating to Reports
+  // within that window serves the pre-save response and never refetches — the
+  // user sees the *previous* save, which is what "it didn't save" looks like.
+  it('invalidates the reports queries after a successful save', async () => {
+    vi.mocked(inventoryApi.save).mockResolvedValue({
+      data: { data: mockResponse },
+    } as any);
+
+    const wrapper = createWrapper();
+    const invalidate = vi.spyOn(wrapper.queryClient, 'invalidateQueries');
+
+    const { result } = renderHook(() => useInventorySave(), { wrapper });
+    await result.current.save(mockRequest);
+
+    // Prefix, not an exact key: useCurrentLocations keys on org id, fetchAll and
+    // the full params object, so every filter/pagination variant in the cache
+    // has a different key and an exact match would miss all but one.
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['reports'] });
+  });
+
+  it('marks a cached current-locations query stale so Reports refetches', async () => {
+    vi.mocked(inventoryApi.save).mockResolvedValue({
+      data: { data: mockResponse },
+    } as any);
+
+    const wrapper = createWrapper();
+    // A report the user looked at just before saving — exactly the state that
+    // produces the bug, keyed the way useCurrentLocations keys it.
+    const reportKey = ['reports', 'current-locations', 42, false, { limit: 50 }];
+    wrapper.queryClient.setQueryData(reportKey, { data: [], total_count: 0 });
+    expect(wrapper.queryClient.getQueryState(reportKey)?.isInvalidated).toBe(false);
+
+    const { result } = renderHook(() => useInventorySave(), { wrapper });
+    await result.current.save(mockRequest);
+
+    await waitFor(() => {
+      expect(wrapper.queryClient.getQueryState(reportKey)?.isInvalidated).toBe(true);
+    });
+  });
+
+  it('does not invalidate reports when the save fails', async () => {
+    vi.mocked(inventoryApi.save).mockRejectedValue(new Error('Network error'));
+
+    const wrapper = createWrapper();
+    const invalidate = vi.spyOn(wrapper.queryClient, 'invalidateQueries');
+
+    const { result } = renderHook(() => useInventorySave(), { wrapper });
+    await expect(result.current.save(mockRequest)).rejects.toThrow('Network error');
+
+    expect(invalidate).not.toHaveBeenCalled();
   });
 
   it('shows specific message on org context error', async () => {
