@@ -57,28 +57,30 @@ describe('locateSettingsSequence', () => {
     });
   });
 
-  it('handles uppercase and lowercase identically', () => {
-    const seq1 = locateSettingsSequence('abc123');
-    const seq2 = locateSettingsSequence('ABC123');
-
-    expect(seq1).toHaveLength(seq2.length);
-
-    // Keyed by register rather than position, so adding a command to the
-    // sequence cannot silently move this assertion off the mask registers.
-    for (const register of [
-      RFID_REGISTERS.TAGMSK_0_3,
-      RFID_REGISTERS.TAGMSK_4_7,
-      RFID_REGISTERS.TAGMSK_8_11
-    ]) {
-      expect(registerValue(seq1, register)).toBe(registerValue(seq2, register));
-    }
+  // Whole-sequence comparison rather than a hand-listed set of registers: a
+  // listed register the input never reaches compares undefined to undefined and
+  // passes without asserting anything. Comparing sequences covers whatever the
+  // input actually produces, including the 128-bit tail.
+  //
+  // Caveat on this particular pair: case-insensitivity holds for free, because
+  // parseInt(x, 16) ignores case — deleting the .toUpperCase() in the source
+  // does not fail these. They pin the contract, not the implementation. The
+  // space-stripping pair below IS implementation-sensitive.
+  it.each([
+    ['96-bit', 'e28011606000020a7654321f', 'E28011606000020A7654321F'],
+    ['128-bit', 'e28011700000020f8b1c0b39aaaaaaaf', 'E28011700000020F8B1C0B39AAAAAAAF']
+  ])('handles uppercase and lowercase identically (%s)', (_width, lower, upper) => {
+    expect(locateSettingsSequence(lower)).toEqual(locateSettingsSequence(upper));
   });
 
-  it('removes spaces from EPC', () => {
-    const sequence = locateSettingsSequence('E280 1160 6000 020A 7654 3210');
-
-    expect(sequence).toHaveLength(9);
-    expect(sequence).toEqual(locateSettingsSequence('E28011606000020A76543210'));
+  it.each([
+    ['96-bit', 'E280 1160 6000 020A 7654 3210', 'E28011606000020A76543210'],
+    ['128-bit', 'E280 1170 0000 020F 8B1C 0B39 AAAA AAAA', 'E28011700000020F8B1C0B39AAAAAAAA']
+  ])('removes spaces from EPC (%s)', (_width, spaced, tight) => {
+    // The 128-bit case also pins that spaces are stripped BEFORE the width is
+    // decided — the spaced string is 39 chars, so a width test against the raw
+    // input rather than the cleaned one would misjudge the padding target.
+    expect(locateSettingsSequence(spaced)).toEqual(locateSettingsSequence(tight));
   });
 
   it('handles empty EPC by padding to all zeros', () => {
