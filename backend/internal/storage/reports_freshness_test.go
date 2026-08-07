@@ -34,36 +34,51 @@ func TestCurrentLocationsQueries_ReadTheFreshTail(t *testing.T) {
 
 	for name, q := range map[string]string{"list": list, "count": count} {
 		assert.Contains(t, q, "FROM trakrf.asset_scans s",
-			"%s query must union the raw tail or the report lags materialization", name)
+			"%s query must read the raw tail or the report lags materialization", name)
 		assert.Contains(t, q, "FROM trakrf.asset_scan_latest",
 			"%s query must still take history from the CAGG", name)
+		assert.Contains(t, q, "fresh_tail AS MATERIALIZED (",
+			"%s query: asset_scans cannot be pruned at plan time, so the tail is planned once", name)
 	}
 }
 
-// The dwell LATERAL is the third consumer, and the easiest to forget: miss it and
-// locations are fresh while dwell is stale or null on exactly the row the user
-// just created.
-func TestCurrentLocationsQuery_DwellReadsTheSameSource(t *testing.T) {
+// The dwell probes are the third consumer, and the easiest to forget: miss them
+// and locations are fresh while dwell is stale or null on exactly the row the
+// user just created.
+func TestCurrentLocationsQuery_DwellSeesTheFreshTail(t *testing.T) {
 	list, _ := renderedCurrentLocationsQueries()
 
-	assert.Contains(t, list, "FROM scan_source r")
-	assert.Contains(t, list, "FROM scan_source c")
-	assert.NotContains(t, list, "FROM trakrf.asset_scan_latest r",
-		"the dwell walk-back must go through scan_source, not the bare CAGG")
-	assert.NotContains(t, list, "FROM trakrf.asset_scan_latest c",
-		"the dwell walk-back must go through scan_source, not the bare CAGG")
+	assert.Contains(t, list, "FROM fresh_tail t WHERE t.asset_id = p.asset_id AND t.location_id IS DISTINCT FROM p.scan_location_id",
+		"run detection must consider a move recorded only in the tail")
+	assert.Contains(t, list, "FROM fresh_tail t WHERE t.asset_id = p.asset_id AND t.bucket > w.run_after",
+		"the run-start probe must fall through to the tail")
 }
 
-// scan_source is referenced by both legs of the dwell LATERAL, so PostgreSQL
-// would materialize it by default — aggregating the org's whole history before
-// the LIMIT applies, then re-scanning it per page row. Inlining is what keeps
-// each dwell probe an index lookup.
-func TestCurrentLocationsQuery_ScanSourceIsInlined(t *testing.T) {
+// Both dwell probes ask one source at a time and COALESCE, rather than ordering
+// over a union. A union cannot use the per-chunk index for max()/LIMIT 1; on
+// preview that was 41ms per row against ~1ms. The COALESCE order encodes the
+// disjointness — tail first for the newest, CAGG first for the oldest — so
+// reordering the arms is a correctness bug, not a style change.
+func TestCurrentLocationsQuery_DwellProbesOneSourceAtATime(t *testing.T) {
 	list, _ := renderedCurrentLocationsQueries()
 
-	require.Contains(t, list, "scan_source AS NOT MATERIALIZED (")
-	assert.Equal(t, 2, strings.Count(list, "FROM scan_source "),
-		"if scan_source picks up more references, re-check the plan before trusting NOT MATERIALIZED")
+	// Newest-first: tail arm precedes CAGG arm.
+	runAfter := strings.Index(list, "AS run_after")
+	require.Positive(t, runAfter, "the run-detection LATERAL must exist")
+	head := list[:runAfter]
+	assert.Less(t, strings.LastIndex(head, "SELECT max(t.bucket) FROM fresh_tail t"),
+		strings.LastIndex(head, "SELECT max(c.bucket) FROM trakrf.asset_scan_latest c"),
+		"tail holds the newest buckets, so it must be the first COALESCE arm")
+
+	// Oldest-first: CAGG arm precedes tail arm.
+	dwell := strings.Index(list, "AS dwell_started_at")
+	require.Positive(t, dwell, "the run-start LATERAL must exist")
+	tailProbe := strings.Index(list[runAfter:dwell], "SELECT t.last_seen FROM fresh_tail t")
+	caggProbe := strings.Index(list[runAfter:dwell], "SELECT c.last_seen FROM trakrf.asset_scan_latest c")
+	require.Positive(t, tailProbe)
+	require.Positive(t, caggProbe)
+	assert.Less(t, caggProbe, tailProbe,
+		"the CAGG holds the oldest buckets, so it must be the first COALESCE arm")
 }
 
 // TRA-1021: a DISTINCT ON over asset_scans tripped a TimescaleDB SkipScan bug
@@ -77,31 +92,74 @@ func TestCurrentLocationsQueries_NeverUseDistinctOn(t *testing.T) {
 	assert.NotContains(t, strings.ToUpper(count), "DISTINCT ON")
 }
 
-// The two sources must be split at the same instant on both sides of the cut,
-// and that instant must be a bucket boundary. An overlapping or gapped partition
-// either double-counts a bucket into the dwell walk-back or drops one entirely.
-func TestCurrentLocationsQueries_PartitionAtOneBucketAlignedCut(t *testing.T) {
-	list, count := renderedCurrentLocationsQueries()
-	cut := normalizeSQL(scanSourceCut)
+// The cut must be a bucket boundary, or the split between the two sources is
+// approximate rather than exact and a bucket can be double-counted into run
+// detection or dropped from it.
+func TestFreshTailCut_IsBucketAligned(t *testing.T) {
+	cut := normalizeSQL(freshTailCut)
 
-	require.Contains(t, cut, "time_bucket(INTERVAL '1 minute'",
-		"the cut must land on a bucket boundary for the partition to be exact")
-	require.Contains(t, cut, freshScanTailWindow)
+	assert.Contains(t, cut, "time_bucket(INTERVAL '1 minute'",
+		"the cut must land on a bucket boundary for the split to be exact")
+	assert.Contains(t, cut, freshScanTailWindow)
+}
+
+// Where the cut applies is the subtle part, and it differs by consumer.
+//
+// Run detection MUST bound the CAGG below the cut: a bucket materialized while
+// still filling holds a stale last(location_id) that reads as a visit elsewhere
+// and truncates the run.
+//
+// The latest_scans roll-up must NOT, and this is the one measured on preview
+// (500k buckets): on an un-correlated whole-org aggregate the bound loses the
+// index and drops onto a parallel seq scan of every chunk. It is safe to omit
+// precisely because that roll-up only wants the newest observation, and the CAGG
+// can never hold a later last_seen than the raw rows it derives from.
+func TestCurrentLocationsQueries_CutBoundsRunDetectionOnly(t *testing.T) {
+	list, count := renderedCurrentLocationsQueries()
+	cut := normalizeSQL(freshTailCut)
+	rollup := normalizeSQL(latestScansCTE())
+
+	assert.NotContains(t, rollup, cut,
+		"bounding the whole-org roll-up by the cut costs the index; see freshTailCut")
 
 	for name, q := range map[string]string{"list": list, "count": count} {
-		assert.Contains(t, q, "bucket < "+cut, "%s query: CAGG branch takes settled history only", name)
-		assert.Contains(t, q, "s.timestamp >= "+cut, "%s query: raw branch takes the tail only", name)
-		assert.Equal(t, strings.Count(q, "bucket < "+cut), strings.Count(q, "s.timestamp >= "+cut),
-			"%s query: every CAGG branch needs its matching tail branch", name)
+		assert.Contains(t, q, "s.timestamp >= "+cut, "%s query: the tail starts at the cut", name)
 	}
+
+	// Both per-asset dwell probes bound the CAGG; the roll-up does not.
+	assert.Equal(t, 2, strings.Count(list, "c.bucket < "+cut),
+		"both dwell probes must exclude unsettled CAGG buckets")
+	assert.NotContains(t, count, "c.bucket < "+cut,
+		"the count resolves no runs, so it has no dwell probes to bound")
 }
 
 // The tail must be wider than the worst-case materialization lag — end_offset
 // (1 min) + schedule_interval (30s) + a slipped cycle. Narrowing it below that
 // silently reopens the invisibility window with no other symptom.
 func TestFreshScanTailWindow_ClearsTheMaterializationLag(t *testing.T) {
-	assert.Equal(t, "5 minutes", freshScanTailWindow,
-		"changing this is a freshness decision, not a tuning knob; see 000028_asset_scan_latest_policy")
+	assert.GreaterOrEqual(t, freshScanTailMinutes, 3,
+		"the tail must clear end_offset + schedule_interval + a slipped cycle; see 000028_asset_scan_latest_policy")
+	assert.Equal(t, "5 minutes", freshScanTailWindow)
+}
+
+// The chunk-exclusion bound must stay LOOSER than the cut, by at least the
+// bucket width that truncation can subtract. Tighten it and it starts rejecting
+// rows the cut would have kept — silently, since it sits alongside the cut and
+// nothing else would notice a row going missing from the tail.
+func TestFreshTailChunkBound_IsLooserThanTheCut(t *testing.T) {
+	assert.Equal(t, "6 minutes", freshTailChunkWindow)
+	assert.Greater(t, freshScanTailMinutes+caggBucketMinutes, freshScanTailMinutes,
+		"the chunk bound must reach back at least one bucket further than the cut")
+
+	// And it must actually be stated, or planning goes back to walking every
+	// asset_scans chunk (88ms vs 16ms on preview).
+	list, count := renderedCurrentLocationsQueries()
+	bound := normalizeSQL(freshTailChunkBound)
+	cut := normalizeSQL(freshTailCut)
+	for name, q := range map[string]string{"list": list, "count": count} {
+		assert.Contains(t, q, "s.timestamp >= "+bound+" AND s.timestamp >= "+cut,
+			"%s query: the tail needs both the constify-able bound and the exact cut", name)
+	}
 }
 
 // The count paginates the rows the list returns. If only one of them learned

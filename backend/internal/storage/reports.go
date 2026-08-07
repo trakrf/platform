@@ -3,13 +3,14 @@ package storage
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/trakrf/platform/backend/internal/models/report"
 )
 
-// freshScanTailWindow bounds the raw-asset_scans tail that TRA-1117 splices onto
+// freshScanTailMinutes bounds the raw-asset_scans tail that TRA-1117 splices onto
 // the current-locations report in front of the asset_scan_latest CAGG.
 //
 // The CAGG is materialized_only, so a CAGG-only read is stale by at most
@@ -19,38 +20,63 @@ import (
 // the window carries real margin rather than hugging the worst case. Widening it
 // costs read work without changing any answer; narrowing it below the
 // materialization lag loses rows. Adjust upward freely, downward never.
-const freshScanTailWindow = "5 minutes"
+const freshScanTailMinutes = 5
 
-// scanSourceCut is the instant that partitions the two sources. It is a bucket
-// boundary, which is what makes the partition exact rather than approximate: a
-// CAGG bucket strictly below it aggregates only raw rows strictly below it, and
-// every raw row at or above it belongs to a bucket at or above it. So the CAGG
-// supplies history, raw asset_scans supplies the tail, and no scan is counted
-// twice or dropped between them.
-//
-// Splitting rather than overlapping is deliberate. An overlapping union has to
-// re-collapse every historical bucket to dedupe the overlap, which measured ~3x
-// the whole query on a 2.9M-bucket org; disjoint branches need no dedupe at all.
-// It also sidesteps a subtler problem: a bucket the CAGG materialized while it
-// was still filling holds a stale last(location_id), and as a second row that
-// reads to the dwell walk-back as a genuine visit elsewhere and truncates the
-// run. Below the cut the CAGG is settled; above it, it is never consulted.
+// caggBucketMinutes is the asset_scan_latest bucket width
+// (000027_asset_scan_latest_cagg.up.sql). Bucket-truncating an instant moves it
+// backwards by strictly less than this.
+const caggBucketMinutes = 1
+
+var (
+	freshScanTailWindow = strconv.Itoa(freshScanTailMinutes) + " minutes"
+
+	// freshTailChunkWindow is freshTailCut restated one bucket looser. See
+	// freshTailChunkBound.
+	freshTailChunkWindow = strconv.Itoa(freshScanTailMinutes+caggBucketMinutes) + " minutes"
+)
+
+// freshTailCut is the bucket boundary separating the two sources wherever they
+// must not overlap. Bucket-aligned is what makes the split exact rather than
+// approximate: a CAGG bucket strictly below it aggregates only raw rows strictly
+// below it, and every raw row at or above it belongs to a bucket at or above it.
 //
 // now() is the transaction timestamp, so every occurrence within one statement
-// resolves to the same instant and the two branches cannot drift apart mid-query.
-const scanSourceCut = `time_bucket(INTERVAL '1 minute', now() - INTERVAL '` + freshScanTailWindow + `')`
+// resolves to the same instant and the two sides cannot drift apart mid-query.
+//
+// Do not add this bound to the CAGG side of latest_scans. Measured on preview
+// (500k buckets, ~14k per asset), `bucket < <cut>` on the un-correlated
+// whole-org roll-up loses the index and drops PostgreSQL onto a parallel seq
+// scan of every chunk. On the per-asset dwell probes, where asset_id supplies
+// the leading equality, it stays an index scan and is required for correctness.
+var freshTailCut = `time_bucket(INTERVAL '` + strconv.Itoa(caggBucketMinutes) + ` minute', now() - INTERVAL '` + freshScanTailWindow + `')`
 
-// caggHistoryBranch reads settled buckets from the continuous aggregate. $1 is
-// org_id — filtered explicitly because RLS does not extend to a CAGG at all.
-const caggHistoryBranch = `
-	FROM trakrf.asset_scan_latest
-	WHERE org_id = $1
-	  AND bucket < ` + scanSourceCut
+// freshTailChunkBound restates freshTailCut one bucket looser, purely so the
+// planner can exclude chunks. It is logically redundant — bucket-truncation moves
+// an instant backwards by strictly less than one bucket, so every row satisfying
+// the cut satisfies this too — and it selects no row the cut would reject,
+// because the cut is applied alongside it.
+//
+// It exists because TimescaleDB's plan-time `now()` constification only
+// recognises a bare `now() - INTERVAL 'x'`; wrapped in time_bucket() the bound
+// becomes opaque, chunk exclusion falls back to execution start, and the planner
+// has to plan a ChunkAppend across every asset_scans chunk. Measured on preview
+// (16.5M rows), stating this extra bound took planning from 88ms to 16ms.
+//
+// If the cut ever stops being a bucket-truncation of a now()-relative instant,
+// re-derive this rather than nudging the interval.
+var freshTailChunkBound = `now() - INTERVAL '` + freshTailChunkWindow + `'`
 
-// freshTailBranch reads the not-yet-materialized tail straight off the raw
-// hypertable, re-deriving the CAGG's own expression (time_bucket 1 minute,
-// last(location_id, timestamp), max(timestamp)) so the two branches produce the
-// same shape and the same answers. $1 is org_id.
+// freshTailCTE renders the `fresh_tail` CTE body: the not-yet-materialized tail
+// read straight off the raw hypertable, re-deriving the CAGG's own expression
+// (time_bucket 1 minute, last(location_id, timestamp), max(timestamp)) so both
+// sources carry the same shape and the same answers. $1 is org_id.
+//
+// MATERIALIZED at the call site, and that is a planning decision as much as an
+// execution one. The tail is a handful of rows, but asset_scans is a large
+// hypertable whose ChunkAppend cannot be pruned at plan time — the bound is
+// now()-relative, so chunk exclusion happens at execution start. Every inlined
+// reference would therefore re-plan across every chunk; materializing plans it
+// once. On preview that is the difference between 80ms and 15ms of planning.
 //
 // This read runs inside WithOrgTx and is therefore subject to the asset_scans
 // org-isolation policy (TRA-875), which is wanted; the explicit org_id predicate
@@ -59,22 +85,41 @@ const caggHistoryBranch = `
 // tripped the TimescaleDB SkipScan bug that XX000-crashed preview in TRA-1021,
 // and TRA-1022 moved to the CAGG specifically to escape it. Local tests will not
 // catch a SkipScan regression — verify on preview.
-const freshTailBranch = `
-	FROM trakrf.asset_scans s
-	WHERE s.org_id = $1
-	  AND s.timestamp >= ` + scanSourceCut
+func freshTailCTE() string {
+	return `
+		SELECT
+			s.asset_id,
+			time_bucket(INTERVAL '1 minute', s.timestamp) AS bucket,
+			last(s.location_id, s.timestamp)              AS location_id,
+			max(s.timestamp)                              AS last_seen
+		FROM trakrf.asset_scans s
+		WHERE s.org_id = $1
+		  AND s.timestamp >= ` + freshTailChunkBound + `
+		  AND s.timestamp >= ` + freshTailCut + `
+		GROUP BY s.asset_id, 2
+	`
+}
 
 // latestScansCTE renders the `latest_scans` CTE body: exactly one row per asset,
 // carrying its most recent location and last_seen. Feeds both the list query's
 // page CTE and the count query, which must agree or pagination reports a total
 // its own rows cannot reach.
 //
-// Each branch rolls up to per-asset independently before they meet, rather than
+// Each side rolls up to per-asset independently before they meet, rather than
 // unioning at bucket granularity and rolling up once. The shapes are equivalent —
 // last()/max() over a partition of the rows is the same as over all of them — but
-// the per-branch form lets the CAGG side stay the same index-ordered aggregation
-// it was before TRA-1117, instead of feeding a hash aggregate over an Append.
-// Measured on a 2.9M-bucket org that is worth ~40% of the query.
+// the per-side form leaves the CAGG aggregation byte-identical to what it was
+// before TRA-1117 instead of feeding a hash aggregate over an Append.
+//
+// The two sides are allowed to OVERLAP here, unlike everywhere else, and that is
+// what lets the CAGG side keep its index-friendly plan (see freshTailCut). The
+// overlap is harmless because this roll-up only asks for the newest observation:
+// the CAGG derives from the same raw rows, so for any bucket it holds a last_seen
+// that is at best equal to the tail's and never later. A tie resolves to the same
+// underlying scan and therefore the same location. The tail always wins or draws;
+// it can never be overruled by a staler copy of itself.
+//
+// org_id is filtered explicitly because RLS does not extend to a CAGG at all.
 func latestScansCTE() string {
 	return `
 		SELECT
@@ -86,43 +131,18 @@ func latestScansCTE() string {
 				asset_id,
 				last(location_id, last_seen) AS location_id,
 				max(last_seen)               AS last_seen
-			` + caggHistoryBranch + `
+			FROM trakrf.asset_scan_latest
+			WHERE org_id = $1
 			GROUP BY asset_id
 			UNION ALL
 			SELECT
-				s.asset_id,
-				last(s.location_id, s.timestamp) AS location_id,
-				max(s.timestamp)                 AS last_seen
-			` + freshTailBranch + `
-			GROUP BY s.asset_id
+				asset_id,
+				last(location_id, last_seen) AS location_id,
+				max(last_seen)               AS last_seen
+			FROM fresh_tail
+			GROUP BY asset_id
 		) per_source
 		GROUP BY asset_id
-	`
-}
-
-// scanSourceCTE renders the `scan_source` CTE body: the same two sources at
-// bucket granularity, which is the resolution the dwell walk-back needs to find
-// where the current run began. Same partition, same cut, same answers.
-//
-// NOT MATERIALIZED at the call site is load-bearing. Both legs of the dwell
-// LATERAL reference this CTE, so PostgreSQL would otherwise materialize it once
-// per query — aggregating the org's entire history before the LIMIT can apply,
-// then re-scanning that result for every row on the page. Inlined, the correlated
-// `asset_id = p.asset_id` qual pushes into both branches and each dwell probe
-// stays an index lookup, exactly as it was when it named asset_scan_latest
-// directly.
-func scanSourceCTE() string {
-	return `
-		SELECT asset_id, bucket, location_id, last_seen
-		` + caggHistoryBranch + `
-		UNION ALL
-		SELECT
-			s.asset_id,
-			time_bucket(INTERVAL '1 minute', s.timestamp) AS bucket,
-			last(s.location_id, s.timestamp)              AS location_id,
-			max(s.timestamp)                              AS last_seen
-		` + freshTailBranch + `
-		GROUP BY s.asset_id, 2
 	`
 }
 
@@ -205,14 +225,15 @@ func (s *Storage) ListCurrentLocations(ctx context.Context, orgID int, filter re
 	return items, nil
 }
 
-// countCurrentLocationsQuery renders the count query. It shares latest_scans
-// verbatim with the list query (TRA-1022, TRA-1117) — the count paginates the
-// rows the list returns, so it has to see the fresh tail too or total_count
-// undershoots the moment anything is saved. It has no page CTE and no dwell
-// LATERAL, so it never needs bucket granularity.
+// countCurrentLocationsQuery renders the count query. It shares fresh_tail and
+// latest_scans verbatim with the list query (TRA-1022, TRA-1117) — the count
+// paginates the rows the list returns, so it has to see the fresh tail too or
+// total_count undershoots the moment anything is saved. It has no page CTE and no
+// dwell LATERAL, so it never needs to resolve a run.
 func countCurrentLocationsQuery() string {
 	return `
-		WITH latest_scans AS (` + latestScansCTE() + `)
+		WITH fresh_tail AS MATERIALIZED (` + freshTailCTE() + `),
+		latest_scans AS (` + latestScansCTE() + `)
 		SELECT COUNT(*)
 		FROM latest_scans ls
 		JOIN trakrf.assets    a ON a.id = ls.asset_id AND a.org_id = $1 AND ` + temporallyEffective("a") + `
@@ -322,8 +343,7 @@ func buildCurrentLocationsOrderBy(sorts []report.CurrentLocationSort, cols curre
 
 // buildCurrentLocationsQuery renders the list query. The latest_scans CTE
 // resolves one row per asset (last(location_id) by newest observation,
-// max(last_seen)) across the CAGG and its fresh raw tail; scan_source exposes the
-// same two sources at bucket granularity for the dwell LATERAL. The joins,
+// max(last_seen)) across the CAGG and the fresh_tail CTE. The joins,
 // temporal-validity predicates, filters, sort and pagination are unchanged from
 // the pre-CAGG query — they now just live inside the `page` CTE.
 //
@@ -334,19 +354,34 @@ func buildCurrentLocationsOrderBy(sorts []report.CurrentLocationSort, cols curre
 // spelling it MATERIALIZED makes the cost contract explicit and unbreakable by
 // a future planner change.
 //
-// The dwell LATERAL reads scan_source, not asset_scan_latest directly: a move
-// recorded only in the fresh tail would otherwise leave the walk-back unable to
-// find any bucket at the new location, and dwell would come back NULL on exactly
-// the row the user just created (TRA-1117).
+// The dwell LATERALs must see the fresh tail as well as the CAGG: a move
+// recorded only in the tail would otherwise leave the walk-back unable to find
+// any bucket at the new location, and dwell would come back NULL on exactly the
+// row the user just created (TRA-1117).
 //
-// Resolving one asset's dwell is two steps over scan_source:
+// Resolving one asset's dwell is two steps:
 //
-//  1. the newest bucket whose location_id IS DISTINCT FROM the asset's current
-//     location — the last time it was somewhere else. NULL when it has never
-//     been anywhere else, which COALESCEs to -infinity so step 2 falls through
-//     to the asset's first bucket ever.
-//  2. the oldest bucket strictly newer than that: the first bucket of the
+//  1. `w` — the newest bucket whose location_id IS DISTINCT FROM the asset's
+//     current location: the last time it was somewhere else. NULL when it has
+//     never been anywhere else, which COALESCEs to -infinity so step 2 falls
+//     through to the asset's first bucket ever.
+//  2. `d` — the oldest bucket strictly newer than that: the first bucket of the
 //     current run. Its last_seen is dwell_started_at.
+//
+// Each step asks the tail first and the CAGG second, COALESCEd, rather than
+// asking a union of the two. That works because the sources are disjoint at
+// freshTailCut, so for step 1 any tail answer is automatically the newer one and
+// for step 2 any CAGG answer is automatically the older one — the COALESCE order
+// IS the ordering. It is not merely tidier: a single ORDER BY / max() over the
+// union cannot use the per-chunk index the way a single-source probe can, and
+// measured on preview that difference was 41ms per row against ~1ms. Both probes
+// as written are the same index-ordered LIMIT 1 the query used before TRA-1117.
+//
+// This is the one place the CAGG must carry `bucket < <cut>`: unlike the
+// latest_scans roll-up, run detection is corrupted by a bucket the CAGG
+// materialized while it was still filling — a stale last(location_id) reads as a
+// genuine visit elsewhere and truncates the run. Here asset_id supplies the
+// leading index equality, so the bound costs nothing.
 //
 // IS DISTINCT FROM (rather than <>) is load-bearing: a scan that resolved to no
 // location is a distinct state, so a NULL-location bucket breaks the run in
@@ -365,8 +400,8 @@ func buildCurrentLocationsOrderBy(sorts []report.CurrentLocationSort, cols curre
 // scan_location_id), not on the projected l.id.
 func buildCurrentLocationsQuery(innerOrderBy, outerOrderBy string) string {
 	return `
-		WITH latest_scans AS (` + latestScansCTE() + `),
-		scan_source AS NOT MATERIALIZED (` + scanSourceCTE() + `),
+		WITH fresh_tail AS MATERIALIZED (` + freshTailCTE() + `),
+		latest_scans AS (` + latestScansCTE() + `),
 		page AS MATERIALIZED (
 			SELECT
 				a.id            AS asset_id,
@@ -410,18 +445,36 @@ func buildCurrentLocationsQuery(innerOrderBy, outerOrderBy string) string {
 			EXTRACT(EPOCH FROM (p.last_seen - d.dwell_started_at))::BIGINT AS dwell_seconds
 		FROM page p
 		CROSS JOIN LATERAL (
-			SELECT (
-				SELECT r.last_seen
-				FROM scan_source r
-				WHERE r.asset_id = p.asset_id
-				  AND r.bucket > COALESCE((
-					  SELECT max(c.bucket)
-					  FROM scan_source c
-					  WHERE c.asset_id = p.asset_id
-						AND c.location_id IS DISTINCT FROM p.scan_location_id
-				  ), '-infinity'::timestamptz)
-				ORDER BY r.bucket
-				LIMIT 1
+			SELECT COALESCE(
+				(SELECT max(t.bucket)
+				 FROM fresh_tail t
+				 WHERE t.asset_id = p.asset_id
+				   AND t.location_id IS DISTINCT FROM p.scan_location_id),
+				(SELECT max(c.bucket)
+				 FROM trakrf.asset_scan_latest c
+				 WHERE c.org_id = $1
+				   AND c.asset_id = p.asset_id
+				   AND c.bucket < ` + freshTailCut + `
+				   AND c.location_id IS DISTINCT FROM p.scan_location_id),
+				'-infinity'::timestamptz
+			) AS run_after
+		) w
+		CROSS JOIN LATERAL (
+			SELECT COALESCE(
+				(SELECT c.last_seen
+				 FROM trakrf.asset_scan_latest c
+				 WHERE c.org_id = $1
+				   AND c.asset_id = p.asset_id
+				   AND c.bucket < ` + freshTailCut + `
+				   AND c.bucket > w.run_after
+				 ORDER BY c.bucket
+				 LIMIT 1),
+				(SELECT t.last_seen
+				 FROM fresh_tail t
+				 WHERE t.asset_id = p.asset_id
+				   AND t.bucket > w.run_after
+				 ORDER BY t.bucket
+				 LIMIT 1)
 			) AS dwell_started_at
 		) d
 		ORDER BY ` + outerOrderBy + `
