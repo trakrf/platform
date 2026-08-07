@@ -58,8 +58,9 @@ export const TagRow: React.FC<{
   onRed?: boolean;
   icon?: React.ReactNode;
 }> = ({ epc, onLocate, label, onRed, icon }) => {
-  // Display and Locate use the trimmed value, matching the Scan tab
-  // (displayEpc); the testid keeps the raw server value for test stability.
+  // Display uses the trimmed value, matching the Scan tab (displayEpc); the
+  // testid keeps the raw server value for test stability. Locate gets the
+  // full-width EPC — a trimmed one is unmaskable at 128 bits (TRA-1108).
   const displayEpc = removeLeadingZeros(epc);
   return (
     <div className="flex items-center justify-between gap-2 py-1">
@@ -72,7 +73,7 @@ export const TagRow: React.FC<{
       </span>
       <button
         data-testid={`kit-locate-${epc}`}
-        onClick={() => onLocate(displayEpc)}
+        onClick={() => onLocate(epc)}
         className={`flex items-center flex-shrink-0 text-sm font-medium transition-colors ${
           onRed ? 'text-white hover:text-red-200' : 'text-blue-600 hover:text-blue-800'
         }`}

@@ -118,6 +118,42 @@ test.describe('Locate Navigation Tests @hardware', () => {
     }
   });
 
+  test('navigate from inventory: a 128-bit tag deep-links its full-width EPC (TRA-1108)', async ({ page }) => {
+    // The Scan tab renders `displayEpc` (leading zeros stripped), but the
+    // Locate link has to carry `tag.epc`. The mask builder pads a deep-linked
+    // value back out, and at 128 bits that padding cannot be the inverse of
+    // the stripping — it lands on entirely the wrong 96 bits.
+    const EPC_128 = '00000000000000000000533034313633';
+
+    await page.click('[data-testid="menu-item-scan"]');
+    await page.waitForTimeout(3000);
+    await expect(page.getByTestId('page-title')).toContainText('Scan', { timeout: 10000 });
+    await page.waitForTimeout(1000);
+
+    await page.evaluate((epc) => {
+      window.__ZUSTAND_STORES__!.tagStore.getState().addTag({
+        epc,
+        rssi: -45,
+        count: 1,
+        antenna: 1,
+        timestamp: Date.now(),
+        source: 'rfid'
+      });
+    }, EPC_128);
+
+    const locateButton = page.locator('[data-testid="locate-button"]:visible');
+    await expect(locateButton).toHaveCount(1);
+
+    // The row itself still shows the operator the trimmed form.
+    await expect(page.getByText('533034313633')).toBeVisible();
+
+    await locateButton.click();
+    await page.waitForSelector('h2:text("Configuring Reader")', { state: 'detached', timeout: 10000 }).catch(() => {});
+
+    expect(page.url()).toContain(`#locate?epc=${EPC_128}`);
+    await expect(page.locator('[data-testid="target-epc-display"]')).toHaveValue(EPC_128);
+  });
+
   test('direct URL: navigate to #locate?epc=X sets targetEPC', async ({ page }) => {
     const testEpc = '10019';
 
