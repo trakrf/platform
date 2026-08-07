@@ -12,12 +12,14 @@ import {
   INV_SEL_VALUES,
   TAG_MEMORY_BANK,
   TAGMASK_DESCRIPTOR,
+  TAGMSK_DESCRIPTOR_INDEX,
   EPC_MEMORY_OFFSET,
   EPC_BIT_LENGTH,
   buildInvCfg,
   buildQueryCfg,
 } from '../constant.js';
 import { RFID_FIRMWARE_COMMAND, RFID_POWER_ON } from '../../event.js';
+import { logger } from '../../../utils/logger.js';
 
 /**
  * LOCATE Mode Sequence
@@ -88,12 +90,22 @@ export const LOCATE_CONFIG_SEQUENCE: CommandSequence = [
  *
  * This function creates a command sequence that configures the tag mask registers
  * to search for a specific EPC. The sequence includes:
+ * 0. Select which mask descriptor the rest of the writes land on
  * 1. Configure mask descriptor (enable + target SL)
  * 2. Select EPC memory bank
  * 3. Set starting bit position (after PC bits)
  * 4. Set mask length (96 or 128 bits, matching the EPC width)
  * 5. Set mask values (3 registers for a 96-bit EPC, 4 for a 128-bit one)
  * 6. Enable search mode with mask
+ *
+ * ## Descriptor selection
+ *
+ * The CS108 has 8 Select descriptors, each with its own mask register set, and
+ * TAGMSK_DESC_SEL decides which set every subsequent TAGMSK_* write lands on.
+ * This used to be omitted and worked only because the power-up default is 0;
+ * anything that ever left the register non-zero would have silently aimed these
+ * writes at a descriptor nobody enables. Pinning it makes the sequence
+ * self-contained rather than dependent on reader state we do not control.
  *
  * ## Mask width (TRA-1108)
  *
@@ -106,10 +118,26 @@ export const LOCATE_CONFIG_SEQUENCE: CommandSequence = [
  * '533034313633' is indistinguishable between a 96-bit and a 128-bit origin,
  * which is why the Scan-tab Locate link sends the untruncated `tag.epc`.
  *
+ * 96 and 128 are the only widths this masks exactly, because they are the only
+ * ones seen in the field. GS1 also defines longer fixed forms (170, 174, 195,
+ * 198, 202, 212) and Gen2 allows up to 496 bits. Those are reachable in
+ * principle — TAGMSK_LEN is a bit count that explicitly supports non-byte-
+ * aligned masks, and the register file runs to TAGMSK_28_31 — but TAGMSK_LEN is
+ * an 8-bit field, so the hardware ceiling is 255 bits, and none of those higher
+ * registers has ever been put on a reader by this code.
+ *
+ * So anything wider than 128 bits deliberately falls through to a 128-bit
+ * PREFIX search, and says so in the log rather than failing silently. Widening
+ * further is a hardware-validation exercise, not a code change.
+ *
  * The 96-bit branch deliberately does NOT clear TAGMSK_12_15. Per the vendor
  * spec the firmware scans only TAGMSK_LEN bits when it builds the Select, so a
- * value left in the tail register is inert — and leaving the primary path's
- * byte stream untouched is the conservative choice for reader firmware.
+ * value a previous 128-bit locate left in the tail register is inert.
+ *
+ * Only one descriptor is used, so a short value is still a prefix search rather
+ * than an exact match at the other width. Matching a stripped value at BOTH
+ * widths needs two descriptors OR'd together via TAGMSK_DESC_CFG's sel_action
+ * — tracked separately.
  *
  * @param targetEPC - Normalized EPC hex string (≤32 chars), or undefined to skip
  * @returns Command sequence to configure tag mask for locate mode
@@ -125,6 +153,16 @@ export function locateSettingsSequence(targetEPC?: string): CommandSequence {
   // Pad with leading zeros to whichever standard EPC width the value fits.
   const isExtended = cleanEpc.length > 24;
   const paddedEpc = cleanEpc.padStart(isExtended ? 32 : 24, '0');
+
+  if (cleanEpc.length > 32) {
+    // Only the leading 128 bits get masked, so this is a prefix search and any
+    // tag sharing that prefix will answer. Silent narrowing is exactly the
+    // failure this function was fixed for; say it out loud instead.
+    logger.warn(
+      `[Locate] EPC is ${cleanEpc.length} hex chars (>128 bits); masking the leading 128 bits only. ` +
+      'Locate may report a different tag sharing that prefix.'
+    );
+  }
   const maskBitLength = isExtended
     ? EPC_BIT_LENGTH.EXTENDED_128
     : EPC_BIT_LENGTH.STANDARD_96;
@@ -160,6 +198,15 @@ export function locateSettingsSequence(targetEPC?: string): CommandSequence {
     : [];
 
   return [
+    // 0. Select the mask descriptor every write below applies to. Must come
+    // first — it decides which of the 8 register sets they land on.
+    {
+      event: RFID_FIRMWARE_COMMAND,
+      payload: createFirmwareCommand(CommandType.WRITE_REGISTER, {
+        register: RFID_REGISTERS.HST_TAGMSK_DESC_SEL,
+        value: TAGMSK_DESCRIPTOR_INDEX.LOCATE
+      })
+    },
     // 1. Configure mask descriptor (enable + target SL)
     {
       event: RFID_FIRMWARE_COMMAND,

@@ -107,6 +107,18 @@ export const TAGMASK_DESCRIPTOR = {
 } as const;
 
 /**
+ * Which of the 8 Select descriptors (TAGMSK_DESC_SEL, bits 2:0) a feature owns.
+ *
+ * Each descriptor carries its own TAGMSK_* register set, and every enabled one
+ * issues a Select before the inventory. Locate uses a single descriptor, so a
+ * short EPC is a prefix search; matching a leading-zero-stripped value at both
+ * 96 and 128 bits would need a second descriptor OR'd in via sel_action.
+ */
+export const TAGMSK_DESCRIPTOR_INDEX = {
+  LOCATE: 0x00,
+} as const;
+
+/**
  * EPC Memory Offsets
  */
 export const EPC_MEMORY_OFFSET = {
