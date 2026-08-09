@@ -287,6 +287,53 @@ version=$(printf '%s' "$devbuild" | "$extract")
 "$assert" "$version" >/dev/null 2>&1 && status=0 || status=$?
 expect_status "chained extract -> assert refuses a merge-then-tag image" 1 "$status"
 
+# ---------------------------------------------------------------------------
+echo
+echo "build-version.sh"
+# ---------------------------------------------------------------------------
+bv="$repo_root/scripts/build-version.sh"
+
+out=$("$bv" 2>&1) && status=0 || status=$?
+expect_status "reads the committed VERSION file" 0 "$status"
+expect "prefixes the declared version with v" "v$(cat "$repo_root/VERSION")" "$out"
+
+out=$("$bv" "-preview+419+420" 2>&1)
+expect "appends the suffix verbatim" "v$(cat "$repo_root/VERSION")-preview+419+420" "$out"
+
+# Run from elsewhere: CI and the local backend build both invoke it with a cwd
+# that is not guaranteed to be the repo root.
+out=$(cd / && "$bv" 2>&1)
+expect "resolves VERSION relative to the script, not the cwd" "v$(cat "$repo_root/VERSION")" "$out"
+
+# A VERSION file that already carries the v is the mistake this catches: the
+# derivation layer owns the prefix, so it would produce `vv1.5.0`.
+bvfix=$(mktemp -d)
+mkdir -p "$bvfix/scripts"
+cp "$bv" "$bvfix/scripts/build-version.sh"
+
+printf 'v1.5.0\n' > "$bvfix/VERSION"
+out=$("$bvfix/scripts/build-version.sh" 2>&1) && status=0 || status=$?
+expect_status "refuses a VERSION carrying a leading v" 1 "$status"
+expect "explains that VERSION is bare semver" "bare semver" "$out"
+
+printf '1.5\n' > "$bvfix/VERSION"
+out=$("$bvfix/scripts/build-version.sh" 2>&1) && status=0 || status=$?
+expect_status "refuses a two-component VERSION" 1 "$status"
+
+printf '\n' > "$bvfix/VERSION"
+out=$("$bvfix/scripts/build-version.sh" 2>&1) && status=0 || status=$?
+expect_status "refuses an empty VERSION" 1 "$status"
+
+printf '1.5.0-dev\n' > "$bvfix/VERSION"
+out=$("$bvfix/scripts/build-version.sh" 2>&1) && status=0 || status=$?
+expect_status "accepts a -dev prerelease" 0 "$status"
+expect "keeps the prerelease suffix" "v1.5.0-dev" "$out"
+
+printf '1.5.0\n' > "$bvfix/VERSION"
+out=$("$bvfix/scripts/build-version.sh" 2>&1)
+expect "accepts a clean release version" "v1.5.0" "$out"
+rm -rf "$bvfix"
+
 echo
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]
