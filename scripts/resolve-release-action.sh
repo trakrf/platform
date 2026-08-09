@@ -7,12 +7,23 @@
 #
 # Usage: resolve-release-action.sh <bare-version> <commit-sha>
 #   none    VERSION is not a clean release version — ordinary development merge
-#   create  no tag for this version yet — mint it at <commit-sha>
-#   skip    the tag already exists AT THIS COMMIT — a re-run, or a later merge
-#           inside the stale-clean-VERSION window before the bump-back lands
+#   create  no tag for this version yet — mint it at <commit-sha>, then publish
+#           the :vX.Y.Z image tag
+#   skip    the tag already exists AT THIS COMMIT — a re-run. Do not touch the
+#           git tag; DO republish the image tag, which is how a run that minted
+#           the tag and then died before publishing repairs itself
+#   stale   the tag exists at a DIFFERENT commit — mint nothing, publish nothing
 #
-# Exit 1 when the tag exists at a DIFFERENT commit: that is a version being
-# reused, which would silently repoint a released artifact.
+# `stale` is the window between the release merge and the bump-back landing:
+# VERSION on main is still clean, so every ordinary merge in it reaches this
+# script with the release tag already sitting on an ancestor. That is normal and
+# must not fail the build — main would go red for everyone until the bump-back
+# merged. It must equally not republish :vX.Y.Z, which would re-point a released
+# image tag at a commit that is not the release. Doing nothing is both.
+#
+# An operator editing VERSION back to an already-shipped number is topologically
+# indistinguishable from that window, and lands in `stale` too. Also harmless:
+# nothing is minted and nothing moves. The caller warns.
 #
 # Takes the version BARE, as it appears in the file, because that is the string
 # its caller already holds. assert-release-commit.sh takes the v-prefixed form
@@ -48,12 +59,9 @@ if [ "${tagged}" = "${commit}" ]; then
 fi
 
 {
-    echo "::error::Refusing to release ${tag}: the tag already exists at a different commit."
-    echo "  tag ${tag} -> ${tagged}"
-    echo "  this build -> ${commit}"
-    echo
-    echo "VERSION declares a version that has already been released. Either the"
-    echo "bump-back to the next -dev never landed, or VERSION was edited back to"
-    echo "an already-shipped number. Bump VERSION forward; never re-point a tag."
+    echo "::warning::${tag} was already released at ${tagged}; this build is ${commit}."
+    echo "Minting nothing and republishing nothing. Either the bump-back to the next"
+    echo "-dev has not landed yet — normal, and harmless — or VERSION was edited back"
+    echo "to an already-shipped number, which is a mistake to fix by bumping forward."
 } >&2
-exit 1
+echo "stale"

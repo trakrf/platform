@@ -371,12 +371,25 @@ expect_status "an existing tag at this commit is a no-op" 0 "$status"
 expect "reports skip" "skip" "$out"
 
 # The Q3 stale-window case: main keeps moving while VERSION is still clean, so
-# a later commit re-runs the release job against a tag that already exists
-# somewhere else. That is a version reuse and must be loud.
+# every ordinary merge reaches this script with the release tag already on an
+# ancestor. It must NOT fail — main would go red for everyone until the
+# bump-back landed — and it must NOT republish, which would re-point :vX.Y.Z at
+# a commit that is not the release.
 out=$(cd "$fixture" && "$action" 1.3.0 "$prev" 2>&1) && status=0 || status=$?
-expect_status "refuses a version already tagged at a different commit" 1 "$status"
-expect "names the version being reused" "v1.3.0" "$out"
-expect "says the tag is elsewhere" "different commit" "$out"
+expect_status "the stale-clean-VERSION window does not fail the build" 0 "$status"
+expect "reports stale" "stale" "$out"
+expect "warns rather than erroring" "::warning::" "$out"
+expect "names the released tag" "v1.3.0" "$out"
+
+# stdout must carry ONLY the action word — the caller reads it into a variable.
+out=$(cd "$fixture" && "$action" 1.3.0 "$prev" 2>/dev/null)
+if [ "$out" = "stale" ]; then
+    echo "  ✓ the warning goes to stderr, not stdout"
+    pass=$((pass + 1))
+else
+    echo "  ✗ the warning goes to stderr, not stdout (stdout was '$out')"
+    fail=$((fail + 1))
+fi
 
 out=$(cd "$fixture" && "$action" "not-a-version" "$tip" 2>&1) && status=0 || status=$?
 expect_status "a malformed version is not a release" 0 "$status"
