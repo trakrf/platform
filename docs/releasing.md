@@ -37,18 +37,27 @@ see [What the guards enforce](#what-the-guards-enforce). The rest is here.
       Expect exactly one row from the first query. If it says `public`, you are
       on a pre-TRA-1069 database and step 4 applies in full.
 
-      `just psql ENV` takes no query argument — it only opens an interactive
-      shell, so the statements above cannot be run non-interactively as written
-      (`just psql prod -c "…"` fails with ``Justfile does not contain recipe
-      `-c` ``). Until **TRA-1105** adds a query form, a scripted read has to go
-      through the pod directly, which connects as **superuser** — fine for the
-      read-only checks in this runbook, but never run DDL through it (TRA-1105
-      explains why: superuser-owned objects become un-migratable).
-
-      ```bash
-      kubectl -n trakrf-prod exec trakrf-db-prod-1 -- \
-        psql -U postgres -d trakrf -c "SELECT version, dirty FROM trakrf.schema_migrations;"
-      ```
+      > ### ⚠️ TEMPORARY WORKAROUND — DELETE THIS BLOCK WHEN TRA-1105 LANDS
+      >
+      > `just psql ENV` takes no query argument — it only opens an interactive
+      > shell, so the statements above cannot be run non-interactively as
+      > written (`just psql prod -c "…"` fails with ``Justfile does not contain
+      > recipe `-c` ``). **TRA-1105 adds `just psql ENV [QUERY]` and drops the
+      > superuser default.** Until it lands, a scripted read has to go through
+      > the pod directly, which connects as **superuser**:
+      >
+      > ```bash
+      > kubectl -n trakrf-prod exec trakrf-db-prod-1 -- \
+      >   psql -U postgres -d trakrf -c "SELECT version, dirty FROM trakrf.schema_migrations;"
+      > ```
+      >
+      > Read-only checks only. **Never run DDL through it** — superuser-owned
+      > objects are permanently un-replaceable by the migrate role and wedge a
+      > later deploy. That is the whole reason TRA-1105 exists, so leaving this
+      > block in place after the fix ships actively undermines it.
+      >
+      > **On TRA-1105 landing:** delete this block and change the `-- via:`
+      > comment above to the working `just psql prod "<query>"` form.
 
 - [ ] **Cut the changelog section.** `CHANGELOG.md` gets a real `[X.Y.Z]`
       section, and anything under `[Unreleased]` that is actually shipping moves
