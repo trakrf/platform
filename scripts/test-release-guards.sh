@@ -85,7 +85,7 @@ expect_status "refuses a missing argument" 1 $?
 
 out=$("$assert" v1.2.0-559-gaa9822bb 2>&1)
 expect "names the offending version" "v1.2.0-559-gaa9822bb" "$out"
-expect "explains the likely cause" "before the release tag existed" "$out"
+expect "explains the likely cause" "deliberately unpromotable" "$out"
 
 out=$("$assert" v1.3.0 2>&1)
 expect "echoes the accepted version" "v1.3.0" "$out"
@@ -149,10 +149,23 @@ else
     pass=$((pass + 1))
 fi
 
-# Backwards compatibility: the old input contract passed the image tag directly.
+# Finding 3 (TRA-1126): a raw sha- input used to be waved through unchecked, on
+# the wrong belief that an image tag cannot be ancestry-checked. sha-<hex> IS
+# the git short sha, so it resolves and is checked like any other ref. Before
+# TRA-1126 this mattered little because preview versions were always
+# describe-shaped; with a declared VERSION an OPEN release PR puts a clean
+# `1.5.0` into the preview composition, and its sha- tag was promotable.
+out=$(cd "$fixture" && "$resolve" "sha-${main_sha:0:7}" 2>&1) && status=0 || status=$?
+expect_status "accepts a sha- tag naming a main commit" 0 "$status"
+expect "sha- tag round-trips to itself" "$main_short" "$out"
+
+side_sha=$(git -C "$fixture" rev-parse sidebranch)
+out=$(cd "$fixture" && "$resolve" "sha-${side_sha:0:7}" 2>&1) && status=0 || status=$?
+expect_status "refuses a sha- tag for a commit not on main" 1 "$status"
+expect "says why the sha- tag was refused" "not an ancestor" "$out"
+
 out=$(cd "$fixture" && "$resolve" sha-abc1234 2>&1) && status=0 || status=$?
-expect_status "passes an existing sha- image tag through" 0 "$status"
-expect "sha- tag unchanged" "sha-abc1234" "$out"
+expect_status "refuses a sha- tag that resolves to nothing" 1 "$status"
 
 out=$(cd "$fixture" && "$resolve" latest 2>&1) && status=0 || status=$?
 expect_status "passes latest through" 0 "$status"
@@ -286,6 +299,173 @@ devbuild='{
 version=$(printf '%s' "$devbuild" | "$extract")
 "$assert" "$version" >/dev/null 2>&1 && status=0 || status=$?
 expect_status "chained extract -> assert refuses a merge-then-tag image" 1 "$status"
+
+# ---------------------------------------------------------------------------
+echo
+echo "build-version.sh"
+# ---------------------------------------------------------------------------
+bv="$repo_root/scripts/build-version.sh"
+
+out=$("$bv" 2>&1) && status=0 || status=$?
+expect_status "reads the committed VERSION file" 0 "$status"
+expect "prefixes the declared version with v" "v$(cat "$repo_root/VERSION")" "$out"
+
+out=$("$bv" "-preview+419+420" 2>&1)
+expect "appends the suffix verbatim" "v$(cat "$repo_root/VERSION")-preview+419+420" "$out"
+
+# Run from elsewhere: CI and the local backend build both invoke it with a cwd
+# that is not guaranteed to be the repo root.
+out=$(cd / && "$bv" 2>&1)
+expect "resolves VERSION relative to the script, not the cwd" "v$(cat "$repo_root/VERSION")" "$out"
+
+# A VERSION file that already carries the v is the mistake this catches: the
+# derivation layer owns the prefix, so it would produce `vv1.5.0`.
+bvfix=$(mktemp -d)
+mkdir -p "$bvfix/scripts"
+cp "$bv" "$bvfix/scripts/build-version.sh"
+
+printf 'v1.5.0\n' > "$bvfix/VERSION"
+out=$("$bvfix/scripts/build-version.sh" 2>&1) && status=0 || status=$?
+expect_status "refuses a VERSION carrying a leading v" 1 "$status"
+expect "explains that VERSION is bare semver" "bare semver" "$out"
+
+printf '1.5\n' > "$bvfix/VERSION"
+out=$("$bvfix/scripts/build-version.sh" 2>&1) && status=0 || status=$?
+expect_status "refuses a two-component VERSION" 1 "$status"
+
+printf '\n' > "$bvfix/VERSION"
+out=$("$bvfix/scripts/build-version.sh" 2>&1) && status=0 || status=$?
+expect_status "refuses an empty VERSION" 1 "$status"
+
+printf '1.5.0-dev\n' > "$bvfix/VERSION"
+out=$("$bvfix/scripts/build-version.sh" 2>&1) && status=0 || status=$?
+expect_status "accepts a -dev prerelease" 0 "$status"
+expect "keeps the prerelease suffix" "v1.5.0-dev" "$out"
+
+printf '1.5.0\n' > "$bvfix/VERSION"
+out=$("$bvfix/scripts/build-version.sh" 2>&1)
+expect "accepts a clean release version" "v1.5.0" "$out"
+rm -rf "$bvfix"
+
+# ---------------------------------------------------------------------------
+echo
+echo "resolve-release-action.sh"
+# ---------------------------------------------------------------------------
+action="$repo_root/scripts/resolve-release-action.sh"
+
+# Reuse the fixture repo built for resolve-promote-source.sh: main has two
+# commits and v1.3.0 sits on the tip.
+tip=$(git -C "$fixture" rev-parse main)
+prev=$(git -C "$fixture" rev-parse main~1)
+
+out=$(cd "$fixture" && "$action" 1.5.0-dev "$tip" 2>&1) && status=0 || status=$?
+expect_status "a -dev version is not a release" 0 "$status"
+expect "reports no action for -dev" "none" "$out"
+
+out=$(cd "$fixture" && "$action" 1.4.0 "$tip" 2>&1) && status=0 || status=$?
+expect_status "an untagged clean version mints a tag" 0 "$status"
+expect "reports create" "create" "$out"
+
+out=$(cd "$fixture" && "$action" 1.3.0 "$tip" 2>&1) && status=0 || status=$?
+expect_status "an existing tag at this commit is a no-op" 0 "$status"
+expect "reports skip" "skip" "$out"
+
+# The Q3 stale-window case: main keeps moving while VERSION is still clean, so
+# every ordinary merge reaches this script with the release tag already on an
+# ancestor. It must NOT fail — main would go red for everyone until the
+# bump-back landed — and it must NOT republish, which would re-point :vX.Y.Z at
+# a commit that is not the release.
+out=$(cd "$fixture" && "$action" 1.3.0 "$prev" 2>&1) && status=0 || status=$?
+expect_status "the stale-clean-VERSION window does not fail the build" 0 "$status"
+expect "reports stale" "stale" "$out"
+expect "warns rather than erroring" "::warning::" "$out"
+expect "names the released tag" "v1.3.0" "$out"
+
+# stdout must carry ONLY the action word — the caller reads it into a variable.
+out=$(cd "$fixture" && "$action" 1.3.0 "$prev" 2>/dev/null)
+if [ "$out" = "stale" ]; then
+    echo "  ✓ the warning goes to stderr, not stdout"
+    pass=$((pass + 1))
+else
+    echo "  ✗ the warning goes to stderr, not stdout (stdout was '$out')"
+    fail=$((fail + 1))
+fi
+
+out=$(cd "$fixture" && "$action" "not-a-version" "$tip" 2>&1) && status=0 || status=$?
+expect_status "a malformed version is not a release" 0 "$status"
+expect "reports none for a malformed version" "none" "$out"
+
+out=$(cd "$fixture" && "$action" 1.4.0 "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" 2>&1) && status=0 || status=$?
+expect_status "refuses an unresolvable commit" 1 "$status"
+
+# ---------------------------------------------------------------------------
+echo
+echo "assert-release-commit.sh"
+# ---------------------------------------------------------------------------
+bind="$repo_root/scripts/assert-release-commit.sh"
+
+# Finding 4 (TRA-1126): between the release merge and the bump-back landing,
+# every ordinary merge to main builds an image labelled clean v1.3.0. The label
+# alone is therefore no longer proof; the image must be the tagged commit.
+out=$(cd "$fixture" && "$bind" v1.3.0 "$main_short" 2>&1) && status=0 || status=$?
+expect_status "accepts the image built from the tagged commit" 0 "$status"
+
+prev_sha=$(git -C "$fixture" rev-parse main~1)
+out=$(cd "$fixture" && "$bind" v1.3.0 "sha-${prev_sha:0:7}" 2>&1) && status=0 || status=$?
+expect_status "refuses a clean label on a commit the tag does not name" 1 "$status"
+expect "names the offending image commit" "${prev_sha:0:7}" "$out"
+
+out=$(cd "$fixture" && "$bind" v9.9.9 "$main_short" 2>&1) && status=0 || status=$?
+expect_status "refuses a version with no git tag at all" 1 "$status"
+expect "says the tag is missing" "no git tag" "$out"
+
+# `latest` names an image, not a commit, so it cannot be bound. Fail closed.
+out=$(cd "$fixture" && "$bind" v1.3.0 latest 2>&1) && status=0 || status=$?
+expect_status "refuses a source that does not name a commit" 1 "$status"
+expect "tells the operator to name the release tag" "name the release tag" "$out"
+
+out=$(cd "$fixture" && "$bind" v1.3.0 2>&1) && status=0 || status=$?
+expect_status "refuses a missing image tag argument" 1 "$status"
+
+out=$(cd "$fixture" && "$bind" "v1.2.0-559-gaa9822bb" "$main_short" 2>&1) && status=0 || status=$?
+expect_status "refuses a non-clean version outright" 1 "$status"
+
+# ---------------------------------------------------------------------------
+echo
+echo "assert-changelog-section.sh"
+# ---------------------------------------------------------------------------
+changelog="$repo_root/scripts/assert-changelog-section.sh"
+
+# Against the real checkout: VERSION is -dev during development, so the gate is
+# inert and this must stay green on every ordinary PR.
+out=$("$changelog" 2>&1) && status=0 || status=$?
+expect_status "inert while VERSION carries a prerelease" 0 "$status"
+
+clfix=$(mktemp -d)
+mkdir -p "$clfix/scripts"
+cp "$changelog" "$clfix/scripts/assert-changelog-section.sh"
+
+printf '1.5.0\n' > "$clfix/VERSION"
+printf '# Changelog\n\n## [Unreleased]\n\n## [1.4.0] - 2026-08-09\n' > "$clfix/CHANGELOG.md"
+out=$("$clfix/scripts/assert-changelog-section.sh" 2>&1) && status=0 || status=$?
+expect_status "refuses a release with no matching changelog section" 1 "$status"
+expect "names the missing heading" "## [1.5.0]" "$out"
+
+printf '# Changelog\n\n## [Unreleased]\n\n## [1.5.0] - 2026-08-20\n\n## [1.4.0] - 2026-08-09\n' > "$clfix/CHANGELOG.md"
+out=$("$clfix/scripts/assert-changelog-section.sh" 2>&1) && status=0 || status=$?
+expect_status "accepts a release whose changelog section exists" 0 "$status"
+
+# An Unreleased heading is not a release section.
+printf '# Changelog\n\n## [Unreleased]\n' > "$clfix/CHANGELOG.md"
+out=$("$clfix/scripts/assert-changelog-section.sh" 2>&1) && status=0 || status=$?
+expect_status "does not accept [Unreleased] as the section" 1 "$status"
+
+# A 1.5.0 section must not satisfy 1.5.0's neighbour by prefix match.
+printf '1.5.0\n' > "$clfix/VERSION"
+printf '# Changelog\n\n## [1.5.01] - 2026-08-20\n' > "$clfix/CHANGELOG.md"
+out=$("$clfix/scripts/assert-changelog-section.sh" 2>&1) && status=0 || status=$?
+expect_status "does not match a longer version by prefix" 1 "$status"
+rm -rf "$clfix"
 
 echo
 echo "passed: $pass  failed: $fail"

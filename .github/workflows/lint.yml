@@ -67,6 +67,15 @@ jobs:
       - name: Generate OpenAPI specs (swag init + apispec — required for swaggerspec go:embed)
         run: just backend api-spec
 
+      - name: Changelog gate (release PRs only)
+        # TRA-1085 item 4 / TRA-1126. Deliberately a step inside lint-test
+        # rather than its own job: the main-branch-protection ruleset requires
+        # the exact contexts `build`, `lint-test`, `api-spec` and `main
+        # contract-tests must be green`, so a new job would need a ruleset edit
+        # before it enforced anything. Inert unless VERSION declares a clean
+        # release, which is every PR that is not the release PR.
+        run: just check-changelog
+
       - name: Lint
         run: just lint
 

@@ -1,8 +1,25 @@
 # ADR 0001 — Platform version, API contract version, and OpenAPI spec version are three independent numbers
 
 Date: 2026-05-23
-Status: Accepted
-Tracking: TRA-485 (mechanism), TRA-672 (`info.version` semantics), TRA-481 (`/health` SHA exposure)
+Status: Accepted; the platform version's *source* superseded 2026-08-09 by [ADR 0004](0004-declared-platform-version.md)
+Tracking: TRA-485 (mechanism), TRA-672 (`info.version` semantics), TRA-481 (`/health` SHA exposure), TRA-1126 (source superseded)
+
+> **2026-08-09 — superseded in part, not reversed.** The decision this record
+> exists for — that the platform version, the API contract version and the
+> OpenAPI `info.version` are three independent numbers, and that the monolith
+> has exactly **one** platform version fed to every surface from a single
+> source — stands entirely. What changed is where that single source lives.
+>
+> `git describe --tags --always --dirty` at build time made the version a
+> property of the *ref that built the image* rather than of the commit, which
+> broke three releases in three different ways. It is now **declared** in a root
+> `VERSION` file and the git tag is an output of the release build.
+> [ADR 0004](0004-declared-platform-version.md) has the reasoning.
+>
+> Read the Decision and Consequences below with that substitution: wherever this
+> record says `git describe`, the mechanism is now the `VERSION` file. The
+> Alternatives section is unaffected — the runtime-fetch and release-please
+> options were rejected for reasons that do not depend on the source.
 
 ## Context
 
@@ -73,6 +90,11 @@ decoupled. Platform can ship v1.x → v2.x → v3.x without touching `/api/v1/`;
 * **No release-time file edits.** A release is `git tag vX.Y.Z && git push --tags`.
   CI rebuilds the image, the new version flows everywhere. No "did someone
   remember to bump?" failure mode.
+  > **Inverted by [ADR 0004](0004-declared-platform-version.md).** A release *is*
+  > now a file edit — one line, in a reviewed PR — and that is the point: the
+  > old form appeared in no diff and passed no checks. The
+  > "did someone remember to bump?" failure mode is answered by CI minting the
+  > tag from the file rather than by there being no file.
 * **`pnpm-lock.yaml` may re-resolve** when the demoted `0.0.0` is first
   installed; harmless for a private package.
 * **Local `pnpm dev`** has no build-time env, so the nav header reads `dev`.

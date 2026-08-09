@@ -11,22 +11,39 @@
 #
 # Accepting arbitrary refs would lose the guarantee the old input regex gave —
 # that only main-derived images can reach :prod — so every ref resolved here is
-# ancestry-checked against origin/main. An already-formed sha-/latest image tag
-# is passed through untouched: it is what the old contract accepted, and it
-# cannot be ancestry-checked because it names an image, not a commit.
+# ancestry-checked against origin/main.
+#
+# TRA-1126 Finding 3: `sha-<hex>` used to be passed through unchecked, on the
+# stated belief that it "cannot be ancestry-checked because it names an image,
+# not a commit". That was simply wrong — sha-<hex> IS the git short sha, so it
+# resolves with `git rev-parse` and is checked like anything else. It mattered
+# little while every preview version was describe-shaped; with a declared
+# VERSION (TRA-1126) an OPEN release PR puts a clean `1.5.0` into the preview
+# composition, and that preview image's sha- tag was directly promotable.
+#
+# `latest` is still passed through: it names an image and no commit. It is
+# refused downstream by assert-release-commit.sh, which cannot bind it to the
+# release tag's commit.
 #
 # Usage: resolve-promote-source.sh [ref]
 #   (no argument, or empty)  -> origin/main HEAD
-#   sha-<hex> | latest       -> passed through unchanged
+#   latest                   -> passed through unchanged
+#   sha-<hex>                -> resolved as a commit, ancestry-checked, renormalised
 #   anything else            -> resolved as a git ref -> sha-<first 7 of its sha>
 set -euo pipefail
 
 ref="${1-}"
 
-# Already an image tag? Preserve the existing input contract exactly.
-if [[ "${ref}" =~ ^(sha-[0-9a-f]{7,40}|latest)$ ]]; then
-    echo "${ref}"
+# Names an image and no commit; preserved for the old input contract.
+if [ "${ref}" = "latest" ]; then
+    echo "latest"
     exit 0
+fi
+
+# An image tag that DOES name a commit: strip the prefix and resolve it as a
+# ref, so it gets the same ancestry check as everything else.
+if [[ "${ref}" =~ ^sha-([0-9a-f]{7,40})$ ]]; then
+    ref="${BASH_REMATCH[1]}"
 fi
 
 # No ref given: promote whatever main currently points at.

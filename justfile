@@ -104,10 +104,17 @@ logs *ARGS:
 test-ops:
     @./scripts/test-ops-passthrough.sh
 
-# TRA-1085: the promote-prod release guards — source-ref resolution and the
-# clean-vX.Y.Z version check. Pure bash, no registry or cluster needed.
+# TRA-1085 / TRA-1126: the release guards — VERSION derivation, source-ref
+# resolution, the clean-vX.Y.Z check, the tag-commit binding and the release
+# tag decision. Pure bash, no registry or cluster needed.
 test-release-guards:
     @./scripts/test-release-guards.sh
+
+# TRA-1085 item 4 — a clean VERSION requires its CHANGELOG.md section. Inert
+# during development (VERSION carries -dev). Run in CI inside `lint-test` so it
+# needs no new required-check context.
+check-changelog:
+    @./scripts/assert-changelog-section.sh
 
 # TRA-1075: the local + edge database bootstrap keeps its non-superuser posture.
 # Text assertions over database/sql/ and the env templates — no database needed.

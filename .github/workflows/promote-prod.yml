@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       source:
-        description: 'Git ref to promote — a release tag (v1.3.0), a branch, or a full SHA. Leave empty for current main. An existing sha-xxxxxxx / latest image tag is also accepted.'
+        description: 'Release tag to promote (v1.5.0). A branch, full SHA or sha-xxxxxxx tag also resolves, but only the release commit itself passes the guards. Leave empty for current main.'
         required: false
         type: string
 
@@ -36,7 +36,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           # Full history + tags: resolve-promote-source.sh resolves release tags
-          # and ancestry-checks against origin/main. A shallow clone has neither.
+          # and ancestry-checks against origin/main, and assert-release-commit.sh
+          # reads the release tag's commit. A shallow clone has neither.
           fetch-depth: 0
 
       - name: Resolve source image tag
@@ -75,10 +76,9 @@ jobs:
           echo "Resolving ${IMAGE}:${SOURCE} ..."
           docker buildx imagetools inspect "${IMAGE}:${SOURCE}"
 
-          # TRA-1085: refuse an image built before its release tag existed.
-          # APP_VERSION is `git describe` at BUILD time and nothing rebuilds on
-          # promote, so merge-then-tag bakes a dev version in permanently and
-          # /health would report it for the life of the release. The label is
+          # TRA-1085 / TRA-1126: refuse an image that is not the release build.
+          # The platform version is declared in the committed VERSION file and
+          # baked in at build time; nothing rebuilds on promote. The label is
           # stamped by the Dockerfile's production stage; metadata-action's
           # org.opencontainers.image.version holds the image TAG, not this.
           # Note `.Image` is keyed by platform on a multi-arch manifest, which
@@ -89,6 +89,13 @@ jobs:
             --format '{{ json .Image }}' | ./scripts/extract-image-version.sh)
           echo "Image reports version: ${APP_VERSION:-<none>}"
           ./scripts/assert-release-version.sh "${APP_VERSION}"
+
+          # TRA-1126 Finding 4: a clean label alone is no longer proof. VERSION
+          # stays clean on main between the release merge and the bump-back, so
+          # every ordinary merge in that window also builds a clean-labelled
+          # image — including whatever an empty `source` resolves to. Bind the
+          # version to the exact commit its git tag names.
+          ./scripts/assert-release-commit.sh "${APP_VERSION}" "${SOURCE}"
 
           # Pure manifest re-tag — copies the source manifest to :prod, no rebuild.
           docker buildx imagetools create --tag "${IMAGE}:prod" "${IMAGE}:${SOURCE}"

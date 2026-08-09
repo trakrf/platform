@@ -13,16 +13,13 @@ on:
     # `preview` tag is gated on `refs/heads/preview`. Prod uses semver tags
     # — no path for `preview` to promote into a stable ref.
     branches: [main, preview]
-    # TRA-1085: build on release tags too. APP_VERSION is `git describe` at
-    # BUILD time and promote-prod never rebuilds, so the natural order — merge,
-    # then tag — bakes a dev-shaped version (v1.2.0-559-gaa9822bb) into the
-    # image permanently and /health reports it for the life of the release.
-    # Building on the tag re-resolves describe against the tag itself and
-    # republishes the same immutable sha-<short> with a clean vX.Y.Z, removing
-    # the "tag, then manually re-run the build" folklore that recovered v1.3.0.
-    # Neither floating tag is touched here: metadata-action gates `latest` on
-    # is_default_branch and `preview` on refs/heads/preview, both false on a tag.
-    tags: ['v*']
+    # No `tags:` trigger, deliberately (TRA-1126). It existed only so a tag
+    # build could re-resolve `git describe` after a merge had already baked a
+    # dev-shaped version into the image. With the version declared in the commit
+    # there is nothing to re-resolve, and a second build of one commit is
+    # exactly the race that broke v1.4.0 (TRA-1125) — both refs wrote the shared
+    # sha-<short> tag and the later one won. The release tag is now an OUTPUT of
+    # the merge build; see the `release` job below.
 
 concurrency:
   group: docker-build-${{ github.ref }}
@@ -66,30 +63,38 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          # Full history + tags so `git describe` can resolve the platform
-          # version (TRA-485). Shallow clones drop tag refs and ancestor
-          # commits, leaving describe with nothing to report.
-          fetch-depth: 0
+        # No fetch-depth: 0. It existed only so `git describe` could resolve the
+        # platform version (TRA-485); the version is now read from the committed
+        # VERSION file (TRA-1126), which a shallow clone has.
 
       - name: Compute platform version
         id: version
         run: |
-          # --match 'v*' so only release tags (v1.1.0, v1.1.1, ...) anchor the
-          # version. Ad-hoc snapshot tags like `pre-tra-720` would otherwise win
-          # by recency and produce a misleading version string (TRA-851).
-          version=$(git describe --tags --match 'v*' --always --dirty)
+          set -euo pipefail
           # On preview-branch builds, append the list of PR numbers currently
           # merged into preview, sourced from the .preview-manifest file written
-          # by sync-preview.yml. Result: `v1.1.1-N-g<sha>-preview+419+420` so a
-          # quick refresh of the preview env tells you which PRs are in it.
+          # by sync-preview.yml. Result: `v1.5.0-dev-preview+419+420`, so a
+          # quick refresh of the preview env tells you which PRs are in it
+          # (TRA-851) AND a non-technical viewer can tell preview's release line
+          # from prod's at a glance (TRA-1126).
+          #
+          # The suffix also keeps preview unpromotable while a release PR is
+          # OPEN: the composition then contains a clean VERSION, and without the
+          # suffix that preview image would carry a clean vX.Y.Z label on a
+          # commit that is not, and never will be, the release commit
+          # (TRA-1126 Finding 3).
+          suffix=""
           if [[ "${GITHUB_REF}" == "refs/heads/preview" && -s .preview-manifest ]]; then
             prs=$(tr '\n' '+' < .preview-manifest | sed 's/+$//')
             if [[ -n "${prs}" ]]; then
-              version="${version}-preview+${prs}"
+              suffix="-preview+${prs}"
             fi
           fi
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          version=$(./scripts/build-version.sh "${suffix}")
+          {
+            echo "suffix=${suffix}"
+            echo "version=${version}"
+          } >> "$GITHUB_OUTPUT"
           echo "Platform version: ${version}"
 
       - name: Set up Buildx
@@ -143,6 +148,10 @@ jobs:
           # Inject build metadata so /health and frontend /version.json report
           # the deployed commit. BUILD_TAG uses the primary ref tag produced
           # by metadata-action (sha-xxxx on commits, latest on default branch).
+          # APP_VERSION is not a judgment made here — it is derived from the
+          # committed VERSION file, and the Dockerfile COPYs the same file and
+          # FAILS the build if the two disagree. It is passed only because the
+          # OCI label cannot read a file (TRA-1126).
           # Dockerfile propagates these to the frontend stage as VITE_* env.
           # The environment banner is NOT baked here — it's runtime-driven from
           # the backend's ENVIRONMENT_LABEL env var (TRA-853), so one image
@@ -151,6 +160,7 @@ jobs:
             COMMIT_SHA=${{ github.sha }}
             BUILD_TAG=${{ steps.meta.outputs.version }}
             APP_VERSION=${{ steps.version.outputs.version }}
+            VERSION_SUFFIX=${{ steps.version.outputs.suffix }}
 
       - name: Export digest
         if: github.event_name != 'pull_request'
@@ -245,3 +255,186 @@ jobs:
       - name: Inspect image
         run: |
           docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
+
+  # TRA-1126: the release tag is an OUTPUT of the merge build, not the trigger
+  # for a second one. When the merged commit declares a clean VERSION, this job
+  # mints the git tag vX.Y.Z at that commit and publishes
+  # ghcr.io/trakrf/backend:vX.Y.Z from the manifest the merge job just pushed.
+  # Both are written once, by one job — the immutability `sha-<short>` was
+  # wrongly documented as having (TRA-1125).
+  #
+  # Merging to main still deploys nothing. promote-prod remains the separate,
+  # manual, human-triggered step, and that is where the deploy gate belongs;
+  # this only decides when a PROMOTABLE artifact is minted.
+  #
+  # The tag push uses the default GITHUB_TOKEN on purpose: pushes made with it
+  # do not trigger workflows, so there is no path back into this workflow even
+  # if a `tags:` trigger were ever reintroduced.
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: merge
+    permissions:
+      # Scoped per-job: the workflow default is `contents: read`, and pushing
+      # the tag needs write. Widening it workflow-wide would hand write access
+      # to every build leg for no reason.
+      contents: write
+      packages: write
+    outputs:
+      version: ${{ steps.decide.outputs.version }}
+      action: ${{ steps.decide.outputs.action }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Tags and full history: resolve-release-action.sh has to see whether
+          # this version is already tagged, and at which commit.
+          fetch-depth: 0
+
+      - name: Decide what to release
+        id: decide
+        run: |
+          set -euo pipefail
+          version=$(tr -d '[:space:]' < VERSION)
+          action=$(./scripts/resolve-release-action.sh "${version}" "${GITHUB_SHA}")
+          {
+            echo "version=${version}"
+            echo "action=${action}"
+          } >> "$GITHUB_OUTPUT"
+          echo "VERSION=${version} -> ${action}"
+
+      - name: Mint the release tag
+        if: steps.decide.outputs.action == 'create'
+        env:
+          TAG: v${{ steps.decide.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "Release ${TAG}"
+          git push origin "${TAG}"
+          echo "Minted ${TAG} at ${GITHUB_SHA}"
+
+      - name: Log in to GHCR
+        if: contains(fromJSON('["create", "skip"]'), steps.decide.outputs.action)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish the release image tag
+        # 'create' and 'skip' only — NOT 'stale'. On 'skip' the git tag already
+        # names this exact commit, so republishing is a no-op that also repairs
+        # a prior run which minted the tag and died before this step. On 'stale'
+        # the tag names a DIFFERENT commit, and publishing here would re-point a
+        # released image tag at a commit that is not the release.
+        if: contains(fromJSON('["create", "skip"]'), steps.decide.outputs.action)
+        env:
+          TAG: v${{ steps.decide.outputs.version }}
+        run: |
+          set -euo pipefail
+          src="${REGISTRY_IMAGE}:sha-${GITHUB_SHA:0:7}"
+          docker buildx imagetools create --tag "${REGISTRY_IMAGE}:${TAG}" "${src}"
+          echo "Published ${REGISTRY_IMAGE}:${TAG} from ${src}"
+          docker buildx imagetools inspect "${REGISTRY_IMAGE}:${TAG}"
+
+      - name: Summary
+        if: steps.decide.outputs.action != 'none'
+        env:
+          TAG: v${{ steps.decide.outputs.version }}
+          ACTION: ${{ steps.decide.outputs.action }}
+        run: |
+          set -euo pipefail
+          if [ "${ACTION}" = "stale" ]; then
+            {
+              echo "### No release minted"
+              echo
+              echo "\`VERSION\` still declares **${TAG}**, which is already released at a"
+              echo "different commit. Nothing was tagged and nothing was published."
+              echo
+              echo "This is the expected state between the release merge and the"
+              echo "bump-back PR landing. If the bump-back is already merged, someone"
+              echo "has edited \`VERSION\` back to a shipped number — bump it forward."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "### Release ${TAG}"
+            echo
+            echo "- git tag: \`${TAG}\` (${ACTION})"
+            echo "- image: \`${REGISTRY_IMAGE}:${TAG}\`"
+            echo
+            echo "Promote with: \`gh workflow run promote-prod.yml -f source=${TAG}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Opens the follow-up PR that returns VERSION to the next -dev, so main does
+  # not sit at a promotable version. Deliberately a separate job with its own
+  # failure surface, because it is COSMETIC: assert-release-commit.sh binds a
+  # clean version to the exact commit its tag names, so nothing depends on this
+  # landing, or on when (TRA-1126 Finding 4).
+  #
+  # Uses the trakrf-preview-sync App token rather than GITHUB_TOKEN. PRs opened
+  # with the default token do not trigger workflows, so the required checks
+  # (`build`, `lint-test`, `api-spec`, `main contract-tests must be green`)
+  # would never report and the PR would sit permanently BLOCKED — the same
+  # anti-recursion gate sync-preview.yml documents for its push to `preview`.
+  bump-back:
+    if: needs.release.outputs.action == 'create'
+    runs-on: ubuntu-latest
+    needs: release
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Generate App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.PREVIEW_SYNC_APP_ID }}
+          private-key: ${{ secrets.PREVIEW_SYNC_APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Open the bump-back PR
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASED: ${{ needs.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          next=$(awk -F. '{printf "%d.%d.0-dev", $1, $2 + 1}' <<< "${RELEASED}")
+          branch="chore/bump-version-to-${next}"
+
+          if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
+            echo "${branch} already exists — nothing to do."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${branch}"
+          printf '%s\n' "${next}" > VERSION
+          git add VERSION
+          git commit -m "chore: bump VERSION to ${next}
+
+          Returns main to an in-development version after releasing v${RELEASED}.
+
+          Refs: TRA-1126"
+          git push origin "${branch}"
+
+          gh pr create \
+            --base main \
+            --head "${branch}" \
+            --title "chore: bump VERSION to ${next}" \
+            --body "Automatic follow-up to the \`v${RELEASED}\` release (TRA-1126).
+
+          Returns \`main\` to an in-development version so preview and ordinary
+          main builds read \`v${next}\` rather than the released line.
+
+          This is **cosmetic**. \`scripts/assert-release-commit.sh\` binds a clean
+          \`vX.Y.Z\` label to the exact commit its git tag names, so an image built
+          while \`VERSION\` was still clean cannot be promoted regardless of when
+          this lands."
