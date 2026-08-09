@@ -417,6 +417,43 @@ expect_status "refuses a missing image tag argument" 1 "$status"
 out=$(cd "$fixture" && "$bind" "v1.2.0-559-gaa9822bb" "$main_short" 2>&1) && status=0 || status=$?
 expect_status "refuses a non-clean version outright" 1 "$status"
 
+# ---------------------------------------------------------------------------
+echo
+echo "assert-changelog-section.sh"
+# ---------------------------------------------------------------------------
+changelog="$repo_root/scripts/assert-changelog-section.sh"
+
+# Against the real checkout: VERSION is -dev during development, so the gate is
+# inert and this must stay green on every ordinary PR.
+out=$("$changelog" 2>&1) && status=0 || status=$?
+expect_status "inert while VERSION carries a prerelease" 0 "$status"
+
+clfix=$(mktemp -d)
+mkdir -p "$clfix/scripts"
+cp "$changelog" "$clfix/scripts/assert-changelog-section.sh"
+
+printf '1.5.0\n' > "$clfix/VERSION"
+printf '# Changelog\n\n## [Unreleased]\n\n## [1.4.0] - 2026-08-09\n' > "$clfix/CHANGELOG.md"
+out=$("$clfix/scripts/assert-changelog-section.sh" 2>&1) && status=0 || status=$?
+expect_status "refuses a release with no matching changelog section" 1 "$status"
+expect "names the missing heading" "## [1.5.0]" "$out"
+
+printf '# Changelog\n\n## [Unreleased]\n\n## [1.5.0] - 2026-08-20\n\n## [1.4.0] - 2026-08-09\n' > "$clfix/CHANGELOG.md"
+out=$("$clfix/scripts/assert-changelog-section.sh" 2>&1) && status=0 || status=$?
+expect_status "accepts a release whose changelog section exists" 0 "$status"
+
+# An Unreleased heading is not a release section.
+printf '# Changelog\n\n## [Unreleased]\n' > "$clfix/CHANGELOG.md"
+out=$("$clfix/scripts/assert-changelog-section.sh" 2>&1) && status=0 || status=$?
+expect_status "does not accept [Unreleased] as the section" 1 "$status"
+
+# A 1.5.0 section must not satisfy 1.5.0's neighbour by prefix match.
+printf '1.5.0\n' > "$clfix/VERSION"
+printf '# Changelog\n\n## [1.5.01] - 2026-08-20\n' > "$clfix/CHANGELOG.md"
+out=$("$clfix/scripts/assert-changelog-section.sh" 2>&1) && status=0 || status=$?
+expect_status "does not match a longer version by prefix" 1 "$status"
+rm -rf "$clfix"
+
 echo
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]
