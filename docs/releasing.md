@@ -74,31 +74,38 @@ v1.3.0 and v1.4.0 (TRA-1126, `docs/adr/0004-declared-platform-version.md`).
 ## 1. Open the release PR
 
 **Releasing is a diff.** The platform version is declared in the root `VERSION`
-file, and a release is the one-line change that flips it from `1.5.0-dev` to
-`1.5.0`. There is no tag to push and no ordering to get right: **the merge build
+file, and a release is the one-line change that flips it from `X.Y.Z-dev` to
+`X.Y.Z`. There is no tag to push and no ordering to get right: **the merge build
 IS the release build**, and CI produces the git tag as an *output* of it.
+
+Substitute the version you are cutting throughout — `cat VERSION` tells you
+which one that is, minus the `-dev`.
 
 ```bash
 git checkout main && git pull
-git checkout -b release/1.5.0
-printf '1.5.0\n' > VERSION
-# move the shipping items from [Unreleased] into a new ## [1.5.0] - YYYY-MM-DD
+cat VERSION                             # e.g. X.Y.Z-dev -> you are cutting X.Y.Z
+git checkout -b release/X.Y.Z
+printf 'X.Y.Z\n' > VERSION
+# move the shipping items from [Unreleased] into a new ## [X.Y.Z] - YYYY-MM-DD
 $EDITOR CHANGELOG.md
-just check-changelog        # the gate CI will run
-git commit -am "release: 1.5.0"
-gh pr create --base main --title "release: 1.5.0"
+just check-changelog                    # the gate CI will run
+git commit -am "release: X.Y.Z"
+gh pr create --base main --title "release: X.Y.Z"
 ```
+
+Pasting the block verbatim fails loudly rather than quietly: `X.Y.Z` is not
+semver, so `just check-changelog` and the image build both refuse it.
 
 The PR runs the four required checks — `build`, `lint-test`, `api-spec` and
 `main contract-tests must be green`. `lint-test` carries the changelog gate.
 
 **On merge**, the `release` job in `docker-build.yml`:
 
-1. reads `VERSION`, sees a clean `1.5.0`,
-2. creates the git tag `v1.5.0` at the merge commit,
-3. publishes `ghcr.io/trakrf/backend:v1.5.0` from the manifest that build just
+1. reads `VERSION`, sees a clean `X.Y.Z`,
+2. creates the git tag `vX.Y.Z` at the merge commit,
+3. publishes `ghcr.io/trakrf/backend:vX.Y.Z` from the manifest that build just
    pushed,
-4. opens a follow-up PR bumping `VERSION` to `1.6.0-dev`.
+4. opens a follow-up PR bumping `VERSION` to the next minor `-dev`.
 
 All of it is idempotent. A re-run finds the tag already at that commit and
 republishes the image tag only, which is also how a run that minted the tag and
@@ -117,19 +124,20 @@ Merging deploys nothing. Step 2 is still a separate, manual act.
 
 ### Merge the bump-back promptly
 
-Until the `1.6.0-dev` PR lands, `main` still declares a clean `1.5.0`, so every
-ordinary merge builds an image carrying a clean `v1.5.0` label. Those images are
+Until the bump-back PR lands, `main` still declares a clean `X.Y.Z`, so every
+ordinary merge builds an image carrying a clean `vX.Y.Z` label. Those images are
 **not** promotable — `assert-release-commit.sh` requires the promoted image to
-be the exact commit `v1.5.0` names — but the window is untidy and the release
+be the exact commit `vX.Y.Z` names — but the window is untidy and the release
 job logs a `stale` warning on every merge inside it. Merge the bump-back.
 
 ### Hotfixes
 
-A patch on a shipped release branches from its tag rather than from main:
+A patch on a shipped release branches from its tag rather than from main, and
+sets `VERSION` to the next patch of that line:
 
 ```bash
-git checkout -b release/1.4.x v1.4.0
-printf '1.4.1\n' > VERSION
+git checkout -b release/X.Y.x vX.Y.Z
+printf 'X.Y.<Z+1>\n' > VERSION
 ```
 
 `resolve-promote-source.sh` currently requires the source be an ancestor of
@@ -152,7 +160,7 @@ ships as the next patch version.
 Run the **Promote to prod** workflow, with `source` set to the release tag:
 
 ```bash
-gh workflow run promote-prod.yml -f source=v1.5.0
+gh workflow run promote-prod.yml -f source=vX.Y.Z
 ```
 
 `source` resolves a release tag, a branch, a full SHA or a `sha-xxxxxxx` image
@@ -304,7 +312,7 @@ Promotion is a manifest re-tag, so rolling back is the same operation aimed at
 the previous release tag:
 
 ```bash
-gh workflow run promote-prod.yml -f source=v1.2.0
+gh workflow run promote-prod.yml -f source=v<previous>
 ```
 
 **Migrations do not roll back with it.** A schema change already applied stays

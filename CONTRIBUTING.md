@@ -205,7 +205,7 @@ The shape of it:
    `## [Unreleased]` into a new `## [X.Y.Z] - YYYY-MM-DD` section of
    `CHANGELOG.md`. `lint-test` fails the PR if the section is missing.
    ```bash
-   printf '1.5.0\n' > VERSION
+   printf 'X.Y.Z\n' > VERSION
    just check-changelog
    ```
 2. **Merge it.** The merge build IS the release build. There is no tag to push
