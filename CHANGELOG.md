@@ -305,7 +305,16 @@ boundary is left unreconstructed rather than guessed at.
 - TRA-578 Public API surface cleanup:
   - `POST/GET/DELETE /api/v1/orgs/{id}/api-keys*` removed from the public OpenAPI spec. Key minting remains browser-mediated by design (see Authentication docs). The endpoints are still implemented and used by the SPA's avatar menu.
   - Renamed scope `scans:read` → `history:read` to align with the `/assets/{id}/history` and `/locations/current` endpoint vocabulary. Existing keys are migrated by `000039_rename_scans_read_scope`. JWTs minted before the migration with a literal `scans:read` claim will return 403 — pre-launch hard cut, no production keys exist.
-  - SPA "Scans" row in the new-key form is renamed to "History" to match the new scope name.
+
+    > **Correction (2026-08-09):** this did not ship as written and does not
+    > describe the system today. The TRA-720 migration re-baseline dropped 44
+    > legacy migrations including `000039_rename_scans_read_scope` (commit
+    > `8cfa3949`), and `671f0779` restored the scope name. The live scope is
+    > **`tracking:read`** — see `models/apikey/apikey.go:17`. The number
+    > `000039` was later reused by `000039_hermetic_stored_functions` in 1.4.0,
+    > which is unrelated.
+
+  - SPA "Scans" row in the new-key form is renamed to "History" to match the new scope name. *(Also superseded — see the correction above.)*
 
 ## [0.1.0] - 2025-10-11
 
