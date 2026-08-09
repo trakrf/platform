@@ -7,6 +7,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-09
+
+Ten days of `main`, one migration (`000039`). Prod moves from `v1.3.0` (schema
+version 38) to schema version 39.
+
+The headline is a data-completeness bug rather than a feature: the Assets
+screen had been fetching only the first 25 assets, and the list, the result
+count, the stat tiles and the CSV/XLSX/PDF exports were all silently truncated
+to that page. Any export taken before this release is incomplete for an
+organization with more than 25 assets.
+
+This is also the first release cut through the guards and runbook added in
+1.3.0's wake (TRA-1085): `promote-prod` now refuses an image whose version is
+not a clean `vX.Y.Z`, and resolves its image tag from a git ref.
+
+### Upgrading
+
+**`POST /api/v1/users` is removed from the public API** (TRA-1103). It was one
+half of an endpoint group that had no authorization at all; see *Security*.
+The path still serves `GET` (superadmin-gated), so a `POST` to it now returns
+`405 Method Not Allowed`. No known integrator uses it. Editing your own
+profile goes through `PATCH /api/v1/users/me` instead (TRA-958).
+
+Migration `000039` is metadata-only — it re-declares the `000010` stored
+functions with an explicit `search_path`. It does not touch data and the
+previous release runs against it unchanged.
+
+### Security
+
+- **`/api/v1/users/{id}` had no authorization whatsoever** (TRA-1103). Any
+  signed-in user could read, edit or delete any user in any organization,
+  across org boundaries. The endpoints are now superadmin-gated, and
+  `POST /api/v1/users` is removed outright rather than gated.
+
+### Added
+
+- **Users can edit their own profile** (TRA-958) — display name and email, via
+  `PATCH /users/me`. Previously there was no UI for this at all.
+- **Windows first-time Bluetooth pairing guidance** (TRA-1100). On Windows the
+  browser's device chooser labels the CS108 "Unknown or unsupported device"
+  next to a bare hex address, and connecting fails. Help now explains that the
+  hex string is the reader's Bluetooth address — printed on the antenna label
+  — and that pairing it once in Settings → Bluetooth & devices makes it list
+  by name.
+- **One consolidated Web Bluetooth support check** (TRA-1078) with
+  platform-specific guidance, including iOS and Bluefy.
+
+### Changed
+
+- **Stored functions are hermetic** (TRA-1076, `000039`) — the `000010`
+  functions now carry an explicit `SET search_path` instead of resolving
+  against the caller's.
+- **Local dev and edge run as non-superuser roles** (TRA-1075), so RLS is
+  actually enforced outside of production.
+- **The migrate preflight catches superuser-owned functions** (TRA-1104)
+  rather than failing mid-migration and leaving the ledger dirty. This is what
+  wedged preview on `000039`.
+- **Reader mode follows the active tab** rather than being forced to Idle on
+  connect (TRA-1101).
+
+### Fixed
+
+- **The Assets screen only ever fetched 25 assets** (TRA-1098) — list, result
+  count, stat tiles, and CSV/XLSX/PDF export all truncated silently to the
+  first page.
+- **React StrictMode duplicated every row on the Assets page** (TRA-1070) via a
+  double-invoked non-idempotent effect.
+- **A saved scan took up to ~2 minutes to appear in Reports** (TRA-1117). The
+  asset-locations report reads the `asset_scan_latest` continuous aggregate,
+  which is `materialized_only` because TimescaleDB will not enable real-time
+  aggregation over an RLS-guarded hypertable. The report now unions a bounded
+  5-minute tail of raw `asset_scans` into the aggregate — idempotent, so the
+  overlap cannot double-count — and saving invalidates the reports query
+  client-side.
+- **Locate could not find a 128-bit EPC, and could report the wrong tag**
+  (TRA-1108). The Scan-tab deep link carried a leading-zero-stripped EPC that
+  re-padded to the wrong width, and the tag mask covered only the leading 96
+  bits, so two tags off one reel produced byte-identical mask sequences.
+  Hardware-confirmed on two 128-bit bench tags.
+- **Locate's first Start click silently failed** with "Cannot start scanning
+  from state Busy" and then reported "No signal" (TRA-1080).
+- **The Locate deep link raced the command mutex** (TRA-1091), logging a
+  spurious hardware ERROR on the primary Locate path.
+- **Blank header titles on Readers, Live Reads and Outputs** (TRA-1082), plus a
+  reintroduced "inventory" in the nav vocabulary.
+
+### Internal
+
+No runtime behaviour: release guards and `docs/releasing.md` (TRA-1085);
+preview composition tests, retiring the up-to-date branch rule (TRA-1094);
+frontend vitest cross-file contamination (TRA-1093); rotted Locate e2e specs
+(TRA-1088); `CLAUDE.md` refresh (TRA-1092); removal of the CSW spec tree.
+
 ## [1.3.0] - 2026-07-30
 
 Eight weeks of `main` promoted to production in one release: 27 migrations
@@ -212,7 +305,16 @@ boundary is left unreconstructed rather than guessed at.
 - TRA-578 Public API surface cleanup:
   - `POST/GET/DELETE /api/v1/orgs/{id}/api-keys*` removed from the public OpenAPI spec. Key minting remains browser-mediated by design (see Authentication docs). The endpoints are still implemented and used by the SPA's avatar menu.
   - Renamed scope `scans:read` → `history:read` to align with the `/assets/{id}/history` and `/locations/current` endpoint vocabulary. Existing keys are migrated by `000039_rename_scans_read_scope`. JWTs minted before the migration with a literal `scans:read` claim will return 403 — pre-launch hard cut, no production keys exist.
-  - SPA "Scans" row in the new-key form is renamed to "History" to match the new scope name.
+
+    > **Correction (2026-08-09):** this did not ship as written and does not
+    > describe the system today. The TRA-720 migration re-baseline dropped 44
+    > legacy migrations including `000039_rename_scans_read_scope` (commit
+    > `8cfa3949`), and `671f0779` restored the scope name. The live scope is
+    > **`tracking:read`** — see `models/apikey/apikey.go:17`. The number
+    > `000039` was later reused by `000039_hermetic_stored_functions` in 1.4.0,
+    > which is unrelated.
+
+  - SPA "Scans" row in the new-key form is renamed to "History" to match the new scope name. *(Also superseded — see the correction above.)*
 
 ## [0.1.0] - 2025-10-11
 
