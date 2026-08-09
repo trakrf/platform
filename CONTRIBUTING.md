@@ -184,8 +184,11 @@ cd tests/api && pnpm test
 
 ## Cutting a Release
 
-TrakRF uses `git describe` for the platform version (TRA-485). A release is
-a single tag push; CI does the rest. See
+TrakRF declares the platform version in the root `VERSION` file (TRA-1126). A
+release is a reviewed one-line diff; CI produces the git tag and the release
+image tag as outputs of the merge build. See
+[`docs/adr/0004-declared-platform-version.md`](docs/adr/0004-declared-platform-version.md)
+for why the version is declared rather than derived, and
 [`docs/adr/0001-platform-vs-api-versioning.md`](docs/adr/0001-platform-vs-api-versioning.md)
 for the three-axis versioning rationale (platform vs API contract vs spec).
 
@@ -197,21 +200,24 @@ Follow it rather than the summary here.
 
 The shape of it:
 
-1. Update `CHANGELOG.md` — move items from `## [Unreleased]` to a new
-   `## [vX.Y.Z] - YYYY-MM-DD` section.
-2. **Tag first, then let the build run.** `APP_VERSION` is `git describe` at
-   *build* time and promoting never rebuilds, so merging and then tagging bakes
-   a dev-shaped version into the image permanently:
+1. **Open a release PR** that does two things and nothing else: flip `VERSION`
+   from `X.Y.Z-dev` to `X.Y.Z`, and move the shipping items from
+   `## [Unreleased]` into a new `## [X.Y.Z] - YYYY-MM-DD` section of
+   `CHANGELOG.md`. `lint-test` fails the PR if the section is missing.
    ```bash
-   git tag vX.Y.Z
-   git push origin vX.Y.Z
+   printf '1.5.0\n' > VERSION
+   just check-changelog
    ```
-3. `.github/workflows/docker-build.yml` triggers on the tag, bakes the version
-   into the backend binary (`-X main.version`) and the frontend bundle
-   (`VITE_APP_VERSION`), and publishes `ghcr.io/trakrf/backend:sha-<short>`.
+2. **Merge it.** The merge build IS the release build. There is no tag to push
+   and no ordering to get right: the version is a property of the commit, so
+   two builds of it cannot disagree.
+3. `.github/workflows/docker-build.yml` bakes the version into the backend
+   binary (`-X main.version`) and the frontend bundle (`VITE_APP_VERSION`),
+   publishes `ghcr.io/trakrf/backend:sha-<short>`, then — in the `release` job —
+   creates the git tag `vX.Y.Z`, publishes `:vX.Y.Z`, and opens the follow-up PR
+   returning `VERSION` to the next `-dev`.
 4. Promote, once that build is green. `promote-prod` re-tags the manifest —
-   there is no rebuild — and refuses an image whose version is not a clean
-   `vX.Y.Z`:
+   there is no rebuild — and refuses any image that is not the release commit:
    ```bash
    gh workflow run promote-prod.yml -f source=vX.Y.Z
    ```
@@ -227,7 +233,7 @@ The shape of it:
 
 | Axis | Source | Bumped when |
 |---|---|---|
-| Platform release | `git tag vX.Y.Z` → `git describe` | A new build is shipped |
+| Platform release | Root `VERSION` file → CI mints `vX.Y.Z` | A new build is shipped |
 | API contract | URL path `/api/v1/` | Breaking change to customer-facing API |
 | OpenAPI spec | `info.version` in `docs/api/openapi.public.{json,yaml}` | Breaking change to spec shape (TRA-672) |
 

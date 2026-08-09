@@ -7,8 +7,12 @@ in a single Linear ticket description, so the next release would have started
 from a blank page. At a weeks-apart cadence that is tolerable; the plan is to
 move to days, where it guarantees drift (TRA-1085).
 
-Two of the mistakes that release hit are now enforced rather than documented —
-see [What the guards enforce](#what-the-guards-enforce). The rest is here.
+The mistakes those releases hit are now enforced rather than documented — see
+[What the guards enforce](#what-the-guards-enforce). The rest is here.
+
+The version itself is declared in the root `VERSION` file rather than derived
+from `git describe`, which is what removed the ordering hazard that broke
+v1.3.0 and v1.4.0 (TRA-1126, `docs/adr/0004-declared-platform-version.md`).
 
 ---
 
@@ -59,81 +63,87 @@ see [What the guards enforce](#what-the-guards-enforce). The rest is here.
       > **On TRA-1105 landing:** delete this block and change the `-- via:`
       > comment above to the working `just psql prod "<query>"` form.
 
-- [ ] **Cut the changelog section.** `CHANGELOG.md` gets a real `[X.Y.Z]`
+- [ ] **Draft the changelog section.** `CHANGELOG.md` gets a real `[X.Y.Z]`
       section, and anything under `[Unreleased]` that is actually shipping moves
-      into it. Nothing enforces this yet (TRA-1085 item 4 is unbuilt), and it
-      had drifted so far by v1.3.0 that no release before it had a section at
-      all.
+      into it. This is **enforced** as of TRA-1126 — `lint-test` fails a PR that
+      flips `VERSION` to a clean `X.Y.Z` without the matching `## [X.Y.Z]`
+      heading (TRA-1085 item 4). Run it locally with `just check-changelog`.
 
 ---
 
-## 1. Tag first, then let the build run
+## 1. Open the release PR
 
-**Order matters, and it is the opposite of the instinct.**
-
-`APP_VERSION` is `git describe --tags` evaluated **at image build time**, and
-promoting to prod is a pure manifest re-tag with no rebuild. So merging and
-*then* tagging bakes a dev-shaped version — `v1.2.0-559-gaa9822bb` — into the
-image permanently. Tagging afterwards changes nothing, because nothing rebuilds.
-`/health` would report that string for the entire life of the release.
+**Releasing is a diff.** The platform version is declared in the root `VERSION`
+file, and a release is the one-line change that flips it from `1.5.0-dev` to
+`1.5.0`. There is no tag to push and no ordering to get right: **the merge build
+IS the release build**, and CI produces the git tag as an *output* of it.
 
 ```bash
 git checkout main && git pull
-git tag v1.3.0
-git push origin v1.3.0
+git checkout -b release/1.5.0
+printf '1.5.0\n' > VERSION
+# move the shipping items from [Unreleased] into a new ## [1.5.0] - YYYY-MM-DD
+$EDITOR CHANGELOG.md
+just check-changelog        # the gate CI will run
+git commit -am "release: 1.5.0"
+gh pr create --base main --title "release: 1.5.0"
 ```
 
-Pushing the tag triggers **Docker Build and Push** on `refs/tags/v1.3.0`
-(TRA-1085 added the `v*` trigger). That build re-resolves `git describe` against
-the tag itself and republishes the `sha-<short>` tag with a clean `v1.3.0`
-version.
+The PR runs the four required checks — `build`, `lint-test`, `api-spec` and
+`main contract-tests must be green`. `lint-test` carries the changelog gate.
 
-Wait for it to finish before promoting. Neither floating tag is affected —
-`latest` is gated on the default branch and `preview` on `refs/heads/preview`,
-both false on a tag.
+**On merge**, the `release` job in `docker-build.yml`:
 
-> Before TRA-1085 the recovery for getting this order wrong was to tag and then
-> manually **re-run** the main build so `describe` re-resolved. That worked, but
-> it was folklore. You should not need it now; if you do, it still works.
+1. reads `VERSION`, sees a clean `1.5.0`,
+2. creates the git tag `v1.5.0` at the merge commit,
+3. publishes `ghcr.io/trakrf/backend:v1.5.0` from the manifest that build just
+   pushed,
+4. opens a follow-up PR bumping `VERSION` to `1.6.0-dev`.
 
-### Wait for main's build too — `sha-<short>` is not immutable
+All of it is idempotent. A re-run finds the tag already at that commit and
+republishes the image tag only, which is also how a run that minted the tag and
+then died repairs itself.
 
-**Hit live on v1.4.0 (TRA-1125).** If you merge a PR and tag the merge commit
-promptly, you get **two** builds of that one commit — one on `refs/heads/main`
-from the merge, one on `refs/tags/vX.Y.Z` from your tag. Both publish the same
-`sha-<short>` image tag, and the concurrency group is keyed on `github.ref`, so
-they do **not** serialize. Whichever finishes last wins.
+Merging deploys nothing. Step 2 is still a separate, manual act.
 
-When main finishes last, it overwrites the clean version with a `git describe`
-dev shape and the promote refuses:
+> **Why this replaces "tag first, then let the build run".** `APP_VERSION` used
+> to be `git describe` evaluated at build time, so merging and *then* tagging
+> baked a dev-shaped version into the image permanently (v1.3.0), and tagging
+> *first* produced two builds of one commit racing on the shared `sha-<short>`
+> tag (v1.4.0, TRA-1125). Both failure modes were properties of deriving the
+> version from ref topology. It is now declared in the commit, so two builds of
+> one commit produce byte-identical version metadata and nothing has to
+> serialize. See `docs/adr/0004-declared-platform-version.md`.
 
-```
-Image reports version: v1.3.0-99-g85e46284
-Refusing to promote an image whose version is 'v1.3.0-99-g85e46284'.
-```
+### Merge the bump-back promptly
 
-That refusal is the guard working. Nothing reached `:prod`.
+Until the `1.6.0-dev` PR lands, `main` still declares a clean `1.5.0`, so every
+ordinary merge builds an image carrying a clean `v1.5.0` label. Those images are
+**not** promotable — `assert-release-commit.sh` requires the promoted image to
+be the exact commit `v1.5.0` names — but the window is untidy and the release
+job logs a `stale` warning on every merge inside it. Merge the bump-back.
 
-Before promoting, confirm **no build is still in flight**, then read the version
-straight off the registry:
+### Hotfixes
+
+A patch on a shipped release branches from its tag rather than from main:
 
 ```bash
-gh run list --workflow=docker-build.yml --status in_progress   # expect none
-docker buildx imagetools inspect --format '{{ json .Image }}' \
-  ghcr.io/trakrf/backend:sha-$(git rev-parse --short=7 vX.Y.Z^{commit}) \
-  | ./scripts/extract-image-version.sh                          # expect vX.Y.Z
+git checkout -b release/1.4.x v1.4.0
+printf '1.4.1\n' > VERSION
 ```
 
-Note `extract-image-version.sh` reads its JSON on **stdin** — it does not take
-an image reference as an argument. Passing one makes it read an empty stdin and
-print nothing, which looks exactly like a missing label.
+`resolve-promote-source.sh` currently requires the source be an ancestor of
+`origin/main`, which a `release/*` head is not; the rule wants restating as
+*promotable = ancestor of main or of a `release/*` head*, and the auto-tag
+trigger wants extending to `release/*`. Decided, not built — this is the shape
+to build at the first real hotfix, not a thing to improvise under pressure.
 
-**Recovery:** once main's build has finished, re-run the tag build
-(`gh run rerun <tag-run-id>`) and re-check. Do not re-tag.
+### If a release is reverted
 
-Because the winner depends on timing, a release can pass this step one day and
-fail it the next. TRA-1125 tracks removing the shared mutable tag from the
-release path.
+A revert does not remove the release commit from main's ancestry, so the tag
+and the image stay valid and promote still accepts them — correctly; the
+artifact is immutable history. **A reverted release is never promoted.** The fix
+ships as the next patch version.
 
 ---
 
@@ -142,25 +152,30 @@ release path.
 Run the **Promote to prod** workflow, with `source` set to the release tag:
 
 ```bash
-gh workflow run promote-prod.yml -f source=v1.3.0
+gh workflow run promote-prod.yml -f source=v1.5.0
 ```
 
-`source` accepts a release tag, a branch, or a full SHA, and resolves the image
-tag itself. Leave it empty to promote current `main`. You no longer need to know
-that `git rev-parse --short` returns 8 characters while the registry publishes
-7 — the mismatch that failed the first v1.3.0 promotion outright.
+`source` resolves a release tag, a branch, a full SHA or a `sha-xxxxxxx` image
+tag to an image, but only the release commit itself passes the guards. You no
+longer need to know that `git rev-parse --short` returns 8 characters while the
+registry publishes 7 — the mismatch that failed the first v1.3.0 promotion
+outright.
 
 The workflow refuses, before touching `:prod`, if:
 
 | Refusal | Meaning |
 |---|---|
 | `Cannot resolve '<ref>' to a commit` | Typo, or a ref that does not exist |
-| `not an ancestor of origin/main` | Not a main-derived commit. `preview` is a force-rewritten PR composition and must never reach prod |
+| `not an ancestor of origin/main` | Not a main-derived commit. `preview` is a force-rewritten PR composition and must never reach prod. As of TRA-1126 a raw `sha-xxxxxxx` input gets this check too |
 | `<image>: not found` | The image for that commit was never built, or the build has not finished yet |
-| `Refusing to promote an image whose version is '<x>'` | The image was built **before** the release tag existed. Go back to step 1 |
+| `Refusing to promote an image whose version is '<x>'` | Not a release build. `VERSION` carries `-dev` outside a release, so this is a preview or in-development image |
+| `there is no git tag <vX.Y.Z>` | The image was built while `VERSION` was clean but is not the release commit — see the bump-back window in step 1 |
+| `it is not the <vX.Y.Z> release commit` | Same window, tag present. Promote the release tag itself rather than a later main commit |
+| `Cannot bind 'latest' to a commit` | `latest` names an image and no commit, so it cannot be checked against the release tag. Name the tag |
 
-An empty version in that last message means the image predates the
-`id.trakrf.app-version` label — rebuild it from a tagged commit.
+An empty version in the "whose version is" message means the image predates the
+`id.trakrf.app-version` label — rebuild it from a commit that declares a release
+`VERSION`.
 
 ---
 
@@ -306,22 +321,33 @@ numbered migration. Applied migrations are immutable and CI enforces it
 
 ## What the guards enforce
 
-Two of the v1.3.0 mistakes are now unshippable rather than documented
-(TRA-1085):
+Every mistake that has bitten a release is now unshippable rather than
+documented (TRA-1085, TRA-1126):
 
+- **The version cannot be derived, injected, or disagree with itself.** The
+  Dockerfile `COPY`s `VERSION` and derives the version from it. A build that
+  passes an `APP_VERSION` disagreeing with the file **fails**. Both arches of a
+  multi-arch build read the same file, so they cannot diverge.
 - **`promote-prod` refuses an image whose version is not a clean `vX.Y.Z`.** The
   version is read back off the registry from the `id.trakrf.app-version` OCI
-  label stamped by the Dockerfile. This is what makes step 1's ordering
-  self-enforcing.
+  label. `VERSION` carries `-dev` outside a release, so no preview and no
+  in-development main build can pass.
+- **`promote-prod` refuses a clean image that is not the release commit.** The
+  git tag is minted once, at one commit; the promoted image must be that commit.
+  This is what makes the bump-back window safe rather than merely short.
 - **`promote-prod` resolves its source from a git ref**, so the 7-vs-8 character
-  short-SHA convention is no longer knowledge the operator has to carry.
+  short-SHA convention is no longer knowledge the operator has to carry — and a
+  raw `sha-xxxxxxx` input is ancestry-checked like any other ref rather than
+  waved through.
+- **A release cannot be cut without its `CHANGELOG.md` section.** `lint-test`
+  fails a PR that flips `VERSION` clean without the matching `## [X.Y.Z]`
+  heading (TRA-1085 item 4, built under TRA-1126).
+- **A version cannot be released twice.** The release job refuses to re-point a
+  tag; a `VERSION` that names an already-released version mints nothing.
 
-Both live in `scripts/` with tests (`just test-release-guards`) rather than
-inline in workflow YAML, because this is exactly the class of logic that was
-wrong in production.
-
-Still **not** enforced: nothing fails a release tag that has no matching
-`CHANGELOG.md` section (TRA-1085 item 4).
+All of it lives in `scripts/` with tests (`just test-release-guards`) rather
+than inline in workflow YAML, because this is exactly the class of logic that
+was wrong in production.
 
 ## A note on prod-mutating ops recipes
 
