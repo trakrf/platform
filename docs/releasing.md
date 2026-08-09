@@ -29,13 +29,26 @@ see [What the guards enforce](#what-the-guards-enforce). The rest is here.
       days earlier:
 
       ```sql
-      -- via: just psql prod
+      -- via: just psql prod  (interactive session; paste both statements)
       SELECT schemaname FROM pg_tables WHERE tablename = 'schema_migrations';
       SELECT version, dirty FROM trakrf.schema_migrations;
       ```
 
       Expect exactly one row from the first query. If it says `public`, you are
       on a pre-TRA-1069 database and step 4 applies in full.
+
+      `just psql ENV` takes no query argument — it only opens an interactive
+      shell, so the statements above cannot be run non-interactively as written
+      (`just psql prod -c "…"` fails with ``Justfile does not contain recipe
+      `-c` ``). Until **TRA-1105** adds a query form, a scripted read has to go
+      through the pod directly, which connects as **superuser** — fine for the
+      read-only checks in this runbook, but never run DDL through it (TRA-1105
+      explains why: superuser-owned objects become un-migratable).
+
+      ```bash
+      kubectl -n trakrf-prod exec trakrf-db-prod-1 -- \
+        psql -U postgres -d trakrf -c "SELECT version, dirty FROM trakrf.schema_migrations;"
+      ```
 
 - [ ] **Cut the changelog section.** `CHANGELOG.md` gets a real `[X.Y.Z]`
       section, and anything under `[Unreleased]` that is actually shipping moves
@@ -63,8 +76,8 @@ git push origin v1.3.0
 
 Pushing the tag triggers **Docker Build and Push** on `refs/tags/v1.3.0`
 (TRA-1085 added the `v*` trigger). That build re-resolves `git describe` against
-the tag itself and republishes the same immutable `sha-<short>` tag with a clean
-`v1.3.0` version.
+the tag itself and republishes the `sha-<short>` tag with a clean `v1.3.0`
+version.
 
 Wait for it to finish before promoting. Neither floating tag is affected —
 `latest` is gated on the default branch and `preview` on `refs/heads/preview`,
@@ -73,6 +86,45 @@ both false on a tag.
 > Before TRA-1085 the recovery for getting this order wrong was to tag and then
 > manually **re-run** the main build so `describe` re-resolved. That worked, but
 > it was folklore. You should not need it now; if you do, it still works.
+
+### Wait for main's build too — `sha-<short>` is not immutable
+
+**Hit live on v1.4.0 (TRA-1125).** If you merge a PR and tag the merge commit
+promptly, you get **two** builds of that one commit — one on `refs/heads/main`
+from the merge, one on `refs/tags/vX.Y.Z` from your tag. Both publish the same
+`sha-<short>` image tag, and the concurrency group is keyed on `github.ref`, so
+they do **not** serialize. Whichever finishes last wins.
+
+When main finishes last, it overwrites the clean version with a `git describe`
+dev shape and the promote refuses:
+
+```
+Image reports version: v1.3.0-99-g85e46284
+Refusing to promote an image whose version is 'v1.3.0-99-g85e46284'.
+```
+
+That refusal is the guard working. Nothing reached `:prod`.
+
+Before promoting, confirm **no build is still in flight**, then read the version
+straight off the registry:
+
+```bash
+gh run list --workflow=docker-build.yml --status in_progress   # expect none
+docker buildx imagetools inspect --format '{{ json .Image }}' \
+  ghcr.io/trakrf/backend:sha-$(git rev-parse --short=7 vX.Y.Z^{commit}) \
+  | ./scripts/extract-image-version.sh                          # expect vX.Y.Z
+```
+
+Note `extract-image-version.sh` reads its JSON on **stdin** — it does not take
+an image reference as an argument. Passing one makes it read an empty stdin and
+print nothing, which looks exactly like a missing label.
+
+**Recovery:** once main's build has finished, re-run the tag build
+(`gh run rerun <tag-run-id>`) and re-check. Do not re-tag.
+
+Because the winner depends on timing, a release can pass this step one day and
+fail it the next. TRA-1125 tracks removing the shared mutable tag from the
+release path.
 
 ---
 
@@ -192,11 +244,23 @@ not a corrupted schema.
       CALL refresh_continuous_aggregate('trakrf.asset_scan_latest', NULL, NULL);
       ```
 
-- [ ] **`/health` reports the new version** — a clean `vX.Y.Z`, matching the tag:
+- [ ] **All three version surfaces report the new version** — a clean `vX.Y.Z`,
+      matching the tag. They share one source (`Dockerfile` stage 0 writes
+      `/version` once; the Go `-ldflags` and Vite's `VITE_APP_VERSION` both read
+      it), so they cannot disagree *within* an image — but a **stale cached
+      frontend bundle** can still serve the old UI against a new backend, and
+      `/health` alone cannot see that.
 
       ```bash
-      curl -s https://app.trakrf.id/health | jq '{version, commit, built}'
+      curl -s https://app.trakrf.id/health       | jq '{version, commit, built}'
+      curl -s https://app.trakrf.id/version.json
       ```
+
+      Third surface is the UI itself: the version sits in the **sidebar header**
+      under "Handheld Tag Reader" (`TabNavigation.tsx:174`) and on Settings
+      (`SettingsScreen.tsx:352`, `:440`). The sidebar is collapsed by default —
+      open the menu or you will find no version string and think it is missing.
+      A UI/`version.json` mismatch means a cached bundle, not a build problem.
 
 - [ ] **Spot-check the real customers.** Confirm base asset management is
       untouched for each — that is the surface no release is allowed to disturb.
