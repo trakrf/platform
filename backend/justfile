@@ -382,14 +382,15 @@ vendor:
 # Build backend binary with version + build metadata injection (regenerates
 # internal spec first). version, commit, tag, and build_time surface at /health
 # so operators can tell which SHA is running — see TRA-481, TRA-485.
-# Platform version (main.version) is derived from `git describe` so local
-# builds report the same shape as CI builds; no hardcoded literal to drift.
+# Platform version (main.version) is read from the root VERSION file so a local
+# build reports the same declared version as a CI build (TRA-1126). `tag` stays
+# `git describe` — it is provenance, not the product version.
 build: api-spec
     #!/usr/bin/env bash
     set -euo pipefail
     COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
     TAG=$(git describe --tags --match 'v*' --always --dirty 2>/dev/null || echo "dev")
-    APP_VERSION="${TAG}"
+    APP_VERSION=$(../scripts/build-version.sh)
     BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     go build -ldflags "-X main.version=${APP_VERSION} -X main.commit=${COMMIT} -X main.tag=${TAG} -X main.buildTime=${BUILD_TIME}" -o bin/trakrf .
 

@@ -1,28 +1,53 @@
 # Stage 0: Build Metadata
-# Resolves the deployed commit, tag, and platform version from one of two sources:
-#   1. Explicit caller --build-arg COMMIT_SHA / BUILD_TAG / APP_VERSION (GHA path,
-#      see .github/workflows/docker-build.yml — passes github.sha, meta tag, and
-#      `git describe --tags --always --dirty`).
-#   2. Railway-provided RAILWAY_GIT_COMMIT_SHA / RAILWAY_GIT_BRANCH. Railway
-#      injects these into the build environment for any ARG declared with a
-#      matching name (per https://docs.railway.com/guides/dockerfiles), so no
-#      railway.json dockerBuildArgs indirection is needed.
-# Explicit args win; Railway args are the fallback; "unknown"/"dev" if neither.
-# Platform version (TRA-485): APP_VERSION is the single source of truth, fed
-# into both the Go binary (-X main.version) and the frontend (VITE_APP_VERSION).
-# Railway can't run `git describe` during build (only env vars are injected),
-# so we fall back to RAILWAY_GIT_BRANCH — preview UI then shows the branch
-# name instead of a full describe, which is acceptable for non-prod surfaces.
-# TRA-760 F2, TRA-485.
+# Resolves the deployed commit, tag, and platform version.
+#
+# Platform version (TRA-485, redesigned by TRA-1126): the version is DECLARED in
+# the root VERSION file and COPY'd in here — not derived from git ref topology,
+# and not chosen by the caller. That is what makes it a property of the commit:
+# identical for both arches of a multi-arch build, identical for CI, a local
+# `docker build` and Railway, and unchanged by a re-run after CI mints the
+# release tag. `git describe` used to fill this role and broke three releases
+# doing it — see docs/adr/0004-declared-platform-version.md.
+#
+# VERSION_SUFFIX is appended for builds that are not a plain build of the
+# commit: docker-build.yml passes `-preview+419+420` on the preview branch so
+# the UI names the PRs in that composition (TRA-851) and a non-technical viewer
+# can tell preview's release line from prod's. It can only make a version LESS
+# clean, never more.
+#
+# APP_VERSION survives as an explicit dev override and as the value stamped into
+# the OCI label further down (a LABEL cannot read a file). If it is set and
+# disagrees with the declared version, this stage FAILS the build rather than
+# shipping an image whose label and /health disagree.
+#
+# COMMIT_SHA / BUILD_TAG still come from the caller, falling back to Railway's
+# injected RAILWAY_* args — Railway sets these for any ARG declared with a
+# matching name (per https://docs.railway.com/guides/dockerfiles), so no
+# railway.json dockerBuildArgs indirection is needed — then to "unknown"/"dev".
+# TRA-760 F2, TRA-485, TRA-1126.
 FROM alpine:3.20 AS build-meta
 ARG COMMIT_SHA=
 ARG BUILD_TAG=
 ARG APP_VERSION=
+ARG VERSION_SUFFIX=
 ARG RAILWAY_GIT_COMMIT_SHA=
 ARG RAILWAY_GIT_BRANCH=
-RUN printf '%s' "${COMMIT_SHA:-${RAILWAY_GIT_COMMIT_SHA:-unknown}}" > /commit && \
-    printf '%s' "${BUILD_TAG:-${RAILWAY_GIT_BRANCH:-dev}}" > /tag && \
-    printf '%s' "${APP_VERSION:-${BUILD_TAG:-${RAILWAY_GIT_BRANCH:-dev}}}" > /version
+COPY VERSION /VERSION
+RUN set -eu; \
+    declared=$(tr -d '[:space:]' < /VERSION); \
+    if ! echo "${declared}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then \
+      echo "VERSION is '${declared}', which is not bare semver (e.g. 1.5.0-dev)." >&2; \
+      exit 1; \
+    fi; \
+    version="v${declared}${VERSION_SUFFIX}"; \
+    if [ -n "${APP_VERSION}" ] && [ "${APP_VERSION}" != "${version}" ]; then \
+      echo "APP_VERSION build-arg is '${APP_VERSION}' but this commit declares '${version}'." >&2; \
+      echo "The platform version is a property of the commit (TRA-1126); it cannot be injected." >&2; \
+      exit 1; \
+    fi; \
+    printf '%s' "${COMMIT_SHA:-${RAILWAY_GIT_COMMIT_SHA:-unknown}}" > /commit; \
+    printf '%s' "${BUILD_TAG:-${RAILWAY_GIT_BRANCH:-dev}}" > /tag; \
+    printf '%s' "${version}" > /version
 
 # Stage 1: Frontend Builder
 FROM node:24-alpine AS frontend-builder
@@ -68,9 +93,10 @@ WORKDIR /app/backend
 
 # Build-time metadata injected via -ldflags so /health can report the
 # deployed commit + platform version. Values come from build-meta;
-# main.version is sourced from /version (git-describe at CI time per
-# TRA-485) so /health and the frontend nav header stay in sync.
-# TRA-760 F2, TRA-485.
+# main.version is sourced from /version, which build-meta derives from the
+# committed VERSION file (TRA-1126), so /health, the frontend nav header and
+# the OCI label all report one string for a given commit.
+# TRA-760 F2, TRA-485, TRA-1126.
 COPY --from=build-meta /commit /tag /version /tmp/buildinfo/
 
 # Copy go.mod for layer caching
@@ -125,22 +151,23 @@ RUN apk --no-cache add ca-certificates
 
 # TRA-1085: republish the platform version as an OCI label so it can be read
 # straight off the registry with `docker buildx imagetools inspect`, without
-# pulling and running the image. promote-prod uses it to refuse an image whose
-# version isn't a clean vX.Y.Z — i.e. one built before its release tag existed.
-# Until now APP_VERSION survived only as a Go -ldflags value inside the binary,
-# which is unreadable from a manifest.
+# pulling and running the image. promote-prod uses it to refuse an image that is
+# not a release build. Until TRA-1085 the version survived only as a Go -ldflags
+# value inside the binary, which is unreadable from a manifest.
 #
 # Deliberately NOT org.opencontainers.image.version: docker/metadata-action
 # already emits that key holding the image *tag* (sha-aa9822b), and
 # build-push-action applies its labels after this one, so the value here would
 # be silently overwritten with the wrong thing.
 #
-# The fallback chain is copied from build-meta's /version above so the label and
-# what /health reports can never disagree.
+# A LABEL cannot read a file, so this is the one place the version arrives as a
+# build-arg. It still cannot disagree with /health: build-meta above FAILS the
+# build when APP_VERSION is set and differs from the declared VERSION. A build
+# that passes no APP_VERSION — a bare local `docker build`, or Railway — gets an
+# empty label and is therefore unpromotable, which is the correct fail-closed
+# behaviour: promotable images come from CI. TRA-1126.
 ARG APP_VERSION=
-ARG BUILD_TAG=
-ARG RAILWAY_GIT_BRANCH=
-LABEL id.trakrf.app-version="${APP_VERSION:-${BUILD_TAG:-${RAILWAY_GIT_BRANCH:-dev}}}"
+LABEL id.trakrf.app-version="${APP_VERSION}"
 
 WORKDIR /app
 
