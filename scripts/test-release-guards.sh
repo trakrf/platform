@@ -85,7 +85,7 @@ expect_status "refuses a missing argument" 1 $?
 
 out=$("$assert" v1.2.0-559-gaa9822bb 2>&1)
 expect "names the offending version" "v1.2.0-559-gaa9822bb" "$out"
-expect "explains the likely cause" "before the release tag existed" "$out"
+expect "explains the likely cause" "deliberately unpromotable" "$out"
 
 out=$("$assert" v1.3.0 2>&1)
 expect "echoes the accepted version" "v1.3.0" "$out"
@@ -149,10 +149,23 @@ else
     pass=$((pass + 1))
 fi
 
-# Backwards compatibility: the old input contract passed the image tag directly.
+# Finding 3 (TRA-1126): a raw sha- input used to be waved through unchecked, on
+# the wrong belief that an image tag cannot be ancestry-checked. sha-<hex> IS
+# the git short sha, so it resolves and is checked like any other ref. Before
+# TRA-1126 this mattered little because preview versions were always
+# describe-shaped; with a declared VERSION an OPEN release PR puts a clean
+# `1.5.0` into the preview composition, and its sha- tag was promotable.
+out=$(cd "$fixture" && "$resolve" "sha-${main_sha:0:7}" 2>&1) && status=0 || status=$?
+expect_status "accepts a sha- tag naming a main commit" 0 "$status"
+expect "sha- tag round-trips to itself" "$main_short" "$out"
+
+side_sha=$(git -C "$fixture" rev-parse sidebranch)
+out=$(cd "$fixture" && "$resolve" "sha-${side_sha:0:7}" 2>&1) && status=0 || status=$?
+expect_status "refuses a sha- tag for a commit not on main" 1 "$status"
+expect "says why the sha- tag was refused" "not an ancestor" "$out"
+
 out=$(cd "$fixture" && "$resolve" sha-abc1234 2>&1) && status=0 || status=$?
-expect_status "passes an existing sha- image tag through" 0 "$status"
-expect "sha- tag unchanged" "sha-abc1234" "$out"
+expect_status "refuses a sha- tag that resolves to nothing" 1 "$status"
 
 out=$(cd "$fixture" && "$resolve" latest 2>&1) && status=0 || status=$?
 expect_status "passes latest through" 0 "$status"
@@ -371,6 +384,38 @@ expect "reports none for a malformed version" "none" "$out"
 
 out=$(cd "$fixture" && "$action" 1.4.0 "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" 2>&1) && status=0 || status=$?
 expect_status "refuses an unresolvable commit" 1 "$status"
+
+# ---------------------------------------------------------------------------
+echo
+echo "assert-release-commit.sh"
+# ---------------------------------------------------------------------------
+bind="$repo_root/scripts/assert-release-commit.sh"
+
+# Finding 4 (TRA-1126): between the release merge and the bump-back landing,
+# every ordinary merge to main builds an image labelled clean v1.3.0. The label
+# alone is therefore no longer proof; the image must be the tagged commit.
+out=$(cd "$fixture" && "$bind" v1.3.0 "$main_short" 2>&1) && status=0 || status=$?
+expect_status "accepts the image built from the tagged commit" 0 "$status"
+
+prev_sha=$(git -C "$fixture" rev-parse main~1)
+out=$(cd "$fixture" && "$bind" v1.3.0 "sha-${prev_sha:0:7}" 2>&1) && status=0 || status=$?
+expect_status "refuses a clean label on a commit the tag does not name" 1 "$status"
+expect "names the offending image commit" "${prev_sha:0:7}" "$out"
+
+out=$(cd "$fixture" && "$bind" v9.9.9 "$main_short" 2>&1) && status=0 || status=$?
+expect_status "refuses a version with no git tag at all" 1 "$status"
+expect "says the tag is missing" "no git tag" "$out"
+
+# `latest` names an image, not a commit, so it cannot be bound. Fail closed.
+out=$(cd "$fixture" && "$bind" v1.3.0 latest 2>&1) && status=0 || status=$?
+expect_status "refuses a source that does not name a commit" 1 "$status"
+expect "tells the operator to name the release tag" "name the release tag" "$out"
+
+out=$(cd "$fixture" && "$bind" v1.3.0 2>&1) && status=0 || status=$?
+expect_status "refuses a missing image tag argument" 1 "$status"
+
+out=$(cd "$fixture" && "$bind" "v1.2.0-559-gaa9822bb" "$main_short" 2>&1) && status=0 || status=$?
+expect_status "refuses a non-clean version outright" 1 "$status"
 
 echo
 echo "passed: $pass  failed: $fail"
