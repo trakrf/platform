@@ -75,6 +75,14 @@ export const authApi = {
   resetPassword: (token: string, password: string) =>
     apiClient.post<MessageResponse>('/auth/reset-password', { token, password }),
 
+  // Authenticated rotation (TRA-1130): re-proves the current password, unlike
+  // the token-based reset above.
+  changePassword: (currentPassword: string, newPassword: string) =>
+    apiClient.put<MessageResponse>('/auth/password', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+
   getInvitationInfo: (token: string) =>
     apiClient.get<InvitationInfoResponse>(
       `/auth/invitation-info?token=${encodeURIComponent(token)}`

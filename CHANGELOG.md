@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Authenticated password change (TRA-1130). `PUT /api/v1/auth/password`
+  verifies the current password before storing the new one, and the profile
+  screen grows a "Change password" section. Until now the only way to rotate a
+  password was the forgot-password email flow, which is no help to a user whose
+  mail gateway blocks our sender.
+
 ## [1.4.0] - 2026-08-09
 
 Ten days of `main`, one migration (`000039`). Prod moves from `v1.3.0` (schema
