@@ -53,6 +53,9 @@ const (
 	AuthResetPasswordValidation   = "Validation failed"
 	AuthResetPasswordInvalidToken = "Invalid or expired reset link"
 	AuthResetPasswordFailed       = "Failed to reset password"
+
+	AuthChangePasswordWrongCurrent = "Current password is incorrect"
+	AuthChangePasswordFailed       = "Failed to change password"
 )
 
 const (

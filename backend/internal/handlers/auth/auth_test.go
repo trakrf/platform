@@ -22,6 +22,12 @@ type stubAuthService struct {
 	signupErr    error
 	loginResult  *authmodels.AuthResponse
 	loginErr     error
+
+	changePasswordErr error
+}
+
+func (s *stubAuthService) ChangePassword(_ context.Context, _ int, _ authmodels.ChangePasswordRequest, _ func(string, string) error, _ func(string) (string, error)) error {
+	return s.changePasswordErr
 }
 
 func (s *stubAuthService) Signup(_ context.Context, _ authmodels.SignupRequest, _, _ string, _ func(string) (string, error), _ func(int, string, *int) (string, error)) (*authmodels.AuthResponse, error) {

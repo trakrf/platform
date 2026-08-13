@@ -37,6 +37,7 @@ type authServicer interface {
 	Logout(ctx context.Context, presentedSecret string) error
 	ForgotPassword(ctx context.Context, emailAddr, resetURL string) error
 	ResetPassword(ctx context.Context, token, newPassword string, hashPassword func(string) (string, error)) error
+	ChangePassword(ctx context.Context, userID int, request auth.ChangePasswordRequest, comparePassword func(string, string) error, hashPassword func(string) (string, error)) error
 	AcceptInvitation(ctx context.Context, token string, userID int) (*organization.AcceptInvitationResponse, error)
 	GetInvitationInfo(ctx context.Context, token string) (*auth.InvitationInfoResponse, error)
 	MintAPITokenPair(ctx context.Context, jti string, scopes []string, orgID int, apiKeyID int64, userAgent, ip string) (accessToken, refreshSecret string, expiresIn int, err error)
@@ -252,6 +253,55 @@ func (handler *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		}
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, errors.ErrInternal,
 			apierrors.AuthResetPasswordFailed, middleware.GetRequestID(r.Context()))
+
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, auth.MessageResponse{
+		Message: "Password updated successfully",
+	})
+}
+
+// @Summary Change password
+// @Description Change the authenticated user's password after verifying the current one
+// @Tags auth,internal
+// @Accept json
+// @Produce json
+// @Param request body auth.ChangePasswordRequest true "Current and new password"
+// @Success 200 {object} auth.MessageResponse
+// @Failure 400 {object} errors.ErrorResponse "Wrong current password or validation failure"
+// @Failure 401 {object} errors.ErrorResponse "Not authenticated"
+// @Failure 500 {object} errors.ErrorResponse "Internal server error"
+// @Security SessionAuth
+// @Router /api/v1/auth/password [put]
+func (handler *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.GetUserClaims(r)
+	if claims == nil {
+		httputil.Respond401(w, r, "Authentication required", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	var request auth.ChangePasswordRequest
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.RespondDecodeError(w, r, err, middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	if err := validate.Struct(request); err != nil {
+		httputil.RespondValidationError(w, r, err, middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	err := handler.service.ChangePassword(r.Context(), claims.UserID, request, password.Compare, password.Hash)
+	if err != nil {
+		if stderrors.Is(err, authservice.ErrInvalidCurrentPassword) {
+			httputil.WriteJSONError(w, r, http.StatusBadRequest, errors.ErrBadRequest,
+				apierrors.AuthChangePasswordWrongCurrent, middleware.GetRequestID(r.Context()))
+
+			return
+		}
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, errors.ErrInternal,
+			apierrors.AuthChangePasswordFailed, middleware.GetRequestID(r.Context()))
 
 		return
 	}
@@ -480,4 +530,5 @@ func (handler *Handler) RegisterRoutes(r chi.Router, jwtMiddleware func(http.Han
 
 	// Protected auth routes
 	r.With(jwtMiddleware).Post("/api/v1/auth/accept-invite", handler.AcceptInvite)
+	r.With(jwtMiddleware).Put("/api/v1/auth/password", handler.ChangePassword)
 }

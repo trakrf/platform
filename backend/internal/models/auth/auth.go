@@ -72,6 +72,14 @@ type ResetPasswordRequest struct {
 	Password string `json:"password" validate:"required,min=8"`
 }
 
+// ChangePasswordRequest for PUT /api/v1/auth/password (TRA-1130). The caller
+// is authenticated by JWT; current_password re-proves possession before the
+// rotation, so a hijacked session cannot silently take over the account.
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" validate:"required"`
+	NewPassword     string `json:"new_password" validate:"required,min=8"`
+}
+
 // MessageResponse for simple success/error messages
 type MessageResponse struct {
 	Message string `json:"message"`
