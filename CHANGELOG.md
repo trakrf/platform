@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-08-13
+
+A single-purpose hotfix. No migrations; prod stays at schema version 39.
+
 ### Added
 
 - Authenticated password change (TRA-1130). `PUT /api/v1/auth/password`
