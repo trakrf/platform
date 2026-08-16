@@ -11,6 +11,13 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/scanread"
 )
 
+// ScanGranularity is the resolution of asset location history (TRA-1118):
+// asset_scans timestamps are truncated to this on insert, so the PK
+// (timestamp, org_id, asset_id) keeps at most one row per asset per minute.
+// Hardcoded by product decision — sub-minute history is unnecessary precision,
+// and an org-level knob was rejected as YAGNI.
+const ScanGranularity = time.Minute
+
 // ScanRoute is the routing result for an MQTT topic (TRA-900).
 type ScanRoute struct {
 	OrgID        int
@@ -93,6 +100,12 @@ type ResolvedRead struct {
 	LocationID  *int
 	EPC         string
 	RSSI        int // scanread.Read.RSSI; 0 == parser sentinel for "no usable RSSI"
+	// Stored is true iff this read's asset_scans insert landed a row (TRA-1118).
+	// A false value means the minute bucket already held a row for the asset, so
+	// stored history did not change. Geofence ignores it — presence at the
+	// boundary is its signal either way — but assetevent filters on it so a
+	// conflict-dropped read cannot re-publish the same move for a whole minute.
+	Stored bool
 }
 
 // PersistReads writes asset_scans for parsed reads under org context (RLS).
@@ -106,8 +119,10 @@ type ResolvedRead struct {
 // on the hex value (TRA-944), identical to the handheld getMatchingKey, so a tag
 // registered by its short barcode value resolves the reader's full-width EPC.
 // receivedAt (server time) is authoritative for asset_scans.timestamp; the
-// reader clock is ignored.
+// reader clock is ignored, and the stored timestamp is truncated to
+// ScanGranularity (TRA-1118) so the PK dedups to one row per asset per minute.
 func (s *Storage) PersistReads(ctx context.Context, orgID, scanDeviceID int, tagScanID int64, receivedAt time.Time, reads []scanread.Read) (PersistResult, error) {
+	receivedAt = receivedAt.Truncate(ScanGranularity)
 	res := PersistResult{Dropped: map[string]int{}}
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		for _, rd := range reads {
@@ -173,6 +188,7 @@ func (s *Storage) PersistReads(ctx context.Context, orgID, scanDeviceID int, tag
 			if err != nil {
 				return fmt.Errorf("insert asset_scan: %w", err)
 			}
+			res.Resolved[len(res.Resolved)-1].Stored = ct.RowsAffected() > 0
 			if ct.RowsAffected() == 0 {
 				res.Dropped["conflict"]++
 				continue

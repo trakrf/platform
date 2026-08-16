@@ -305,6 +305,80 @@ func TestPersistReads_UnknownScanPointDropsRead(t *testing.T) {
 	assert.Equal(t, 0, countAssetScans(t, db, orgID))
 }
 
+// TRA-1118: asset_scans stores at most one row per (asset, minute). The PK
+// (timestamp, org_id, asset_id) does the dedup; truncation is the whole change.
+func TestPersistReads_TruncatesTimestampToMinute(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+	dev := registerDevice(t, db, orgID, "cs463-214")
+	registerRFIDTag(t, db, orgID, testEPC)
+
+	receivedAt := time.Date(2026, 8, 16, 6, 24, 47, 123456000, time.UTC)
+	res, err := db.Store.PersistReads(ctx, orgID, dev.ID, 1, receivedAt,
+		[]scanread.Read{{EPC: testEPC, AntennaPort: 1, RSSI: -56}})
+	require.NoError(t, err)
+	require.Equal(t, 1, res.Inserted)
+
+	var stored time.Time
+	require.NoError(t, db.AdminPool.QueryRow(ctx,
+		`SELECT timestamp FROM trakrf.asset_scans WHERE org_id = $1`, orgID).Scan(&stored))
+	assert.True(t, stored.Equal(receivedAt.Truncate(time.Minute)),
+		"stored %v, want minute floor %v", stored, receivedAt.Truncate(time.Minute))
+}
+
+// TRA-1118: a second read of the same asset within the minute — even from a
+// different scan point at a different location — is a conflict no-op. First
+// observed location wins for the minute, and Stored records which read landed.
+func TestPersistReads_SameMinuteSecondReadIsConflict(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+	devA := registerDevice(t, db, orgID, "cs463-a")
+	devB := registerDevice(t, db, orgID, "cs463-b")
+	registerRFIDTag(t, db, orgID, testEPC)
+
+	var locA, locB int
+	require.NoError(t, db.AdminPool.QueryRow(ctx,
+		`INSERT INTO trakrf.locations (org_id, external_key, name) VALUES ($1, 'zone-a', 'Zone A') RETURNING id`,
+		orgID).Scan(&locA))
+	require.NoError(t, db.AdminPool.QueryRow(ctx,
+		`INSERT INTO trakrf.locations (org_id, external_key, name) VALUES ($1, 'zone-b', 'Zone B') RETURNING id`,
+		orgID).Scan(&locB))
+	_, err := db.AdminPool.Exec(ctx,
+		`UPDATE trakrf.scan_points SET location_id = $1 WHERE org_id = $2 AND scan_device_id = $3`,
+		locA, orgID, devA.ID)
+	require.NoError(t, err)
+	_, err = db.AdminPool.Exec(ctx,
+		`UPDATE trakrf.scan_points SET location_id = $1 WHERE org_id = $2 AND scan_device_id = $3`,
+		locB, orgID, devB.ID)
+	require.NoError(t, err)
+
+	base := time.Date(2026, 8, 16, 6, 24, 10, 0, time.UTC)
+	reads := []scanread.Read{{EPC: testEPC, AntennaPort: 1, RSSI: -56}}
+
+	resA, err := db.Store.PersistReads(ctx, orgID, devA.ID, 1, base, reads)
+	require.NoError(t, err)
+	require.Equal(t, 1, resA.Inserted)
+	require.Len(t, resA.Resolved, 1)
+	assert.True(t, resA.Resolved[0].Stored, "the read that landed the row is Stored")
+
+	// 37 seconds later, same minute, different reader/location.
+	resB, err := db.Store.PersistReads(ctx, orgID, devB.ID, 1, base.Add(37*time.Second), reads)
+	require.NoError(t, err)
+	assert.Equal(t, 0, resB.Inserted)
+	assert.Equal(t, 1, resB.Dropped["conflict"])
+	require.Len(t, resB.Resolved, 1, "conflict read still reaches the geofence engine")
+	assert.False(t, resB.Resolved[0].Stored, "conflict read is not Stored")
+
+	// One row, first location wins.
+	var n, gotLoc int
+	require.NoError(t, db.AdminPool.QueryRow(ctx,
+		`SELECT count(*), min(location_id) FROM trakrf.asset_scans WHERE org_id = $1`, orgID).Scan(&n, &gotLoc))
+	assert.Equal(t, 1, n)
+	assert.Equal(t, locA, gotLoc)
+}
+
 func TestPersistReads_DuplicateEPCInBatchDedups(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	ctx := context.Background()
