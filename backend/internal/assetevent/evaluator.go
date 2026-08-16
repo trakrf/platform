@@ -65,16 +65,23 @@ func (e *Evaluator) Evaluate(ctx context.Context, orgID int, _ int64, receivedAt
 	candidates := make(map[int]int, len(reads))
 	for _, rd := range reads {
 		metricEvaluated.Inc()
+		// A conflict-dropped read (TRA-1118): asset_scans already held this
+		// asset's minute bucket, so stored history did not change and emitting
+		// would re-publish the identical move once per message for the rest of
+		// the minute. Counted so flapping stays visible in Prometheus.
+		if !rd.Stored {
+			metricSuppressed.WithLabelValues("not_stored").Inc()
+			continue
+		}
 		// An asset scanned at a scan point with no location cannot have moved
 		// anywhere nameable, so there is nothing to report.
 		if rd.LocationID == nil {
 			metricSuppressed.WithLabelValues("no_location").Inc()
 			continue
 		}
-		// Several reads of one asset in a single message (multiple antennas,
-		// multiple tags on one asset) are one observation. First read wins,
-		// matching which row asset_scans actually kept: the insert is
-		// ON CONFLICT (timestamp, org_id, asset_id) DO NOTHING.
+		// Stored identifies the row asset_scans actually kept — at most one per
+		// asset per message — so this seen-check is defense in depth for
+		// within-message duplicates of that stored read.
 		if _, seen := candidates[rd.AssetID]; seen {
 			continue
 		}
@@ -119,8 +126,16 @@ func (e *Evaluator) evaluate(ctx context.Context, orgID int, at time.Time, candi
 		assetIDs = append(assetIDs, id)
 	}
 
+	// Stored timestamps are truncated to storage.ScanGranularity (TRA-1118) and
+	// PreviousAssetLocations bounds with a strict `timestamp < before`, so the
+	// lookup must use the truncated minute: raw receivedAt sits above the
+	// just-stored bucket, which would then act as its own predecessor and
+	// suppress every genuine move as no_change. (EvaluateScans already passes a
+	// truncated time; Truncate is idempotent.)
+	before := at.Truncate(storage.ScanGranularity)
+
 	start := time.Now()
-	prev, err := e.store.PreviousAssetLocations(ctx, orgID, assetIDs, at)
+	prev, err := e.store.PreviousAssetLocations(ctx, orgID, assetIDs, before)
 	metricLookupSeconds.Observe(time.Since(start).Seconds())
 	if err != nil {
 		// Best-effort: without a trustworthy previous location we would have to
