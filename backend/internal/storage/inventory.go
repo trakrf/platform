@@ -29,6 +29,16 @@ type SaveInventoryResult struct {
 	// unrecoverable from history and evaluating it would emit a phantom or
 	// duplicate move on every same-minute re-save.
 	InsertedAssetIDs []int `json:"-"`
+
+	// OverriddenFrom maps each asset whose upsert UPDATED an existing bucket to
+	// a DIFFERENT location onto the bucket's pre-save location (nil when that
+	// row carried no location). Internal only. Because the update destroys the
+	// old value, this captured provenance is the only way to emit the
+	// fixed-reader-location → handheld-location move the operator just
+	// asserted; the evaluator emits it directly with this explicit origin
+	// instead of a history lookup. Same-location re-saves are absent from the
+	// map — they are not moves.
+	OverriddenFrom map[int]*int `json:"-"`
 }
 
 // InventoryAccessError provides diagnostic context for 403 responses.
@@ -104,6 +114,7 @@ func (s *Storage) SaveInventoryScans(ctx context.Context, orgID int, req SaveInv
 
 	var locationName string
 	var insertedAssetIDs []int
+	overriddenFrom := map[int]*int{}
 	// Minute-truncated like every asset_scans write (TRA-1118): history keeps at
 	// most one row per (asset, minute).
 	timestamp := time.Now().Truncate(ScanGranularity)
@@ -194,20 +205,35 @@ func (s *Storage) SaveInventoryScans(ctx context.Context, orgID int, req SaveInv
 		// xmax = 0 distinguishes a fresh insert from a conflict update: an
 		// updated row carries the deleting-transaction id of its superseded
 		// version. That provenance drives movement-event evaluation above.
-		insertQuery := `INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id, scan_point_id, tag_scan_id)
+		//
+		// The `old` CTE snapshots the bucket's pre-statement location so an
+		// override can emit the move it represents with an explicit origin.
+		// This is provenance, not dedup — the ON CONFLICT clause still owns
+		// race safety (the ticket's WHERE NOT EXISTS warning does not apply);
+		// a read landing between snapshot and conflict merely costs event
+		// fidelity at human frequency, never a constraint violation.
+		insertQuery := `WITH old AS (
+				SELECT location_id FROM trakrf.asset_scans
+				WHERE timestamp = $1 AND org_id = $2 AND asset_id = $3
+			)
+			INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id, scan_point_id, tag_scan_id)
 			VALUES ($1, $2, $3, $4, NULL, NULL)
 			ON CONFLICT (timestamp, org_id, asset_id) DO UPDATE
 			SET location_id = EXCLUDED.location_id,
 			    scan_point_id = EXCLUDED.scan_point_id,
 			    tag_scan_id = EXCLUDED.tag_scan_id
-			RETURNING (xmax = 0)`
+			RETURNING (xmax = 0), (SELECT location_id FROM old)`
 		for _, assetID := range uniqueAssetIDs {
 			var inserted bool
-			if err := tx.QueryRow(ctx, insertQuery, timestamp, orgID, assetID, req.LocationID).Scan(&inserted); err != nil {
+			var oldLocation *int
+			if err := tx.QueryRow(ctx, insertQuery, timestamp, orgID, assetID, req.LocationID).Scan(&inserted, &oldLocation); err != nil {
 				return fmt.Errorf("failed to insert asset scan for asset %d: %w", assetID, err)
 			}
-			if inserted {
+			switch {
+			case inserted:
 				insertedAssetIDs = append(insertedAssetIDs, assetID)
+			case oldLocation == nil || *oldLocation != req.LocationID:
+				overriddenFrom[assetID] = oldLocation
 			}
 		}
 
@@ -220,6 +246,7 @@ func (s *Storage) SaveInventoryScans(ctx context.Context, orgID int, req SaveInv
 
 	return &SaveInventoryResult{
 		InsertedAssetIDs: insertedAssetIDs,
+		OverriddenFrom:   overriddenFrom,
 		Count:            len(uniqueAssetIDs),
 		LocationID:       req.LocationID,
 		LocationName:     locationName,

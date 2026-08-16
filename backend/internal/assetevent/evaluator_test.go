@@ -129,6 +129,49 @@ func TestAllUnstoredReadsEmitNothing(t *testing.T) {
 	require.Empty(t, f.prevAsked, "no previous-location lookup for a no-op message")
 }
 
+// TRA-1118: a same-minute override carries its captured pre-save origin, so it
+// emits directly — no history lookup, which could not know the destroyed value.
+func TestOverrideEmitsWithExplicitOrigin(t *testing.T) {
+	f := newFixture()
+	e, q := newEvaluatorFixture(f)
+
+	at := time.Now()
+	e.EvaluateOverrides(context.Background(), 7, map[int]*int{1: intp(20)}, 10, at)
+
+	require.Len(t, q.events, 1)
+	require.NotNil(t, q.events[0].From)
+	require.Equal(t, 20, q.events[0].From.ID)
+	require.Equal(t, "Bay 3", q.events[0].From.Name)
+	require.Equal(t, 10, q.events[0].To.ID)
+	require.Equal(t, at, q.events[0].OccurredAt)
+	require.Empty(t, f.prevAsked, "explicit origin means no previous-location lookup")
+}
+
+// A bucket whose pre-save row carried no location yields a null origin — a
+// real observation with nowhere nameable, same as the lookup path's semantics.
+func TestOverrideWithNilOriginEmitsNullFrom(t *testing.T) {
+	f := newFixture()
+	e, q := newEvaluatorFixture(f)
+
+	e.EvaluateOverrides(context.Background(), 7, map[int]*int{1: nil}, 10, time.Now())
+
+	require.Len(t, q.events, 1)
+	require.Nil(t, q.events[0].From)
+	require.Equal(t, 10, q.events[0].To.ID)
+}
+
+// Defensive: storage maps only location-changing overrides, but a same-location
+// entry must suppress rather than emit a phantom move.
+func TestOverrideSameLocationIsSuppressed(t *testing.T) {
+	f := newFixture()
+	e, q := newEvaluatorFixture(f)
+
+	e.EvaluateOverrides(context.Background(), 7, map[int]*int{1: intp(10)}, 10, time.Now())
+
+	require.Empty(t, q.events)
+	require.Empty(t, f.namesAsked, "suppressed override does no enrichment")
+}
+
 // TRA-1118: stored timestamps are minute-truncated, and PreviousAssetLocations
 // bounds with a strict `timestamp < before`. The lookup must use the truncated
 // minute — raw receivedAt would let the just-stored bucket (already below it)

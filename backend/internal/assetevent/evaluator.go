@@ -145,14 +145,7 @@ func (e *Evaluator) evaluate(ctx context.Context, orgID int, at time.Time, candi
 		return
 	}
 
-	type move struct {
-		assetID int
-		from    *int
-		to      int
-	}
-	moves := make([]move, 0, len(candidates))
-	locationIDs := make(map[int]struct{}, len(candidates))
-
+	moves := make([]pendingMove, 0, len(candidates))
 	for assetID, to := range candidates {
 		p, seen := prev[assetID]
 		// Absent from the map = genuine first-ever sighting. A prior sighting
@@ -165,18 +158,61 @@ func (e *Evaluator) evaluate(ctx context.Context, orgID int, at time.Time, candi
 		var from *int
 		if seen && p.LocationID != nil {
 			from = p.LocationID
-			locationIDs[*from] = struct{}{}
 		}
-		locationIDs[to] = struct{}{}
-		moves = append(moves, move{assetID: assetID, from: from, to: to})
+		moves = append(moves, pendingMove{assetID: assetID, from: from, to: to})
 	}
+	e.emit(ctx, orgID, at, moves)
+}
+
+// EvaluateOverrides is the same-minute correction path (TRA-1118): a manual
+// save that DO-UPDATEd an existing minute bucket to a different location. The
+// origin is the bucket's captured pre-save location
+// (SaveInventoryResult.OverriddenFrom) — it was destroyed by the update, so no
+// history lookup could recover it; the explicit origin is what makes emitting
+// here safe where a generic evaluation would phantom or duplicate. `at` is the
+// wall-clock correction time, not the bucket floor, so these events order
+// correctly after the same-minute reader event they override.
+func (e *Evaluator) EvaluateOverrides(ctx context.Context, orgID int, from map[int]*int, to int, at time.Time) {
+	if len(from) == 0 {
+		return
+	}
+	moves := make([]pendingMove, 0, len(from))
+	for assetID, f := range from {
+		metricEvaluated.Inc()
+		// Defensive: storage only maps location-changing overrides, but a
+		// same-location entry must never become a phantom move.
+		if f != nil && *f == to {
+			metricSuppressed.WithLabelValues("no_change").Inc()
+			continue
+		}
+		moves = append(moves, pendingMove{assetID: assetID, from: f, to: to})
+	}
+	e.emit(ctx, orgID, at, moves)
+}
+
+// pendingMove is a detected location change awaiting name enrichment.
+type pendingMove struct {
+	assetID int
+	from    *int
+	to      int
+}
+
+// emit enriches detected moves with asset/location names and enqueues them —
+// the shared tail of evaluate (lookup-diffed moves) and EvaluateOverrides
+// (explicit-origin moves).
+func (e *Evaluator) emit(ctx context.Context, orgID int, at time.Time, moves []pendingMove) {
 	if len(moves) == 0 {
 		return
 	}
 
+	locationIDs := make(map[int]struct{}, len(moves))
 	movedAssetIDs := make([]int, 0, len(moves))
 	for _, m := range moves {
 		movedAssetIDs = append(movedAssetIDs, m.assetID)
+		if m.from != nil {
+			locationIDs[*m.from] = struct{}{}
+		}
+		locationIDs[m.to] = struct{}{}
 	}
 	locIDs := make([]int, 0, len(locationIDs))
 	for id := range locationIDs {

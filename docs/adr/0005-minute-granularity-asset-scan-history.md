@@ -62,11 +62,27 @@ amplifier. Provenance is carried per-path:
   flapping stays visible in Prometheus. `res.Resolved` itself still carries
   every membership-passing read — the geofence engine must keep seeing every
   observation, so filtering is per-consumer, never done by trimming the slice.
-* Handheld save: `SaveInventoryResult.InsertedAssetIDs`
-  (`RETURNING xmax = 0`), filtered in the inventory handler. A same-minute
-  re-save is a `DO UPDATE` that destroys the bucket's first-observed location,
-  leaving nothing trustworthy to diff against: evaluating it emits a phantom
-  first-sighting or a duplicate move on every re-save.
+* Handheld save: the upsert returns per-asset provenance —
+  `SaveInventoryResult.InsertedAssetIDs` (`RETURNING xmax = 0`) for fresh
+  buckets, evaluated normally against history, and
+  `SaveInventoryResult.OverriddenFrom` for buckets `DO UPDATE`d to a different
+  location. The update destroys the bucket's first-observed location, so the
+  upsert's `old` CTE captures it and the override emits directly with that
+  explicit origin (`assetevent.EvaluateOverrides`) — no history lookup, which
+  could not know the destroyed value and would phantom or duplicate. A
+  same-location re-save appears in neither set and stays silent. Override
+  events carry wall-clock `OccurredAt` (not the bucket floor) so they order
+  after the same-minute reader event they correct.
+
+The governing principle, stated once: **passive observation dedups silently;
+interactive operator action overrides and announces itself.** Two overlapping
+fixed-reader zones must not flap history or webhooks — their conflicts are
+no-op `DO NOTHING`s, first-in-minute wins, at most one location change per
+asset per minute (crude but real hysteresis on the two-antenna doorway
+problem). An operator's save is the opposite kind of signal: it both wins the
+bucket and emits the reader-location → handheld-location move it represents,
+and the reader's next fresh bucket emits the return move if the asset is still
+in its field.
 
 **The previous-location lookup bounds at the truncated minute.** Stored
 timestamps sit at the minute floor while `receivedAt` does not, and
@@ -75,10 +91,9 @@ timestamps sit at the minute floor while `receivedAt` does not, and
 and suppress every genuine move as `no_change`. This is load-bearing; the
 symptom of getting it wrong is total silence, not an error.
 
-Accepted consequence, both paths: a genuine mid-minute move is delayed to the
-next bucket — ≤60s for movement events and their webhooks. Bonus: the minute
-bucket is a debounce window, at most one location change per asset per minute —
-crude but real hysteresis on the two-antenna doorway problem.
+Accepted consequence, passive paths: a genuine mid-minute move seen only by
+readers is delayed to the next bucket — ≤60s for movement events and their
+webhooks. Operator saves are exempt via the override path above.
 
 ## Why the alarm path is unaffected — and where to extend it
 

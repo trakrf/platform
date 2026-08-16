@@ -61,7 +61,12 @@ func TestSaveInventoryScans_CollidesWithReaderRowUpdatesInPlace(t *testing.T) {
 	require.NoError(t, err, "same-minute collision must upsert, not raise a unique violation")
 	assert.Equal(t, 1, result.Count)
 	assert.Empty(t, result.InsertedAssetIDs,
-		"a collision is an update, not an insert — movement evaluation must skip it")
+		"a collision is an update, not an insert — the normal evaluation path must skip it")
+	require.Contains(t, result.OverriddenFrom, assetID,
+		"a location-changing override must carry the captured pre-save origin")
+	require.NotNil(t, result.OverriddenFrom[assetID])
+	assert.Equal(t, readerLoc, *result.OverriddenFrom[assetID],
+		"the origin is the reader's location the save overrode")
 	assert.True(t, result.Timestamp.Equal(result.Timestamp.Truncate(time.Minute)),
 		"save timestamp is minute-truncated")
 
