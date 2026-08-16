@@ -20,6 +20,15 @@ type SaveInventoryResult struct {
 	LocationID   int       `json:"location_id"`
 	LocationName string    `json:"location_name"`
 	Timestamp    time.Time `json:"timestamp"`
+
+	// InsertedAssetIDs are the assets whose upsert created a fresh minute-bucket
+	// row, as opposed to updating one that already existed (TRA-1118). Internal
+	// only (never serialised): the movement-event evaluator consumes it, exactly
+	// mirroring ResolvedRead.Stored on the ingest path — an update rewrote the
+	// bucket's first-observed location in place, so the previous location is
+	// unrecoverable from history and evaluating it would emit a phantom or
+	// duplicate move on every same-minute re-save.
+	InsertedAssetIDs []int `json:"-"`
 }
 
 // InventoryAccessError provides diagnostic context for 403 responses.
@@ -94,6 +103,7 @@ func (s *Storage) SaveInventoryScans(ctx context.Context, orgID int, req SaveInv
 	uniqueAssetIDs := dedupInts(req.AssetIDs)
 
 	var locationName string
+	var insertedAssetIDs []int
 	// Minute-truncated like every asset_scans write (TRA-1118): history keeps at
 	// most one row per (asset, minute).
 	timestamp := time.Now().Truncate(ScanGranularity)
@@ -181,15 +191,23 @@ func (s *Storage) SaveInventoryScans(ctx context.Context, orgID int, req SaveInv
 		// so the surviving row is coherently a manual observation. The ingest
 		// path deliberately keeps DO NOTHING — at reader frequency an update
 		// would reintroduce the tuple-version churn TRA-1118 removes.
+		// xmax = 0 distinguishes a fresh insert from a conflict update: an
+		// updated row carries the deleting-transaction id of its superseded
+		// version. That provenance drives movement-event evaluation above.
 		insertQuery := `INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id, scan_point_id, tag_scan_id)
 			VALUES ($1, $2, $3, $4, NULL, NULL)
 			ON CONFLICT (timestamp, org_id, asset_id) DO UPDATE
 			SET location_id = EXCLUDED.location_id,
 			    scan_point_id = EXCLUDED.scan_point_id,
-			    tag_scan_id = EXCLUDED.tag_scan_id`
+			    tag_scan_id = EXCLUDED.tag_scan_id
+			RETURNING (xmax = 0)`
 		for _, assetID := range uniqueAssetIDs {
-			if _, err := tx.Exec(ctx, insertQuery, timestamp, orgID, assetID, req.LocationID); err != nil {
+			var inserted bool
+			if err := tx.QueryRow(ctx, insertQuery, timestamp, orgID, assetID, req.LocationID).Scan(&inserted); err != nil {
 				return fmt.Errorf("failed to insert asset scan for asset %d: %w", assetID, err)
+			}
+			if inserted {
+				insertedAssetIDs = append(insertedAssetIDs, assetID)
 			}
 		}
 
@@ -201,10 +219,11 @@ func (s *Storage) SaveInventoryScans(ctx context.Context, orgID int, req SaveInv
 	}
 
 	return &SaveInventoryResult{
-		Count:        len(uniqueAssetIDs),
-		LocationID:   req.LocationID,
-		LocationName: locationName,
-		Timestamp:    timestamp,
+		InsertedAssetIDs: insertedAssetIDs,
+		Count:            len(uniqueAssetIDs),
+		LocationID:       req.LocationID,
+		LocationName:     locationName,
+		Timestamp:        timestamp,
 	}, nil
 }
 

@@ -34,8 +34,12 @@ type InventoryStorage interface {
 // *assetevent.Evaluator satisfies it. Optional: a nil evaluator disables
 // detection, which keeps the handler constructible in tests that do not care.
 //
-// It is invoked AFTER the save transaction commits and does its own reads, so
-// SaveInventoryScans is untouched — no new parameter, return field, or query.
+// It is invoked AFTER the save transaction commits and does its own reads.
+// Since TRA-1118 it receives only the assets whose save created a fresh
+// minute-bucket row (SaveInventoryResult.InsertedAssetIDs): a same-minute
+// re-save updates the bucket in place, destroying the previous location, so
+// evaluating it could only phantom or duplicate — the handheld mirror of the
+// ingest path's ResolvedRead.Stored filter.
 type MovedEvaluator interface {
 	EvaluateScans(ctx context.Context, orgID int, assetIDs []int, locationID int, at time.Time)
 }
@@ -203,8 +207,8 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	// Best-effort by construction: detection failures are logged inside the
 	// evaluator and the dispatcher drops rather than blocking, so a slow customer
 	// endpoint can never delay a scan save.
-	if h.moved != nil {
-		h.moved.EvaluateScans(r.Context(), orgID, assetIDs, locationID, result.Timestamp)
+	if h.moved != nil && len(result.InsertedAssetIDs) > 0 {
+		h.moved.EvaluateScans(r.Context(), orgID, result.InsertedAssetIDs, locationID, result.Timestamp)
 	}
 
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": result})

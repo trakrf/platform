@@ -707,7 +707,7 @@ func (r *recordingMovedEvaluator) EvaluateScans(_ context.Context, orgID int, as
 func TestSave_FiresMovedDetectionAfterCommit(t *testing.T) {
 	saved := time.Now()
 	mock := &mockInventoryStorage{
-		saveResult: &storage.SaveInventoryResult{Count: 2, LocationID: 1, LocationName: "WH-01", Timestamp: saved},
+		saveResult: &storage.SaveInventoryResult{Count: 2, LocationID: 1, LocationName: "WH-01", Timestamp: saved, InsertedAssetIDs: []int{100, 101}},
 		locationByIdentifier: map[string]*location.LocationWithParent{
 			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 1, ExternalKey: "WH-01"}}},
 		},
@@ -731,6 +731,31 @@ func TestSave_FiresMovedDetectionAfterCommit(t *testing.T) {
 	// The save's own timestamp, so the previous-location lookup excludes the
 	// rows this save just wrote.
 	require.Equal(t, saved, moved.at)
+}
+
+// TRA-1118: a save whose every asset landed as a same-minute bucket update
+// (InsertedAssetIDs empty) has no evaluable history change — the previous
+// location was overwritten in place — so detection must not run at all.
+func TestSave_SkipsDetectionWhenNothingInserted(t *testing.T) {
+	mock := &mockInventoryStorage{
+		saveResult: &storage.SaveInventoryResult{Count: 1, LocationID: 1, LocationName: "WH-01", Timestamp: time.Now()},
+		locationByIdentifier: map[string]*location.LocationWithParent{
+			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 1, ExternalKey: "WH-01"}}},
+		},
+		assetIDsByIdentifiers: map[string]int{"ASSET-1": 100},
+	}
+	moved := &recordingMovedEvaluator{}
+	handler := NewHandler(mock, moved)
+
+	req := newTestRequest(t, map[string]any{
+		"location_identifier": "WH-01",
+		"asset_identifiers":   []string{"ASSET-1"},
+	}, 7)
+	w := httptest.NewRecorder()
+	handler.Save(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	require.Zero(t, moved.calls)
 }
 
 // A save that never committed must never produce an event — that is the whole

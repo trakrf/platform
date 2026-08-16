@@ -60,6 +60,8 @@ func TestSaveInventoryScans_CollidesWithReaderRowUpdatesInPlace(t *testing.T) {
 	})
 	require.NoError(t, err, "same-minute collision must upsert, not raise a unique violation")
 	assert.Equal(t, 1, result.Count)
+	assert.Empty(t, result.InsertedAssetIDs,
+		"a collision is an update, not an insert — movement evaluation must skip it")
 	assert.True(t, result.Timestamp.Equal(result.Timestamp.Truncate(time.Minute)),
 		"save timestamp is minute-truncated")
 
