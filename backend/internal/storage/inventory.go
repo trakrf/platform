@@ -94,7 +94,9 @@ func (s *Storage) SaveInventoryScans(ctx context.Context, orgID int, req SaveInv
 	uniqueAssetIDs := dedupInts(req.AssetIDs)
 
 	var locationName string
-	timestamp := time.Now()
+	// Minute-truncated like every asset_scans write (TRA-1118): history keeps at
+	// most one row per (asset, minute).
+	timestamp := time.Now().Truncate(ScanGranularity)
 
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		// 1. Validate location belongs to org and get its name
@@ -170,8 +172,21 @@ func (s *Storage) SaveInventoryScans(ctx context.Context, orgID int, req SaveInv
 			}
 		}
 
-		// 3. Batch INSERT into asset_scans — one row per unique asset
-		insertQuery := `INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id, scan_point_id, tag_scan_id) VALUES ($1, $2, $3, $4, NULL, NULL)`
+		// 3. Batch INSERT into asset_scans — one row per unique asset. With
+		// minute-truncated timestamps a save can collide with a fixed-reader row
+		// for the same asset in the same minute; the operator's explicit save
+		// beats the passive reader read, so upsert (TRA-1118). DO NOTHING here
+		// would silently drop the save while Count (len(uniqueAssetIDs), not
+		// rows affected) still reported success. All three columns move together
+		// so the surviving row is coherently a manual observation. The ingest
+		// path deliberately keeps DO NOTHING — at reader frequency an update
+		// would reintroduce the tuple-version churn TRA-1118 removes.
+		insertQuery := `INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id, scan_point_id, tag_scan_id)
+			VALUES ($1, $2, $3, $4, NULL, NULL)
+			ON CONFLICT (timestamp, org_id, asset_id) DO UPDATE
+			SET location_id = EXCLUDED.location_id,
+			    scan_point_id = EXCLUDED.scan_point_id,
+			    tag_scan_id = EXCLUDED.tag_scan_id`
 		for _, assetID := range uniqueAssetIDs {
 			if _, err := tx.Exec(ctx, insertQuery, timestamp, orgID, assetID, req.LocationID); err != nil {
 				return fmt.Errorf("failed to insert asset scan for asset %d: %w", assetID, err)
