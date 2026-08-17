@@ -34,10 +34,17 @@ type InventoryStorage interface {
 // *assetevent.Evaluator satisfies it. Optional: a nil evaluator disables
 // detection, which keeps the handler constructible in tests that do not care.
 //
-// It is invoked AFTER the save transaction commits and does its own reads, so
-// SaveInventoryScans is untouched — no new parameter, return field, or query.
+// It is invoked AFTER the save transaction commits. Since TRA-1118 the save
+// splits into two event paths: assets whose save created a fresh minute-bucket
+// row (InsertedAssetIDs) are evaluated normally against history, while assets
+// whose save DO-UPDATEd an existing bucket to a different location
+// (OverriddenFrom) are emitted with the explicit pre-save origin the upsert
+// captured — the update destroyed it, so no lookup could recover it. A
+// same-minute re-save at the SAME location appears in neither and stays
+// silent.
 type MovedEvaluator interface {
 	EvaluateScans(ctx context.Context, orgID int, assetIDs []int, locationID int, at time.Time)
+	EvaluateOverrides(ctx context.Context, orgID int, from map[int]*int, to int, at time.Time)
 }
 
 // Handler handles inventory-related API requests
@@ -204,7 +211,14 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	// evaluator and the dispatcher drops rather than blocking, so a slow customer
 	// endpoint can never delay a scan save.
 	if h.moved != nil {
-		h.moved.EvaluateScans(r.Context(), orgID, assetIDs, locationID, result.Timestamp)
+		if len(result.InsertedAssetIDs) > 0 {
+			h.moved.EvaluateScans(r.Context(), orgID, result.InsertedAssetIDs, locationID, result.Timestamp)
+		}
+		if len(result.OverriddenFrom) > 0 {
+			// Wall-clock time, not result.Timestamp: the bucket floor would sort
+			// this correction BEFORE the same-minute reader event it overrides.
+			h.moved.EvaluateOverrides(r.Context(), orgID, result.OverriddenFrom, locationID, time.Now())
+		}
 	}
 
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"data": result})

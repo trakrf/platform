@@ -65,16 +65,23 @@ func (e *Evaluator) Evaluate(ctx context.Context, orgID int, _ int64, receivedAt
 	candidates := make(map[int]int, len(reads))
 	for _, rd := range reads {
 		metricEvaluated.Inc()
+		// A conflict-dropped read (TRA-1118): asset_scans already held this
+		// asset's minute bucket, so stored history did not change and emitting
+		// would re-publish the identical move once per message for the rest of
+		// the minute. Counted so flapping stays visible in Prometheus.
+		if !rd.Stored {
+			metricSuppressed.WithLabelValues("not_stored").Inc()
+			continue
+		}
 		// An asset scanned at a scan point with no location cannot have moved
 		// anywhere nameable, so there is nothing to report.
 		if rd.LocationID == nil {
 			metricSuppressed.WithLabelValues("no_location").Inc()
 			continue
 		}
-		// Several reads of one asset in a single message (multiple antennas,
-		// multiple tags on one asset) are one observation. First read wins,
-		// matching which row asset_scans actually kept: the insert is
-		// ON CONFLICT (timestamp, org_id, asset_id) DO NOTHING.
+		// Stored identifies the row asset_scans actually kept — at most one per
+		// asset per message — so this seen-check is defense in depth for
+		// within-message duplicates of that stored read.
 		if _, seen := candidates[rd.AssetID]; seen {
 			continue
 		}
@@ -119,8 +126,16 @@ func (e *Evaluator) evaluate(ctx context.Context, orgID int, at time.Time, candi
 		assetIDs = append(assetIDs, id)
 	}
 
+	// Stored timestamps are truncated to storage.ScanGranularity (TRA-1118) and
+	// PreviousAssetLocations bounds with a strict `timestamp < before`, so the
+	// lookup must use the truncated minute: raw receivedAt sits above the
+	// just-stored bucket, which would then act as its own predecessor and
+	// suppress every genuine move as no_change. (EvaluateScans already passes a
+	// truncated time; Truncate is idempotent.)
+	before := at.Truncate(storage.ScanGranularity)
+
 	start := time.Now()
-	prev, err := e.store.PreviousAssetLocations(ctx, orgID, assetIDs, at)
+	prev, err := e.store.PreviousAssetLocations(ctx, orgID, assetIDs, before)
 	metricLookupSeconds.Observe(time.Since(start).Seconds())
 	if err != nil {
 		// Best-effort: without a trustworthy previous location we would have to
@@ -130,14 +145,7 @@ func (e *Evaluator) evaluate(ctx context.Context, orgID int, at time.Time, candi
 		return
 	}
 
-	type move struct {
-		assetID int
-		from    *int
-		to      int
-	}
-	moves := make([]move, 0, len(candidates))
-	locationIDs := make(map[int]struct{}, len(candidates))
-
+	moves := make([]pendingMove, 0, len(candidates))
 	for assetID, to := range candidates {
 		p, seen := prev[assetID]
 		// Absent from the map = genuine first-ever sighting. A prior sighting
@@ -150,18 +158,61 @@ func (e *Evaluator) evaluate(ctx context.Context, orgID int, at time.Time, candi
 		var from *int
 		if seen && p.LocationID != nil {
 			from = p.LocationID
-			locationIDs[*from] = struct{}{}
 		}
-		locationIDs[to] = struct{}{}
-		moves = append(moves, move{assetID: assetID, from: from, to: to})
+		moves = append(moves, pendingMove{assetID: assetID, from: from, to: to})
 	}
+	e.emit(ctx, orgID, at, moves)
+}
+
+// EvaluateOverrides is the same-minute correction path (TRA-1118): a manual
+// save that DO-UPDATEd an existing minute bucket to a different location. The
+// origin is the bucket's captured pre-save location
+// (SaveInventoryResult.OverriddenFrom) — it was destroyed by the update, so no
+// history lookup could recover it; the explicit origin is what makes emitting
+// here safe where a generic evaluation would phantom or duplicate. `at` is the
+// wall-clock correction time, not the bucket floor, so these events order
+// correctly after the same-minute reader event they override.
+func (e *Evaluator) EvaluateOverrides(ctx context.Context, orgID int, from map[int]*int, to int, at time.Time) {
+	if len(from) == 0 {
+		return
+	}
+	moves := make([]pendingMove, 0, len(from))
+	for assetID, f := range from {
+		metricEvaluated.Inc()
+		// Defensive: storage only maps location-changing overrides, but a
+		// same-location entry must never become a phantom move.
+		if f != nil && *f == to {
+			metricSuppressed.WithLabelValues("no_change").Inc()
+			continue
+		}
+		moves = append(moves, pendingMove{assetID: assetID, from: f, to: to})
+	}
+	e.emit(ctx, orgID, at, moves)
+}
+
+// pendingMove is a detected location change awaiting name enrichment.
+type pendingMove struct {
+	assetID int
+	from    *int
+	to      int
+}
+
+// emit enriches detected moves with asset/location names and enqueues them —
+// the shared tail of evaluate (lookup-diffed moves) and EvaluateOverrides
+// (explicit-origin moves).
+func (e *Evaluator) emit(ctx context.Context, orgID int, at time.Time, moves []pendingMove) {
 	if len(moves) == 0 {
 		return
 	}
 
+	locationIDs := make(map[int]struct{}, len(moves))
 	movedAssetIDs := make([]int, 0, len(moves))
 	for _, m := range moves {
 		movedAssetIDs = append(movedAssetIDs, m.assetID)
+		if m.from != nil {
+			locationIDs[*m.from] = struct{}{}
+		}
+		locationIDs[m.to] = struct{}{}
 	}
 	locIDs := make([]int, 0, len(locationIDs))
 	for id := range locationIDs {

@@ -694,6 +694,10 @@ type recordingMovedEvaluator struct {
 	assetIDs   []int
 	locationID int
 	at         time.Time
+
+	overrideCalls int
+	overrideFrom  map[int]*int
+	overrideTo    int
 }
 
 func (r *recordingMovedEvaluator) EvaluateScans(_ context.Context, orgID int, assetIDs []int, locationID int, at time.Time) {
@@ -704,10 +708,17 @@ func (r *recordingMovedEvaluator) EvaluateScans(_ context.Context, orgID int, as
 	r.at = at
 }
 
+func (r *recordingMovedEvaluator) EvaluateOverrides(_ context.Context, orgID int, from map[int]*int, to int, _ time.Time) {
+	r.overrideCalls++
+	r.orgID = orgID
+	r.overrideFrom = from
+	r.overrideTo = to
+}
+
 func TestSave_FiresMovedDetectionAfterCommit(t *testing.T) {
 	saved := time.Now()
 	mock := &mockInventoryStorage{
-		saveResult: &storage.SaveInventoryResult{Count: 2, LocationID: 1, LocationName: "WH-01", Timestamp: saved},
+		saveResult: &storage.SaveInventoryResult{Count: 2, LocationID: 1, LocationName: "WH-01", Timestamp: saved, InsertedAssetIDs: []int{100, 101}},
 		locationByIdentifier: map[string]*location.LocationWithParent{
 			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 1, ExternalKey: "WH-01"}}},
 		},
@@ -731,6 +742,63 @@ func TestSave_FiresMovedDetectionAfterCommit(t *testing.T) {
 	// The save's own timestamp, so the previous-location lookup excludes the
 	// rows this save just wrote.
 	require.Equal(t, saved, moved.at)
+}
+
+// TRA-1118: a save whose every asset landed as a same-minute bucket update
+// (InsertedAssetIDs empty) has no evaluable history change — the previous
+// location was overwritten in place — so detection must not run at all.
+func TestSave_SkipsDetectionWhenNothingInserted(t *testing.T) {
+	mock := &mockInventoryStorage{
+		saveResult: &storage.SaveInventoryResult{Count: 1, LocationID: 1, LocationName: "WH-01", Timestamp: time.Now()},
+		locationByIdentifier: map[string]*location.LocationWithParent{
+			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 1, ExternalKey: "WH-01"}}},
+		},
+		assetIDsByIdentifiers: map[string]int{"ASSET-1": 100},
+	}
+	moved := &recordingMovedEvaluator{}
+	handler := NewHandler(mock, moved)
+
+	req := newTestRequest(t, map[string]any{
+		"location_identifier": "WH-01",
+		"asset_identifiers":   []string{"ASSET-1"},
+	}, 7)
+	w := httptest.NewRecorder()
+	handler.Save(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	require.Zero(t, moved.calls)
+	require.Zero(t, moved.overrideCalls)
+}
+
+// TRA-1118: a save that overrode an existing bucket to a different location
+// fires the override path with the captured pre-save origins.
+func TestSave_FiresOverrideDetection(t *testing.T) {
+	prevLoc := 42
+	mock := &mockInventoryStorage{
+		saveResult: &storage.SaveInventoryResult{
+			Count: 1, LocationID: 1, LocationName: "WH-01", Timestamp: time.Now(),
+			OverriddenFrom: map[int]*int{100: &prevLoc},
+		},
+		locationByIdentifier: map[string]*location.LocationWithParent{
+			"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 1, ExternalKey: "WH-01"}}},
+		},
+		assetIDsByIdentifiers: map[string]int{"ASSET-1": 100},
+	}
+	moved := &recordingMovedEvaluator{}
+	handler := NewHandler(mock, moved)
+
+	req := newTestRequest(t, map[string]any{
+		"location_identifier": "WH-01",
+		"asset_identifiers":   []string{"ASSET-1"},
+	}, 7)
+	w := httptest.NewRecorder()
+	handler.Save(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	require.Zero(t, moved.calls, "nothing inserted, so the normal path stays quiet")
+	require.Equal(t, 1, moved.overrideCalls)
+	require.Equal(t, map[int]*int{100: &prevLoc}, moved.overrideFrom)
+	require.Equal(t, 1, moved.overrideTo)
 }
 
 // A save that never committed must never produce an event — that is the whole

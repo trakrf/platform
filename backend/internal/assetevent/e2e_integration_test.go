@@ -126,13 +126,22 @@ func (h *harness) readAt(t *testing.T, epc string, at time.Time) {
 	h.evaluator.Evaluate(context.Background(), h.orgID, 0, at, res.Resolved)
 }
 
-// saveAt drives the handheld path.
+// saveAt drives the handheld path, mirroring the inventory handler (TRA-1118):
+// assets whose save inserted a fresh minute bucket are evaluated against
+// history; assets whose save overrode an existing bucket to a different
+// location are emitted with the captured pre-save origin; a same-location
+// re-save stays silent.
 func (h *harness) saveAt(t *testing.T, assetIDs []int, locationID int) {
 	t.Helper()
 	res, err := h.db.Store.SaveInventoryScans(context.Background(), h.orgID,
 		storage.SaveInventoryRequest{LocationID: locationID, AssetIDs: assetIDs})
 	require.NoError(t, err)
-	h.evaluator.EvaluateScans(context.Background(), h.orgID, assetIDs, locationID, res.Timestamp)
+	if len(res.InsertedAssetIDs) > 0 {
+		h.evaluator.EvaluateScans(context.Background(), h.orgID, res.InsertedAssetIDs, locationID, res.Timestamp)
+	}
+	if len(res.OverriddenFrom) > 0 {
+		h.evaluator.EvaluateOverrides(context.Background(), h.orgID, res.OverriddenFrom, locationID, time.Now())
+	}
 }
 
 // expectDelivery waits for one delivery and decodes its envelope.
@@ -195,6 +204,30 @@ func TestHandheldMoveEmitsFromAndTo(t *testing.T) {
 	bay := h.location(t, "E2E-BAY", "Bay 3")
 	assetID := h.asset(t, "E2E-FORK", epcA)
 
+	// Seed the prior sighting in an EARLIER minute bucket (TRA-1118: history is
+	// one row per asset per minute, so two same-minute saves cannot represent a
+	// move — the second overwrites the first in place and is not evaluated).
+	// readAt takes an explicit time; saveAt always stamps now.
+	h.pointAt(t, dock)
+	h.readAt(t, epcA, time.Now().Add(-2*time.Minute))
+	h.expectDelivery(t)
+
+	h.saveAt(t, []int{assetID}, bay)
+	env := h.expectDelivery(t)
+	data := env["data"].(map[string]any)
+	require.Equal(t, "Dock", data["from_location"].(map[string]any)["name"])
+	require.Equal(t, "Bay 3", data["to_location"].(map[string]any)["name"])
+}
+
+// TRA-1118: a second save of the same asset in the same minute to a DIFFERENT
+// location DO-UPDATEs the minute bucket, and the captured pre-save location
+// lets the correction emit with a real origin instead of staying silent.
+func TestHandheldSameMinuteResaveEmitsOverride(t *testing.T) {
+	h := newHarness(t)
+	dock := h.location(t, "E2E-DOCK", "Dock")
+	bay := h.location(t, "E2E-BAY", "Bay 3")
+	assetID := h.asset(t, "E2E-FORK", epcA)
+
 	h.saveAt(t, []int{assetID}, dock)
 	h.expectDelivery(t)
 
@@ -203,6 +236,38 @@ func TestHandheldMoveEmitsFromAndTo(t *testing.T) {
 	data := env["data"].(map[string]any)
 	require.Equal(t, "Dock", data["from_location"].(map[string]any)["name"])
 	require.Equal(t, "Bay 3", data["to_location"].(map[string]any)["name"])
+}
+
+// The full same-minute override story (TRA-1118): a fixed reader observes the
+// asset, an operator's save overrides the bucket to the handheld location and
+// emits reader→handheld, and the reader's next fresh bucket re-asserts with
+// handheld→reader. Three events, no phantoms, no duplicates.
+func TestReaderOverrideThenReaderReassertsNextMinute(t *testing.T) {
+	h := newHarness(t)
+	dock := h.location(t, "E2E-DOCK", "Dock")
+	shelf := h.location(t, "E2E-SHELF", "Shelf")
+	assetID := h.asset(t, "E2E-FORK", epcA)
+
+	base := time.Now()
+	h.pointAt(t, dock)
+	h.readAt(t, epcA, base)
+	first := h.expectDelivery(t)
+	require.Equal(t, "Dock", first["data"].(map[string]any)["to_location"].(map[string]any)["name"])
+
+	// Handheld save while the reader's bucket is live. If the wall clock
+	// crossed a minute boundary since the read, this lands a fresh bucket
+	// instead of an override — either path must still emit Dock→Shelf.
+	h.saveAt(t, []int{assetID}, shelf)
+	second := h.expectDelivery(t)
+	require.Equal(t, "Dock", second["data"].(map[string]any)["from_location"].(map[string]any)["name"])
+	require.Equal(t, "Shelf", second["data"].(map[string]any)["to_location"].(map[string]any)["name"])
+
+	// The reader re-asserts in a later bucket (+2 min covers a boundary
+	// straddle by the save above): history says Shelf, the read says Dock.
+	h.readAt(t, epcA, base.Add(2*time.Minute))
+	third := h.expectDelivery(t)
+	require.Equal(t, "Shelf", third["data"].(map[string]any)["from_location"].(map[string]any)["name"])
+	require.Equal(t, "Dock", third["data"].(map[string]any)["to_location"].(map[string]any)["name"])
 }
 
 func TestFixedReaderPathEmitsAssetMoved(t *testing.T) {
@@ -233,27 +298,33 @@ func TestMoveInsideCAGGLagWindowIsStillDetected(t *testing.T) {
 	h := newHarness(t)
 	dock := h.location(t, "E2E-DOCK", "Dock")
 	bay := h.location(t, "E2E-BAY", "Bay 3")
-	assetID := h.asset(t, "E2E-FORK", epcA)
+	h.asset(t, "E2E-FORK", epcA)
 
-	// Three saves seconds apart, well inside the CAGG's materialization lag.
-	h.saveAt(t, []int{assetID}, dock)
+	// Three observations a minute apart (TRA-1118 buckets), all well inside the
+	// CAGG's materialization lag. readAt takes explicit times, so the reader
+	// path stands in for the rapid handheld saves this test used pre-1118.
+	now := time.Now()
+	h.pointAt(t, dock)
+	h.readAt(t, epcA, now.Add(-3*time.Minute))
 	first := h.expectDelivery(t)
 	require.Nil(t, first["data"].(map[string]any)["from_location"])
 
-	h.saveAt(t, []int{assetID}, bay)
+	h.pointAt(t, bay)
+	h.readAt(t, epcA, now.Add(-2*time.Minute))
 	second := h.expectDelivery(t)
 	require.Equal(t, "Dock", second["data"].(map[string]any)["from_location"].(map[string]any)["name"])
 
 	// Back to the dock: the origin must be Bay 3, which only the base-table
 	// tail knows about.
-	h.saveAt(t, []int{assetID}, dock)
+	h.pointAt(t, dock)
+	h.readAt(t, epcA, now.Add(-time.Minute))
 	third := h.expectDelivery(t)
 	require.Equal(t, "Bay 3", third["data"].(map[string]any)["from_location"].(map[string]any)["name"])
 	require.Equal(t, "Dock", third["data"].(map[string]any)["to_location"].(map[string]any)["name"])
 
 	// And a rescan at the dock is silent — proving the tail did not merely
 	// invent a fresh origin every time.
-	h.saveAt(t, []int{assetID}, dock)
+	h.readAt(t, epcA, now)
 	h.expectNoDelivery(t)
 }
 
@@ -287,7 +358,10 @@ func TestUnentitledOrgReceivesNothing(t *testing.T) {
 		`UPDATE trakrf.organizations SET subscription_enabled = false WHERE id = $1`, h.orgID)
 	require.NoError(t, err)
 
-	h.saveAt(t, []int{assetID}, dock)
+	// An earlier minute bucket (TRA-1118), so the re-entitled save below lands
+	// a fresh bucket and is evaluated rather than updating this one in place.
+	h.pointAt(t, dock)
+	h.readAt(t, epcA, time.Now().Add(-2*time.Minute))
 	h.expectNoDelivery(t)
 
 	// Re-entitling resumes delivery on the NEXT qualifying scan, with no

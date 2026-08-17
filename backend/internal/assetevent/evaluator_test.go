@@ -86,7 +86,105 @@ func newEvaluatorFixture(f *fakeStore) (*Evaluator, *captureQueue) {
 }
 
 func read(assetID int, locationID *int) storage.ResolvedRead {
+	return storage.ResolvedRead{AssetID: assetID, LocationID: locationID, EPC: "E280", RSSI: -55, Stored: true}
+}
+
+// unstoredRead is a conflict-dropped read: membership passed but asset_scans
+// already held this asset's minute bucket (TRA-1118).
+func unstoredRead(assetID int, locationID *int) storage.ResolvedRead {
 	return storage.ResolvedRead{AssetID: assetID, LocationID: locationID, EPC: "E280", RSSI: -55}
+}
+
+// TRA-1118: a conflict-dropped read cannot have changed stored history, so it
+// must not produce an event — otherwise every message after the bucket lands
+// re-publishes the identical move for the rest of the minute.
+func TestUnstoredReadIsSuppressed(t *testing.T) {
+	f := newFixture()
+	e, q := newEvaluatorFixture(f)
+
+	// The flapping scenario: the stored read landed at 20; later same-minute
+	// observations at 10 are conflict-dropped and must stay silent.
+	e.Evaluate(context.Background(), 7, 0, time.Now(), []storage.ResolvedRead{
+		read(1, intp(20)),
+		unstoredRead(1, intp(10)),
+		unstoredRead(1, intp(10)),
+	})
+
+	require.Len(t, q.events, 1)
+	require.Equal(t, 20, q.events[0].To.ID, "only the read that landed the row emits")
+}
+
+// TRA-1118: a message whose reads were all conflict-dropped does no lookup work
+// at all — stored history is untouched, so there is nothing to evaluate.
+func TestAllUnstoredReadsEmitNothing(t *testing.T) {
+	f := newFixture()
+	e, q := newEvaluatorFixture(f)
+
+	e.Evaluate(context.Background(), 7, 0, time.Now(), []storage.ResolvedRead{
+		unstoredRead(1, intp(10)),
+		unstoredRead(1, intp(20)),
+	})
+
+	require.Empty(t, q.events)
+	require.Empty(t, f.prevAsked, "no previous-location lookup for a no-op message")
+}
+
+// TRA-1118: a same-minute override carries its captured pre-save origin, so it
+// emits directly — no history lookup, which could not know the destroyed value.
+func TestOverrideEmitsWithExplicitOrigin(t *testing.T) {
+	f := newFixture()
+	e, q := newEvaluatorFixture(f)
+
+	at := time.Now()
+	e.EvaluateOverrides(context.Background(), 7, map[int]*int{1: intp(20)}, 10, at)
+
+	require.Len(t, q.events, 1)
+	require.NotNil(t, q.events[0].From)
+	require.Equal(t, 20, q.events[0].From.ID)
+	require.Equal(t, "Bay 3", q.events[0].From.Name)
+	require.Equal(t, 10, q.events[0].To.ID)
+	require.Equal(t, at, q.events[0].OccurredAt)
+	require.Empty(t, f.prevAsked, "explicit origin means no previous-location lookup")
+}
+
+// A bucket whose pre-save row carried no location yields a null origin — a
+// real observation with nowhere nameable, same as the lookup path's semantics.
+func TestOverrideWithNilOriginEmitsNullFrom(t *testing.T) {
+	f := newFixture()
+	e, q := newEvaluatorFixture(f)
+
+	e.EvaluateOverrides(context.Background(), 7, map[int]*int{1: nil}, 10, time.Now())
+
+	require.Len(t, q.events, 1)
+	require.Nil(t, q.events[0].From)
+	require.Equal(t, 10, q.events[0].To.ID)
+}
+
+// Defensive: storage maps only location-changing overrides, but a same-location
+// entry must suppress rather than emit a phantom move.
+func TestOverrideSameLocationIsSuppressed(t *testing.T) {
+	f := newFixture()
+	e, q := newEvaluatorFixture(f)
+
+	e.EvaluateOverrides(context.Background(), 7, map[int]*int{1: intp(10)}, 10, time.Now())
+
+	require.Empty(t, q.events)
+	require.Empty(t, f.namesAsked, "suppressed override does no enrichment")
+}
+
+// TRA-1118: stored timestamps are minute-truncated, and PreviousAssetLocations
+// bounds with a strict `timestamp < before`. The lookup must use the truncated
+// minute — raw receivedAt would let the just-stored bucket (already below it)
+// act as its own predecessor and suppress every genuine move as no_change.
+func TestEvaluateLooksUpBeforeTruncatedMinute(t *testing.T) {
+	f := newFixture()
+	e, _ := newEvaluatorFixture(f)
+
+	at := time.Date(2026, 8, 16, 6, 24, 47, 123456000, time.UTC)
+	e.Evaluate(context.Background(), 7, 0, at, []storage.ResolvedRead{read(1, intp(20))})
+
+	want := time.Date(2026, 8, 16, 6, 24, 0, 0, time.UTC)
+	require.True(t, f.prevBefore.Equal(want), "lookup bound %v, want minute floor %v", f.prevBefore, want)
 }
 
 func TestFirstEverSightingEmitsNullOrigin(t *testing.T) {
@@ -248,7 +346,9 @@ func TestEvaluateScansEmitsPerMovedAsset(t *testing.T) {
 	require.Len(t, q.events, 1, "one event for the mover, none for the stationary asset, duplicates collapsed")
 	require.Equal(t, 2, q.events[0].Asset.ID)
 	require.Equal(t, at, q.events[0].OccurredAt)
-	require.Equal(t, at, f.prevBefore, "the lookup must exclude the scan being evaluated")
+	// TRA-1118: the save's row is stored at the minute floor, so that is the
+	// bound that excludes the scan being evaluated.
+	require.Equal(t, at.Truncate(time.Minute), f.prevBefore, "the lookup must exclude the scan being evaluated")
 }
 
 func TestEmptyInputIsANoOp(t *testing.T) {

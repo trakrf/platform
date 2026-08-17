@@ -22,7 +22,7 @@ var (
 	metricSuppressed = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "asset_events_suppressed_total",
 		Help: "Observations that produced no event, by reason.",
-	}, []string{"reason"}) // no_location, no_change, unresolved_names
+	}, []string{"reason"}) // not_stored, no_location, no_change, unresolved_names
 
 	metricDropped = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "asset_events_dropped_total",
