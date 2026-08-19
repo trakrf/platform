@@ -1,6 +1,13 @@
 # TrakRF Platform - Task Runner
 # https://just.systems/
 
+# Make a recipe's arguments available to its body as "$@" with word boundaries
+# intact. `{{ ARGS }}` substitutes textually, so the shell re-splits a quoted
+# argument on whitespace — which silently broke `just psql prod "SELECT ..."`
+# (TRA-1105). The workspace delegation and infra passthrough recipes below both
+# rely on this.
+set positional-arguments
+
 # List all available recipes
 default:
     @just --list
@@ -11,18 +18,22 @@ default:
 # Delegate commands to workspace justfiles
 # Usage: just <workspace> <command> [args...]
 # Example: just frontend dev, just backend test
+#
+# "$@" rather than {{ args }}, for the reason given at the top of this file: a
+# quoted argument such as `just backend test -run "TestFoo Bar"` must reach the
+# workspace as one word (TRA-1105).
 
 frontend *args:
-    cd frontend && just {{args}}
+    cd frontend && just "$@"
 
 backend *args:
-    cd backend && just {{args}}
+    cd backend && just "$@"
 
 cli *args:
-    cd cli && just {{args}}
+    cd cli && just "$@"
 
 database *args:
-    cd database && just {{args}}
+    cd database && just "$@"
 
 # ============================================================================
 # Lazy Dev Aliases
@@ -86,19 +97,24 @@ ops *ARGS:
         echo "       See .env.local.example — .envrc loads .env.local." >&2
         exit 1
     fi
-    just --justfile "$infra_dir/justfile" {{ ARGS }}
+    # "$@" rather than {{ ARGS }}: infra's `psql ENV QUERY=""` takes a whole SQL
+    # statement as one argument, and textual interpolation would re-split it on
+    # whitespace before infra ever sees it (TRA-1105).
+    just --justfile "$infra_dir/justfile" "$@"
 
 # Authenticate to GCP and point kubectl at the cluster (no-op if already valid)
 gcp-auth *ARGS:
-    @just ops gcp-auth {{ ARGS }}
+    @just ops gcp-auth "$@"
 
-# Interactive psql on a CNPG primary: `just psql preview`, `just psql prod`
+# psql on a CNPG primary as the non-superuser `trakrf-migrate` role (TRA-1105):
+# `just psql preview` for a shell, `just psql prod "SELECT 1;"` for a one-off.
+# A superuser session is a deliberate opt-in: `just ops psql-super ENV [QUERY]`.
 psql *ARGS:
-    @just ops psql {{ ARGS }}
+    @just ops psql "$@"
 
 # Follow backend logs: `just logs preview`, `just logs prod 1h`
 logs *ARGS:
-    @just ops logs {{ ARGS }}
+    @just ops logs "$@"
 
 # Test the passthrough against a stub infra justfile (no cluster access needed)
 test-ops:

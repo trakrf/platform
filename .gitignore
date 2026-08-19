@@ -100,8 +100,13 @@ temp/
 dev-mock.log
 .dev-mock.pid
 
-# Claude Code workspace (hooks, lock files, per-session scratch)
-.claude/
+# Claude Code workspace. Narrow ignore: the rest of .claude/ stays tracked, so
+# shared agent config (csw.json) is versioned with the repo. Matches trakrf/infra.
+# Git worktrees — Claude Code's native worktree tool writes here (see CLAUDE.md)
+.claude/worktrees/
+# Local settings and per-session scratch (e.g. scheduled_tasks.lock)
+.claude/settings.local.json
+.claude/*.lock
 
 # macOS resource fork files
 ._*
