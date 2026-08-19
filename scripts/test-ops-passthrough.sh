@@ -56,8 +56,10 @@ list:
 gcp-auth:
     @echo "STUB gcp-auth FORCE=${FORCE:-unset}"
 
-psql ENV:
-    @echo "STUB psql {{ ENV }}"
+psql ENV QUERY="":
+    #!/usr/bin/env bash
+    query={{ quote(QUERY) }}
+    echo "STUB psql {{ ENV }} [$query]"
 
 logs ENV SINCE="10m":
     @echo "STUB logs {{ ENV }} {{ SINCE }}"
@@ -117,6 +119,34 @@ expect "psql alias forwards" "STUB psql preview" "$out"
 
 out=$(cd "$repo_root" && TRAKRF_INFRA_DIR="$tmp/infra-explicit" just logs prod 1h 2>&1)
 expect "logs alias forwards both args" "STUB logs prod 1h" "$out"
+
+echo "== quoted arguments survive the hop (TRA-1105) =="
+
+# infra's `psql ENV QUERY=""` takes SQL as a single argument. Bare `{{ ARGS }}`
+# interpolation substitutes textually, so the shell re-splits the query on
+# whitespace and `just psql prod "SELECT version, dirty FROM ..."` reached infra
+# as five arguments — it died with ``Justfile does not contain recipe `version,```.
+# The release checklist (docs/releasing.md step 0) documents exactly this call.
+q="SELECT version, dirty FROM trakrf.schema_migrations;"
+
+out=$(cd "$repo_root" && TRAKRF_INFRA_DIR="$tmp/infra-explicit" just ops psql preview "$q" 2>&1)
+expect "ops keeps a quoted multi-word arg in one piece" "STUB psql preview [$q]" "$out"
+
+out=$(cd "$repo_root" && TRAKRF_INFRA_DIR="$tmp/infra-explicit" just psql preview "$q" 2>&1)
+expect "psql alias keeps a quoted multi-word arg in one piece" "STUB psql preview [$q]" "$out"
+
+# A double-quoted SQL identifier is what breaks textual interpolation hardest.
+# infra guards its own side with quote(); platform must not have mangled the
+# argument before infra ever sees it.
+qq='SELECT rolname FROM pg_roles WHERE rolname = "trakrf-migrate";'
+
+out=$(cd "$repo_root" && TRAKRF_INFRA_DIR="$tmp/infra-explicit" just psql preview "$qq" 2>&1)
+expect "psql alias survives a double-quoted identifier" "STUB psql preview [$qq]" "$out"
+
+# Empty QUERY is the interactive form, and must stay distinguishable from a
+# query — not collapse into a stray empty argument.
+out=$(cd "$repo_root" && TRAKRF_INFRA_DIR="$tmp/infra-explicit" just psql preview 2>&1)
+expect "psql alias with no query stays the interactive form" "STUB psql preview []" "$out"
 
 # The aliases are variadic on purpose: infra owns SINCE's default, platform must
 # not restate it. If this prints 10m, platform never saw the default at all.
