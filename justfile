@@ -92,7 +92,9 @@ ops *ARGS:
 gcp-auth *ARGS:
     @just ops gcp-auth {{ ARGS }}
 
-# Interactive psql on a CNPG primary: `just psql preview`, `just psql prod`
+# psql on a CNPG primary as the non-superuser `trakrf-migrate` role (TRA-1105):
+# `just psql preview` for a shell, `just psql prod "SELECT 1;"` for a one-off.
+# A superuser session is a deliberate opt-in: `just ops psql-super ENV [QUERY]`.
 psql *ARGS:
     @just ops psql {{ ARGS }}
 
