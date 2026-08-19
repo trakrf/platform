@@ -1,0 +1,16 @@
+{
+  "ticketPrefix": "TRA",
+  "tracker": "linear",
+  "baseBranch": "main",
+  "defaultType": "feat",
+  "validate": "just validate",
+  "worktreeDir": ".claude/worktrees",
+  "branchPattern": "<type>/<ticket>-<slug>",
+  "adrDir": "docs/adr",
+  "gates": [
+    {
+      "when": "**/migrations/**",
+      "run": "just backend migrate-checksums"
+    }
+  ]
+}
