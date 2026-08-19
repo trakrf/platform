@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Tests for the infra ops passthrough recipes (TRA-1053).
+# Tests for the root justfile's delegation recipes (TRA-1053, TRA-1105).
 #
-# These exercise the root justfile's `ops`, `psql` and `logs` recipes against a
-# stub infra justfile, so nothing here needs gcloud, kubectl, a cluster, or the
-# real trakrf/infra checkout.
+# These exercise `ops`, `psql` and `logs` against a stub infra justfile, and the
+# `frontend`/`backend`/`cli`/`database` workspace recipes against stub workspace
+# justfiles — so nothing here needs gcloud, kubectl, a cluster, the real
+# trakrf/infra checkout, or node_modules.
 #
 # Run: just test-ops
 set -uo pipefail
@@ -72,6 +73,31 @@ sourcecheck:
 STUB
     mkdir -p "$dir/scripts"
     echo 'STUB_LIB=ok' > "$dir/scripts/stub-lib.sh"
+}
+
+# Stand up a platform checkout whose four workspace directories carry stub
+# justfiles, so the workspace delegation recipes can be exercised without
+# node_modules or a Go toolchain. `echoargs` has a fixed arity on purpose: if
+# delegation re-splits a quoted argument, just rejects the call outright rather
+# than quietly passing the wrong thing through.
+make_workspace_stubs() {
+    local dir="$1"
+    mkdir -p "$dir"
+    cp "$repo_root/justfile" "$dir/justfile"
+    local ws
+    for ws in frontend backend cli database; do
+        mkdir -p "$dir/$ws"
+        cat > "$dir/$ws/justfile" <<STUB
+default:
+    @echo "STUB $ws default"
+
+echoargs ONE TWO="":
+    #!/usr/bin/env bash
+    one={{ quote(ONE) }}
+    two={{ quote(TWO) }}
+    echo "STUB $ws echoargs [\$one] [\$two]"
+STUB
+    done
 }
 
 # Stand up a platform checkout at <parent>/platform with a sibling <parent>/infra
@@ -152,6 +178,31 @@ expect "psql alias with no query stays the interactive form" "STUB psql preview 
 # not restate it. If this prints 10m, platform never saw the default at all.
 out=$(cd "$repo_root" && TRAKRF_INFRA_DIR="$tmp/infra-explicit" just logs prod 2>&1)
 expect "logs alias leaves infra's default arg to infra" "STUB logs prod 10m" "$out"
+
+echo "== workspace delegation keeps arguments intact (TRA-1105) =="
+
+make_workspace_stubs "$tmp/ws"
+
+# Same defect as the ops passthrough: `cd <ws> && just {{ args }}` substitutes
+# textually, so `just backend test -run "TestFoo Bar"` reached the workspace as
+# two arguments and the -run pattern lost its second word.
+for ws in frontend backend cli database; do
+    out=$(cd "$tmp/ws" && just "$ws" echoargs "go test -run TestFoo Bar" 2>&1)
+    expect "$ws keeps a quoted multi-word arg in one piece" \
+        "STUB $ws echoargs [go test -run TestFoo Bar] []" "$out"
+done
+
+out=$(cd "$tmp/ws" && just backend echoargs "one two" "three four" 2>&1)
+expect "backend keeps two quoted args separate" \
+    "STUB backend echoargs [one two] [three four]" "$out"
+
+# The lazy aliases resolve to the same recipes and must not regress separately.
+out=$(cd "$tmp/ws" && just be echoargs "one two" 2>&1)
+expect "be alias keeps a quoted arg in one piece" "STUB backend echoargs [one two] []" "$out"
+
+# No arguments must still reach the workspace's own default recipe.
+out=$(cd "$tmp/ws" && just frontend 2>&1)
+expect "bare workspace recipe runs the workspace default" "STUB frontend default" "$out"
 
 echo "== missing infra checkout =="
 

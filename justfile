@@ -4,7 +4,8 @@
 # Make a recipe's arguments available to its body as "$@" with word boundaries
 # intact. `{{ ARGS }}` substitutes textually, so the shell re-splits a quoted
 # argument on whitespace — which silently broke `just psql prod "SELECT ..."`
-# (TRA-1105). Only the infra passthrough recipes below rely on this.
+# (TRA-1105). The workspace delegation and infra passthrough recipes below both
+# rely on this.
 set positional-arguments
 
 # List all available recipes
@@ -17,18 +18,22 @@ default:
 # Delegate commands to workspace justfiles
 # Usage: just <workspace> <command> [args...]
 # Example: just frontend dev, just backend test
+#
+# "$@" rather than {{ args }}, for the reason given at the top of this file: a
+# quoted argument such as `just backend test -run "TestFoo Bar"` must reach the
+# workspace as one word (TRA-1105).
 
 frontend *args:
-    cd frontend && just {{args}}
+    cd frontend && just "$@"
 
 backend *args:
-    cd backend && just {{args}}
+    cd backend && just "$@"
 
 cli *args:
-    cd cli && just {{args}}
+    cd cli && just "$@"
 
 database *args:
-    cd database && just {{args}}
+    cd database && just "$@"
 
 # ============================================================================
 # Lazy Dev Aliases
