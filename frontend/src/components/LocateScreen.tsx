@@ -78,14 +78,13 @@ const LocateScreen: React.FC = () => {
 
   // Get RSSI tracking from locateStore
   const {
-    currentRSSI,
-    averageRSSI,
-    peakRSSI,
-    updateRate,
     rssiBuffer,
     statusMessage,
     setStatusMessage,
-    getFilteredRSSI
+    getFilteredRSSI,
+    getStatistics,
+    // The raw, undecayed peak. Only the "Last search" status line uses it.
+    peakRSSI: lastSearchPeak
   } = useLocateStore();
 
   // Initialize Web Audio tone hook
@@ -124,15 +123,27 @@ const LocateScreen: React.FC = () => {
   const hasLiveSignal = displayRSSI > DEFAULT_RSSI;
   const isSearching = isScanning || hasLiveSignal;
 
+  // Same signal again for the Statistics rows. The raw store fields are only
+  // recalculated when a reading arrives, so rendering them directly left the
+  // previous search's numbers on screen for a search that was returning
+  // nothing — a decoy EPC matching no tag on the bench showed -36 dBm at
+  // 14.5 Hz (TRA-1123). getStatistics() decays all four to "no signal".
+  const { currentRSSI, averageRSSI, peakRSSI, updateRate } = getStatistics();
+
   // UI just observes trigger state changes - rfidManager handles the actual trigger operations
   useEffect(() => {
     // Update UI messages based on trigger and locate state
     if (triggerState && isScanning) {
       setStatusMessage('Searching...');
-    } else if (!triggerState && !isScanning && peakRSSI > DEFAULT_RSSI) {
-      setStatusMessage(`Last search - Peak RSSI: ${peakRSSI} dBm`);
+    } else if (!triggerState && !isScanning && lastSearchPeak > DEFAULT_RSSI) {
+      // The one readout meant to outlive the search that produced it, and the
+      // only one labelled as history — so it reads the raw store field. The
+      // Statistics "Peak" row decays with the rest, because there it sits
+      // unlabelled beside a live Current and Average and is read as now
+      // (TRA-1089).
+      setStatusMessage(`Last search - Peak RSSI: ${lastSearchPeak} dBm`);
     }
-  }, [triggerState, isScanning, peakRSSI, setStatusMessage]);
+  }, [triggerState, isScanning, lastSearchPeak, setStatusMessage]);
 
   // Force re-render every 250ms while a signal is being reported, so the
   // display drops back to "No signal" once readings go stale even though no
@@ -377,7 +388,7 @@ const LocateScreen: React.FC = () => {
       </div>
       
       {/* Simple Graph */}
-      {graphData && graphData.length > 0 && (
+      {hasLiveSignal && graphData && graphData.length > 0 && (
         <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow p-4">
           <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">Signal History (10s)</h3>
           <div className="h-32 bg-gray-50 dark:bg-gray-700 rounded flex items-center justify-center text-gray-500 dark:text-gray-400">

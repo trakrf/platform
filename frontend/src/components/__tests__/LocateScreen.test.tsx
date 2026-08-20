@@ -15,6 +15,10 @@ const mockSetStatusMessage = vi.fn((msg: string) => {
 // independently of the reader's state machine — that split is the whole point
 // of TRA-1080.
 let mockFilteredRSSI = -120;
+// When true, getStatistics() reports the signal as gone while the raw store
+// fields keep the frozen values a finished search left behind — the TRA-1123
+// state the screen used to render straight to the operator.
+let mockStatsStale = false;
 const mockLocateStats = {
   currentRSSI: -120,
   averageRSSI: -120,
@@ -32,7 +36,15 @@ vi.mock('@/stores/locateStore', () => ({
     get rssiBuffer() { return mockLocateStats.rssiBuffer; },
     get statusMessage() { return mockStatusMessage; },
     setStatusMessage: mockSetStatusMessage,
-    getFilteredRSSI: () => mockFilteredRSSI
+    getFilteredRSSI: () => mockFilteredRSSI,
+    getStatistics: () => mockStatsStale
+      ? { currentRSSI: -120, averageRSSI: -120, peakRSSI: -120, updateRate: 0 }
+      : {
+          currentRSSI: mockLocateStats.currentRSSI,
+          averageRSSI: mockLocateStats.averageRSSI,
+          peakRSSI: mockLocateStats.peakRSSI,
+          updateRate: mockLocateStats.updateRate
+        }
   })
 }));
 
@@ -303,5 +315,70 @@ describe('LocateScreen heading', () => {
 
     expect(screen.queryByText('Find Item')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Locate' })).not.toBeInTheDocument();
+  });
+});
+/**
+ * TRA-1123: the Statistics rows read four store fields that are only ever
+ * recalculated when a reading arrives, so a search returning nothing shows the
+ * previous search's signal — "Current: -36 dBm / Peak: -35 dBm / 14.5 Hz" for a
+ * tag that is not in the building. Observed on hardware with a decoy EPC
+ * matching no tag on the bench, where it briefly read as a tag-mask defect.
+ *
+ * The four rows and the Signal History panel must follow the same staleness
+ * signal the gauge follows.
+ */
+describe('LocateScreen stale statistics (TRA-1123)', () => {
+  const rowValue = (label: string) =>
+    screen.getByText(label).parentElement?.lastElementChild?.textContent?.trim();
+
+  afterEach(() => {
+    cleanup();
+    resetDeviceState();
+    mockStatsStale = false;
+    mockFilteredRSSI = -120;
+    mockLocateStats.currentRSSI = -120;
+    mockLocateStats.averageRSSI = -120;
+    mockLocateStats.peakRSSI = -120;
+    mockLocateStats.updateRate = 0;
+    mockLocateStats.rssiBuffer = [];
+  });
+
+  it('shows No signal on every statistic when the last read has gone stale', () => {
+    // The frozen fields a finished search leaves behind in the store.
+    mockLocateStats.currentRSSI = -36;
+    mockLocateStats.averageRSSI = -36;
+    mockLocateStats.peakRSSI = -35;
+    mockLocateStats.updateRate = 14.5;
+    mockStatsStale = true;
+
+    render(<LocateScreen />);
+
+    expect(rowValue('Current:')).toBe('No signal');
+    expect(rowValue('Average (1s):')).toBe('No signal');
+    expect(rowValue('Peak:')).toBe('No signal');
+    expect(rowValue('Update Rate:')).toBe('0 Hz');
+  });
+
+  it('does not print a Signal History range for a search that is hearing nothing', () => {
+    mockLocateStats.rssiBuffer = [{ timestamp: Date.now(), nb_rssi: -36 }];
+    mockStatsStale = true;
+    mockFilteredRSSI = -120;
+
+    render(<LocateScreen />);
+
+    expect(screen.queryByText('Signal History (10s)')).not.toBeInTheDocument();
+  });
+
+  it('still shows live statistics while reads are arriving', () => {
+    mockLocateStats.currentRSSI = -35;
+    mockLocateStats.averageRSSI = -36;
+    mockLocateStats.updateRate = 13.5;
+    mockFilteredRSSI = -35;
+
+    render(<LocateScreen />);
+
+    expect(rowValue('Current:')).toBe('-35 dBm');
+    expect(rowValue('Average (1s):')).toBe('-36 dBm');
+    expect(rowValue('Update Rate:')).toBe('13.5 Hz');
   });
 });
