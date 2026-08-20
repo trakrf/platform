@@ -542,6 +542,36 @@ class CS108Reader extends BaseReader {
     this.readerSettings = { ...this.readerSettings, ...settings };
     logger.debug('[Reader] Stored settings for future use');
 
+    // A retarget while the search is running has to reach the hardware. The
+    // apply path below only runs while CONNECTED, so during SCANNING the new
+    // mask was stored and never written: the reader kept streaming the
+    // *previous* tag, and because that mask is the only EPC filter there is —
+    // addRssiReading() never receives an EPC — the screen rendered another
+    // tag's signal as this search's. Measured over the bridge on 2026-08-20:
+    // retargeting a running search to a decoy EPC matching no tag on the bench
+    // kept reporting 13.5 Hz at -43 dBm. That is TRA-1123 entire.
+    //
+    // Cycle the search rather than writing a mask underneath a running
+    // inventory, which is the sequencing the reader already trusts for a mode
+    // change. stopScanning() reconciles a held trigger by restarting on its
+    // own, and that path writes the mask too, so either way the write goes
+    // through the single owner of it in startScanning().
+    if (this.readerMode === ReaderMode.LOCATE &&
+        this.readerState === ReaderState.SCANNING &&
+        settings.rfid?.targetEPC &&
+        settings.rfid.targetEPC !== this.lastAppliedTargetEPC) {
+      logger.info('[Reader] Target changed mid-search - cycling the search so the new mask reaches hardware');
+      const wasRequested = this.scanningRequested;
+      await this.stopScanning();
+      // Read the state back through getState(): the guard above narrowed
+      // this.readerState to SCANNING, and the compiler cannot see that
+      // stopScanning() moved it.
+      if (this.getState() === ReaderState.CONNECTED) {
+        this.scanningRequested = wasRequested;
+        await this.startScanning();
+      }
+    }
+
     // Check if we need to apply hardware settings
     const hasHardwareSettings =
       settings.rfid?.transmitPower !== undefined ||

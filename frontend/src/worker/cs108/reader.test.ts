@@ -802,8 +802,13 @@ describe('CS108Reader', () => {
       postMessageSpy.mockClear();
     });
 
-    it('writes a target that changed while the reader was not CONNECTED', async () => {
-      (reader as any).readerState = ReaderState.SCANNING;
+    it('writes a target that changed while the reader was mid-transition', async () => {
+      // BUSY, not SCANNING: a retarget landing on a *running* search is now
+      // handled by setSettings cycling the search. What still reaches
+      // startScanning unapplied is a retarget that lands in the transitional
+      // window — which is the reported TRA-1122 timing, since leaving SCANNING
+      // passes through BUSY.
+      (reader as any).readerState = ReaderState.BUSY;
       await reader.setSettings({ rfid: { targetEPC: SECOND_EPC } });
       (reader as any).readerState = ReaderState.CONNECTED;
       (commandManagerMock.executeSequence as Mock).mockClear();
@@ -823,7 +828,7 @@ describe('CS108Reader', () => {
     });
 
     it('surfaces a failed mask write instead of searching for the wrong tag', async () => {
-      (reader as any).readerState = ReaderState.SCANNING;
+      (reader as any).readerState = ReaderState.BUSY;
       await reader.setSettings({ rfid: { targetEPC: SECOND_EPC } });
       (reader as any).readerState = ReaderState.CONNECTED;
       (commandManagerMock.executeSequence as Mock).mockClear();
@@ -851,6 +856,61 @@ describe('CS108Reader', () => {
       // The LOCATE mode sequence just rewrote the mask, so the start needs no
       // second write.
       expect(commandManagerMock.executeSequence).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  /**
+   * Hardware-found, 2026-08-20: retargeting *while the search is running* left
+   * the old mask on the reader. setSettings only writes the mask while
+   * CONNECTED; during SCANNING it takes the "stored but not applied" branch,
+   * and nothing rewrites it because the search never restarts.
+   *
+   * Measured over the ble-mcp-test bridge: retargeting a running search to a
+   * decoy EPC matching no tag on the bench kept delivering reads at 13.5 Hz and
+   * -43 dBm — the *previous* tag, arriving through the stale mask. The ring
+   * buffer cleared correctly and then refilled from the same wrong tag, because
+   * the hardware mask is the only EPC filter there is: addRssiReading() never
+   * receives an EPC, despite comments elsewhere claiming locateStore filters.
+   *
+   * A tag finder reporting another tag's signal is the whole of TRA-1123.
+   */
+  describe('LOCATE retarget while scanning (hardware-found)', () => {
+    const FIRST_EPC = 'E280689400000000001018DD';
+    const SECOND_EPC = 'E280689400000000001018EE';
+
+    const executedSequences = () =>
+      (commandManagerMock.executeSequence as Mock).mock.calls.map(call => call[0]);
+
+    beforeEach(async () => {
+      await reader.connect();
+      await reader.setMode(ReaderMode.LOCATE, { rfid: { targetEPC: FIRST_EPC } });
+      (reader as any).triggerState = true;
+      await reader.startScanning();
+      postMessageSpy.mockClear();
+    });
+
+    it('puts the new mask on the hardware rather than storing it for later', async () => {
+      expect(reader.getState()).toBe(ReaderState.SCANNING);
+      (commandManagerMock.executeSequence as Mock).mockClear();
+
+      await reader.setSettings({ rfid: { targetEPC: SECOND_EPC } });
+
+      expect(executedSequences()).toContainEqual(locateSettingsSequence(SECOND_EPC));
+    });
+
+    it('is searching again on the new target when it settles', async () => {
+      await reader.setSettings({ rfid: { targetEPC: SECOND_EPC } });
+
+      expect(reader.getState()).toBe(ReaderState.SCANNING);
+    });
+
+    it('leaves a running search alone when the target has not changed', async () => {
+      (commandManagerMock.executeSequence as Mock).mockClear();
+
+      await reader.setSettings({ rfid: { targetEPC: FIRST_EPC } });
+
+      expect(executedSequences()).not.toContainEqual(locateSettingsSequence(FIRST_EPC));
+      expect(reader.getState()).toBe(ReaderState.SCANNING);
     });
   });
 
