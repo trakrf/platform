@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { recordStoreUpdateStart } from '../lib/perf/locate-metrics';
+import { removeLeadingZeros } from '../utils/reconciliationUtils';
 
 // RSSI data point in the ring buffer
 export interface RssiDataPoint {
@@ -30,6 +31,7 @@ interface LocateState {
   // Current state
   lastUpdateTime: number;       // Timestamp of last RSSI update
   statusMessage: string;        // UI status message
+  targetEPC: string;            // The target the buffered readings were read for
   
   // Statistics (calculated from buffer)
   currentRSSI: number;          // Most recent RSSI value
@@ -38,17 +40,48 @@ interface LocateState {
   updateRate: number;           // Updates per second
   
   // Actions
-  addRssiReading: (nb_rssi: number, wb_rssi?: number, phase?: number, workerTimestamp?: number) => void;
+  addRssiReading: (nb_rssi: number, wb_rssi?: number, phase?: number, workerTimestamp?: number, epc?: string) => void;
   setStatusMessage: (message: string) => void;
+  setTarget: (epc: string) => void;
   clearBuffer: () => void;
   
   // Getters
   getRecentReadings: (duration?: number) => RssiDataPoint[];  // Get readings from last N ms
   getFilteredRSSI: () => number;  // Get time-weighted filtered RSSI
+  getStatistics: () => LocateStatistics;  // Statistics with staleness applied
+}
+
+// The four numbers the Statistics panel renders, as the operator should read
+// them right now
+export interface LocateStatistics {
+  currentRSSI: number;
+  averageRSSI: number;
+  peakRSSI: number;
+  updateRate: number;
 }
 
 // Default RSSI value when no signal
-const DEFAULT_RSSI = -120;
+export const DEFAULT_RSSI = -120;
+
+// Does a read belong to the tag we are looking for?
+//
+// The operator may type a leading-zero-stripped EPC while the tag reports its
+// full width, which is the equivalence TRA-1108/TRA-1120 already build into the
+// hardware mask by OR-ing a 96- and a 128-bit descriptor. This filter has to
+// use the same one: comparing raw strings would drop every legitimate read for
+// a stripped target and re-break locate for 128-bit EPCs.
+//
+// An empty target means nothing has been selected yet, and a reading with no
+// EPC gives no basis to reject it. Both admit.
+export function isReadingForTarget(readEPC: string | undefined, targetEPC: string): boolean {
+  if (!targetEPC || !readEPC) return true;
+  return removeLeadingZeros(readEPC.toUpperCase()) === removeLeadingZeros(targetEPC.toUpperCase());
+}
+
+// How long after the last read the signal counts as gone. One value, because
+// the gauge, the Status row and the Statistics panel must agree about whether
+// the tag is being heard (TRA-1089).
+export const STALE_THRESHOLD_MS = 1000;
 
 export const useLocateStore = create<LocateState>()(
   subscribeWithSelector((set, get) => ({
@@ -63,6 +96,7 @@ export const useLocateStore = create<LocateState>()(
     // State
     lastUpdateTime: 0,
     statusMessage: 'Ready to locate',
+    targetEPC: '',
     
     // Statistics
     currentRSSI: DEFAULT_RSSI,
@@ -71,7 +105,24 @@ export const useLocateStore = create<LocateState>()(
     updateRate: 0,
     
     // Add new RSSI reading to ring buffer
-    addRssiReading: (nb_rssi: number, wb_rssi?: number, phase?: number, workerTimestamp?: number) => {
+    addRssiReading: (nb_rssi: number, wb_rssi?: number, phase?: number, workerTimestamp?: number, epc?: string) => {
+      // Reject reads from tags that are not the target.
+      //
+      // handler.ts has always said "the application layer (locateStore) will
+      // filter for the target EPC" — it never did, so the hardware Gen2 Select
+      // was the only filter, and it is demonstrably imperfect: measured on the
+      // turntable bench, ~0.03% of reads come from a tag at the edge of the
+      // field that mis-decoded the Select and asserted SL. One stray sample is
+      // enough to turn an honest "no signal" into a plausible reading, which is
+      // this ticket's symptom by a different route than the stale buffer.
+      //
+      // This also drops the read still in flight from the old mask when the
+      // target changes mid-search, instead of leaving it on screen until
+      // staleness catches it a second later.
+      if (!isReadingForTarget(epc, get().targetEPC)) {
+        return;
+      }
+
       // Start metrics recording (returns completion callback)
       const completeMetrics = recordStoreUpdateStart(workerTimestamp);
 
@@ -144,6 +195,17 @@ export const useLocateStore = create<LocateState>()(
     setStatusMessage: (message: string) => {
       set({ statusMessage: message });
     },
+
+    // Point the buffer at a target. A reading only says anything about the tag
+    // it was read for, so retargeting throws the readings away rather than
+    // showing the previous tag's signal for a search that is returning nothing
+    // (TRA-1123). Re-asserting the same target is a no-op, because the screen
+    // re-syncs on every mount and every settings change.
+    setTarget: (epc: string) => {
+      if (get().targetEPC === epc) return;
+      get().clearBuffer();
+      set({ targetEPC: epc });
+    },
     
     // Clear buffer
     clearBuffer: () => {
@@ -165,14 +227,43 @@ export const useLocateStore = create<LocateState>()(
       return state.rssiBuffer.filter(p => p.timestamp > cutoff);
     },
     
+    // Statistics as the operator should read them.
+    //
+    // currentRSSI/averageRSSI/peakRSSI/updateRate are recomputed only inside
+    // addRssiReading(), so once reads stop they freeze on the last value
+    // indefinitely. On a screen whose whole job is proximity feedback, a frozen
+    // number from a search that is over is a wrong answer, not an old one: it
+    // reads as "the tag is right here" for a search that has returned nothing
+    // (TRA-1123). Decay them on the same staleness signal getFilteredRSSI()
+    // already uses, so the gauge, the Status row and this panel cannot
+    // disagree.
+    getStatistics: () => {
+      const state = get();
+
+      if (Date.now() - state.lastUpdateTime > STALE_THRESHOLD_MS) {
+        return {
+          currentRSSI: DEFAULT_RSSI,
+          averageRSSI: DEFAULT_RSSI,
+          peakRSSI: DEFAULT_RSSI,
+          updateRate: 0
+        };
+      }
+
+      return {
+        currentRSSI: state.currentRSSI,
+        averageRSSI: state.averageRSSI,
+        peakRSSI: state.peakRSSI,
+        updateRate: state.updateRate
+      };
+    },
+
     // Get time-weighted filtered RSSI (for smooth gauge display)
     getFilteredRSSI: () => {
       const state = get();
       const now = Date.now();
 
       // If no readings in the last 1 second, return default (no signal)
-      const staleThreshold = 1000;
-      if (now - state.lastUpdateTime > staleThreshold) {
+      if (now - state.lastUpdateTime > STALE_THRESHOLD_MS) {
         return DEFAULT_RSSI;
       }
 

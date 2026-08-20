@@ -293,7 +293,8 @@ export class DeviceManager {
               locatePayload.smoothedRssi ?? locatePayload.rssi,
               locatePayload.wbRssi,
               undefined, // phase not in payload
-              locatePayload._workerTimestamp // for metrics
+              locatePayload._workerTimestamp, // for metrics
+              locatePayload.epc // so the store can reject reads from other tags
             );
           } else {
             console.debug(`[DeviceManager] Ignoring stale locate update (${age}ms old)`);
