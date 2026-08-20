@@ -114,10 +114,14 @@ vi.mock('@/stores/settingsStore', () => {
 // onScan callback the screen registered, so a capture can be delivered without
 // a reader; the resolver is mocked because its own suite covers the registry
 // lookups and this file is about what the screen does with each verdict.
+// startBarcodeScan/stopScan must resolve, not return undefined: the real hook
+// types them as () => Promise<void> and the screen chains .catch() onto the
+// start call so a scan that never starts cannot leave the button offering to
+// cancel a scan that is not running.
 const scanHook = vi.hoisted(() => ({
   capturedOnScan: null as ((value: string) => void) | null,
-  startBarcodeScan: vi.fn(),
-  stopScan: vi.fn()
+  startBarcodeScan: vi.fn().mockResolvedValue(undefined),
+  stopScan: vi.fn().mockResolvedValue(undefined)
 }));
 
 vi.mock('@/hooks/useScanToInput', () => ({
@@ -557,6 +561,66 @@ describe('LocateScreen barcode target acquisition (TRA-1121)', () => {
     expect(mockSetTargetEPC).not.toHaveBeenCalled();
     expect(mockSetStatusMessage).toHaveBeenLastCalledWith(
       expect.stringContaining('no RFID tag')
+    );
+  });
+
+  // useScanToInput reports isScanning from a ref, so it never triggers a
+  // re-render. A screen that trusted it would leave the button showing "scan"
+  // after a capture had started, and a second click would re-arm rather than
+  // cancel — stranding the reader in barcode mode with the trigger dead.
+  it('offers cancel once a capture is running, and stops the scan', async () => {
+    vi.mocked(resolveBarcodeTarget).mockResolvedValue({ status: 'no-asset' });
+    render(<LocateScreen />);
+
+    const button = screen.getByTestId('locate-barcode-scan');
+    fireEvent.click(button);
+
+    expect(button).toHaveAttribute('aria-label', 'Cancel scan');
+
+    fireEvent.click(button);
+
+    expect(scanHook.stopScan).toHaveBeenCalled();
+    expect(scanHook.startBarcodeScan).toHaveBeenCalledTimes(1);
+    expect(button).toHaveAttribute('aria-label', 'Scan barcode to acquire target');
+  });
+
+  // Verified on hardware: setMode(BARCODE) takes about a second on a real
+  // CS108, and a cancel that lands inside that window collides with the
+  // in-flight command ("Command already active"), leaving the reader in
+  // Barcode mode and ERROR state with the trigger dead until the operator
+  // reloads. The reader reports BUSY for the duration, so that is the gate.
+  it('does not offer to cancel a scan that failed to start', async () => {
+    scanHook.startBarcodeScan.mockRejectedValueOnce(new Error('reader busy'));
+    render(<LocateScreen />);
+
+    const button = screen.getByTestId('locate-barcode-scan');
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    expect(button).toHaveAttribute('aria-label', 'Scan barcode to acquire target');
+    expect(mockSetStatusMessage).toHaveBeenLastCalledWith(
+      expect.stringContaining('Could not start')
+    );
+  });
+
+  it('refuses input while the reader is still applying a mode change', () => {
+    mockDeviceState.readerState = ReaderState.BUSY;
+
+    render(<LocateScreen />);
+
+    expect(screen.getByTestId('locate-barcode-scan')).toBeDisabled();
+  });
+
+  it('returns the button to its resting state once a capture lands', async () => {
+    vi.mocked(resolveBarcodeTarget).mockResolvedValue({ status: 'no-asset' });
+    render(<LocateScreen />);
+
+    await scanBarcode('S04163');
+
+    expect(screen.getByTestId('locate-barcode-scan')).toHaveAttribute(
+      'aria-label',
+      'Scan barcode to acquire target'
     );
   });
 

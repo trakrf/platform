@@ -103,7 +103,39 @@ describe('resolveBarcodeTarget', () => {
     expect(lookupApi.byTag).toHaveBeenCalledWith('barcode', 'LOT/4163');
   });
 
-  it('reports no-asset when neither path matches', async () => {
+  // The rfidCollect convention prints the tag's own value on the label, and
+  // commissioning stores it leading-zero-stripped, so the bench asset carries
+  // an RFID tag valued exactly "10021" and no barcode tag at all. Confirming
+  // the value against the registry is not the literal-EPC fallback this
+  // feature rejects — a value the registry does not know is still refused.
+  it('falls back to an RFID tag whose registered value is the barcode', async () => {
+    vi.mocked(assetsApi.list).mockResolvedValue(listOk([]) as never);
+    vi.mocked(lookupApi.byTag).mockImplementation(((type: string) =>
+      type === 'rfid'
+        ? Promise.resolve({ data: { data: { entity_type: 'asset', entity_id: 7 } } })
+        : Promise.reject({ response: { status: 404 } })) as never);
+    vi.mocked(assetsApi.get).mockResolvedValue({ data: { data: asset() } } as never);
+
+    const result = await resolveBarcodeTarget('10021');
+
+    expect(lookupApi.byTag).toHaveBeenCalledWith('rfid', '10021');
+    expect(result).toMatchObject({ status: 'resolved' });
+  });
+
+  it('prefers a barcode tag over an RFID tag of the same value', async () => {
+    vi.mocked(assetsApi.list).mockResolvedValue(listOk([]) as never);
+    vi.mocked(lookupApi.byTag).mockResolvedValue({
+      data: { data: { entity_type: 'asset', entity_id: 7 } },
+    } as never);
+    vi.mocked(assetsApi.get).mockResolvedValue({ data: { data: asset() } } as never);
+
+    await resolveBarcodeTarget('10021');
+
+    expect(lookupApi.byTag).toHaveBeenCalledWith('barcode', '10021');
+    expect(lookupApi.byTag).not.toHaveBeenCalledWith('rfid', '10021');
+  });
+
+  it('reports no-asset when no path matches', async () => {
     vi.mocked(assetsApi.list).mockResolvedValue(listOk([]) as never);
 
     await expect(resolveBarcodeTarget('10023')).resolves.toEqual({ status: 'no-asset' });

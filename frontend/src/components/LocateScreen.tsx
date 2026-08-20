@@ -136,6 +136,13 @@ const LocateScreen: React.FC = () => {
   const isConnected = useDeviceStore((state) => state.isConnected);
   const [isResolving, setIsResolving] = React.useState(false);
   const [tagChoices, setTagChoices] = React.useState<Tag[]>([]);
+  // Capture state is tracked here, not read from useScanToInput. The hook
+  // reports isScanning from a ref, which never triggers a re-render — and
+  // nothing else re-renders this screen while it sits idle, so a button
+  // driven by the hook's value would still read "scan" after a capture had
+  // started. The second click would then re-arm instead of cancelling and
+  // leave the reader in barcode mode with the trigger dead.
+  const [isCapturing, setIsCapturing] = React.useState(false);
 
   const applyTarget = React.useCallback((epc: string, note: string) => {
     setInputEPC(epc);
@@ -151,6 +158,7 @@ const LocateScreen: React.FC = () => {
 
   const handleBarcode = React.useCallback(async (barcode: string) => {
     setTagChoices([]);
+    setIsCapturing(false);
     setIsResolving(true);
     setStatusMessage(`Looking up ${barcode}...`);
     try {
@@ -180,7 +188,7 @@ const LocateScreen: React.FC = () => {
     }
   }, [applyTarget, setStatusMessage]);
 
-  const { startBarcodeScan, stopScan, isScanning: isCapturing } = useScanToInput({
+  const { startBarcodeScan, stopScan } = useScanToInput({
     onScan: handleBarcode,
     autoStop: true,
     // Back to Locate rather than IDLE, so the reader is ready to search the
@@ -369,8 +377,31 @@ const LocateScreen: React.FC = () => {
           <button
             type="button"
             data-testid="locate-barcode-scan"
-            onClick={isCapturing ? stopScan : () => startBarcodeScan()}
-            disabled={isResolving || readerState === ReaderState.SCANNING}
+            onClick={() => {
+              if (isCapturing) {
+                setIsCapturing(false);
+                stopScan();
+                setStatusMessage('Scan cancelled.');
+                return;
+              }
+              setIsCapturing(true);
+              // A capture that never starts must not leave the button stuck
+              // offering a cancel for a scan that is not running.
+              startBarcodeScan().catch((error) => {
+                console.error('[LocateScreen] barcode scan failed to start', error);
+                setIsCapturing(false);
+                setStatusMessage('Could not start the barcode scanner.');
+              });
+            }}
+            // BUSY covers the ~1s the reader spends applying a mode change.
+            // Accepting a click inside that window collides with the in-flight
+            // command and strands the reader in barcode mode with the trigger
+            // dead (observed on a CS108).
+            disabled={
+              isResolving ||
+              readerState === ReaderState.SCANNING ||
+              readerState === ReaderState.BUSY
+            }
             title={isCapturing ? 'Cancel scan' : 'Scan barcode to acquire target'}
             aria-label={isCapturing ? 'Cancel scan' : 'Scan barcode to acquire target'}
             className="flex-shrink-0 p-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"

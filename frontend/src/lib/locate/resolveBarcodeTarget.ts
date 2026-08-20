@@ -49,12 +49,12 @@ async function byExternalKey(barcode: string): Promise<Asset | null> {
   return assets.length === 1 ? assets[0] : null;
 }
 
-/** Exact match against a registered barcode-type tag. */
-async function byBarcodeTag(barcode: string): Promise<Asset | null> {
+/** Exact match against a registered tag of the given type. */
+async function byTag(tagType: 'barcode' | 'rfid', barcode: string): Promise<Asset | null> {
   let entityId: number;
 
   try {
-    const response = await lookupApi.byTag('barcode', barcode);
+    const response = await lookupApi.byTag(tagType, barcode);
     const result = response.data.data;
     if (result?.entity_type !== 'asset') return null;
     entityId = result.entity_id;
@@ -80,7 +80,17 @@ export async function resolveBarcodeTarget(
   if (!trimmed) return { status: 'no-asset' };
 
   try {
-    const asset = (await byExternalKey(trimmed)) ?? (await byBarcodeTag(trimmed));
+    // Three exact steps, most explicit first. The last one matters because the
+    // rfidCollect convention prints the tag's own value on the label, so the
+    // bench asset carries an RFID tag valued "10021" and no barcode tag —
+    // without it, scanning our own label resolves to nothing. It is still a
+    // registry confirmation, not the literal-EPC fallback this feature
+    // rejects: a value the registry does not know is refused, and the
+    // backend's lookup normalizes leading zeros on both sides.
+    const asset =
+      (await byExternalKey(trimmed)) ??
+      (await byTag('barcode', trimmed)) ??
+      (await byTag('rfid', trimmed));
     return asset ? fromAsset(asset) : { status: 'no-asset' };
   } catch (error) {
     console.error('[resolveBarcodeTarget] lookup failed', error);
