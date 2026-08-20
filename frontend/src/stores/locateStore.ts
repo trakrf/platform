@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { recordStoreUpdateStart } from '../lib/perf/locate-metrics';
+import { removeLeadingZeros } from '../utils/reconciliationUtils';
 
 // RSSI data point in the ring buffer
 export interface RssiDataPoint {
@@ -39,7 +40,7 @@ interface LocateState {
   updateRate: number;           // Updates per second
   
   // Actions
-  addRssiReading: (nb_rssi: number, wb_rssi?: number, phase?: number, workerTimestamp?: number) => void;
+  addRssiReading: (nb_rssi: number, wb_rssi?: number, phase?: number, workerTimestamp?: number, epc?: string) => void;
   setStatusMessage: (message: string) => void;
   setTarget: (epc: string) => void;
   clearBuffer: () => void;
@@ -61,6 +62,21 @@ export interface LocateStatistics {
 
 // Default RSSI value when no signal
 export const DEFAULT_RSSI = -120;
+
+// Does a read belong to the tag we are looking for?
+//
+// The operator may type a leading-zero-stripped EPC while the tag reports its
+// full width, which is the equivalence TRA-1108/TRA-1120 already build into the
+// hardware mask by OR-ing a 96- and a 128-bit descriptor. This filter has to
+// use the same one: comparing raw strings would drop every legitimate read for
+// a stripped target and re-break locate for 128-bit EPCs.
+//
+// An empty target means nothing has been selected yet, and a reading with no
+// EPC gives no basis to reject it. Both admit.
+export function isReadingForTarget(readEPC: string | undefined, targetEPC: string): boolean {
+  if (!targetEPC || !readEPC) return true;
+  return removeLeadingZeros(readEPC.toUpperCase()) === removeLeadingZeros(targetEPC.toUpperCase());
+}
 
 // How long after the last read the signal counts as gone. One value, because
 // the gauge, the Status row and the Statistics panel must agree about whether
@@ -89,7 +105,24 @@ export const useLocateStore = create<LocateState>()(
     updateRate: 0,
     
     // Add new RSSI reading to ring buffer
-    addRssiReading: (nb_rssi: number, wb_rssi?: number, phase?: number, workerTimestamp?: number) => {
+    addRssiReading: (nb_rssi: number, wb_rssi?: number, phase?: number, workerTimestamp?: number, epc?: string) => {
+      // Reject reads from tags that are not the target.
+      //
+      // handler.ts has always said "the application layer (locateStore) will
+      // filter for the target EPC" — it never did, so the hardware Gen2 Select
+      // was the only filter, and it is demonstrably imperfect: measured on the
+      // turntable bench, ~0.03% of reads come from a tag at the edge of the
+      // field that mis-decoded the Select and asserted SL. One stray sample is
+      // enough to turn an honest "no signal" into a plausible reading, which is
+      // this ticket's symptom by a different route than the stale buffer.
+      //
+      // This also drops the read still in flight from the old mask when the
+      // target changes mid-search, instead of leaving it on screen until
+      // staleness catches it a second later.
+      if (!isReadingForTarget(epc, get().targetEPC)) {
+        return;
+      }
+
       // Start metrics recording (returns completion callback)
       const completeMetrics = recordStoreUpdateStart(workerTimestamp);
 

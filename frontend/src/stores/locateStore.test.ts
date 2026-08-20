@@ -119,3 +119,104 @@ describe('locateStore target tracking (TRA-1123)', () => {
     expect(useLocateStore.getState().targetEPC).toBe('E280689400000000001018DD');
   });
 });
+
+/**
+ * Measured on the TRA-1120 turntable bench: both pre- and post-fix code
+ * occasionally admit a read from a tag that was never the target — 2 strays in
+ * 6,119 reads (0.033%) on shipped main, consistent with a tag at the edge of
+ * sensitivity mis-decoding the Gen2 Select and asserting SL when it should not.
+ *
+ * One stray in a few thousand never dominates a search, but the gauge does not
+ * need it to: a single sample is the difference between an honest "no signal"
+ * and a brief plausible reading, which is this ticket's symptom reached by a
+ * different route than the stale buffer.
+ *
+ * handler.ts has always claimed "the application layer (locateStore) will
+ * filter for the target EPC". It never did — addRssiReading took no EPC at all,
+ * so the hardware Select was the only line of defence and it is demonstrably
+ * imperfect. The EPC is already on the LOCATE_UPDATE payload; this makes the
+ * comment true.
+ */
+describe('locateStore rejects reads from other tags (stray admissions)', () => {
+  const TARGET = '00000000000000000000533034313633';
+  const OTHER  = '00000000000000000000533034313634';
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    useLocateStore.getState().clearBuffer();
+    useLocateStore.getState().setTarget('');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('admits a read for the current target', () => {
+    useLocateStore.getState().setTarget(TARGET);
+
+    useLocateStore.getState().addRssiReading(-35, undefined, undefined, undefined, TARGET);
+
+    expect(useLocateStore.getState().rssiBuffer).toHaveLength(1);
+    expect(useLocateStore.getState().getStatistics().currentRSSI).toBe(-35);
+  });
+
+  it('drops a stray read from a different tag', () => {
+    useLocateStore.getState().setTarget(TARGET);
+
+    useLocateStore.getState().addRssiReading(-35, undefined, undefined, undefined, OTHER);
+
+    expect(useLocateStore.getState().rssiBuffer).toHaveLength(0);
+    expect(useLocateStore.getState().getStatistics().currentRSSI).toBe(DEFAULT_RSSI);
+  });
+
+  it('matches a leading-zero-stripped target against a full-width read', () => {
+    // The operator types 533034313633; the tag reports the full 128 bits.
+    // TRA-1108/TRA-1120 make the *mask* match both widths — this filter must
+    // use the same equivalence or it would drop every legitimate read for a
+    // stripped target and re-break locate for 128-bit EPCs.
+    useLocateStore.getState().setTarget('533034313633');
+
+    useLocateStore.getState().addRssiReading(-35, undefined, undefined, undefined, TARGET);
+
+    expect(useLocateStore.getState().rssiBuffer).toHaveLength(1);
+  });
+
+  it('matches case-insensitively', () => {
+    useLocateStore.getState().setTarget(TARGET.toLowerCase());
+
+    useLocateStore.getState().addRssiReading(-35, undefined, undefined, undefined, TARGET);
+
+    expect(useLocateStore.getState().rssiBuffer).toHaveLength(1);
+  });
+
+  it('admits everything when no target is set', () => {
+    useLocateStore.getState().addRssiReading(-35, undefined, undefined, undefined, OTHER);
+
+    expect(useLocateStore.getState().rssiBuffer).toHaveLength(1);
+  });
+
+  it('admits a read whose source did not say which tag it came from', () => {
+    // No EPC on the reading means no basis to reject it; dropping it would
+    // silently break any caller that has not been updated.
+    useLocateStore.getState().setTarget(TARGET);
+
+    useLocateStore.getState().addRssiReading(-35);
+
+    expect(useLocateStore.getState().rssiBuffer).toHaveLength(1);
+  });
+
+  it('drops the in-flight read that arrives just after a retarget', () => {
+    // The residual window from the mid-search retarget fix: the old mask is
+    // still on the hardware for ~80ms, so one read for the previous tag lands
+    // under the new target. Staleness used to hide it 1.25s later; this drops
+    // it outright.
+    useLocateStore.getState().setTarget(TARGET);
+    useLocateStore.getState().addRssiReading(-35, undefined, undefined, undefined, TARGET);
+
+    useLocateStore.getState().setTarget(OTHER);
+    useLocateStore.getState().addRssiReading(-35, undefined, undefined, undefined, TARGET);
+
+    expect(useLocateStore.getState().rssiBuffer).toHaveLength(0);
+    expect(useLocateStore.getState().getStatistics().currentRSSI).toBe(DEFAULT_RSSI);
+  });
+});
