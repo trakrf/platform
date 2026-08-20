@@ -83,6 +83,7 @@ const LocateScreen: React.FC = () => {
     setStatusMessage,
     getFilteredRSSI,
     getStatistics,
+    setTarget,
     // The raw, undecayed peak. Only the "Last search" status line uses it.
     peakRSSI: lastSearchPeak
   } = useLocateStore();
@@ -105,6 +106,15 @@ const LocateScreen: React.FC = () => {
   useEffect(() => {
     setInputEPC(storedEPC);
   }, [storedEPC]);
+
+  // The ring buffer is module-level state that outlives both this screen and
+  // the target it was filled for. Point it at whatever we are looking for now —
+  // on mount (the deep-link path stores the EPC before the tab mounts) and on
+  // every change — so readings for the previous tag are dropped rather than
+  // rendered as this search's signal (TRA-1123).
+  useEffect(() => {
+    setTarget(storedEPC);
+  }, [storedEPC, setTarget]);
   
   const isScanning = readerState === ReaderState.SCANNING;
 

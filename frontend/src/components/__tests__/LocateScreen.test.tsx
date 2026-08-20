@@ -19,6 +19,7 @@ let mockFilteredRSSI = -120;
 // fields keep the frozen values a finished search left behind — the TRA-1123
 // state the screen used to render straight to the operator.
 let mockStatsStale = false;
+const mockSetTarget = vi.fn();
 const mockLocateStats = {
   currentRSSI: -120,
   averageRSSI: -120,
@@ -36,6 +37,7 @@ vi.mock('@/stores/locateStore', () => ({
     get rssiBuffer() { return mockLocateStats.rssiBuffer; },
     get statusMessage() { return mockStatusMessage; },
     setStatusMessage: mockSetStatusMessage,
+    setTarget: mockSetTarget,
     getFilteredRSSI: () => mockFilteredRSSI,
     getStatistics: () => mockStatsStale
       ? { currentRSSI: -120, averageRSSI: -120, peakRSSI: -120, updateRate: 0 }
@@ -91,24 +93,21 @@ vi.mock('@/hooks/useWebAudioTone', () => ({
 }));
 
 const mockSetTargetEPC = vi.fn();
-vi.mock('@/stores/settingsStore', () => ({
-  useSettingsStore: Object.assign((selector?: any) => {
-    const state = {
-      rfid: {
-        targetEPC: ''
-      },
-      setTargetEPC: mockSetTargetEPC
-    };
-    return selector ? selector(state) : state;
-  }, {
-    getState: () => ({
-      rfid: {
-        targetEPC: ''
-      },
-      setTargetEPC: mockSetTargetEPC
-    })
-  })
-}));
+let mockStoredEPC = '';
+vi.mock('@/stores/settingsStore', () => {
+  const readState = () => ({
+    rfid: {
+      targetEPC: mockStoredEPC
+    },
+    setTargetEPC: mockSetTargetEPC
+  });
+  return {
+    useSettingsStore: Object.assign(
+      (selector?: any) => (selector ? selector(readState()) : readState()),
+      { getState: readState }
+    )
+  };
+});
 
 // Mock the gauge component. It renders the same formatted text the real gauge
 // shows in its value label, so tests can assert what the user actually reads.
@@ -380,5 +379,41 @@ describe('LocateScreen stale statistics (TRA-1123)', () => {
     expect(rowValue('Current:')).toBe('-35 dBm');
     expect(rowValue('Average (1s):')).toBe('-36 dBm');
     expect(rowValue('Update Rate:')).toBe('13.5 Hz');
+  });
+});
+
+/**
+ * TRA-1123: the ring buffer is module-level state that outlives both the
+ * screen and the target. Retarget — by typing, by the Locate deep link, or by
+ * coming back to the tab — and the previous tag's readings are still what the
+ * screen renders. Point the store at the current target whenever the screen
+ * knows what it is, so the readings that no longer describe it are dropped.
+ */
+describe('LocateScreen target handoff (TRA-1123)', () => {
+  afterEach(() => {
+    cleanup();
+    resetDeviceState();
+    mockSetTarget.mockClear();
+    mockStoredEPC = '';
+  });
+
+  it('points the locate buffer at the stored target on mount', () => {
+    // The deep-link path: App.tsx stores the EPC, then the tab mounts.
+    mockStoredEPC = 'E280689400000000001018DD';
+
+    render(<LocateScreen />);
+
+    expect(mockSetTarget).toHaveBeenCalledWith('E280689400000000001018DD');
+  });
+
+  it('follows the target when it changes under the screen', () => {
+    mockStoredEPC = 'E280689400000000001018DD';
+    const { rerender } = render(<LocateScreen />);
+    mockSetTarget.mockClear();
+
+    mockStoredEPC = 'E280689400000000001018EE';
+    rerender(<LocateScreen />);
+
+    expect(mockSetTarget).toHaveBeenCalledWith('E280689400000000001018EE');
   });
 });

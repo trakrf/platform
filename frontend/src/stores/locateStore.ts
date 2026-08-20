@@ -30,6 +30,7 @@ interface LocateState {
   // Current state
   lastUpdateTime: number;       // Timestamp of last RSSI update
   statusMessage: string;        // UI status message
+  targetEPC: string;            // The target the buffered readings were read for
   
   // Statistics (calculated from buffer)
   currentRSSI: number;          // Most recent RSSI value
@@ -40,6 +41,7 @@ interface LocateState {
   // Actions
   addRssiReading: (nb_rssi: number, wb_rssi?: number, phase?: number, workerTimestamp?: number) => void;
   setStatusMessage: (message: string) => void;
+  setTarget: (epc: string) => void;
   clearBuffer: () => void;
   
   // Getters
@@ -78,6 +80,7 @@ export const useLocateStore = create<LocateState>()(
     // State
     lastUpdateTime: 0,
     statusMessage: 'Ready to locate',
+    targetEPC: '',
     
     // Statistics
     currentRSSI: DEFAULT_RSSI,
@@ -158,6 +161,17 @@ export const useLocateStore = create<LocateState>()(
     // Set status message
     setStatusMessage: (message: string) => {
       set({ statusMessage: message });
+    },
+
+    // Point the buffer at a target. A reading only says anything about the tag
+    // it was read for, so retargeting throws the readings away rather than
+    // showing the previous tag's signal for a search that is returning nothing
+    // (TRA-1123). Re-asserting the same target is a no-op, because the screen
+    // re-syncs on every mount and every settings change.
+    setTarget: (epc: string) => {
+      if (get().targetEPC === epc) return;
+      get().clearBuffer();
+      set({ targetEPC: epc });
     },
     
     // Clear buffer

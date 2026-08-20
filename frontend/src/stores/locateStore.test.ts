@@ -72,3 +72,50 @@ describe('locateStore statistics staleness (TRA-1123 / TRA-1089)', () => {
     expect(useLocateStore.getState().getStatistics().currentRSSI).toBe(-70);
   });
 });
+
+/**
+ * TRA-1123: the ring buffer outlives the target that produced it. Retarget to
+ * a different EPC and the screen keeps rendering the previous tag's readings,
+ * so a search for something that is not there looks like a search that is
+ * working. A reading only means anything about the target it was read for.
+ */
+describe('locateStore target tracking (TRA-1123)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    useLocateStore.getState().clearBuffer();
+    useLocateStore.getState().setTarget('');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('drops readings collected for a different target', () => {
+    useLocateStore.getState().setTarget('E280689400000000001018DD');
+    useLocateStore.getState().addRssiReading(-35);
+    expect(useLocateStore.getState().rssiBuffer).toHaveLength(1);
+
+    useLocateStore.getState().setTarget('E280689400000000001018EE');
+
+    expect(useLocateStore.getState().rssiBuffer).toHaveLength(0);
+    expect(useLocateStore.getState().getStatistics().currentRSSI).toBe(DEFAULT_RSSI);
+  });
+
+  it('keeps readings when the target is re-asserted unchanged', () => {
+    // The screen re-syncs the target on every mount and on every settings
+    // change; re-asserting the same EPC must not wipe a live search.
+    useLocateStore.getState().setTarget('E280689400000000001018DD');
+    useLocateStore.getState().addRssiReading(-35);
+
+    useLocateStore.getState().setTarget('E280689400000000001018DD');
+
+    expect(useLocateStore.getState().rssiBuffer).toHaveLength(1);
+    expect(useLocateStore.getState().getStatistics().currentRSSI).toBe(-35);
+  });
+
+  it('records the target so the next change can be detected', () => {
+    useLocateStore.getState().setTarget('E280689400000000001018DD');
+
+    expect(useLocateStore.getState().targetEPC).toBe('E280689400000000001018DD');
+  });
+});
