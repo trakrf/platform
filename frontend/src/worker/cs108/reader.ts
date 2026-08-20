@@ -63,6 +63,7 @@ class CS108Reader extends BaseReader {
   private batteryCheckTimer?: NodeJS.Timeout;
   private lastBatteryPercentage = -1;
   private scanningRequested = false; // Track if scanning was explicitly requested (button/trigger)
+  private lastAppliedTargetEPC?: string; // The LOCATE tag mask actually written to hardware
 
   constructor() {
     super();
@@ -254,6 +255,9 @@ class CS108Reader extends BaseReader {
     // Reset trigger state on disconnect
     this.triggerState = false;
 
+    // Nothing is on the hardware any more, so nothing was applied
+    this.lastAppliedTargetEPC = undefined;
+
     // Abort any running sequence on disconnect
     this.commandManager.abortSequence('Disconnect requested');
 
@@ -378,6 +382,13 @@ class CS108Reader extends BaseReader {
       // SUCCESS - update actual mode
       this.readerMode = mode;
       logger.debug(`[setMode] Successfully changed to ${mode} mode`);
+
+      // buildModeSequences() writes the tag mask as part of the LOCATE
+      // sequence; any other mode leaves whatever is on the hardware
+      // meaningless, so re-entering LOCATE must not trust it.
+      this.lastAppliedTargetEPC = mode === ReaderMode.LOCATE
+        ? (this.readerSettings.rfid?.targetEPC || '')
+        : undefined;
 
       // Re-initialize notification handlers for new mode
       // IDLE mode needs notifications for battery updates
@@ -585,6 +596,7 @@ class CS108Reader extends BaseReader {
           if (epcValue) {
             logger.debug('[Reader] Applying EPC tag mask in LOCATE mode');
             await this.commandManager.executeSequence(locateSettingsSequence(epcValue));
+            this.lastAppliedTargetEPC = epcValue;
             logger.debug('[Reader] EPC tag mask applied successfully');
           } else {
             logger.warn('[Reader] LOCATE mode without targetEPC - will receive all tags');
@@ -651,6 +663,23 @@ class CS108Reader extends BaseReader {
     // produces no reads at all. The UI layer should still prevent this.
     if (this.readerMode === ReaderMode.LOCATE && !this.readerSettings.rfid?.targetEPC) {
       logger.warn('[Reader] Starting LOCATE mode without targetEPC - all-zero tag mask, no tags will match');
+    }
+
+    // The mask is written by setMode, and by setSettings *while CONNECTED* —
+    // and by nothing else. A retarget that lands in the window the reader
+    // spends leaving SCANNING is stored in readerSettings and never written, so
+    // the search then runs against the previous tag's mask and returns nothing
+    // with no error at all (TRA-1122). Write it here rather than start a search
+    // we already know is aimed at the wrong tag. Deliberately outside the try
+    // below, so a failure is reported as the failure it is instead of being
+    // relabelled "failed to start scanning".
+    if (this.readerMode === ReaderMode.LOCATE) {
+      const targetEPC = this.readerSettings.rfid?.targetEPC || '';
+      if (targetEPC && targetEPC !== this.lastAppliedTargetEPC) {
+        logger.info('[Reader] Target EPC changed since it was last written - applying tag mask before scan');
+        await this.commandManager.executeSequence(locateSettingsSequence(targetEPC));
+        this.lastAppliedTargetEPC = targetEPC;
+      }
     }
 
     try {

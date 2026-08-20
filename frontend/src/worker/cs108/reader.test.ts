@@ -775,6 +775,85 @@ describe('CS108Reader', () => {
     });
   });
 
+  /**
+   * TRA-1122 (absorbed into TRA-1123): stop → change EPC → start inside ~2s
+   * returns zero reads for a tag that is present, with Status showing
+   * "Searching" and no error.
+   *
+   * The mask reaches the hardware from exactly two places: buildModeSequences()
+   * during setMode, and setSettings() *while the reader is CONNECTED*.
+   * startScanning() never wrote it. So a retarget that lands in the window the
+   * reader spends leaving SCANNING is stored in readerSettings and never
+   * written, and the search then runs against the previous tag's mask —
+   * silently, because nothing failed.
+   */
+  describe('LOCATE tag mask reaches hardware before scanning (TRA-1122)', () => {
+    const FIRST_EPC = 'E280689400000000001018DD';
+    const SECOND_EPC = 'E280689400000000001018EE';
+
+    const executedSequences = () =>
+      (commandManagerMock.executeSequence as Mock).mock.calls.map(call => call[0]);
+
+    beforeEach(async () => {
+      await reader.connect();
+      await reader.setMode(ReaderMode.LOCATE, { rfid: { targetEPC: FIRST_EPC } });
+      // Held trigger, so the start is not reconciled straight back to a stop.
+      (reader as any).triggerState = true;
+      postMessageSpy.mockClear();
+    });
+
+    it('writes a target that changed while the reader was not CONNECTED', async () => {
+      (reader as any).readerState = ReaderState.SCANNING;
+      await reader.setSettings({ rfid: { targetEPC: SECOND_EPC } });
+      (reader as any).readerState = ReaderState.CONNECTED;
+      (commandManagerMock.executeSequence as Mock).mockClear();
+
+      await reader.startScanning();
+
+      expect(executedSequences()[0]).toEqual(locateSettingsSequence(SECOND_EPC));
+    });
+
+    it('does not rewrite a mask that is already on the hardware', async () => {
+      (commandManagerMock.executeSequence as Mock).mockClear();
+
+      await reader.startScanning();
+
+      // The start sequence, and nothing else.
+      expect(commandManagerMock.executeSequence).toHaveBeenCalledTimes(1);
+    });
+
+    it('surfaces a failed mask write instead of searching for the wrong tag', async () => {
+      (reader as any).readerState = ReaderState.SCANNING;
+      await reader.setSettings({ rfid: { targetEPC: SECOND_EPC } });
+      (reader as any).readerState = ReaderState.CONNECTED;
+      (commandManagerMock.executeSequence as Mock).mockClear();
+      (commandManagerMock.executeSequence as Mock)
+        .mockRejectedValueOnce(new Error('Command already active'));
+
+      await expect(reader.startScanning()).rejects.toThrow('Command already active');
+
+      // It failed on the mask, and never went on to start a search aimed at
+      // the previous tag.
+      expect(executedSequences()).toEqual([locateSettingsSequence(SECOND_EPC)]);
+    });
+
+    it('rewrites the mask after LOCATE is re-entered from another mode', async () => {
+      // Leaving LOCATE invalidates whatever is on the hardware; coming back
+      // must not trust the record of what was applied before.
+      (reader as any).triggerState = false;
+      await reader.setMode(ReaderMode.INVENTORY);
+      await reader.setMode(ReaderMode.LOCATE, { rfid: { targetEPC: FIRST_EPC } });
+      (reader as any).triggerState = true;
+      (commandManagerMock.executeSequence as Mock).mockClear();
+
+      await reader.startScanning();
+
+      // The LOCATE mode sequence just rewrote the mask, so the start needs no
+      // second write.
+      expect(commandManagerMock.executeSequence).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('stopScanning()', () => {
     beforeEach(async () => {
       await reader.connect();
