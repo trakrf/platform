@@ -99,23 +99,44 @@ export const TAGMSK_DESC_CFG_VAL = {
 } as const;
 
 /**
- * Tag Mask Descriptor Configuration values
+ * Tag Mask Descriptor Configuration values (TAGMSK_DESC_CFG)
+ *
+ * Bit 0 enables the descriptor, bits 3:1 pick the flag it drives, and bits 6:4
+ * are the Gen2 Select `sel_action` — what the tag does to that flag on a match
+ * and on a miss. Leaving sel_action at its default 000 makes each descriptor
+ * overwrite the previous one's verdict, which reads as AND; 001 is what turns a
+ * second descriptor into an OR term.
  */
 export const TAGMASK_DESCRIPTOR = {
+  DISABLED: 0x00,         // Descriptor off — issues no Select at all
   ENABLE: 0x01,           // Enable mask
   TARGET_SL: 0x08,        // Target Session S0, SL asserted
+  /**
+   * sel_action 001 in bits 6:4 — assert SL on a match, do NOTHING on a miss.
+   *
+   * The default 000 deasserts on a miss, so a second descriptor carrying it
+   * would cancel whatever the first one asserted. 001 only ever adds matches,
+   * which is what makes a chain of descriptors accumulate as OR.
+   */
+  SEL_ACTION_ASSERT_ON_MATCH_ONLY: 0x10,
 } as const;
 
 /**
  * Which of the 8 Select descriptors (TAGMSK_DESC_SEL, bits 2:0) a feature owns.
  *
  * Each descriptor carries its own TAGMSK_* register set, and every enabled one
- * issues a Select before the inventory. Locate uses a single descriptor, so a
- * short EPC is a prefix search; matching a leading-zero-stripped value at both
- * 96 and 128 bits would need a second descriptor OR'd in via sel_action.
+ * issues a Select before the inventory, in index order.
+ *
+ * Locate owns two. LOCATE carries the width the value's own length implies and
+ * runs first, so its default sel_action (deassert on a miss) clears the SL that
+ * Gen2 persists from the previous search. LOCATE_ALT_WIDTH is only configured
+ * when the value is short enough to be either width, where it carries the same
+ * value padded to 128 bits and ORs itself in (TRA-1120). Off that path it is
+ * explicitly disabled rather than left holding a stale mask.
  */
 export const TAGMSK_DESCRIPTOR_INDEX = {
   LOCATE: 0x00,
+  LOCATE_ALT_WIDTH: 0x01,
 } as const;
 
 /**

@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { locateSettingsSequence, LOCATE_CONFIG_SEQUENCE } from './sequences.js';
 import { RFID_FIRMWARE_COMMAND, RFID_POWER_ON } from '../../event.js';
-import { RFID_REGISTERS, EPC_BIT_LENGTH } from '../constant.js';
+import {
+  RFID_REGISTERS,
+  EPC_BIT_LENGTH,
+  EPC_MEMORY_OFFSET,
+  TAGMASK_DESCRIPTOR,
+  TAGMSK_DESCRIPTOR_INDEX
+} from '../constant.js';
 import { logger } from '../../../utils/logger.js';
 
 /**
@@ -27,12 +33,45 @@ const registerValue = (
   register: number
 ) => decodeSequence(sequence).find(cmd => cmd.register === register)?.value;
 
+type RegisterWrite = { register: number; value: number };
+
+/**
+ * Group a sequence's register writes by the descriptor they land on.
+ *
+ * TAGMSK_DESC_SEL decides which of the 8 register sets every subsequent
+ * TAGMSK_* write applies to, so "how is descriptor 1 configured" is only
+ * answerable by replaying the sequence in order — a flat register lookup
+ * would silently read whichever descriptor happened to be written last.
+ *
+ * INV_CFG is not a descriptor register and is left out. Insertion order is
+ * preserved, so the key order is the order the descriptors are configured in,
+ * which is what decides whether the OR accumulates or cancels.
+ */
+const descriptorBlocks = (sequence: ReturnType<typeof locateSettingsSequence>) => {
+  const blocks = new Map<number, RegisterWrite[]>();
+  let selected: number | undefined;
+
+  for (const write of decodeSequence(sequence)) {
+    if (write.register === RFID_REGISTERS.HST_TAGMSK_DESC_SEL) {
+      selected = write.value;
+      if (!blocks.has(selected)) blocks.set(selected, []);
+      continue;
+    }
+    if (selected !== undefined && write.register !== RFID_REGISTERS.INV_CFG) {
+      blocks.get(selected)!.push(write);
+    }
+  }
+
+  return blocks;
+};
+
 describe('locateSettingsSequence', () => {
   it('generates correct sequence for standard 96-bit EPC', () => {
     const sequence = locateSettingsSequence('E28011606000020A76543210');
 
-    // Descriptor select + mask config + search mode
-    expect(sequence).toHaveLength(9);
+    // Two descriptors' worth of mask config plus search mode: 24 chars is
+    // ambiguous between the two widths, so both get configured (TRA-1120).
+    expect(sequence).toHaveLength(18);
 
     // Each command should have proper structure
     sequence.forEach(cmd => {
@@ -48,7 +87,7 @@ describe('locateSettingsSequence', () => {
   it('pads short EPCs to 96 bits (24 hex chars)', () => {
     const sequence = locateSettingsSequence('10020');
 
-    expect(sequence).toHaveLength(9);
+    expect(sequence).toHaveLength(18);
 
     // Should pad to 000000000000000000010020
     // Check that the sequence is generated without errors
@@ -86,7 +125,7 @@ describe('locateSettingsSequence', () => {
   it('handles empty EPC by padding to all zeros', () => {
     const sequence = locateSettingsSequence('');
 
-    expect(sequence).toHaveLength(9);
+    expect(sequence).toHaveLength(18);
 
     // Should generate mask for 000000000000000000000000
     sequence.forEach(cmd => {
@@ -123,23 +162,30 @@ describe('locateSettingsSequence — mask width (TRA-1108)', () => {
   describe('96-bit EPCs', () => {
     const EPC_96 = '112233445566778899AABBCC';
 
-    it('emits 9 commands and never writes TAGMSK_12_15', () => {
-      const sequence = locateSettingsSequence(EPC_96);
+    it('never writes TAGMSK_12_15 on the 96-bit descriptor', () => {
+      // The tail register is left alone rather than cleared: the firmware
+      // scans only TAGMSK_LEN bits, so whatever a previous locate left there
+      // is inert. The alternate descriptor (TRA-1120) has its own register
+      // set, so its 128-bit write does not land here.
+      const primary = descriptorBlocks(locateSettingsSequence(EPC_96))
+        .get(TAGMSK_DESCRIPTOR_INDEX.LOCATE)!;
 
-      expect(sequence).toHaveLength(9);
-      expect(
-        decodeSequence(sequence).some(c => c.register === RFID_REGISTERS.TAGMSK_12_15)
-      ).toBe(false);
+      expect(primary.some(c => c.register === RFID_REGISTERS.TAGMSK_12_15)).toBe(false);
     });
 
-    it('sets TAGMSK_LEN to 96 bits', () => {
-      expect(registerValue(locateSettingsSequence(EPC_96), RFID_REGISTERS.TAGMSK_LEN))
+    it('sets TAGMSK_LEN to 96 bits on the primary descriptor', () => {
+      const primary = descriptorBlocks(locateSettingsSequence(EPC_96))
+        .get(TAGMSK_DESCRIPTOR_INDEX.LOCATE)!;
+
+      expect(primary.find(c => c.register === RFID_REGISTERS.TAGMSK_LEN)?.value)
         .toBe(EPC_BIT_LENGTH.STANDARD_96);
     });
 
     it('pins the exact register traffic, descriptor select first', () => {
-      // Byte-for-byte guard on the primary path. TAGMSK_DESC_SEL must lead:
-      // it decides which of the 8 register sets everything below lands on.
+      // Byte-for-byte guard on the primary path. Each TAGMSK_DESC_SEL must
+      // lead its block: it decides which of the 8 register sets the writes
+      // below it land on. 24 chars is ambiguous, so a second block follows
+      // carrying the same value padded out to 128 bits (TRA-1120).
       expect(decodeSequence(locateSettingsSequence(EPC_96))).toEqual([
         { register: RFID_REGISTERS.HST_TAGMSK_DESC_SEL, value: 0x00 },
         { register: RFID_REGISTERS.TAGMSK_DESC_CFG, value: 0x09 },
@@ -149,6 +195,18 @@ describe('locateSettingsSequence — mask width (TRA-1108)', () => {
         { register: RFID_REGISTERS.TAGMSK_0_3, value: 0x44332211 },
         { register: RFID_REGISTERS.TAGMSK_4_7, value: 0x88776655 },
         { register: RFID_REGISTERS.TAGMSK_8_11, value: 0xCCBBAA99 },
+        // 0x19 = enable | target SL | sel_action 001 (assert on match only).
+        { register: RFID_REGISTERS.HST_TAGMSK_DESC_SEL, value: 0x01 },
+        { register: RFID_REGISTERS.TAGMSK_DESC_CFG, value: 0x19 },
+        { register: RFID_REGISTERS.TAGMSK_BANK, value: 0x01 },
+        { register: RFID_REGISTERS.TAGMSK_PTR, value: 0x20 },
+        { register: RFID_REGISTERS.TAGMSK_LEN, value: 0x80 },
+        // The same 12 bytes, shifted one register along by the 4 zero bytes
+        // the 128-bit padding puts in front of them.
+        { register: RFID_REGISTERS.TAGMSK_0_3, value: 0x00000000 },
+        { register: RFID_REGISTERS.TAGMSK_4_7, value: 0x44332211 },
+        { register: RFID_REGISTERS.TAGMSK_8_11, value: 0x88776655 },
+        { register: RFID_REGISTERS.TAGMSK_12_15, value: 0xCCBBAA99 },
         { register: RFID_REGISTERS.INV_CFG, value: 0x01E04000 }
       ]);
     });
@@ -158,7 +216,7 @@ describe('locateSettingsSequence — mask width (TRA-1108)', () => {
       // manual workaround work. It has to keep working.
       expect(locateSettingsSequence('5330'))
         .toEqual(locateSettingsSequence('000000000000000000005330'));
-      expect(locateSettingsSequence('5330')).toHaveLength(9);
+      expect(locateSettingsSequence('5330')).toHaveLength(18);
     });
   });
 
@@ -166,7 +224,9 @@ describe('locateSettingsSequence — mask width (TRA-1108)', () => {
     it('emits one more command, writing TAGMSK_12_15', () => {
       const sequence = locateSettingsSequence('112233445566778899AABBCCDDEEFF00');
 
-      expect(sequence).toHaveLength(10);
+      // 10 for the one exact descriptor, plus the two writes that disable the
+      // alternate one (TRA-1120), plus INV_CFG.
+      expect(sequence).toHaveLength(12);
       // Same reversed byte order as its siblings: bytes[15,14,13,12].
       expect(registerValue(sequence, RFID_REGISTERS.TAGMSK_12_15)).toBe(0x00FFEEDD);
     });
@@ -243,6 +303,151 @@ describe('locateSettingsSequence — mask width (TRA-1108)', () => {
       const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
       locateSettingsSequence('A'.repeat(32));
       expect(warn).not.toHaveBeenCalled();
+    });
+  });
+});
+
+/**
+ * TRA-1120 — a leading-zero-stripped EPC has to match at BOTH widths.
+ *
+ * '533034313633' is ambiguous: it could be a 96-bit EPC padded out to 24 hex
+ * chars, or a 128-bit one padded out to 32. TRA-1108 fixed the case where the
+ * caller can supply the full-width value; the manual EPC field and the tag
+ * registry structurally cannot, because the Scan-tab commissioning modal
+ * pre-fills the stripped form.
+ *
+ * A single descriptor has to pick one width, so a short value only ever
+ * matched at 96 bits. Two descriptors, each an EXACT match at its own width,
+ * cover both without inventing a new false-positive class.
+ */
+describe('locateSettingsSequence — ambiguous width (TRA-1120)', () => {
+  // The WALDO bench probes. STRIPPED is what the registry and the manual EPC
+  // field actually hand Locate when the operator means TAG_633.
+  const STRIPPED = '533034313633';
+  const TAG_633 = '00000000000000000000533034313633';
+  const TAG_634 = '00000000000000000000533034313634';
+
+  const MASK_REGISTERS = [
+    RFID_REGISTERS.TAGMSK_0_3,
+    RFID_REGISTERS.TAGMSK_4_7,
+    RFID_REGISTERS.TAGMSK_8_11,
+    RFID_REGISTERS.TAGMSK_12_15
+  ];
+
+  const valueIn = (block: RegisterWrite[], register: number) =>
+    block.find(write => write.register === register)?.value;
+
+  const masksOf = (block: RegisterWrite[]) =>
+    MASK_REGISTERS.map(register => valueIn(block, register));
+
+  const blockFor = (epc: string, descriptor: number) =>
+    descriptorBlocks(locateSettingsSequence(epc)).get(descriptor)!;
+
+  describe('an ambiguous value (≤24 chars)', () => {
+    it('configures two descriptors', () => {
+      expect([...descriptorBlocks(locateSettingsSequence(STRIPPED)).keys()])
+        .toEqual([TAGMSK_DESCRIPTOR_INDEX.LOCATE, TAGMSK_DESCRIPTOR_INDEX.LOCATE_ALT_WIDTH]);
+    });
+
+    it('masks the value at 96 bits on the primary descriptor', () => {
+      const primary = blockFor(STRIPPED, TAGMSK_DESCRIPTOR_INDEX.LOCATE);
+
+      expect(valueIn(primary, RFID_REGISTERS.TAGMSK_LEN)).toBe(EPC_BIT_LENGTH.STANDARD_96);
+      expect(masksOf(primary))
+        .toEqual(masksOf(blockFor(STRIPPED.padStart(24, '0'), TAGMSK_DESCRIPTOR_INDEX.LOCATE)));
+    });
+
+    it('masks the same value at 128 bits on the alternate descriptor', () => {
+      // The acceptance case. The alternate descriptor has to carry the exact
+      // mask the full-width EPC would have produced, tail register and all, or
+      // the stripped form still cannot find a 128-bit tag.
+      const alternate = blockFor(STRIPPED, TAGMSK_DESCRIPTOR_INDEX.LOCATE_ALT_WIDTH);
+
+      expect(valueIn(alternate, RFID_REGISTERS.TAGMSK_LEN)).toBe(EPC_BIT_LENGTH.EXTENDED_128);
+      expect(masksOf(alternate))
+        .toEqual(masksOf(blockFor(TAG_633, TAGMSK_DESCRIPTOR_INDEX.LOCATE)));
+    });
+
+    it('anchors both descriptors past the PC bits', () => {
+      // An alternate descriptor anchored anywhere else would be a suffix
+      // search, which is the TRA-1108 bug mirrored.
+      for (const block of descriptorBlocks(locateSettingsSequence(STRIPPED)).values()) {
+        expect(valueIn(block, RFID_REGISTERS.TAGMSK_PTR))
+          .toBe(EPC_MEMORY_OFFSET.AFTER_PC_BITS);
+      }
+    });
+
+    it('ORs the alternate descriptor in rather than ANDing it', () => {
+      // sel_action (TAGMSK_DESC_CFG bits 6:4) = 001 is assert-SL-on-match,
+      // do-nothing-on-miss, which accumulates as OR. The vendor default of 000
+      // deasserts on a miss, which would cancel the primary descriptor's hit.
+      expect(valueIn(
+        blockFor(STRIPPED, TAGMSK_DESCRIPTOR_INDEX.LOCATE_ALT_WIDTH),
+        RFID_REGISTERS.TAGMSK_DESC_CFG
+      )).toBe(
+        TAGMASK_DESCRIPTOR.ENABLE
+        | TAGMASK_DESCRIPTOR.TARGET_SL
+        | TAGMASK_DESCRIPTOR.SEL_ACTION_ASSERT_ON_MATCH_ONLY
+      );
+    });
+
+    it('leaves the primary descriptor deasserting SL on a miss, and running first', () => {
+      // Gen2 SL persists across Selects, so something has to clear it or every
+      // tag reads as already selected. The primary descriptor's sel_action 000
+      // does that job — it deasserts on a miss — which is why no separate
+      // clearing Select is emitted. It only holds if it runs first.
+      const sequence = locateSettingsSequence(STRIPPED);
+
+      expect(valueIn(
+        descriptorBlocks(sequence).get(TAGMSK_DESCRIPTOR_INDEX.LOCATE)!,
+        RFID_REGISTERS.TAGMSK_DESC_CFG
+      )).toBe(TAGMASK_DESCRIPTOR.ENABLE | TAGMASK_DESCRIPTOR.TARGET_SL);
+
+      expect(decodeSequence(sequence)[0]).toEqual({
+        register: RFID_REGISTERS.HST_TAGMSK_DESC_SEL,
+        value: TAGMSK_DESCRIPTOR_INDEX.LOCATE
+      });
+    });
+
+    it('still rejects a decoy matching neither width', () => {
+      // TAG_634 shares every bit of TAG_633 but the last. Neither descriptor
+      // may blur them — the TRA-1108 discrimination must not regress.
+      expect(locateSettingsSequence(STRIPPED))
+        .not.toEqual(locateSettingsSequence('533034313634'));
+      expect(masksOf(blockFor(STRIPPED, TAGMSK_DESCRIPTOR_INDEX.LOCATE_ALT_WIDTH)))
+        .not.toEqual(masksOf(blockFor(TAG_634, TAGMSK_DESCRIPTOR_INDEX.LOCATE)));
+    });
+
+    it('treats exactly 24 chars as ambiguous', () => {
+      // A 128-bit EPC with eight leading zero hex chars strips to 24, so 24 is
+      // still two-way ambiguous. The boundary is >24, not ≥24.
+      expect(descriptorBlocks(locateSettingsSequence('1'.repeat(24))).size).toBe(2);
+    });
+  });
+
+  describe('an unambiguous value (>24 chars)', () => {
+    it('masks only on the primary descriptor', () => {
+      const blocks = descriptorBlocks(locateSettingsSequence(TAG_633));
+
+      expect(valueIn(blocks.get(TAGMSK_DESCRIPTOR_INDEX.LOCATE)!, RFID_REGISTERS.TAGMSK_LEN))
+        .toBe(EPC_BIT_LENGTH.EXTENDED_128);
+      expect(blocks.get(TAGMSK_DESCRIPTOR_INDEX.LOCATE_ALT_WIDTH)!
+        .some(write => write.register === RFID_REGISTERS.TAGMSK_LEN)).toBe(false);
+    });
+
+    it('disables the alternate descriptor rather than leaving it enabled', () => {
+      // locateSettingsSequence runs again on every settings change without
+      // re-running LOCATE_CONFIG_SEQUENCE, so an alternate descriptor left
+      // enabled by a previous ambiguous locate would keep issuing its stale
+      // Select and OR a wrong tag into this search.
+      expect(blockFor(TAG_633, TAGMSK_DESCRIPTOR_INDEX.LOCATE_ALT_WIDTH)).toEqual([
+        { register: RFID_REGISTERS.TAGMSK_DESC_CFG, value: TAGMASK_DESCRIPTOR.DISABLED }
+      ]);
+    });
+
+    it('treats 25 chars as 128-bit only', () => {
+      expect(blockFor('1'.repeat(25), TAGMSK_DESCRIPTOR_INDEX.LOCATE_ALT_WIDTH)
+        .some(write => write.register === RFID_REGISTERS.TAGMSK_LEN)).toBe(false);
     });
   });
 });
