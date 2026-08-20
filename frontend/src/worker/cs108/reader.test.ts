@@ -8,6 +8,7 @@ import { IDLE_SEQUENCE } from './system/sequences.js';
 import { INVENTORY_CONFIG_SEQUENCE } from './rfid/inventory/sequences.js';
 import { BARCODE_CONFIG_SEQUENCE } from './barcode/sequences.js';
 import { LOCATE_CONFIG_SEQUENCE, locateSettingsSequence } from './rfid/locate/sequences.js';
+import { RFID_REGISTERS } from './rfid/constant.js';
 import { removeLeadingZeros } from '../../utils/reconciliationUtils';
 import type { CS108Packet } from './type.js';
 
@@ -615,6 +616,27 @@ describe('CS108Reader', () => {
       const TAG_633 = '00000000000000000000533034313633';
       const TAG_634 = '00000000000000000000533034313634';
 
+      const MASK_VALUE_REGISTERS = [
+        RFID_REGISTERS.TAGMSK_0_3,
+        RFID_REGISTERS.TAGMSK_4_7,
+        RFID_REGISTERS.TAGMSK_8_11,
+        RFID_REGISTERS.TAGMSK_12_15
+      ];
+
+      // The mask values a sequence writes, in order. createFirmwareCommand
+      // lays the register address and the value out LSB-first.
+      const maskValues = (sequence: ReturnType<typeof locateSettingsSequence>) =>
+        sequence
+          .map(cmd => ({
+            register: cmd.payload![2] | (cmd.payload![3] << 8),
+            value: ((cmd.payload![4]
+              | (cmd.payload![5] << 8)
+              | (cmd.payload![6] << 16)
+              | (cmd.payload![7] << 24)) >>> 0)
+          }))
+          .filter(write => MASK_VALUE_REGISTERS.includes(write.register))
+          .map(write => write.value);
+
       it('are told apart when the full EPC reaches the mask builder', () => {
         // Identical through hex char 24 — the whole difference lives in the
         // tail that TAGMSK_12_15 now covers.
@@ -622,14 +644,28 @@ describe('CS108Reader', () => {
         expect(locateSettingsSequence(TAG_633)).not.toEqual(locateSettingsSequence(TAG_634));
       });
 
-      it('are still unfindable from a leading-zero-stripped value, which is why the deep link sends tag.epc', () => {
+      it('are findable from a leading-zero-stripped value too, now that both widths are masked (TRA-1120)', () => {
         // Nothing distinguishes a stripped '533034313633' of 96-bit origin
         // from one of 128-bit origin, so the mask builder cannot recover the
-        // width on its own. The fix is upstream: InventoryTableRow and
-        // InventoryMobileCard now send the untruncated tag.epc.
+        // width. TRA-1108 answered that upstream — InventoryTableRow and
+        // InventoryMobileCard send the untruncated tag.epc — which does
+        // nothing for the manual EPC field or the registry, both of which
+        // hold the stripped form.
+        //
+        // So the builder now emits BOTH readings and ORs them. What matters
+        // here is that the stripped value ends up carrying the full-width
+        // match's own mask, byte for byte; the register-level proof of the OR
+        // lives in rfid/locate/sequences.test.ts.
         const stripped = removeLeadingZeros(TAG_633);
         expect(stripped).toBe('533034313633');
 
+        // The last descriptor configured is the 128-bit one, and its four
+        // mask registers are exactly what the full-width EPC produces.
+        expect(maskValues(locateSettingsSequence(stripped)).slice(-4))
+          .toEqual(maskValues(locateSettingsSequence(TAG_633)));
+
+        // Not the same sequence, though: the 96-bit reading is still there
+        // too, on the descriptor that runs first.
         expect(locateSettingsSequence(stripped))
           .not.toEqual(locateSettingsSequence(TAG_633));
         expect(locateSettingsSequence(stripped))
