@@ -1,7 +1,8 @@
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import LocateScreen from '../LocateScreen';
+import { resolveBarcodeTarget } from '@/lib/locate/resolveBarcodeTarget';
 import { LOCATE_TEST_TAG, EPC_FORMATS } from '@test-utils/constants';
 import { ReaderState } from '@/worker/types/reader';
 
@@ -108,6 +109,35 @@ vi.mock('@/stores/settingsStore', () => {
     )
   };
 });
+
+// Barcode target acquisition (TRA-1121). The hook mock hands the test the
+// onScan callback the screen registered, so a capture can be delivered without
+// a reader; the resolver is mocked because its own suite covers the registry
+// lookups and this file is about what the screen does with each verdict.
+const scanHook = vi.hoisted(() => ({
+  capturedOnScan: null as ((value: string) => void) | null,
+  startBarcodeScan: vi.fn(),
+  stopScan: vi.fn()
+}));
+
+vi.mock('@/hooks/useScanToInput', () => ({
+  useScanToInput: (opts: { onScan: (value: string) => void }) => {
+    scanHook.capturedOnScan = opts.onScan;
+    return {
+      startRfidScan: vi.fn(),
+      startBarcodeScan: scanHook.startBarcodeScan,
+      stopScan: scanHook.stopScan,
+      isScanning: false,
+      scanType: null,
+      isTriggerArmed: false,
+      setFocused: vi.fn()
+    };
+  }
+}));
+
+vi.mock('@/lib/locate/resolveBarcodeTarget', () => ({
+  resolveBarcodeTarget: vi.fn()
+}));
 
 // Mock the gauge component. It renders the same formatted text the real gauge
 // shows in its value label, so tests can assert what the user actually reads.
@@ -415,5 +445,133 @@ describe('LocateScreen target handoff (TRA-1123)', () => {
     rerender(<LocateScreen />);
 
     expect(mockSetTarget).toHaveBeenCalledWith('E280689400000000001018EE');
+  });
+});
+
+/**
+ * TRA-1121: the operator works from a cut sheet or pick list carrying the
+ * barcode of the item they have been sent to find. Scanning it acquires the
+ * target; the search itself is still RFID and still starts on the trigger.
+ */
+describe('LocateScreen barcode target acquisition (TRA-1121)', () => {
+  const scanBarcode = async (value: string) => {
+    fireEvent.click(screen.getByTestId('locate-barcode-scan'));
+    await act(async () => {
+      scanHook.capturedOnScan?.(value);
+    });
+  };
+
+  beforeEach(() => {
+    resetDeviceState();
+    mockSetTargetEPC.mockReset();
+    mockSetTargetEPC.mockReturnValue(true);
+    mockSetStatusMessage.mockClear();
+    scanHook.startBarcodeScan.mockClear();
+    vi.mocked(resolveBarcodeTarget).mockReset();
+  });
+
+  afterEach(() => {
+    cleanup();
+    resetDeviceState();
+    mockStoredEPC = '';
+  });
+
+  it('offers a scan button when a reader is connected', () => {
+    render(<LocateScreen />);
+
+    expect(screen.getByTestId('locate-barcode-scan')).toBeInTheDocument();
+  });
+
+  it('hides the scan button when no reader is connected', () => {
+    mockDeviceState.isConnected = false;
+
+    render(<LocateScreen />);
+
+    expect(screen.queryByTestId('locate-barcode-scan')).not.toBeInTheDocument();
+  });
+
+  it('sets the target from the RFID tag of the resolved asset', async () => {
+    vi.mocked(resolveBarcodeTarget).mockResolvedValue({
+      status: 'resolved',
+      epc: '000000000000000000010023',
+      asset: { name: 'Reel 10023', external_key: '10023' } as never
+    });
+    render(<LocateScreen />);
+
+    await scanBarcode('10023');
+
+    expect(scanHook.startBarcodeScan).toHaveBeenCalled();
+    expect(mockSetTargetEPC).toHaveBeenCalledWith('000000000000000000010023');
+    expect(screen.getByTestId('target-epc-display')).toHaveValue('000000000000000000010023');
+    expect(mockSetStatusMessage).toHaveBeenLastCalledWith(
+      expect.stringContaining('Reel 10023')
+    );
+  });
+
+  it('does not fall back to the barcode as a literal EPC when nothing matches', async () => {
+    // A hex-of-ASCII encoded label used literally would mask the wrong bits and
+    // report "no signal", which on a tag finder reads as "it is not here".
+    vi.mocked(resolveBarcodeTarget).mockResolvedValue({ status: 'no-asset' });
+    render(<LocateScreen />);
+
+    await scanBarcode('S04163');
+
+    expect(mockSetTargetEPC).not.toHaveBeenCalled();
+    expect(screen.getByTestId('target-epc-display')).toHaveValue('');
+    expect(mockSetStatusMessage).toHaveBeenLastCalledWith(
+      expect.stringContaining('No asset found')
+    );
+  });
+
+  it('offers a choice when the resolved asset carries several RFID tags', async () => {
+    vi.mocked(resolveBarcodeTarget).mockResolvedValue({
+      status: 'ambiguous',
+      asset: { name: 'Kit A', external_key: 'KIT-A' } as never,
+      tags: [
+        { id: 1, tag_type: 'rfid', value: 'AAA1' },
+        { id: 2, tag_type: 'rfid', value: 'BBB2' }
+      ]
+    });
+    render(<LocateScreen />);
+
+    await scanBarcode('KIT-A');
+
+    expect(screen.getByTestId('locate-tag-choice-1')).toBeInTheDocument();
+    expect(mockSetTargetEPC).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('locate-tag-choice-2'));
+
+    expect(mockSetTargetEPC).toHaveBeenCalledWith('BBB2');
+    expect(screen.queryByTestId('locate-tag-choice-1')).not.toBeInTheDocument();
+  });
+
+  it('reports an asset with no RFID tag rather than silently doing nothing', async () => {
+    vi.mocked(resolveBarcodeTarget).mockResolvedValue({
+      status: 'no-rfid-tag',
+      asset: { name: 'Pallet 9', external_key: 'P9' } as never
+    });
+    render(<LocateScreen />);
+
+    await scanBarcode('P9');
+
+    expect(mockSetTargetEPC).not.toHaveBeenCalled();
+    expect(mockSetStatusMessage).toHaveBeenLastCalledWith(
+      expect.stringContaining('no RFID tag')
+    );
+  });
+
+  it('reports a failed lookup as a failure, not as a miss', async () => {
+    vi.mocked(resolveBarcodeTarget).mockResolvedValue({
+      status: 'error',
+      message: 'network down'
+    });
+    render(<LocateScreen />);
+
+    await scanBarcode('10023');
+
+    expect(mockSetTargetEPC).not.toHaveBeenCalled();
+    expect(mockSetStatusMessage).toHaveBeenLastCalledWith(
+      expect.stringContaining('network down')
+    );
   });
 });
