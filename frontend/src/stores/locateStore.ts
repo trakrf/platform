@@ -45,10 +45,25 @@ interface LocateState {
   // Getters
   getRecentReadings: (duration?: number) => RssiDataPoint[];  // Get readings from last N ms
   getFilteredRSSI: () => number;  // Get time-weighted filtered RSSI
+  getStatistics: () => LocateStatistics;  // Statistics with staleness applied
+}
+
+// The four numbers the Statistics panel renders, as the operator should read
+// them right now
+export interface LocateStatistics {
+  currentRSSI: number;
+  averageRSSI: number;
+  peakRSSI: number;
+  updateRate: number;
 }
 
 // Default RSSI value when no signal
-const DEFAULT_RSSI = -120;
+export const DEFAULT_RSSI = -120;
+
+// How long after the last read the signal counts as gone. One value, because
+// the gauge, the Status row and the Statistics panel must agree about whether
+// the tag is being heard (TRA-1089).
+export const STALE_THRESHOLD_MS = 1000;
 
 export const useLocateStore = create<LocateState>()(
   subscribeWithSelector((set, get) => ({
@@ -165,14 +180,43 @@ export const useLocateStore = create<LocateState>()(
       return state.rssiBuffer.filter(p => p.timestamp > cutoff);
     },
     
+    // Statistics as the operator should read them.
+    //
+    // currentRSSI/averageRSSI/peakRSSI/updateRate are recomputed only inside
+    // addRssiReading(), so once reads stop they freeze on the last value
+    // indefinitely. On a screen whose whole job is proximity feedback, a frozen
+    // number from a search that is over is a wrong answer, not an old one: it
+    // reads as "the tag is right here" for a search that has returned nothing
+    // (TRA-1123). Decay them on the same staleness signal getFilteredRSSI()
+    // already uses, so the gauge, the Status row and this panel cannot
+    // disagree.
+    getStatistics: () => {
+      const state = get();
+
+      if (Date.now() - state.lastUpdateTime > STALE_THRESHOLD_MS) {
+        return {
+          currentRSSI: DEFAULT_RSSI,
+          averageRSSI: DEFAULT_RSSI,
+          peakRSSI: DEFAULT_RSSI,
+          updateRate: 0
+        };
+      }
+
+      return {
+        currentRSSI: state.currentRSSI,
+        averageRSSI: state.averageRSSI,
+        peakRSSI: state.peakRSSI,
+        updateRate: state.updateRate
+      };
+    },
+
     // Get time-weighted filtered RSSI (for smooth gauge display)
     getFilteredRSSI: () => {
       const state = get();
       const now = Date.now();
 
       // If no readings in the last 1 second, return default (no signal)
-      const staleThreshold = 1000;
-      if (now - state.lastUpdateTime > staleThreshold) {
+      if (now - state.lastUpdateTime > STALE_THRESHOLD_MS) {
         return DEFAULT_RSSI;
       }
 
