@@ -13,6 +13,8 @@ import type { Tag, TagType } from '@/types/shared/tag';
 export interface ListAssetsOptions {
   limit?: number;
   offset?: number;
+  /** Exact-match filter on asset external_key (server enforces ^[A-Za-z0-9-]+$). */
+  external_key?: string;
   signal?: AbortSignal;
 }
 
@@ -36,6 +38,9 @@ export const assetsApi = {
     }
     if (params.offset !== undefined) {
       searchParams.append('offset', String(params.offset));
+    }
+    if (params.external_key !== undefined) {
+      searchParams.append('external_key', params.external_key);
     }
 
     const queryString = searchParams.toString();
