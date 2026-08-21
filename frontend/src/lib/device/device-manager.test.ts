@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveModeForTab, hasLocateTarget } from './device-manager';
+import { resolveModeForTab, hasLocateTarget, shouldReapplyModeForTarget } from './device-manager';
 import { ReaderMode } from '@/worker/types/reader';
 
 describe('resolveModeForTab (TRA-1031)', () => {
@@ -82,5 +82,35 @@ describe('hasLocateTarget (TRA-1121)', () => {
 
   it('treats a missing rfid section as no target', () => {
     expect(hasLocateTarget(undefined)).toBe(false);
+  });
+});
+
+/**
+ * A settings change and a mode change are two commands into a non-re-entrant
+ * CommandManager. They used to be issued from two separate settingsStore
+ * subscribers, which zustand fires back to back, so the second lost the mutex
+ * with "Command already active" — silently, because nothing caught it. The
+ * reader documents the same collision from TRA-1091 at reader.ts:652, where
+ * losing setSettings is benign; losing setMode is not, because nothing reapplies
+ * it and the reader simply never leaves the mode it was in.
+ *
+ * One subscriber now decides both, so this guard is what says whether the mode
+ * still needs applying after the settings have gone out.
+ */
+describe('shouldReapplyModeForTarget (TRA-1121)', () => {
+  it('asks for a mode change when the target disappears on the locate tab', () => {
+    expect(shouldReapplyModeForTarget(true, false, 'locate')).toBe(true);
+  });
+
+  it('asks for a mode change when a target appears on the locate tab', () => {
+    expect(shouldReapplyModeForTarget(false, true, 'locate')).toBe(true);
+  });
+
+  it('stays quiet when the target is merely edited, not cleared', () => {
+    expect(shouldReapplyModeForTarget(true, true, 'locate')).toBe(false);
+  });
+
+  it('stays quiet on any other tab, which does not care about the target', () => {
+    expect(shouldReapplyModeForTarget(true, false, 'scan')).toBe(false);
   });
 });
