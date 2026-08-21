@@ -194,24 +194,31 @@ describe('LocateScreen EPC Input', () => {
     });
   });
 
-  it('should validate on blur and call setTargetEPC', async () => {
+  it('should commit the typed value on blur', async () => {
     render(<LocateScreen />);
 
     const input = screen.getByTestId('target-epc-display') as HTMLInputElement;
-
-    // Type an odd number of characters
     fireEvent.change(input, { target: { value: LOCATE_TEST_TAG } });
 
-    // Mock validation failure
-    mockSetTargetEPC.mockReturnValue(false);
-
-    // Blur the input
     fireEvent.blur(input);
 
-    // Check that setTargetEPC was called
     expect(mockSetTargetEPC).toHaveBeenCalledWith(LOCATE_TEST_TAG);
+    expect(mockSetStatusMessage).toHaveBeenCalledWith('EPC updated. Press trigger to start searching.');
+  });
 
-    // Check that setStatusMessage was called with error
+  // setTargetEPC is deliberately left returning true, because the real one
+  // always does: validateEPC accepts non-hex with a warning so registry tag
+  // values survive. The screen has to refuse it on its own, or a mistyped
+  // target masks the wrong bits and reports "no signal".
+  it('should refuse a typed value that is not hex', async () => {
+    render(<LocateScreen />);
+
+    const input = screen.getByTestId('target-epc-display') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'S04163' } });
+
+    fireEvent.blur(input);
+
+    expect(mockSetTargetEPC).not.toHaveBeenCalled();
     expect(mockSetStatusMessage).toHaveBeenCalledWith('Invalid EPC format. Must contain only hexadecimal characters (0-9, A-F).');
   });
 
@@ -534,24 +541,35 @@ describe('LocateScreen barcode target acquisition (TRA-1121)', () => {
     expect(mockSetTargetEPC).toHaveBeenCalledWith('E2000012ABCD');
   });
 
-  it('reports a barcode that is not an EPC exactly as typing one is reported', async () => {
-    mockSetTargetEPC.mockReturnValue(false);
+  // setTargetEPC is left returning true here because that is what the real one
+  // does: validateEPC never returns isValid:false, non-hex included. Forcing a
+  // false return would test the mock rather than the screen, and would hide
+  // that a WALDO-style label was being accepted as a target.
+  it('refuses a barcode that is not an EPC instead of targeting it', async () => {
     render(<LocateScreen />);
 
     await scanBarcode('S04163');
 
+    expect(mockSetTargetEPC).not.toHaveBeenCalled();
     expect(mockSetStatusMessage).toHaveBeenLastCalledWith(
       'Invalid EPC format. Must contain only hexadecimal characters (0-9, A-F).'
     );
   });
 
   it('leaves a rejected scan visible in the field so the operator can correct it', async () => {
-    mockSetTargetEPC.mockReturnValue(false);
     render(<LocateScreen />);
 
     await scanBarcode('S04163');
 
     expect(screen.getByTestId('target-epc-display')).toHaveValue('S04163');
+  });
+
+  it('accepts a leading-zero-stripped value, which is hex and short but real (TRA-1120)', async () => {
+    render(<LocateScreen />);
+
+    await scanBarcode('10021');
+
+    expect(mockSetTargetEPC).toHaveBeenCalledWith('10021');
   });
 
   it('offers cancel once a capture is running, and stops the scan', async () => {
@@ -637,6 +655,45 @@ describe('LocateScreen trigger-acquired barcode (TRA-1121)', () => {
     deliverBarcode('000000000000000000019999');
 
     render(<LocateScreen />);
+
+    expect(mockSetTargetEPC).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Clearing the field is how the operator says "I want a different target", and
+ * with no target the tab parks in BARCODE so the trigger acquires one. That
+ * only works if the clear reaches the store: the field commits on blur, but
+ * nobody blurs an input before reaching for a trigger, so an emptied field left
+ * the reader searching for the EPC that had just been deleted.
+ */
+describe('LocateScreen clearing the target (TRA-1121)', () => {
+  beforeEach(() => {
+    resetDeviceState();
+    mockSetTargetEPC.mockReset();
+    mockSetTargetEPC.mockReturnValue(true);
+    mockSetStatusMessage.mockClear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    resetDeviceState();
+    mockStoredEPC = '';
+  });
+
+  it('clears the stored target as soon as the field is emptied, without waiting for blur', () => {
+    mockStoredEPC = '000000000000000000010021';
+    render(<LocateScreen />);
+
+    fireEvent.change(screen.getByTestId('target-epc-display'), { target: { value: '' } });
+
+    expect(mockSetTargetEPC).toHaveBeenCalledWith('');
+  });
+
+  it('does not commit a partially typed EPC', () => {
+    render(<LocateScreen />);
+
+    fireEvent.change(screen.getByTestId('target-epc-display'), { target: { value: '0000' } });
 
     expect(mockSetTargetEPC).not.toHaveBeenCalled();
   });

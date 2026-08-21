@@ -135,17 +135,36 @@ const LocateScreen: React.FC = () => {
   // leave the reader in barcode mode with the trigger dead.
   const [isCapturing, setIsCapturing] = React.useState(false);
 
-  // A scanned value goes through exactly the path a typed one does, down to the
-  // status text, so a scan and a keystroke are indistinguishable downstream.
+  // The single commit path for typing, clearing and scanning, so a scan and a
+  // keystroke are indistinguishable downstream.
+  //
+  // The hex check lives here rather than in setTargetEPC because validateEPC
+  // never rejects anything — it accepts non-hex with a warning, deliberately,
+  // so registry tag values survive. Locate cannot use that latitude: masking on
+  // a non-hex value hunts the wrong bits and reports "no signal", which on a
+  // tag finder reads as "the item is not here". A short hex value like a
+  // leading-zero-stripped "10021" is still a real target (TRA-1120).
+  const commitTarget = React.useCallback((value: string) => {
+    if (value === '') {
+      setTargetEPC('');
+      setStatusMessage('Target cleared. Pull the trigger to scan a barcode.');
+      return;
+    }
+    if (!/^[0-9A-F]+$/.test(value)) {
+      setStatusMessage('Invalid EPC format. Must contain only hexadecimal characters (0-9, A-F).');
+      return;
+    }
+    setTargetEPC(value);
+    setStatusMessage('EPC updated. Press trigger to start searching.');
+  }, [setTargetEPC, setStatusMessage]);
+
   const applyScannedValue = React.useCallback((raw: string) => {
     const value = stripAimIdentifier(raw).toUpperCase();
     // The scanned text stays in the field even when it is rejected, so the
     // operator can see what the scanner actually read and correct it.
     setInputEPC(value);
-    setStatusMessage(setTargetEPC(value)
-      ? 'EPC updated. Press trigger to start searching.'
-      : 'Invalid EPC format. Must contain only hexadecimal characters (0-9, A-F).');
-  }, [setTargetEPC, setStatusMessage]);
+    commitTarget(value);
+  }, [commitTarget]);
 
   // barcodeStore is the single capture path. With no target the reader parks in
   // BARCODE mode (resolveModeForTab), so a trigger pull fires the barcode
@@ -323,28 +342,20 @@ const LocateScreen: React.FC = () => {
           onChange={(e) => {
             const newValue = e.target.value.toUpperCase();
             setInputEPC(newValue); // Update local state immediately for responsive typing
-          }}
-          onBlur={() => {
-            // Validate and save to store on blur
-            const success = setTargetEPC(inputEPC);
-            if (!success && inputEPC !== '') {
-              // If validation failed and input isn't empty, show error
-              setStatusMessage('Invalid EPC format. Must contain only hexadecimal characters (0-9, A-F).');
-            } else if (success) {
-              setStatusMessage('EPC updated. Press trigger to start searching.');
-              // The DeviceManager subscription will automatically push the new targetEPC to the worker
+            // An emptied field is not a partial value the way "0000" is — it is
+            // the operator saying "different target". Commit it now rather than
+            // on blur, because nobody blurs an input before reaching for the
+            // trigger, and until it lands the tab stays in LOCATE and the
+            // reader keeps hunting the EPC that was just deleted (TRA-1121).
+            if (newValue === '') {
+              commitTarget('');
             }
           }}
+          // The DeviceManager subscription pushes an accepted targetEPC to the worker.
+          onBlur={() => commitTarget(inputEPC)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
-              // Save on Enter key
-              const success = setTargetEPC(inputEPC);
-              if (!success && inputEPC !== '') {
-                setStatusMessage('Invalid EPC format. Must contain only hexadecimal characters (0-9, A-F).');
-              } else if (success) {
-                setStatusMessage('EPC updated. Press trigger to start searching.');
-                // The DeviceManager subscription will automatically push the new targetEPC to the worker
-              }
+              commitTarget(inputEPC);
               (e.target as HTMLInputElement).blur();
             }
           }}
