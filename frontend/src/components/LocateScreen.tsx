@@ -8,8 +8,11 @@ import { useLocateStore } from '@/stores/locateStore';
 import { useDeviceStore } from '@/stores/deviceStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useUIStore } from '@/stores/uiStore';
-import { ArrowLeft } from 'lucide-react';
-import { ReaderState } from '@/worker/types/reader';
+import { ArrowLeft, QrCode, Loader2 } from 'lucide-react';
+import { ReaderState, ReaderMode } from '@/worker/types/reader';
+import { useScanToInput } from '@/hooks/useScanToInput';
+import { stripAimIdentifier } from '@/lib/barcode/aim';
+import { useBarcodeStore } from '@/stores/barcodeStore';
 import { EXAMPLE_EPCS } from '@test-utils/constants';
 import { ConfigurationSpinner } from '@/components/ConfigurationSpinner';
 import { useWebAudioTone } from '@/hooks/useWebAudioTone';
@@ -115,7 +118,86 @@ const LocateScreen: React.FC = () => {
   useEffect(() => {
     setTarget(storedEPC);
   }, [storedEPC, setTarget]);
-  
+
+  // Barcode target acquisition (TRA-1121). The operator is working from a cut
+  // sheet or pick list that carries the barcode of the item they were sent to
+  // find — scan the paperwork, then go find the thing.
+  //
+  // The scanned value IS the target: no registry lookup, because Locate is a
+  // tag finder and has to be able to search for a tag no asset owns. A barcode
+  // that is not an EPC is user error, reported the way a typed one is.
+  const isConnected = useDeviceStore((state) => state.isConnected);
+  // Capture state is tracked here, not read from useScanToInput. The hook
+  // reports isScanning from a ref, which never triggers a re-render — and
+  // nothing else re-renders this screen while it sits idle, so a button
+  // driven by the hook's value would still read "scan" after a capture had
+  // started. The second click would then re-arm instead of cancelling and
+  // leave the reader in barcode mode with the trigger dead.
+  const [isCapturing, setIsCapturing] = React.useState(false);
+
+  // The single commit path for typing, clearing and scanning, so a scan and a
+  // keystroke are indistinguishable downstream.
+  //
+  // The hex check lives here rather than in setTargetEPC because validateEPC
+  // never rejects anything — it accepts non-hex with a warning, deliberately,
+  // so registry tag values survive. Locate cannot use that latitude: masking on
+  // a non-hex value hunts the wrong bits and reports "no signal", which on a
+  // tag finder reads as "the item is not here". A short hex value like a
+  // leading-zero-stripped "10021" is still a real target (TRA-1120).
+  const commitTarget = React.useCallback((value: string) => {
+    if (value === '') {
+      setTargetEPC('');
+      setStatusMessage('Target cleared. Pull the trigger to scan a barcode.');
+      return;
+    }
+    if (!/^[0-9A-F]+$/.test(value)) {
+      setStatusMessage('Invalid EPC format. Must contain only hexadecimal characters (0-9, A-F).');
+      return;
+    }
+    setTargetEPC(value);
+    setStatusMessage('EPC updated. Press trigger to start searching.');
+  }, [setTargetEPC, setStatusMessage]);
+
+  const applyScannedValue = React.useCallback((raw: string) => {
+    const value = stripAimIdentifier(raw).toUpperCase();
+    // The scanned text stays in the field even when it is rejected, so the
+    // operator can see what the scanner actually read and correct it.
+    setInputEPC(value);
+    commitTarget(value);
+  }, [commitTarget]);
+
+  // barcodeStore is the single capture path. With no target the reader parks in
+  // BARCODE mode (resolveModeForTab), so a trigger pull fires the barcode
+  // module and the read lands here with no useScanToInput session at all —
+  // reading the store covers the trigger and the button with one code path.
+  const barcodes = useBarcodeStore((state) => state.barcodes);
+  const seenBarcodeCount = React.useRef<number | null>(null);
+  useEffect(() => {
+    // Whatever was already in the store belongs to some earlier screen.
+    if (seenBarcodeCount.current === null) {
+      seenBarcodeCount.current = barcodes.length;
+      return;
+    }
+    if (barcodes.length <= seenBarcodeCount.current) return;
+    seenBarcodeCount.current = barcodes.length;
+    setIsCapturing(false);
+    applyScannedValue(barcodes[0].data);
+  }, [barcodes, applyScannedValue]);
+
+  const { startBarcodeScan, stopScan } = useScanToInput({
+    // The value arrives from barcodeStore; this only releases the button.
+    onScan: () => setIsCapturing(false),
+    autoStop: true,
+    // Back to Locate rather than IDLE, so the reader is ready to search the
+    // moment the target lands. Acquiring and locating are sequential: the
+    // reader has to be in barcode mode to scan and RFID mode to locate.
+    returnMode: ReaderMode.LOCATE,
+    // The trigger is bound by mode, not by this hook: with no target the tab
+    // resolves to BARCODE and the worker's own trigger handler scans. Arming
+    // the hook's trigger path too would fight it.
+    triggerEnabled: false
+  });
+
   const isScanning = readerState === ReaderState.SCANNING;
 
   // What the screen reports must follow the read stream, not the reader's state
@@ -252,6 +334,7 @@ const LocateScreen: React.FC = () => {
       {/* EPC Input */}
       <div className="mb-6">
         <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Tag EPC Identifier</label>
+        <div className="flex items-center gap-2">
         <input
           type="text"
           data-testid="target-epc-display"
@@ -259,35 +342,67 @@ const LocateScreen: React.FC = () => {
           onChange={(e) => {
             const newValue = e.target.value.toUpperCase();
             setInputEPC(newValue); // Update local state immediately for responsive typing
-          }}
-          onBlur={() => {
-            // Validate and save to store on blur
-            const success = setTargetEPC(inputEPC);
-            if (!success && inputEPC !== '') {
-              // If validation failed and input isn't empty, show error
-              setStatusMessage('Invalid EPC format. Must contain only hexadecimal characters (0-9, A-F).');
-            } else if (success) {
-              setStatusMessage('EPC updated. Press trigger to start searching.');
-              // The DeviceManager subscription will automatically push the new targetEPC to the worker
+            // An emptied field is not a partial value the way "0000" is — it is
+            // the operator saying "different target". Commit it now rather than
+            // on blur, because nobody blurs an input before reaching for the
+            // trigger, and until it lands the tab stays in LOCATE and the
+            // reader keeps hunting the EPC that was just deleted (TRA-1121).
+            if (newValue === '') {
+              commitTarget('');
             }
           }}
+          // The DeviceManager subscription pushes an accepted targetEPC to the worker.
+          onBlur={() => commitTarget(inputEPC)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
-              // Save on Enter key
-              const success = setTargetEPC(inputEPC);
-              if (!success && inputEPC !== '') {
-                setStatusMessage('Invalid EPC format. Must contain only hexadecimal characters (0-9, A-F).');
-              } else if (success) {
-                setStatusMessage('EPC updated. Press trigger to start searching.');
-                // The DeviceManager subscription will automatically push the new targetEPC to the worker
-              }
+              commitTarget(inputEPC);
               (e.target as HTMLInputElement).blur();
             }
           }}
           placeholder={`Enter EPC (e.g., ${EXAMPLE_EPCS.CUSTOMER_INPUT} or ${EXAMPLE_EPCS.FULL_EPC})`}
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+          className="flex-1 min-w-0 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
           disabled={readerState === ReaderState.SCANNING}
         />
+        {isConnected && (
+          <button
+            type="button"
+            data-testid="locate-barcode-scan"
+            onClick={() => {
+              if (isCapturing) {
+                setIsCapturing(false);
+                stopScan();
+                setStatusMessage('Scan cancelled.');
+                return;
+              }
+              setIsCapturing(true);
+              // A capture that never starts must not leave the button stuck
+              // offering a cancel for a scan that is not running.
+              startBarcodeScan().catch((error) => {
+                console.error('[LocateScreen] barcode scan failed to start', error);
+                setIsCapturing(false);
+                setStatusMessage('Could not start the barcode scanner.');
+              });
+            }}
+            // BUSY covers the ~1s the reader spends applying a mode change.
+            // Accepting a click inside that window collides with the in-flight
+            // command and strands the reader in barcode mode with the trigger
+            // dead (observed on a CS108).
+            disabled={
+              readerState === ReaderState.SCANNING ||
+              readerState === ReaderState.BUSY
+            }
+            title={isCapturing ? 'Cancel scan' : 'Scan barcode to acquire target'}
+            aria-label={isCapturing ? 'Cancel scan' : 'Scan barcode to acquire target'}
+            className="flex-shrink-0 p-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isCapturing ? (
+              <Loader2 className="h-5 w-5 text-yellow-600 dark:text-yellow-400 animate-spin" />
+            ) : (
+              <QrCode className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+            )}
+          </button>
+        )}
+        </div>
         <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
           {statusMessage}
         </div>
@@ -416,7 +531,8 @@ const LocateScreen: React.FC = () => {
       {/* Instructions */}
       <div className="mt-6 text-sm text-gray-600 dark:text-gray-400">
         <p>• Enter the EPC of the tag you want to find</p>
-        <p>• Press and hold the trigger to search</p>
+        <p>• Or scan a barcode carrying it — while the field is empty the trigger scans</p>
+        <p>• Once a target is set, press and hold the trigger to search</p>
         <p>• Higher signal strength indicates closer proximity</p>
         <p>• Move slowly for best results</p>
       </div>

@@ -23,27 +23,8 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { useTagStore, useBarcodeStore, useDeviceStore } from '@/stores';
 import { DeviceManager } from '@/lib/device/device-manager';
 import { ReaderMode } from '@/worker/types/reader';
+import { stripAimIdentifier } from '@/lib/barcode/aim';
 
-/**
- * Strip AIM symbology identifiers from barcode data.
- * AIM IDs follow the pattern: ]<symbology><modifier> (e.g., ]C1 for Code 128, ]Q1 for QR)
- * Some scanners prepend symbology char before AIM ID (e.g., Q]Q1...)
- *
- * Examples:
- *   "Q]Q1000000000000000000000130" -> "000000000000000000000130"
- *   "]C1E200123456789" -> "E200123456789"
- */
-function stripAimIdentifier(data: string): string {
-  // Match: optional char + ] + letter + digit at start
-  const match = data.match(/^(.?\][A-Za-z]\d)(.*)$/);
-  if (match) {
-    const [, prefix, rest] = match;
-    console.debug('[stripAimIdentifier]', { prefix, rest, restLength: rest.length });
-    return rest;
-  }
-  // No AIM prefix found, return as-is
-  return data;
-}
 
 
 interface UseScanToInputOptions {
