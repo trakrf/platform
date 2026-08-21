@@ -2,9 +2,12 @@ import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import LocateScreen from '../LocateScreen';
-import { resolveBarcodeTarget } from '@/lib/locate/resolveBarcodeTarget';
 import { LOCATE_TEST_TAG, EPC_FORMATS } from '@test-utils/constants';
 import { ReaderState } from '@/worker/types/reader';
+// barcodeStore is the real zustand store: trigger-fired reads land there with no
+// hook session, and re-rendering on a new read is exactly the behaviour under
+// test, so mocking it would test the mock.
+import { useBarcodeStore } from '@/stores/barcodeStore';
 
 // Mock the stores
 let mockStatusMessage = 'Connected';
@@ -139,10 +142,6 @@ vi.mock('@/hooks/useScanToInput', () => ({
   }
 }));
 
-vi.mock('@/lib/locate/resolveBarcodeTarget', () => ({
-  resolveBarcodeTarget: vi.fn()
-}));
-
 // Mock the gauge component. It renders the same formatted text the real gauge
 // shows in its value label, so tests can assert what the user actually reads.
 vi.mock('react-gauge-component', () => ({
@@ -155,6 +154,9 @@ vi.mock('react-gauge-component', () => ({
     </div>
   )
 }));
+
+const deliverBarcode = (data: string) =>
+  useBarcodeStore.getState().addBarcode({ data, type: 'Code 128', timestamp: Date.now() });
 
 describe('LocateScreen EPC Input', () => {
   afterEach(() => {
@@ -454,13 +456,22 @@ describe('LocateScreen target handoff (TRA-1123)', () => {
 
 /**
  * TRA-1121: the operator works from a cut sheet or pick list carrying the
- * barcode of the item they have been sent to find. Scanning it acquires the
+ * barcode of the item they have been sent to find. Scanning it fills in the
  * target; the search itself is still RFID and still starts on the trigger.
+ *
+ * The barcode is used as the EPC verbatim. There is deliberately no registry
+ * lookup: Locate is a tag finder, not an asset finder, so it must be able to
+ * search for a tag that no asset owns. A barcode that is not an EPC is user
+ * error, reported exactly the way typing a bad EPC is reported.
  */
 describe('LocateScreen barcode target acquisition (TRA-1121)', () => {
+  // A button-initiated capture: the click arms the reader, then the read lands
+  // in barcodeStore exactly as a trigger-fired one does. The hook's onScan fires
+  // too — it only releases the button, it does not carry the value.
   const scanBarcode = async (value: string) => {
     fireEvent.click(screen.getByTestId('locate-barcode-scan'));
     await act(async () => {
+      deliverBarcode(value);
       scanHook.capturedOnScan?.(value);
     });
   };
@@ -471,7 +482,7 @@ describe('LocateScreen barcode target acquisition (TRA-1121)', () => {
     mockSetTargetEPC.mockReturnValue(true);
     mockSetStatusMessage.mockClear();
     scanHook.startBarcodeScan.mockClear();
-    vi.mocked(resolveBarcodeTarget).mockReset();
+    useBarcodeStore.setState({ barcodes: [] });
   });
 
   afterEach(() => {
@@ -494,114 +505,77 @@ describe('LocateScreen barcode target acquisition (TRA-1121)', () => {
     expect(screen.queryByTestId('locate-barcode-scan')).not.toBeInTheDocument();
   });
 
-  it('sets the target from the RFID tag of the resolved asset', async () => {
-    vi.mocked(resolveBarcodeTarget).mockResolvedValue({
-      status: 'resolved',
-      epc: '000000000000000000010023',
-      asset: { name: 'Reel 10023', external_key: '10023' } as never
-    });
+  it('puts the scanned value straight into the EPC field', async () => {
     render(<LocateScreen />);
 
-    await scanBarcode('10023');
+    await scanBarcode('000000000000000000010023');
 
-    expect(scanHook.startBarcodeScan).toHaveBeenCalled();
-    expect(mockSetTargetEPC).toHaveBeenCalledWith('000000000000000000010023');
     expect(screen.getByTestId('target-epc-display')).toHaveValue('000000000000000000010023');
+    expect(mockSetTargetEPC).toHaveBeenCalledWith('000000000000000000010023');
+  });
+
+  it('searches for a tag no asset owns', async () => {
+    render(<LocateScreen />);
+
+    await scanBarcode('E20000123456789012345678');
+
+    expect(mockSetTargetEPC).toHaveBeenCalledWith('E20000123456789012345678');
     expect(mockSetStatusMessage).toHaveBeenLastCalledWith(
-      expect.stringContaining('Reel 10023')
+      expect.stringContaining('Press trigger to start searching')
     );
   });
 
-  it('does not fall back to the barcode as a literal EPC when nothing matches', async () => {
-    // A hex-of-ASCII encoded label used literally would mask the wrong bits and
-    // report "no signal", which on a tag finder reads as "it is not here".
-    vi.mocked(resolveBarcodeTarget).mockResolvedValue({ status: 'no-asset' });
+  it('uppercases a scanned value the way the typed field does', async () => {
+    render(<LocateScreen />);
+
+    await scanBarcode('e2000012abcd');
+
+    expect(screen.getByTestId('target-epc-display')).toHaveValue('E2000012ABCD');
+    expect(mockSetTargetEPC).toHaveBeenCalledWith('E2000012ABCD');
+  });
+
+  it('reports a barcode that is not an EPC exactly as typing one is reported', async () => {
+    mockSetTargetEPC.mockReturnValue(false);
     render(<LocateScreen />);
 
     await scanBarcode('S04163');
 
-    expect(mockSetTargetEPC).not.toHaveBeenCalled();
-    expect(screen.getByTestId('target-epc-display')).toHaveValue('');
     expect(mockSetStatusMessage).toHaveBeenLastCalledWith(
-      expect.stringContaining('No asset found')
+      'Invalid EPC format. Must contain only hexadecimal characters (0-9, A-F).'
     );
   });
 
-  it('offers a choice when the resolved asset carries several RFID tags', async () => {
-    vi.mocked(resolveBarcodeTarget).mockResolvedValue({
-      status: 'ambiguous',
-      asset: { name: 'Kit A', external_key: 'KIT-A' } as never,
-      tags: [
-        { id: 1, tag_type: 'rfid', value: 'AAA1' },
-        { id: 2, tag_type: 'rfid', value: 'BBB2' }
-      ]
-    });
+  it('leaves a rejected scan visible in the field so the operator can correct it', async () => {
+    mockSetTargetEPC.mockReturnValue(false);
     render(<LocateScreen />);
 
-    await scanBarcode('KIT-A');
+    await scanBarcode('S04163');
 
-    expect(screen.getByTestId('locate-tag-choice-1')).toBeInTheDocument();
-    expect(mockSetTargetEPC).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByTestId('locate-tag-choice-2'));
-
-    expect(mockSetTargetEPC).toHaveBeenCalledWith('BBB2');
-    expect(screen.queryByTestId('locate-tag-choice-1')).not.toBeInTheDocument();
+    expect(screen.getByTestId('target-epc-display')).toHaveValue('S04163');
   });
 
-  it('reports an asset with no RFID tag rather than silently doing nothing', async () => {
-    vi.mocked(resolveBarcodeTarget).mockResolvedValue({
-      status: 'no-rfid-tag',
-      asset: { name: 'Pallet 9', external_key: 'P9' } as never
-    });
-    render(<LocateScreen />);
-
-    await scanBarcode('P9');
-
-    expect(mockSetTargetEPC).not.toHaveBeenCalled();
-    expect(mockSetStatusMessage).toHaveBeenLastCalledWith(
-      expect.stringContaining('no RFID tag')
-    );
-  });
-
-  // useScanToInput reports isScanning from a ref, so it never triggers a
-  // re-render. A screen that trusted it would leave the button showing "scan"
-  // after a capture had started, and a second click would re-arm rather than
-  // cancel — stranding the reader in barcode mode with the trigger dead.
   it('offers cancel once a capture is running, and stops the scan', async () => {
-    vi.mocked(resolveBarcodeTarget).mockResolvedValue({ status: 'no-asset' });
     render(<LocateScreen />);
 
     const button = screen.getByTestId('locate-barcode-scan');
-    fireEvent.click(button);
-
+    await act(async () => { fireEvent.click(button); });
     expect(button).toHaveAttribute('aria-label', 'Cancel scan');
 
-    fireEvent.click(button);
-
+    await act(async () => { fireEvent.click(button); });
     expect(scanHook.stopScan).toHaveBeenCalled();
-    expect(scanHook.startBarcodeScan).toHaveBeenCalledTimes(1);
     expect(button).toHaveAttribute('aria-label', 'Scan barcode to acquire target');
   });
 
-  // Verified on hardware: setMode(BARCODE) takes about a second on a real
-  // CS108, and a cancel that lands inside that window collides with the
-  // in-flight command ("Command already active"), leaving the reader in
-  // Barcode mode and ERROR state with the trigger dead until the operator
-  // reloads. The reader reports BUSY for the duration, so that is the gate.
   it('does not offer to cancel a scan that failed to start', async () => {
     scanHook.startBarcodeScan.mockRejectedValueOnce(new Error('reader busy'));
     render(<LocateScreen />);
 
-    const button = screen.getByTestId('locate-barcode-scan');
     await act(async () => {
-      fireEvent.click(button);
+      fireEvent.click(screen.getByTestId('locate-barcode-scan'));
     });
 
-    expect(button).toHaveAttribute('aria-label', 'Scan barcode to acquire target');
-    expect(mockSetStatusMessage).toHaveBeenLastCalledWith(
-      expect.stringContaining('Could not start')
-    );
+    expect(screen.getByTestId('locate-barcode-scan'))
+      .toHaveAttribute('aria-label', 'Scan barcode to acquire target');
   });
 
   it('refuses input while the reader is still applying a mode change', () => {
@@ -613,29 +587,57 @@ describe('LocateScreen barcode target acquisition (TRA-1121)', () => {
   });
 
   it('returns the button to its resting state once a capture lands', async () => {
-    vi.mocked(resolveBarcodeTarget).mockResolvedValue({ status: 'no-asset' });
-    render(<LocateScreen />);
-
-    await scanBarcode('S04163');
-
-    expect(screen.getByTestId('locate-barcode-scan')).toHaveAttribute(
-      'aria-label',
-      'Scan barcode to acquire target'
-    );
-  });
-
-  it('reports a failed lookup as a failure, not as a miss', async () => {
-    vi.mocked(resolveBarcodeTarget).mockResolvedValue({
-      status: 'error',
-      message: 'network down'
-    });
     render(<LocateScreen />);
 
     await scanBarcode('10023');
 
+    expect(screen.getByTestId('locate-barcode-scan'))
+      .toHaveAttribute('aria-label', 'Scan barcode to acquire target');
+  });
+});
+
+/**
+ * With no target the reader parks in BARCODE mode, so the physical trigger
+ * fires the barcode module and the read lands in barcodeStore without any
+ * button press and without a useScanToInput session. The screen has to pick it
+ * up from the store or a trigger-acquired target would be silently dropped.
+ */
+describe('LocateScreen trigger-acquired barcode (TRA-1121)', () => {
+  beforeEach(() => {
+    resetDeviceState();
+    mockSetTargetEPC.mockReset();
+    mockSetTargetEPC.mockReturnValue(true);
+    mockSetStatusMessage.mockClear();
+    useBarcodeStore.setState({ barcodes: [] });
+  });
+
+  afterEach(() => {
+    cleanup();
+    resetDeviceState();
+    mockStoredEPC = '';
+  });
+
+  it('takes a barcode that arrives with no button press', async () => {
+    render(<LocateScreen />);
+
+    await act(async () => { deliverBarcode('000000000000000000010023'); });
+
+    expect(mockSetTargetEPC).toHaveBeenCalledWith('000000000000000000010023');
+  });
+
+  it('strips an AIM symbology prefix off a trigger-fired read', async () => {
+    render(<LocateScreen />);
+
+    await act(async () => { deliverBarcode('Q]Q1000000000000000000010023'); });
+
+    expect(mockSetTargetEPC).toHaveBeenCalledWith('000000000000000000010023');
+  });
+
+  it('ignores barcodes already in the store when the screen mounts', () => {
+    deliverBarcode('000000000000000000019999');
+
+    render(<LocateScreen />);
+
     expect(mockSetTargetEPC).not.toHaveBeenCalled();
-    expect(mockSetStatusMessage).toHaveBeenLastCalledWith(
-      expect.stringContaining('network down')
-    );
   });
 });

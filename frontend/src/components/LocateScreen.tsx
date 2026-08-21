@@ -8,11 +8,11 @@ import { useLocateStore } from '@/stores/locateStore';
 import { useDeviceStore } from '@/stores/deviceStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useUIStore } from '@/stores/uiStore';
-import { ArrowLeft, QrCode, Loader2, Radio } from 'lucide-react';
+import { ArrowLeft, QrCode, Loader2 } from 'lucide-react';
 import { ReaderState, ReaderMode } from '@/worker/types/reader';
 import { useScanToInput } from '@/hooks/useScanToInput';
-import { resolveBarcodeTarget } from '@/lib/locate/resolveBarcodeTarget';
-import type { Tag } from '@/types/shared';
+import { stripAimIdentifier } from '@/lib/barcode/aim';
+import { useBarcodeStore } from '@/stores/barcodeStore';
 import { EXAMPLE_EPCS } from '@test-utils/constants';
 import { ConfigurationSpinner } from '@/components/ConfigurationSpinner';
 import { useWebAudioTone } from '@/hooks/useWebAudioTone';
@@ -26,11 +26,6 @@ const MAX_RSSI = -20;
 
 // Lazy load the gauge component
 const GaugeComponent = lazyWithRetry(() => import('react-gauge-component'));
-
-// How a resolved asset is named back to the operator, who is holding paperwork
-// that carries the identifier rather than the name.
-const describeAsset = (asset: { name: string; external_key: string }) =>
-  `${asset.name} (${asset.external_key})`;
 
 const LocateScreen: React.FC = () => {
   // Track render for performance metrics
@@ -128,14 +123,10 @@ const LocateScreen: React.FC = () => {
   // sheet or pick list that carries the barcode of the item they were sent to
   // find — scan the paperwork, then go find the thing.
   //
-  // A barcode does not carry the EPC, so resolveBarcodeTarget goes through the
-  // asset registry. There is deliberately NO literal-EPC fallback on a miss:
-  // for a hex-of-ASCII encoded label (the WALDO convention on our own bench)
-  // using the scanned text as an EPC masks the wrong bits and reports "no
-  // signal", and on a tag finder that reads as "the item is not here".
+  // The scanned value IS the target: no registry lookup, because Locate is a
+  // tag finder and has to be able to search for a tag no asset owns. A barcode
+  // that is not an EPC is user error, reported the way a typed one is.
   const isConnected = useDeviceStore((state) => state.isConnected);
-  const [isResolving, setIsResolving] = React.useState(false);
-  const [tagChoices, setTagChoices] = React.useState<Tag[]>([]);
   // Capture state is tracked here, not read from useScanToInput. The hook
   // reports isScanning from a ref, which never triggers a re-render — and
   // nothing else re-renders this screen while it sits idle, so a button
@@ -144,59 +135,47 @@ const LocateScreen: React.FC = () => {
   // leave the reader in barcode mode with the trigger dead.
   const [isCapturing, setIsCapturing] = React.useState(false);
 
-  const applyTarget = React.useCallback((epc: string, note: string) => {
-    setInputEPC(epc);
-    setTagChoices([]);
-    if (setTargetEPC(epc)) {
-      setStatusMessage(`${note} Press trigger to start searching.`);
-    } else {
-      // The registry can hold a value the EPC validator rejects; say which,
-      // rather than leaving a target that was never applied.
-      setStatusMessage(`Registry value "${epc}" is not a valid EPC.`);
-    }
+  // A scanned value goes through exactly the path a typed one does, down to the
+  // status text, so a scan and a keystroke are indistinguishable downstream.
+  const applyScannedValue = React.useCallback((raw: string) => {
+    const value = stripAimIdentifier(raw).toUpperCase();
+    // The scanned text stays in the field even when it is rejected, so the
+    // operator can see what the scanner actually read and correct it.
+    setInputEPC(value);
+    setStatusMessage(setTargetEPC(value)
+      ? 'EPC updated. Press trigger to start searching.'
+      : 'Invalid EPC format. Must contain only hexadecimal characters (0-9, A-F).');
   }, [setTargetEPC, setStatusMessage]);
 
-  const handleBarcode = React.useCallback(async (barcode: string) => {
-    setTagChoices([]);
-    setIsCapturing(false);
-    setIsResolving(true);
-    setStatusMessage(`Looking up ${barcode}...`);
-    try {
-      const result = await resolveBarcodeTarget(barcode);
-      switch (result.status) {
-        case 'resolved':
-          applyTarget(result.epc, `Target set from ${describeAsset(result.asset)}.`);
-          break;
-        case 'ambiguous':
-          setTagChoices(result.tags);
-          setStatusMessage(
-            `${describeAsset(result.asset)} has ${result.tags.length} RFID tags - choose one.`
-          );
-          break;
-        case 'no-rfid-tag':
-          setStatusMessage(`${describeAsset(result.asset)} has no RFID tag to locate.`);
-          break;
-        case 'no-asset':
-          setStatusMessage(`No asset found for barcode ${barcode}.`);
-          break;
-        case 'error':
-          setStatusMessage(`Lookup failed: ${result.message}`);
-          break;
-      }
-    } finally {
-      setIsResolving(false);
+  // barcodeStore is the single capture path. With no target the reader parks in
+  // BARCODE mode (resolveModeForTab), so a trigger pull fires the barcode
+  // module and the read lands here with no useScanToInput session at all —
+  // reading the store covers the trigger and the button with one code path.
+  const barcodes = useBarcodeStore((state) => state.barcodes);
+  const seenBarcodeCount = React.useRef<number | null>(null);
+  useEffect(() => {
+    // Whatever was already in the store belongs to some earlier screen.
+    if (seenBarcodeCount.current === null) {
+      seenBarcodeCount.current = barcodes.length;
+      return;
     }
-  }, [applyTarget, setStatusMessage]);
+    if (barcodes.length <= seenBarcodeCount.current) return;
+    seenBarcodeCount.current = barcodes.length;
+    setIsCapturing(false);
+    applyScannedValue(barcodes[0].data);
+  }, [barcodes, applyScannedValue]);
 
   const { startBarcodeScan, stopScan } = useScanToInput({
-    onScan: handleBarcode,
+    // The value arrives from barcodeStore; this only releases the button.
+    onScan: () => setIsCapturing(false),
     autoStop: true,
     // Back to Locate rather than IDLE, so the reader is ready to search the
     // moment the target lands. Acquiring and locating are sequential: the
     // reader has to be in barcode mode to scan and RFID mode to locate.
     returnMode: ReaderMode.LOCATE,
-    // The trigger means "search" on this screen. Arming it for capture too
-    // would give one button two meanings on one tab.
+    // The trigger is bound by mode, not by this hook: with no target the tab
+    // resolves to BARCODE and the worker's own trigger handler scans. Arming
+    // the hook's trigger path too would fight it.
     triggerEnabled: false
   });
 
@@ -398,7 +377,6 @@ const LocateScreen: React.FC = () => {
             // command and strands the reader in barcode mode with the trigger
             // dead (observed on a CS108).
             disabled={
-              isResolving ||
               readerState === ReaderState.SCANNING ||
               readerState === ReaderState.BUSY
             }
@@ -406,7 +384,7 @@ const LocateScreen: React.FC = () => {
             aria-label={isCapturing ? 'Cancel scan' : 'Scan barcode to acquire target'}
             className="flex-shrink-0 p-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {isCapturing || isResolving ? (
+            {isCapturing ? (
               <Loader2 className="h-5 w-5 text-yellow-600 dark:text-yellow-400 animate-spin" />
             ) : (
               <QrCode className="h-5 w-5 text-gray-600 dark:text-gray-400" />
@@ -417,24 +395,6 @@ const LocateScreen: React.FC = () => {
         <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
           {statusMessage}
         </div>
-        {/* One barcode can resolve to an asset carrying several RFID tags;
-            the operator picks which one to search for. */}
-        {tagChoices.length > 0 && (
-          <div className="mt-2 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-            {tagChoices.map((tag) => (
-              <button
-                key={tag.id}
-                type="button"
-                data-testid={`locate-tag-choice-${tag.id}`}
-                onClick={() => applyTarget(tag.value, 'Target set.')}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm font-mono hover:bg-blue-50 dark:hover:bg-blue-900/20 border-b border-gray-100 dark:border-gray-700 last:border-b-0 text-gray-900 dark:text-gray-100"
-              >
-                <Radio className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                <span className="truncate">{tag.value}</span>
-              </button>
-            ))}
-          </div>
-        )}
       </div>
       
       {/* Signal Strength Display */}
@@ -560,8 +520,8 @@ const LocateScreen: React.FC = () => {
       {/* Instructions */}
       <div className="mt-6 text-sm text-gray-600 dark:text-gray-400">
         <p>• Enter the EPC of the tag you want to find</p>
-        <p>• Or scan a barcode from your pick list to acquire the target</p>
-        <p>• Press and hold the trigger to search</p>
+        <p>• Or scan a barcode carrying it — while the field is empty the trigger scans</p>
+        <p>• Once a target is set, press and hold the trigger to search</p>
         <p>• Higher signal strength indicates closer proximity</p>
         <p>• Move slowly for best results</p>
       </div>
