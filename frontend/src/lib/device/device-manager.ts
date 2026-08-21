@@ -4,6 +4,7 @@
  */
 
 import * as Comlink from 'comlink';
+import { CommandQueue } from './command-queue';
 import { endpointSymbol } from 'vite-plugin-comlink/symbol';
 import type { StandardTag, BarcodeData } from './types';
 import type { ReaderModeType, ReaderSettings } from '@/worker/types/reader.js';
@@ -112,6 +113,9 @@ export class DeviceManager {
   private previousScanMode: ScanTabMode = 'rfid';
   private previousKitsMode: ScanTabMode = 'rfid';
   private previousHasTarget = true;
+  // Every worker command goes through here. The worker's CommandManager is not
+  // re-entrant, and four independent store subscriptions drive it.
+  private commands = new CommandQueue();
   private scanButtonUnsubscribe?: () => void;
 
   /**
@@ -497,7 +501,7 @@ export class DeviceManager {
           };
 
           // Pass the serializable settings - worker decides what to use
-          await this.worker.setSettings(settings);
+          await this.setSettings(settings);
         } catch (error) {
           // Worker will throw if not in READY state or settings are invalid for mode
           // Worker rejected settings
@@ -544,13 +548,15 @@ export class DeviceManager {
    * Direct proxy methods - pass through to worker
    */
   setMode = async (mode: ReaderModeType, settings?: ReaderSettings) => {
-    // Just pass through to worker - it handles duplicate calls efficiently
-    await this.worker.setMode(mode, settings);
+    // Queued, not called directly: a mode change that collides with another
+    // command is lost outright, and nothing reapplies it (TRA-1121).
+    await this.commands.run(() => this.worker.setMode(mode, settings));
   };
 
-  setSettings = (settings: ReaderSettings) => this.worker.setSettings(settings);
-  startScanning = () => this.worker.startScanning();
-  stopScanning = () => this.worker.stopScanning();
+  setSettings = (settings: ReaderSettings) =>
+    this.commands.run(() => this.worker.setSettings(settings));
+  startScanning = () => this.commands.run(() => this.worker.startScanning());
+  stopScanning = () => this.commands.run(() => this.worker.stopScanning());
 
   /**
    * Check if connected
