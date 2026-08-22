@@ -4,6 +4,7 @@
  */
 
 import * as Comlink from 'comlink';
+import { CommandQueue } from './command-queue';
 import { endpointSymbol } from 'vite-plugin-comlink/symbol';
 import type { StandardTag, BarcodeData } from './types';
 import type { ReaderModeType, ReaderSettings } from '@/worker/types/reader.js';
@@ -51,18 +52,51 @@ const TAB_TO_MODE: Record<string, ReaderModeType> = {
 };
 
 /**
+ * Whether the Locate screen already knows what it is looking for. A blank or
+ * whitespace-only target means the operator is still acquiring one (TRA-1121).
+ */
+export function hasLocateTarget(rfid?: { targetEPC?: string }): boolean {
+  return Boolean(rfid?.targetEPC?.trim());
+}
+
+/**
+ * Whether a settings change needs the reader mode reapplied. Only the Locate
+ * tab cares, and only when the target appears or disappears — editing one EPC
+ * into another must not churn the reader through a mode change mid-search.
+ */
+export function shouldReapplyModeForTarget(
+  previousHasTarget: boolean,
+  nextHasTarget: boolean,
+  tab: string
+): boolean {
+  return tab === 'locate' && previousHasTarget !== nextHasTarget;
+}
+
+/**
  * Resolve the reader mode for a tab. The Scan tab is dual-mode (TRA-1031):
  * its RFID|Barcode toggle decides between INVENTORY and BARCODE. The Kits tab
  * is dual-mode per view (TRA-1033): commission defaults to barcode, verify to
  * RFID — kitsScanMode is the effective mode of the active kit view.
+ *
+ * The Locate tab is dual-mode by target (TRA-1121). The trigger means "do the
+ * thing this screen is for", and that depends on whether the screen already
+ * knows what to look for: with no target the operator is still acquiring one,
+ * so park in BARCODE and let the trigger scan a label; once a target is set,
+ * LOCATE so the trigger searches for it. Nothing binds the trigger to either
+ * action — the worker already starts and stops whatever the current mode is.
+ *
+ * locateHasTarget defaults to true so a caller that says nothing about the
+ * target gets the search behaviour rather than silently arming the scanner.
  */
 export function resolveModeForTab(
   tab: string,
   scanTabMode: ScanTabMode,
-  kitsScanMode: ScanTabMode = 'rfid'
+  kitsScanMode: ScanTabMode = 'rfid',
+  locateHasTarget: boolean = true
 ): ReaderModeType {
   if (tab === 'scan' && scanTabMode === 'barcode') return ReaderMode.BARCODE;
   if (tab === 'kits' && kitsScanMode === 'barcode') return ReaderMode.BARCODE;
+  if (tab === 'locate' && !locateHasTarget) return ReaderMode.BARCODE;
   return TAB_TO_MODE[tab] || ReaderMode.IDLE;
 }
 
@@ -73,6 +107,15 @@ export class DeviceManager {
   private settingsUnsubscribe?: () => void;
   private activeTabUnsubscribe?: () => void;
   private kitsModeUnsubscribe?: () => void;
+  // Mode-resolution inputs. Instance fields rather than closure state because
+  // setupSettingsSubscription needs them too.
+  private previousTab = '';
+  private previousScanMode: ScanTabMode = 'rfid';
+  private previousKitsMode: ScanTabMode = 'rfid';
+  private previousHasTarget = true;
+  // Every worker command goes through here. The worker's CommandManager is not
+  // re-entrant, and four independent store subscriptions drive it.
+  private commands = new CommandQueue();
   private scanButtonUnsubscribe?: () => void;
 
   /**
@@ -170,13 +213,14 @@ export class DeviceManager {
     // Set initial mode based on current tab (including IDLE for home/settings).
     // Must include the kits view mode or connecting while on the Kits tab
     // configures INVENTORY under a Barcode toggle (TRA-1033).
+    // Use already imported settings from above (line 125-127)
+    const currentSettings = useSettingsStore.getState();
     const mode = resolveModeForTab(
       currentTab,
       useUIStore.getState().scanTabMode,
-      getKitsScanMode(useKitStore.getState())
+      getKitsScanMode(useKitStore.getState()),
+      hasLocateTarget(currentSettings.rfid)
     );
-    // Use already imported settings from above (line 125-127)
-    const currentSettings = useSettingsStore.getState();
     await DeviceManager.instance.setMode(mode, {
       rfid: currentSettings.rfid,
       barcode: currentSettings.barcode,
@@ -365,51 +409,63 @@ export class DeviceManager {
     // Initial tab determined
 
     // Subscribe to activeTab AND scanTabMode changes (TRA-1031), plus the
-    // Kits tab's per-view RFID|Barcode mode (TRA-1033)
-    let previousTab = initialTab;
-    let previousScanMode = useUIStore.getState().scanTabMode;
-    let previousKitsMode = getKitsScanMode(useKitStore.getState());
-
-    const applyResolvedMode = async () => {
-      // URL parameters are now handled in App.tsx BEFORE tab change
-      // This ensures settings are updated before we snapshot them
-      const mode = resolveModeForTab(previousTab, previousScanMode, previousKitsMode);
-      const settings = useSettingsStore.getState();
-      await this.setMode(mode, {
-        rfid: settings.rfid,
-        barcode: settings.barcode,
-        system: settings.system
-      });
-    };
+    // Kits tab's per-view RFID|Barcode mode (TRA-1033). The Locate tab's target
+    // (TRA-1121) is watched in setupSettingsSubscription instead: it lives in
+    // settingsStore, and a second subscriber there would race the settings push
+    // for the worker's command mutex.
+    this.previousTab = initialTab;
+    this.previousScanMode = useUIStore.getState().scanTabMode;
+    this.previousKitsMode = getKitsScanMode(useKitStore.getState());
+    this.previousHasTarget = hasLocateTarget(useSettingsStore.getState().rfid);
 
     this.activeTabUnsubscribe = useUIStore.subscribe(
       async (state) => {
         const { activeTab, scanTabMode } = state;
 
         // Only process if the resolved mode inputs actually changed
-        if (activeTab === previousTab && scanTabMode === previousScanMode) return;
-        previousTab = activeTab;
-        previousScanMode = scanTabMode;
-        await applyResolvedMode();
+        if (activeTab === this.previousTab && scanTabMode === this.previousScanMode) return;
+        this.previousTab = activeTab;
+        this.previousScanMode = scanTabMode;
+        await this.applyResolvedMode();
       }
     );
 
     this.kitsModeUnsubscribe = useKitStore.subscribe(
       async (state) => {
         const kitsMode = getKitsScanMode(state);
-        if (kitsMode === previousKitsMode) return;
-        previousKitsMode = kitsMode;
+        if (kitsMode === this.previousKitsMode) return;
+        this.previousKitsMode = kitsMode;
         // Only reconfigure the reader while the Kits tab drives it
-        if (previousTab !== 'kits') return;
-        await applyResolvedMode();
+        if (this.previousTab !== 'kits') return;
+        await this.applyResolvedMode();
       }
     );
 
     // ActiveTab subscription set up
     // URL parameters are handled in App.tsx BEFORE initial tab is set
     // Set initial mode for current tab
-    await applyResolvedMode();
+    await this.applyResolvedMode();
   }
+
+  /**
+   * Push the mode the current tab resolves to. The single place that decides a
+   * mode, so every caller agrees on what the reader should be doing.
+   */
+  private applyResolvedMode = async (): Promise<void> => {
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const settings = useSettingsStore.getState();
+    const mode = resolveModeForTab(
+      this.previousTab,
+      this.previousScanMode,
+      this.previousKitsMode,
+      this.previousHasTarget
+    );
+    await this.setMode(mode, {
+      rfid: settings.rfid,
+      barcode: settings.barcode,
+      system: settings.system
+    });
+  };
 
   /**
    * Set up subscription to settings store for live updates
@@ -426,6 +482,22 @@ export class DeviceManager {
     // No filtering, no state checking - that's the worker's job
     this.settingsUnsubscribe = useSettingsStore.subscribe(
       async (state) => {
+        // The Locate target lives in these settings, and gaining or losing one
+        // flips the tab between acquiring (BARCODE) and searching (LOCATE)
+        // (TRA-1121). Decided here, and applied *after* the settings push,
+        // because both are commands into a non-re-entrant CommandManager: two
+        // subscribers issuing them back to back means the second loses the
+        // mutex with "Command already active". Losing setSettings is benign —
+        // reader.ts:652 says why — but a lost setMode is never reapplied, and
+        // the reader silently stays in the mode it was already in.
+        const nextHasTarget = hasLocateTarget(state.rfid);
+        const modeNeedsReapplying = shouldReapplyModeForTarget(
+          this.previousHasTarget,
+          nextHasTarget,
+          this.previousTab
+        );
+        this.previousHasTarget = nextHasTarget;
+
         try {
           // Extract only the ReaderSettings portion (exclude functions)
           const settings: ReaderSettings = {
@@ -435,10 +507,19 @@ export class DeviceManager {
           };
 
           // Pass the serializable settings - worker decides what to use
-          await this.worker.setSettings(settings);
+          await this.setSettings(settings);
         } catch (error) {
           // Worker will throw if not in READY state or settings are invalid for mode
           // Worker rejected settings
+        }
+
+        if (!modeNeedsReapplying) return;
+        try {
+          await this.applyResolvedMode();
+        } catch (error) {
+          // Never swallow this one silently: an unapplied mode change is why
+          // a cleared Locate target left the reader still hunting the old EPC.
+          console.error('[DeviceManager] Failed to apply mode after target change:', error);
         }
       }
     );
@@ -473,13 +554,15 @@ export class DeviceManager {
    * Direct proxy methods - pass through to worker
    */
   setMode = async (mode: ReaderModeType, settings?: ReaderSettings) => {
-    // Just pass through to worker - it handles duplicate calls efficiently
-    await this.worker.setMode(mode, settings);
+    // Queued, not called directly: a mode change that collides with another
+    // command is lost outright, and nothing reapplies it (TRA-1121).
+    await this.commands.run(() => this.worker.setMode(mode, settings));
   };
 
-  setSettings = (settings: ReaderSettings) => this.worker.setSettings(settings);
-  startScanning = () => this.worker.startScanning();
-  stopScanning = () => this.worker.stopScanning();
+  setSettings = (settings: ReaderSettings) =>
+    this.commands.run(() => this.worker.setSettings(settings));
+  startScanning = () => this.commands.run(() => this.worker.startScanning());
+  stopScanning = () => this.commands.run(() => this.worker.stopScanning());
 
   /**
    * Check if connected
