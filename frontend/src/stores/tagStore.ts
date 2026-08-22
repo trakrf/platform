@@ -82,6 +82,7 @@ interface TagState {
 
   // Actions
   setTags: (tags: TagInfo[]) => void;
+  addTags: (tags: Partial<TagInfo>[]) => void;  // Add a batch of tags in one store write
   addTag: (tag: Partial<TagInfo>) => void;  // Add single tag
   clearTags: () => void;
   selectTag: (tag: TagInfo | null) => void;
@@ -107,6 +108,7 @@ interface TagState {
 
   // Internal lookup queue actions
   _queueForLookup: (epc: string) => void;
+  _queueManyForLookup: (epcs: string[]) => void;
   _flushLookupQueue: () => Promise<void>;
 }
 
@@ -257,65 +259,87 @@ export const useTagStore = create<TagState>()(
     };
   }),
   
-  addTag: (tag) => {
-    const epc = tag.epc || '';
-    const displayEpc = removeLeadingZeros(epc);
-    const state = get();
+  // TRA-1150: one store write per packet, not per read.
+  //
+  // Web Bluetooth is main-thread-only, so cs108-ble-transport registers its
+  // characteristicvaluechanged listener on the main thread and relays every
+  // inbound byte to the worker over a MessagePort. Command ACKs therefore share
+  // a thread with React. The previous per-read implementation did an O(n) key
+  // scan, an O(n) array copy and a zustand notify for EVERY tag read — O(reads x
+  // unique) per burst. On a dense field that kept the main thread busy for the
+  // whole scan, so the queued notification carrying the stop-scan ACK was not
+  // dispatched before the worker's command timeout fired and wedged the reader.
+  //
+  // The matching-key index is built once per batch rather than rescanned per
+  // read. It is deliberately not cached across batches: getMatchingKey depends
+  // on the showLeadingZeros setting, and a stale index would silently mismatch
+  // tags. Per-batch is O(n) once and needs no invalidation.
+  addTags: (incoming) => {
+    if (incoming.length === 0) return;
+
     const { showLeadingZeros } = useSettingsStore.getState();
-
-    // Use canonical matching key so scanned tags (full EPC) match
-    // reconciliation stubs (short EPC from CSV)
-    const matchKey = getMatchingKey(epc, showLeadingZeros);
-    const existingIndex = state.tags.findIndex(
-      t => getMatchingKey(t.epc, showLeadingZeros) === matchKey
-    );
-    const isNewTag = existingIndex < 0;
-
-    // Tag classification will be done asynchronously via the lookup API
-    // Keep initial type as 'unknown' - _flushLookupQueue will classify as asset or location
+    const newEpcs: string[] = [];
 
     set((state) => {
       const now = Date.now();
+      const newTags = [...state.tags];
 
-      let newTags;
-      if (existingIndex >= 0) {
-        const existing = state.tags[existingIndex];
-        // If this is a reconciliation stub being scanned for the first time,
-        // promote it: update source, mark as found, keep reconciliation metadata
-        const isReconStub = existing.source === 'reconciliation';
-        newTags = [...state.tags];
-        newTags[existingIndex] = {
-          ...existing,
-          ...tag,
-          // Keep reconciliation metadata from the stub
-          assetIdentifier: existing.assetIdentifier ?? tag.assetIdentifier,
-          description: existing.description ?? tag.description,
-          location: existing.location ?? tag.location,
-          // Promote stub to scanned tag
-          epc: isReconStub ? epc : existing.epc,
-          displayEpc,
-          source: isReconStub ? (tag.source ?? 'rfid' as const) : existing.source,
-          reconciled: existing.reconciled != null ? true : existing.reconciled,
-          lastSeenTime: now,
-          readCount: (existing.readCount || 0) + 1,
-          count: (existing.count || 0) + 1,
-          timestamp: now
-        };
-      } else {
-        // Create new tag - classification done asynchronously via lookup API
-        const newTag: TagInfo = {
-          epc,
-          displayEpc,
-          count: 1,
-          source: 'rfid',
-          type: 'unknown',
-          firstSeenTime: now,
-          lastSeenTime: now,
-          readCount: 1,
-          timestamp: now,
-          ...tag,
-        };
-        newTags = [...state.tags, newTag];
+      const indexByKey = new Map<string, number>();
+      for (let i = 0; i < newTags.length; i++) {
+        indexByKey.set(getMatchingKey(newTags[i].epc, showLeadingZeros), i);
+      }
+
+      for (const tag of incoming) {
+        const epc = tag.epc || '';
+        const displayEpc = removeLeadingZeros(epc);
+
+        // Use canonical matching key so scanned tags (full EPC) match
+        // reconciliation stubs (short EPC from CSV)
+        const matchKey = getMatchingKey(epc, showLeadingZeros);
+        const existingIndex = indexByKey.get(matchKey);
+
+        if (existingIndex !== undefined) {
+          const existing = newTags[existingIndex];
+          // If this is a reconciliation stub being scanned for the first time,
+          // promote it: update source, mark as found, keep reconciliation metadata
+          const isReconStub = existing.source === 'reconciliation';
+          newTags[existingIndex] = {
+            ...existing,
+            ...tag,
+            // Keep reconciliation metadata from the stub
+            assetIdentifier: existing.assetIdentifier ?? tag.assetIdentifier,
+            description: existing.description ?? tag.description,
+            location: existing.location ?? tag.location,
+            // Promote stub to scanned tag
+            epc: isReconStub ? epc : existing.epc,
+            displayEpc,
+            source: isReconStub ? (tag.source ?? 'rfid' as const) : existing.source,
+            reconciled: existing.reconciled != null ? true : existing.reconciled,
+            lastSeenTime: now,
+            readCount: (existing.readCount || 0) + 1,
+            count: (existing.count || 0) + 1,
+            timestamp: now
+          };
+        } else {
+          // Create new tag - classification done asynchronously via lookup API
+          const newTag: TagInfo = {
+            epc,
+            displayEpc,
+            count: 1,
+            source: 'rfid',
+            type: 'unknown',
+            firstSeenTime: now,
+            lastSeenTime: now,
+            readCount: 1,
+            timestamp: now,
+            ...tag,
+          };
+          newTags.push(newTag);
+          // Register immediately so a repeat of this EPC later in the SAME batch
+          // merges into it instead of appending a duplicate row.
+          indexByKey.set(matchKey, newTags.length - 1);
+          if (epc) newEpcs.push(epc);
+        }
       }
 
       const totalPages = Math.max(1, Math.ceil(newTags.length / state.pageSize));
@@ -328,10 +352,15 @@ export const useTagStore = create<TagState>()(
       };
     });
 
-    // Queue all new tags for batch lookup to classify as asset or location
-    if (isNewTag && epc) {
-      get()._queueForLookup(epc);
+    // Queue all new tags for batch lookup to classify as asset or location.
+    // One timer reset for the whole batch, not one per new tag.
+    if (newEpcs.length > 0) {
+      get()._queueManyForLookup(newEpcs);
     }
+  },
+
+  addTag: (tag) => {
+    get().addTags([tag]);
   },
 
   // Locate actions
@@ -371,6 +400,25 @@ export const useTagStore = create<TagState>()(
     // Add to queue and flush immediately
     unenriched.forEach(epc => get()._lookupQueue.add(epc));
     await get()._flushLookupQueue();
+  },
+
+  // Queue several EPCs with a single debounce timer reset (TRA-1150).
+  // The per-EPC form below resets the timer and calls set() once per new tag,
+  // which put another store notification on the hot scan path.
+  _queueManyForLookup: (epcs: string[]) => {
+    const state = get();
+    epcs.forEach(epc => state._lookupQueue.add(epc));
+
+    // Clear existing timer and set new one (debounce at 500ms)
+    if (state._lookupTimer) {
+      clearTimeout(state._lookupTimer);
+    }
+
+    const timer = setTimeout(() => {
+      get()._flushLookupQueue();
+    }, 500);
+
+    set({ _lookupTimer: timer });
   },
 
   // Queue an EPC for batch lookup with debounce
