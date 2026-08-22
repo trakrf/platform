@@ -2,8 +2,8 @@
  * Tests for CS108 packet parsing
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import { PacketHandler } from './packet.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { PacketHandler, FRAGMENT_TIMEOUT_MS } from './packet.js';
 import { parsePacket, calculatePacketCRC, validatePacketCRC, validatePacketLength } from './protocol.js';
 import { RFID_POWER_OFF, RFID_POWER_ON, TRIGGER_PRESSED_NOTIFICATION, INVENTORY_TAG_NOTIFICATION } from './event.js';
 
@@ -382,5 +382,135 @@ describe('CS108 Packet Validation', () => {
       expect(packets.length).toBe(1);
       expect(packets[0].eventCode).toBe(0x8001);
     });
+  });
+});
+
+describe('PacketHandler fragment timeout (TRA-1148 item 1)', () => {
+  const buildFragmentedPacket = () => {
+    const builder = new PacketHandler();
+    const payload = new Uint8Array(60);
+    payload[0] = 0x03;
+    const packet = builder.buildNotification(INVENTORY_TAG_NOTIFICATION, payload);
+    const fragments = fragmentPacket(packet);
+    expect(fragments.length).toBeGreaterThan(1);
+    return { packet, fragments };
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('defaults to the networked profile so an unknown link does not lose packets', () => {
+    const handler = new PacketHandler();
+    const metrics = handler.getFragmentMetrics();
+
+    expect(metrics.linkProfile).toBe('networked');
+    expect(metrics.timeoutMs).toBe(FRAGMENT_TIMEOUT_MS.networked);
+  });
+
+  it('holds a partial packet past 200ms on a networked link, then completes it', () => {
+    // This is the defect: the bridge measured a 1009ms intra-packet outlier, and
+    // at the old fixed 200ms every one of those ate a whole packet silently.
+    const { fragments } = buildFragmentedPacket();
+    const receiver = new PacketHandler();
+    receiver.setLinkProfile('networked');
+
+    for (let i = 0; i < fragments.length - 1; i++) {
+      expect(receiver.processIncomingData(fragments[i])).toEqual([]);
+    }
+
+    // A stall well past the old 200ms threshold, and past the measured outlier.
+    vi.advanceTimersByTime(1500);
+    expect(receiver.getFragmentMetrics().discards).toBe(0);
+
+    const completed = receiver.processIncomingData(fragments[fragments.length - 1]);
+    expect(completed.length).toBe(1);
+    expect(completed[0].eventCode).toBe(0x8100);
+  });
+
+  it('still discards a partial packet on a networked link once the timeout elapses', () => {
+    const { fragments } = buildFragmentedPacket();
+    const receiver = new PacketHandler();
+    receiver.setLinkProfile('networked');
+
+    receiver.processIncomingData(fragments[0]);
+    vi.advanceTimersByTime(FRAGMENT_TIMEOUT_MS.networked);
+
+    const metrics = receiver.getFragmentMetrics();
+    expect(metrics.discards).toBe(1);
+    expect(metrics.discardedBytes).toBe(fragments[0].length);
+    expect(metrics.lastDiscardAt).not.toBeNull();
+
+    // Buffer really was cleared - the next fragment is not silently glued on.
+    expect(receiver.processIncomingData(fragments[1])).toEqual([]);
+  });
+
+  it('keeps the fast 200ms discard on a native BLE link', () => {
+    // Native BLE delivers fragments 1-3ms apart, so a 200ms silence genuinely
+    // means the rest is never coming and there is no reason to wait longer.
+    const { fragments } = buildFragmentedPacket();
+    const receiver = new PacketHandler();
+    receiver.setLinkProfile('native');
+
+    expect(receiver.getFragmentMetrics().timeoutMs).toBe(FRAGMENT_TIMEOUT_MS.native);
+
+    receiver.processIncomingData(fragments[0]);
+    vi.advanceTimersByTime(FRAGMENT_TIMEOUT_MS.native);
+
+    expect(receiver.getFragmentMetrics().discards).toBe(1);
+  });
+
+  it('does not discard a native-link packet that arrives inside 200ms', () => {
+    const { fragments } = buildFragmentedPacket();
+    const receiver = new PacketHandler();
+    receiver.setLinkProfile('native');
+
+    for (let i = 0; i < fragments.length - 1; i++) {
+      receiver.processIncomingData(fragments[i]);
+      vi.advanceTimersByTime(3); // realistic native inter-fragment gap
+    }
+
+    const completed = receiver.processIncomingData(fragments[fragments.length - 1]);
+    expect(completed.length).toBe(1);
+    expect(receiver.getFragmentMetrics().discards).toBe(0);
+  });
+
+  it('accumulates discards across packets so a slow bleed is visible', () => {
+    const { fragments } = buildFragmentedPacket();
+    const receiver = new PacketHandler();
+    receiver.setLinkProfile('native');
+
+    for (let i = 0; i < 3; i++) {
+      receiver.processIncomingData(fragments[0]);
+      vi.advanceTimersByTime(FRAGMENT_TIMEOUT_MS.native);
+    }
+
+    const metrics = receiver.getFragmentMetrics();
+    expect(metrics.discards).toBe(3);
+    expect(metrics.discardedBytes).toBe(fragments[0].length * 3);
+  });
+
+  it('keeps metrics across reset() but clears them on resetFragmentMetrics()', () => {
+    const { fragments } = buildFragmentedPacket();
+    const receiver = new PacketHandler();
+    receiver.setLinkProfile('native');
+
+    receiver.processIncomingData(fragments[0]);
+    vi.advanceTimersByTime(FRAGMENT_TIMEOUT_MS.native);
+    expect(receiver.getFragmentMetrics().discards).toBe(1);
+
+    // reset() clears in-flight reassembly, not the session health signal.
+    receiver.reset();
+    expect(receiver.getFragmentMetrics().discards).toBe(1);
+
+    receiver.resetFragmentMetrics();
+    const cleared = receiver.getFragmentMetrics();
+    expect(cleared.discards).toBe(0);
+    expect(cleared.discardedBytes).toBe(0);
+    expect(cleared.lastDiscardAt).toBeNull();
   });
 });

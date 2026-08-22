@@ -16,7 +16,7 @@ import { LogLevel } from '@/worker/utils/logger.js';
 
 // Worker interface for type safety
 interface CS108WorkerAPI {
-  initialize(port: MessagePort): Promise<boolean>;
+  initialize(port: MessagePort, options?: { linkProfile?: 'native' | 'networked' }): Promise<boolean>;
   disconnect(): Promise<void>;
   setMode(mode: ReaderModeType, settings?: ReaderSettings): Promise<void>;
   setSettings(settings: ReaderSettings): Promise<void>;
@@ -124,7 +124,13 @@ export class DeviceManager {
 
     // NOW initialize worker with transport port - use Comlink.transfer for MessagePort
     // Initializing worker with transport
-    const success = await worker.initialize(Comlink.transfer(port, [port]));
+    //
+    // Tell the worker the latency shape of this link so packet reassembly can
+    // size its fragment timeout: a networked transport's inter-fragment tail is
+    // orders of magnitude longer than native BLE's, and treating it as native
+    // silently discards whole packets (TRA-1148).
+    const linkProfile = transport.isNetworked() ? 'networked' : 'native';
+    const success = await worker.initialize(Comlink.transfer(port, [port]), { linkProfile });
     if (!success) {
       await transport.disconnect();
       // ComlinkWorker cleanup is handled by the plugin

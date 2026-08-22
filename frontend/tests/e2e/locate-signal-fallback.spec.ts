@@ -12,6 +12,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { connectToDevice, disconnectDevice } from './helpers/connection';
 import { LOCATE_TEST_TAG } from '@test-utils/constants';
+import { HARDWARE_TEST_TIMEOUT_MS } from './e2e.config';
 
 async function readScreen(page: Page) {
   return page.evaluate(() => {
@@ -35,6 +36,9 @@ async function readScreen(page: Page) {
 }
 
 test.describe('TRA-1080 signal falls back after stopping @hardware', () => {
+  // Real hardware: connect + RFID bring-up alone costs ~20s (TRA-1148 item 5)
+  test.describe.configure({ timeout: HARDWARE_TEST_TIMEOUT_MS });
+
   test.describe.configure({ timeout: 120_000 });
   let page: Page;
 

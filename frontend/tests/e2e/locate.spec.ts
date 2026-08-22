@@ -21,6 +21,7 @@ import { simulateTriggerPress, simulateTriggerRelease } from './helpers/trigger-
 import { getReaderState } from './helpers/device-state';
 import { ReaderState } from './helpers/reader-state';
 import { PRIMARY_TEST_TAG, NON_EXISTENT_TAG } from '@test-utils/constants';
+import { HARDWARE_TEST_TIMEOUT_MS } from './e2e.config';
 
 // Test tag that should be locatable (from physical test setup)
 const LOCATE_TEST_TAG = PRIMARY_TEST_TAG;
@@ -88,6 +89,9 @@ async function gotoLocateWithEPC(page: Page, epc: string) {
 
 // Locate mode tests - EPC filtering integration with CS108 hardware
 test.describe('Locate Functionality Tests @hardware', () => {
+  // Real hardware: connect + RFID bring-up alone costs ~20s (TRA-1148 item 5)
+  test.describe.configure({ timeout: HARDWARE_TEST_TIMEOUT_MS });
+
   /**
    * CONNECTION SHARING STRATEGY (from inventory tests)
    *
