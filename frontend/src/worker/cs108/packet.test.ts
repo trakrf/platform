@@ -494,6 +494,37 @@ describe('PacketHandler fragment timeout (TRA-1148 item 1)', () => {
     expect(metrics.discardedBytes).toBe(fragments[0].length * 3);
   });
 
+  it('parses a command response that arrives while a stale partial is still buffered', () => {
+    // The tail-of-burst risk introduced by holding partials 15x longer: an
+    // inventory burst ends mid-packet, then a command ACK arrives before the
+    // fragment timeout would have fired. If the reassembler appended that ACK
+    // to the stale partial as continuation bytes, the ACK would be swallowed
+    // and the command would time out - which is exactly the
+    // "Failed to stop scanning: Command timeout" signature seen on hardware.
+    //
+    // It must not. A valid header in incoming data outranks a stale partial,
+    // and that has to hold for the long networked timeout too.
+    const builder = new PacketHandler();
+    const { fragments } = buildFragmentedPacket();
+    const ack = builder.buildResponse(RFID_POWER_OFF, new Uint8Array([0x00]));
+
+    const receiver = new PacketHandler();
+    receiver.setLinkProfile('networked');
+
+    // Burst ends mid-packet, leaving a partial in the buffer.
+    expect(receiver.processIncomingData(fragments[0])).toEqual([]);
+
+    // ACK lands 500ms later - well inside the 3000ms networked window, so the
+    // stale partial has NOT timed out and is still sitting in the buffer.
+    vi.advanceTimersByTime(500);
+    expect(receiver.getFragmentMetrics().discards).toBe(0);
+
+    const packets = receiver.processIncomingData(ack);
+
+    expect(packets.length).toBe(1);
+    expect(packets[0].eventCode).toBe(0x8001); // RFID_POWER_OFF ACK
+  });
+
   it('keeps metrics across reset() but clears them on resetFragmentMetrics()', () => {
     const { fragments } = buildFragmentedPacket();
     const receiver = new PacketHandler();
