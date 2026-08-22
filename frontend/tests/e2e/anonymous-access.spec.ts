@@ -59,7 +59,7 @@ test.describe('Anonymous Access', () => {
     page,
   }) => {
     // TRA-305: Tags scanned while anonymous should NOT trigger login redirect
-    // The bug was: tagStore._queueForLookup() calls API which returns 401, triggering redirect
+    // The bug was: the tagStore lookup queue calls the API, which returns 401, triggering redirect
     // The fix: _flushLookupQueue() checks isAuthenticated before calling API
 
     // Monitor for 401 errors

@@ -107,7 +107,6 @@ interface TagState {
   refreshAssetEnrichment: () => Promise<void>;
 
   // Internal lookup queue actions
-  _queueForLookup: (epc: string) => void;
   _queueManyForLookup: (epcs: string[]) => void;
   _flushLookupQueue: () => Promise<void>;
 }
@@ -408,23 +407,6 @@ export const useTagStore = create<TagState>()(
   _queueManyForLookup: (epcs: string[]) => {
     const state = get();
     epcs.forEach(epc => state._lookupQueue.add(epc));
-
-    // Clear existing timer and set new one (debounce at 500ms)
-    if (state._lookupTimer) {
-      clearTimeout(state._lookupTimer);
-    }
-
-    const timer = setTimeout(() => {
-      get()._flushLookupQueue();
-    }, 500);
-
-    set({ _lookupTimer: timer });
-  },
-
-  // Queue an EPC for batch lookup with debounce
-  _queueForLookup: (epc: string) => {
-    const state = get();
-    state._lookupQueue.add(epc);
 
     // Clear existing timer and set new one (debounce at 500ms)
     if (state._lookupTimer) {
