@@ -19,7 +19,7 @@ import { connectToDevice, disconnectDevice } from './helpers/connection';
 import { expectConnectionState, expectBatteryPercentage, expectReaderMode } from './helpers/assertions';
 import { setupConsoleMonitoring } from './helpers/console-utils';
 import { getReaderState } from './helpers/device-state';
-import { getE2EConfig } from './e2e.config';
+import { getE2EConfig, HARDWARE_TEST_TIMEOUT_MS } from './e2e.config';
 import {
   simulateTriggerPress,
   simulateTriggerRelease,
@@ -31,6 +31,9 @@ import {
 const config = getE2EConfig();
 
 test.describe('Connection Operations @hardware', () => {
+  // Real hardware: connect + RFID bring-up alone costs ~20s (TRA-1148 item 5)
+  test.describe.configure({ timeout: HARDWARE_TEST_TIMEOUT_MS });
+
   // Shared page instance for all tests in this suite
   let sharedPage: Page;
   let consoleMonitor: ReturnType<typeof setupConsoleMonitoring>;

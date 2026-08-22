@@ -15,11 +15,72 @@ import { PACKET_CONSTANTS, calculatePacketCRC, validatePacketCRC, validatePacket
 import * as Sentry from '@sentry/react';
 import { PacketDebugBuffer } from './utils/packet-debug-buffer.js';
 
+/**
+ * Latency shape of the link the fragments are arriving over.
+ *
+ * This is about *timing only* and is unrelated to `setTransportType(isUSB)`,
+ * which selects the transport byte written into the packet header.
+ */
+export type LinkProfile = 'native' | 'networked';
+
+/**
+ * How long to wait for the next fragment of an in-progress packet before
+ * giving up on it.
+ *
+ * `native` — a local BLE stack delivers the 2-7 notifications of one packet
+ * ~1-3 ms apart, so 200 ms is never in play and a silence that long really
+ * does mean the rest of the packet is never coming.
+ *
+ * `networked` — the bridge/proxy path adds line buffering, a WebSocket, JSON
+ * parsing and the browser task queue. Bench measurement of a real inventory
+ * burst: p50 3 ms, p95 15 ms intra-packet, but with a 1009 ms outlier. The
+ * typical case is comfortable; the tail is not, and at 200 ms that tail was
+ * silently eating whole packets (36 discards in one otherwise healthy run).
+ * 3000 ms covers the measured outlier ~3x over while still landing under the
+ * 5000 ms command timeout, so a genuinely wedged reassembler still clears
+ * before a command gives up on it.
+ *
+ * Raising this is close to free: `processIncomingData` already drops a stale
+ * partial packet *synchronously* the moment a valid new header arrives, so
+ * this timer only ever fires during genuine silence — when there is, by
+ * definition, no incoming data for it to be holding up.
+ */
+export const FRAGMENT_TIMEOUT_MS: Record<LinkProfile, number> = {
+  native: 200,
+  networked: 3000
+};
+
+/**
+ * Cumulative fragment-reassembly health, so a discard is a number something can
+ * assert on rather than only a line in a log nobody is reading.
+ */
+export interface FragmentMetrics {
+  /** Partial packets abandoned because the next fragment never arrived. */
+  discards: number;
+  /** Bytes thrown away by those discards. */
+  discardedBytes: number;
+  /** Date.now() of the most recent discard, or null if there has not been one. */
+  lastDiscardAt: number | null;
+  /** The timeout currently in force, in ms. */
+  timeoutMs: number;
+  /** The link profile that timeout was derived from. */
+  linkProfile: LinkProfile;
+}
+
 export class PacketHandler {
   private currentPacket: CS108Packet | null = null;
   private fragmentTimeout?: NodeJS.Timeout;
   private transportByte: number = PACKET_CONSTANTS.TRANSPORT_BLUETOOTH; // Default to Bluetooth for handheld
   private debugBuffer = new PacketDebugBuffer();
+
+  // Default to the conservative profile. The two failure modes are not
+  // symmetric: too short silently destroys good packets, too long merely
+  // delays recovery during a silence in which nothing is arriving anyway. So
+  // when the link is unknown, wait.
+  private linkProfile: LinkProfile = 'networked';
+  private fragmentDiscards = 0;
+  private fragmentDiscardedBytes = 0;
+  private lastFragmentDiscardAt: number | null = null;
 
   constructor() {
     // Debug: Verify event map is properly initialized
@@ -518,14 +579,75 @@ export class PacketHandler {
       clearTimeout(this.fragmentTimeout);
     }
 
+    const timeoutMs = FRAGMENT_TIMEOUT_MS[this.linkProfile];
+
     this.fragmentTimeout = setTimeout(() => {
-      logger.error('[PacketHandler] Fragment timeout - discarding partial packet');
+      const droppedBytes = this.rawDataBuffer.length;
+      const expected = this.currentPacket?.totalExpected;
+
+      this.fragmentDiscards++;
+      this.fragmentDiscardedBytes += droppedBytes;
+      this.lastFragmentDiscardAt = Date.now();
+
+      logger.error(
+        `[PacketHandler] Fragment timeout after ${timeoutMs}ms (${this.linkProfile} link) - ` +
+        `discarding partial packet: ${droppedBytes}` +
+        `${expected !== undefined ? `/${expected}` : ''} bytes. ` +
+        `Discards this session: ${this.fragmentDiscards} (${this.fragmentDiscardedBytes} bytes).`
+      );
+
       this.currentPacket = null;
       this.rawDataBuffer = new Uint8Array(0); // Clear buffer on timeout
       this.fragmentTimeout = undefined;
-    }, 200); // 200ms industry standard for BLE fragmentation
+    }, timeoutMs);
   }
-  
+
+  /**
+   * Select the fragment-reassembly timeout to suit the link the data is
+   * arriving over. See FRAGMENT_TIMEOUT_MS.
+   *
+   * Takes effect on the next fragment; an already-armed timer keeps the value
+   * it was started with, which is harmless because the profile only changes at
+   * connect time.
+   *
+   * Unrelated to setTransportType(isUSB), which picks the header transport byte.
+   */
+  setLinkProfile(profile: LinkProfile): void {
+    if (profile === this.linkProfile) return;
+    this.linkProfile = profile;
+    logger.debug(
+      `[PacketHandler] Link profile set to '${profile}' - ` +
+      `fragment timeout ${FRAGMENT_TIMEOUT_MS[profile]}ms`
+    );
+  }
+
+  /**
+   * Cumulative fragment-reassembly health for this handler.
+   *
+   * Deliberately survives reset() - reset() clears in-flight reassembly state on
+   * reconnect or mode change, but the discard count is a session-level health
+   * signal and zeroing it there would hide exactly the slow bleed it exists to
+   * expose. Use resetFragmentMetrics() to zero it explicitly.
+   */
+  getFragmentMetrics(): FragmentMetrics {
+    return {
+      discards: this.fragmentDiscards,
+      discardedBytes: this.fragmentDiscardedBytes,
+      lastDiscardAt: this.lastFragmentDiscardAt,
+      timeoutMs: FRAGMENT_TIMEOUT_MS[this.linkProfile],
+      linkProfile: this.linkProfile
+    };
+  }
+
+  /**
+   * Zero the fragment metrics - for tests and for scoping a measurement window.
+   */
+  resetFragmentMetrics(): void {
+    this.fragmentDiscards = 0;
+    this.fragmentDiscardedBytes = 0;
+    this.lastFragmentDiscardAt = null;
+  }
+
   /**
    * Set transport type (for USB vs Bluetooth)
    */

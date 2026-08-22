@@ -116,6 +116,13 @@ export class MockTransport implements Transport {
   getType(): string {
     return 'mock';
   }
+
+  /**
+   * In-process simulation - no network hop, and no real inter-fragment latency.
+   */
+  isNetworked(): boolean {
+    return false;
+  }
   
   /**
    * Handle commands from worker

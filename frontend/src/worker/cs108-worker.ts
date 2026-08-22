@@ -10,6 +10,7 @@
  * - Event callbacks to main thread
  */
 import { CS108Reader } from './cs108/reader.js';
+import type { LinkProfile, FragmentMetrics } from './cs108/packet.js';
 import type {
   ReaderModeType,
   ReaderSettings
@@ -24,7 +25,16 @@ let reader: CS108Reader | null = null;
 
 // Flat API methods exposed to main thread via Comlink
 
-export async function initialize(port: MessagePort): Promise<boolean> {
+export interface InitializeOptions {
+  /**
+   * Latency shape of the link notifications arrive over. Sizes the fragment
+   * reassembly timeout - see FRAGMENT_TIMEOUT_MS in cs108/packet.ts.
+   * Omitted means "unknown", and the reader keeps its conservative default.
+   */
+  linkProfile?: LinkProfile;
+}
+
+export async function initialize(port: MessagePort, options?: InitializeOptions): Promise<boolean> {
   try {
     logger.debug('initialize() called with MessagePort');
 
@@ -32,6 +42,11 @@ export async function initialize(port: MessagePort): Promise<boolean> {
     if (!reader) {
       logger.debug('Creating CS108Reader instance');
       reader = new CS108Reader();
+    }
+
+    // Size fragment reassembly for the link BEFORE any data can arrive
+    if (options?.linkProfile) {
+      reader.setLinkProfile(options.linkProfile);
     }
 
     // Set the transport port
@@ -125,6 +140,18 @@ export { LogLevel };
 export function setRssiDebug(enabled: boolean): void {
   (globalThis as unknown as Record<string, unknown>).__RSSI_DEBUG = enabled;
   logger.info(`[Worker] RSSI debug ${enabled ? 'enabled' : 'disabled'}`);
+}
+
+/**
+ * Fragment-reassembly health, so a dropped packet is a number the app and the
+ * e2e suite can read rather than only a line in the worker log.
+ *
+ * A nonzero discard count means whole CS108 packets - and therefore whole tag
+ * reads - were thrown away because the next fragment did not arrive in time.
+ * Returns null when there is no reader (not connected).
+ */
+export function getFragmentMetrics(): FragmentMetrics | null {
+  return reader ? reader.getFragmentMetrics() : null;
 }
 
 // No event callbacks needed - events flow directly through postMessage

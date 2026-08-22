@@ -13,11 +13,18 @@ import {
   getTriggerState
 } from './helpers/trigger-utils';
 import type { WindowWithStores } from './types';
-import { TEST_TAG_ARRAY, TEST_TAG_RANGE } from '@test-utils/constants';
+import { TEST_TAG_ARRAY, TEST_TAG_RANGE, TEST_EXPECTATIONS } from '@test-utils/constants';
+import { HARDWARE_TEST_TIMEOUT_MS } from './e2e.config';
 
 
 // Post-refactor - re-enabling tests one by one
 test.describe('Consolidated Inventory Tests', () => {
+  // Wall-clock here scales with how many tags are in front of the reader: test 3
+  // took 36.6s against a dense field and blew the 30s default with every
+  // assertion passing and the data healthy. Read volume must not decide
+  // pass/fail (TRA-1148 item 5).
+  test.describe.configure({ timeout: HARDWARE_TEST_TIMEOUT_MS });
+
   /**
    * CONNECTION SHARING STRATEGY
    * 
@@ -289,8 +296,40 @@ test.describe('Consolidated Inventory Tests', () => {
     );
     console.log(`[Test] Found test tags (${TEST_TAG_RANGE}):`, foundTestTags);
 
-    // Should accumulate
-    expect(secondResult.count).toBeGreaterThanOrEqual(firstResult.count);
+    // --- Assertions (TRA-1148 item 4) -------------------------------------
+    //
+    // This test used to assert only `second.count >= first.count`, which is
+    // satisfied by 0 >= 0 and by 375 >= 375. Both were observed passing green:
+    // once against a completely dead link, and once with a second cycle that
+    // contributed no reads at all. A green run here has to mean the scan path
+    // works, so each of those holes is now closed by its own assertion.
+
+    // 1. The first cycle actually read something. Catches the dead-link run
+    //    that "passed" with 0 reads / 0 unique tags.
+    expect(firstResult.count,
+      'first read cycle should return reads - 0 means the scan path is dead'
+    ).toBeGreaterThanOrEqual(TEST_EXPECTATIONS.MIN_READS_PER_CYCLE);
+    expect(firstResult.uniqueCount,
+      'first read cycle should decode at least one unique tag'
+    ).toBeGreaterThanOrEqual(TEST_EXPECTATIONS.MIN_UNIQUE_TAGS_PER_CYCLE);
+
+    // 2. The second cycle contributed reads of its own. Strict, not >=:
+    //    the tag store accumulates, so a working second cycle can only push the
+    //    total up. Equality means the trigger/scan did nothing the second time,
+    //    which is the 375 -> 375 run that used to pass.
+    expect(secondResult.count,
+      'second read cycle should add reads - equality means it contributed nothing'
+    ).toBeGreaterThan(firstResult.count);
+
+    // 3. Known EPCs came back. Without this the test cannot tell a working
+    //    decoder from one returning garbage: counts alone are just byte volume.
+    //    Requires the staged test tags (TEST_TAG_RANGE) to be in the field.
+    expect(foundTestTags.length,
+      `expected at least ${TEST_EXPECTATIONS.MIN_NAMED_TEST_TAGS} of the staged test tags ` +
+      `(${TEST_TAG_RANGE}) to decode; found [${foundTestTags.join(', ')}] ` +
+      `among ${secondResult.uniqueCount} unique tags`
+    ).toBeGreaterThanOrEqual(TEST_EXPECTATIONS.MIN_NAMED_TEST_TAGS);
+
     console.log(`[Test] Tag reads: first=${firstResult.count}, second=${secondResult.count}`);
   });
 

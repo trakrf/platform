@@ -5,8 +5,13 @@
 
 import { test, expect } from '@playwright/test';
 import { connectToDevice, disconnectDevice } from './helpers/connection';
+import { HARDWARE_TEST_TIMEOUT_MS } from './e2e.config';
 
 test.describe('Worker Log Level', () => {
+  // Every test here connects to real hardware; connect + RFID bring-up alone
+  // costs ~20s, and each test disconnects too (TRA-1148 item 5).
+  test.describe.configure({ timeout: HARDWARE_TEST_TIMEOUT_MS });
+
 
   test('@hardware respects log level settings', async ({ page }) => {
     // Collect console messages
