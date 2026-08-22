@@ -127,4 +127,28 @@ export const TEST_EXPECTATIONS = {
   LOCATE_SCAN_DURATION_MS: 3000,  // How long to scan in locate mode
   BARCODE_SCAN_TIMEOUT_MS: 5000,  // Timeout for barcode scanning
   RSSI_VALID_RANGE: { min: -90, max: -30 }, // Valid RSSI range in dBm
+
+  /**
+   * Floors for a scan cycle that is actually reading tags (TRA-1148 item 4).
+   *
+   * Deliberately low. The point is to catch a scan path that produced NOTHING -
+   * a run against a dead link once "passed" the accumulation test with 0 reads
+   * and 0 unique tags, because `0 >= 0` satisfied the only assertion it had.
+   * Real runs against the staged field return 111-174 unique tags and 215-725
+   * reads, so these floors have three orders of magnitude of headroom and do
+   * not re-introduce the flakiness they are replacing.
+   */
+  MIN_READS_PER_CYCLE: 1,
+  MIN_UNIQUE_TAGS_PER_CYCLE: 1,
+
+  /**
+   * How many of the six named test tags (TEST_TAG_RANGE) must be decoded.
+   *
+   * One, not six: tags shadow each other in a dense pile and singulation is
+   * stochastic, so which of them come up varies run to run - observed runs
+   * decoded 2 and 3 of the 6. Requiring all six would be a flake. Requiring one
+   * is what makes this an assertion about DECODING rather than about byte
+   * volume: a known-correct EPC came back, not just some bytes.
+   */
+  MIN_NAMED_TEST_TAGS: 1,
 };

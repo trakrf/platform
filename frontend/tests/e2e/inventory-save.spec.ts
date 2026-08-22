@@ -16,6 +16,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { connectToDevice, disconnectDevice } from './helpers/connection';
 import { simulateTriggerPress, simulateTriggerRelease } from './helpers/trigger-utils';
+import { HARDWARE_TEST_TIMEOUT_MS } from './e2e.config';
 import {
   clearAuthState,
   uniqueId,
@@ -140,6 +141,11 @@ async function waitForEnrichment(page: Page, timeout = 10000): Promise<void> {
 }
 
 test.describe('Inventory Save Flow', () => {
+  // Shares one hardware connection across all four tests, so the whole describe
+  // carries the hardware budget - connect + bring-up alone costs ~20s, and the
+  // scanning tests add real read time on top (TRA-1148 item 5).
+  test.describe.configure({ timeout: HARDWARE_TEST_TIMEOUT_MS });
+
   // Force serial execution - tests depend on each other
   test.describe.configure({ mode: 'serial' });
 

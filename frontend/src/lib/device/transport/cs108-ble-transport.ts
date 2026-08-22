@@ -271,6 +271,18 @@ export class CS108BLETransport implements Transport {
   getType(): string {
     return 'ble';
   }
+
+  /**
+   * Real Web Bluetooth is local; the ble-mcp-test mock is not.
+   *
+   * The mock replaces navigator.bluetooth in place and flags itself with
+   * __webBluetoothBridged, so getType() still reports 'ble' while every
+   * notification is in fact arriving over a WebSocket from the bridge host.
+   * That flag is the only thing that distinguishes the two here.
+   */
+  isNetworked(): boolean {
+    return typeof window !== 'undefined' && !!window.__webBluetoothBridged;
+  }
   
   /**
    * Check if Web Bluetooth is supported
@@ -287,10 +299,17 @@ export class CS108BLETransport implements Transport {
     const value = characteristic.value;
     
     if (!value) return;
-    
-    // Clone data immediately to avoid DataView detachment
-    const data = new Uint8Array(value.buffer.slice(0));
-    
+
+    // Clone data immediately to avoid DataView detachment.
+    //
+    // Honour byteOffset/byteLength: a DataView is a *view* onto its backing
+    // ArrayBuffer, and that buffer may be larger than the notification (a pooled
+    // allocator, a Node Buffer, or a binary/base64 WebSocket frame decoded into a
+    // shared buffer). Copying `value.buffer` wholesale would hand the worker the
+    // whole pool starting at offset 0 — garbage packets rather than a clean error.
+    // Exact-size buffers at offset 0 (today's JSON text frames) are unaffected.
+    const data = new Uint8Array(value.buffer, value.byteOffset, value.byteLength).slice();
+
     // Send to worker via MessagePort
     if (this.messagePort) {
       this.messagePort.postMessage({

@@ -216,13 +216,91 @@ export async function waitForConnectionStatus(
 }
 
 /**
+ * Total wall-clock this helper may spend.
+ *
+ * Its own internal waits sum to ~18.5s in the worst case where every one of
+ * them times out (5s find button + 2s enabled + ~3s cleanup + 2s modal + 5s
+ * status + 1.5s settle), so this has to sit clear of that or it would start
+ * firing on slow-but-working disconnects. 30s does, and still leaves most of
+ * the 90s hardware budget for the test itself.
+ */
+const DISCONNECT_BUDGET_MS = 30000;
+
+/**
+ * Run `work`, but give up after `budgetMs` rather than hanging forever.
+ *
+ * The loser of the race is left running - there is nothing useful to do with a
+ * Playwright call that will not settle, and the page is closed moments later
+ * anyway. Its eventual rejection is swallowed so it cannot surface as an
+ * unhandled rejection after the test has moved on.
+ */
+async function withBudget<T>(work: Promise<T>, budgetMs: number, label: string): Promise<T | null> {
+  let timer: NodeJS.Timeout | undefined;
+  const expiry = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), budgetMs);
+  });
+
+  work.catch(() => { /* reported by the caller, or irrelevant after expiry */ });
+
+  try {
+    const result = await Promise.race([work, expiry]);
+    if (result === null) {
+      console.warn(`[Connection] ${label} exceeded its ${budgetMs}ms budget - abandoning it`);
+    }
+    return result;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
  * Disconnect from the device with enhanced cleanup
  * Ensures clean disconnection and waits for UI to update
  * Prevents zombie connections by properly notifying the bridge
+ *
+ * TRA-1148 item 3: this runs in teardown, so it is bounded and it never throws.
+ * It used to hang - `page.$()` takes no timeout and does not settle while the
+ * page's main thread is busy (rendering a few hundred tags after a dense scan
+ * will do it), so a run whose assertions had all passed blew the test timeout
+ * and reported as a failure. A cleanup step must not be able to fail a test
+ * whose subject already succeeded; every call site here is afterAll/teardown,
+ * and none of them assert on disconnect behaviour.
+ *
+ * Failures are logged loudly rather than silently swallowed - a disconnect that
+ * did not complete can leave a zombie bridge session for the next spec, so it
+ * still needs to be visible in the log.
  */
 export async function disconnectDevice(page: Page): Promise<void> {
-  // First check if disconnect button exists (might not if already disconnected)
-  const disconnectButton = await page.$(config.selectors.disconnectButton);
+  const outcome = await withBudget(
+    disconnectDeviceUnbounded(page),
+    DISCONNECT_BUDGET_MS,
+    'disconnectDevice'
+  ).catch((error) => {
+    console.warn(`[Connection] Disconnect cleanup failed (continuing teardown): ${error}`);
+    return null;
+  });
+
+  if (outcome === null) {
+    console.warn('[Connection] Disconnect did not complete cleanly - the bridge may need to recover');
+  }
+}
+
+async function disconnectDeviceUnbounded(page: Page): Promise<'disconnected' | 'already-disconnected'> {
+  if (page.isClosed()) {
+    console.log('[Connection] Page already closed, nothing to disconnect');
+    return 'already-disconnected';
+  }
+
+  // Is there a disconnect button? (There is not, if we are already disconnected.)
+  //
+  // waitForSelector, NOT page.$: page.$ has no timeout and will not settle while
+  // the page is busy, which is exactly the teardown hang this replaces.
+  const disconnectButton = await page
+    .waitForSelector(config.selectors.disconnectButton, {
+      state: 'attached',
+      timeout: config.timeouts.ui
+    })
+    .catch(() => null);
 
   if (disconnectButton) {
     console.log('[Connection] Initiating clean disconnect...');
@@ -297,11 +375,13 @@ export async function disconnectDevice(page: Page): Promise<void> {
       return null;
     });
     console.log(`[Connection] Final reader state after disconnect: ${finalState}`);
-    
+
     console.log('[Connection] Clean disconnect completed');
-  } else {
-    console.log('[Connection] Already disconnected, no action needed');
+    return 'disconnected';
   }
+
+  console.log('[Connection] Already disconnected, no action needed');
+  return 'already-disconnected';
 }
 
 /**
@@ -373,7 +453,11 @@ export async function cleanupOngoingOperations(page: Page): Promise<void> {
     }
     
     // Stop locate/search if running
-    const stopLocateButton = await page.$('button:has-text("Stop")');
+    // Bounded for the same reason as disconnectDevice: page.$ takes no timeout
+    // and this runs on the teardown path (TRA-1148 item 3).
+    const stopLocateButton = await page
+      .waitForSelector('button:has-text("Stop")', { state: 'attached', timeout: 2000 })
+      .catch(() => null);
     if (stopLocateButton) {
       await stopLocateButton.click();
       console.log('[Connection] Stopped locate operation');

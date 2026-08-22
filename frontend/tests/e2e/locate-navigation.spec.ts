@@ -6,8 +6,12 @@
 import { test, expect } from '@playwright/test';
 import { connectToDevice } from './helpers/connection';
 import { setupConsoleMonitoring } from './helpers/console-utils';
+import { HARDWARE_TEST_TIMEOUT_MS } from './e2e.config';
 
 test.describe('Locate Navigation Tests @hardware', () => {
+  // Real hardware: connect + RFID bring-up alone costs ~20s (TRA-1148 item 5)
+  test.describe.configure({ timeout: HARDWARE_TEST_TIMEOUT_MS });
+
   test.beforeEach(async ({ page }) => {
     // Set up console monitoring
     const logs: string[] = [];

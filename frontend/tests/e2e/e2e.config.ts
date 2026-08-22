@@ -15,6 +15,27 @@
 
 import { getE2EBridgeConfig } from '../config/ble-bridge.config';
 
+/**
+ * Per-test timeout for hardware specs that drive a real scan (TRA-1148 item 5).
+ *
+ * The suite default is 30 s, chosen to fail fast rather than hang. That budget
+ * is right for UI specs but wrong for anything holding the trigger over a real
+ * tag field: wall-clock there scales with how many tags are in front of the
+ * reader, and read volume must not decide pass/fail. Measured: the same
+ * inventory spec took 36.6 s against a dense field and timed out with every
+ * assertion passing and the data healthy, then went green in 25.8 s unchanged
+ * at 90 s.
+ *
+ * Apply with `test.describe.configure({ timeout: HARDWARE_TEST_TIMEOUT_MS })`.
+ *
+ * Deliberately NOT a per-project timeout in playwright.config.ts: splitting
+ * projects on the @hardware tag would cut shared-connection describes
+ * (inventory-save.spec.ts, log-level.spec.ts, anonymous-access.spec.ts) across
+ * two projects, re-running their beforeAll hooks and breaking the ordering the
+ * numbered tests in those files depend on.
+ */
+export const HARDWARE_TEST_TIMEOUT_MS = 90000;
+
 export interface E2EConfig {
   bridge: {
     wsUrl: string;

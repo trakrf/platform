@@ -184,6 +184,13 @@ export class BridgeTransport implements Transport {
   getType(): string {
     return 'bridge';
   }
+
+  /**
+   * Always networked - every notification crosses a WebSocket to reach us.
+   */
+  isNetworked(): boolean {
+    return true;
+  }
   
   /**
    * Handle disconnection

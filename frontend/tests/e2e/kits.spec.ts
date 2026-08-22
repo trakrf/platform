@@ -23,6 +23,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { connectToDevice } from './helpers/connection';
 import { simulateTriggerPress, simulateTriggerRelease } from './helpers/trigger-utils';
 import { signupTestUser, uniqueId } from './fixtures/org.fixture';
+import { HARDWARE_TEST_TIMEOUT_MS } from './e2e.config';
 
 /**
  * Fire the auto-check by simulating a scan burst ending: the workspace
@@ -60,6 +61,9 @@ async function seedTags(page: Page, epcs: string[]): Promise<void> {
 }
 
 test.describe.skip('Kit Scan Flows @hardware', () => {
+  // Real hardware: connect + RFID bring-up alone costs ~20s (TRA-1148 item 5)
+  test.describe.configure({ timeout: HARDWARE_TEST_TIMEOUT_MS });
+
   // Serial — verify tests depend on the kit commissioned in the first test
   test.describe.configure({ mode: 'serial' });
 

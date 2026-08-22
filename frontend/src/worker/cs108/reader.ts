@@ -30,7 +30,7 @@ import {
 import { postWorkerEvent, WorkerEventType, type WorkerEvent } from '../types/events.js';
 import { CommandManager, SequenceAbortedError } from './command.js';
 import type { StateContext } from './state-context.js';
-import { PacketHandler } from './packet.js';
+import { PacketHandler, type LinkProfile, type FragmentMetrics } from './packet.js';
 import { NotificationManager } from './notification/manager.js';
 import { NotificationRouter } from './notification/router.js';
 import { logger, LogLevel } from '../utils/logger.js';
@@ -268,6 +268,23 @@ class CS108Reader extends BaseReader {
    * Handle incoming CS108 packets
    * Reader owns packet parsing and routing
    */
+  /**
+   * Tell the packet reassembler what kind of link the fragments arrive over, so
+   * it can size its fragment timeout. See FRAGMENT_TIMEOUT_MS in packet.ts.
+   */
+  setLinkProfile(profile: LinkProfile): void {
+    this.packetHandler.setLinkProfile(profile);
+  }
+
+  /**
+   * Fragment-reassembly health. A nonzero discard count means whole packets -
+   * and therefore whole tag reads - were thrown away because the next fragment
+   * did not arrive in time.
+   */
+  getFragmentMetrics(): FragmentMetrics {
+    return this.packetHandler.getFragmentMetrics();
+  }
+
   protected handleBleData(data: Uint8Array): void {
     // Log incoming BLE data
     logger.trace('Received BLE data', data);
