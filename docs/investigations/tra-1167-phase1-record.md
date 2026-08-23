@@ -43,7 +43,7 @@ across 6 files, so the negative below is a true negative and not a bad path):
   `ESPHOME_NOISE_PSK`.
 - **`BLE_MCP_IDLE_TIMEOUT=600` is stack-dependent, and inert in the bridge we run.**
   The Rust bridge never reads it. The TypeScript bridge *does*
-  (`src/session-manager.ts:24`, default 60s). The variable is still set in
+  (`src/session-manager.ts:27`, default 60s from `DEFAULT_INACTIVITY_TIMEOUT_SEC` at `:10`). The variable is still set in
   `.env.local` and in the running process's environment, so it appears in `ps`
   output and reads as configured — but under the Rust binary there is no idle
   timer at all. Anyone inspecting this box gets a wrong answer about session
@@ -496,6 +496,41 @@ early) — that file is simply another intermittent, as the table above records.
   in its own ticket with hardware confirmation.
 - **No physical-precondition check yet.** Proposed below, and it cannot be
   honestly shipped tonight — see the recommendation.
+
+### Hardware verification of the product path (2026-08-23, after the soak)
+
+With the bridge stopped and the radio released, **Scan and Locate were both hand-verified
+working against preview** — real `navigator.bluetooth`, real trigger presses, no bridge
+in the path at all.
+
+What that establishes:
+
+- The reader and the bench are healthy, independently of the suite.
+- **The product path works.** This corroborates the test-vs-product call on
+  `locate.spec.ts` from the other direction: the suite's loudest, most
+  deterministic failure sat on a code path a human exercises successfully,
+  which is what a stale *test* expectation looks like and is not what a broken
+  product looks like.
+
+What it does **not** establish, stated so it is not over-read:
+
+- It does not clear `inventory.spec.ts`. A ~35% flake will pass a handful of
+  manual operations most of the time, so a successful hand test is weak
+  evidence against it.
+
+**But it does suggest a narrowing worth testing.** The failing wait follows
+`harness.simulateTriggerPress()`, which **injects a synthetic packet** through
+`forwardBleData` rather than receiving a real `0xA102` notification from the
+device. The hand test exercised **real** trigger presses and worked. So the
+real-trigger path and the injected-trigger path are not the same path, and only
+the injected one is known to be flaky.
+
+That is a hypothesis, not a finding — the two have never been compared under
+controlled repetition. It is written down because it is the cheapest next
+experiment for whoever picks up the `inventory.spec.ts` defect: repeat the same
+operation with a real trigger versus an injected one and see whether the failure
+rate differs. If it is injection-only, the defect is harness-side and does not
+belong in the TRA-1143 / TRA-1154 product family after all.
 
 ### Recommendations
 
