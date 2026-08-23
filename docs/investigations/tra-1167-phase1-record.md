@@ -331,6 +331,46 @@ software defect. That is the single most useful thing Phase 1 has produced so fa
 and it generalises beyond this ticket: a hardware test suite should assert its
 preconditions, not assume them.
 
+### Discriminator for `tra-1120`, committed while the clean re-run is in flight
+
+`tra-1120` failed in the voided baseline (fixed order, position 7–8) and passes
+**6/6 alone** after the reposition. That does **not** yet separate two
+explanations, because two things changed at once — the tag *and* the isolation.
+"Passes alone with a fixed tag" is equally consistent with:
+
+- the occlusion was the cause, or
+- the occlusion was a confound sitting on top of a real isolation leak.
+
+The clean fixed-order re-run decides it, and the reading is fixed in advance:
+
+| result | reading |
+| -- | -- |
+| `tra-1120` **passes** in clean fixed order | occlusion was the cause; that file never had evidence of an isolation leak, and retiring it as a TRA-1154 suspect is justified |
+| `tra-1120` **fails** in clean fixed order, having passed alone | the tag was a confound, not the cause; position/predecessor is live again and the suspect goes back on the board |
+| `tra-1120` fails in fixed order **and** alone | the reposition did not fix what it appeared to; re-examine the bench before reading anything else |
+
+**Disclosure:** repetition 1 of 5 had already completed when this table was
+written, and it showed `tra-1120` **passing** — the first outcome. The remaining
+four repetitions are still outstanding, and the table is recorded now so the
+reading of *those* is fixed before they arrive. Writing it after all five would
+have been worthless; writing it while claiming to have seen none would have been
+false.
+
+### The expensive mistake that was avoided
+
+Worth stating in these terms, because it is the strongest argument for the
+ticket's "characterise before fixing" instruction.
+
+The ticket nominated `tra-1120`'s failure as potentially the **first in-the-wild
+observation of TRA-1154's off-by-one cascade** — *"Would be its first observation
+in the wild, giving it both a reproduction and a verification signal."*
+
+That failure now looks like an occluded tag. A **bench fact was one step from
+being promoted into evidence for a product defect in a different ticket.** Five
+voided repetitions cost an evening. A false cascade sighting would have cost
+however long the next person spent hunting a bug that was never there — and it
+would have carried the authority of "observed in the wild" while doing it.
+
 ### Remaining shapes
 
 Re-run after the reposition, and reported separately from the voided set above.
