@@ -28,6 +28,7 @@
 
 ## Testing
 - Playwright e2e **never runs in CI** — green CI does not mean e2e passes; run it against preview yourself
+- **Name specs for the behaviour they cover, never for a ticket** — `locate-mask-length-variants.spec.ts`, not `tra-1120-locate-ambiguous-width.spec.ts`. Put the ticket reference in the file header instead. A regression spec outlives its ticket, so a ticket-named file misattributes its own failures the moment the ticket closes — a reader sees in-flight work where the truth is permanent coverage. Applies to the `describe` block too, since that is what appears in test output.
 
 ## Preview Deployments
 - Opening/updating a PR auto-deploys to `https://app.preview.trakrf.id`
