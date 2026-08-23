@@ -1,6 +1,6 @@
 # TRA-1167 — Phase 1 characterisation record
 
-**Status:** in progress — predictions committed, results pending
+**Status:** complete — Phase 1 characterisation done, test-vs-product call made
 **Ticket:** TRA-1167 "Hardware integration suite fails non-deterministically when files run together — characterise before fixing"
 **Date:** 2026-08-23
 
@@ -371,8 +371,147 @@ voided repetitions cost an evening. A false cascade sighting would have cost
 however long the next person spent hunting a bug that was never there — and it
 would have carried the authority of "observed in the wild" while doing it.
 
-### Remaining shapes
+### Finding 3 — the ticket's central hypothesis is NOT SUPPORTED
 
-Re-run after the reposition, and reported separately from the voided set above.
+**There is no isolation leak. Stating that plainly, because a hypothesis that is
+never explicitly falsified gets re-derived by the next person.**
 
-_Pending._
+All shapes below are post-reposition, 5 repetitions each.
+
+| file | fixed | shuffle | alone | cold link |
+| -- | -- | -- | -- | -- |
+| `locate.spec.ts` | 5/5 | 5/5 | 3/3 | — |
+| `inventory.spec.ts` | 3/5 | 1/5 | **2/5** | **1/5** |
+| `locate-mask-length-variants.spec.ts` | 0/5 | 1/5 | 1/3 | — |
+| `barcode`, `connectivity`, `connection`, `sequence`, `packet-parsing` | 0/5 | 0/5 | — | — |
+
+`inventory.spec.ts` fails at essentially the same rate **with nothing before it**
+as with seven files before it. Shuffling the order does not move it. Five of the
+eight files never fail in any shape.
+
+The predecessor analysis says the same thing directly:
+
+| failed file | ran immediately after | failures / times in that position |
+| -- | -- | -- |
+| `locate.spec.ts` | `inventory.spec.ts` | 17/17 |
+| `locate.spec.ts` | **(ran first)** | **3/3** |
+| `inventory.spec.ts` | `connectivity.spec.ts` | 6/17 (35%) |
+| `inventory.spec.ts` | **(ran first)** | **3/10 (30%)** |
+
+`locate.spec.ts` fails identically whether it runs first or eighth.
+`inventory.spec.ts` fails at 35% behind a predecessor and 30% running first —
+indistinguishable. **No position effect exists anywhere in the suite.**
+
+Consequences:
+
+- **Phase 2 is moot.** There is no boundary effect to instrument. The leak the
+  ticket asked us to make "visible, not inferred" does not exist to be seen.
+- **The blanket reset hook the ticket warned against would have been a fix for a
+  mechanism that is not there** — it would have turned the suite green by masking
+  two unrelated file-intrinsic problems.
+- The ticket's decision table lands on **file-intrinsic: "a real flake in that
+  file; fix it directly."**
+
+### Finding 4 — the cold-link control exonerates the persistent BLE link
+
+The bridge was restarted (old PID 1656715, warm ~2h39m → new PID 1709591, up
+`20:12:34Z`, ESPHome reconnect clean on attempt 1, no retries). Cold repetition 1
+began at `20:14:44Z` — a link **130 seconds old that had never served a client**,
+with no test file before it.
+
+**It failed, with the same `Timeout waiting for event: TRIGGER_STATE_CHANGED`.**
+
+Cold `inventory` was 1/5 against warm-alone 2/5 — no material difference.
+
+**Note the asymmetry that makes this conclusive at n=1 for true cold.** Only
+repetition 1 is genuinely cold; reps 2–5 share that link as it warms. A cold rep
+*failing* is sufficient — one failure proves warmth is not required for the
+failure. A cold rep *passing* would have proved nothing without many more reps.
+The result landed on the side a single observation can carry.
+
+Carryover across the persistent BLE link — the mechanism that looked strongest
+once the bridge's structure was understood — is therefore **ruled out**.
+
+### The test-vs-product call
+
+| file | verdict | reasoning |
+| -- | -- | -- |
+| `locate.spec.ts` | **TEST bug — fixed here** | Asserted `setTargetEPC` strips leading zeros. Nothing in that path strips; two unit tests deliberately assert the opposite (`settingsValidation.test.ts:46`, `:52`). Trimming is a display concern. Changing the product to satisfy this test would break those two. No RF in the path. |
+| `inventory.spec.ts` | **Genuine defect — NOT fixed here** | `Timeout waiting for event: TRIGGER_STATE_CHANGED`, ~35% of runs, independent of order and of link age. Real, reproducible, and product-adjacent. |
+| `locate-mask-length-variants.spec.ts` | **Intermittent, under-measured** | ~1/3 alone, 1/10 in suite. Real but at an n too small to characterise. Needs its own soak. |
+
+`inventory.spec.ts` is deliberately **left failing**. It is a real defect and it
+belongs in the TRA-1143 / TRA-1154 family, under the BLE-worker change bar that
+requires hardware confirmation. Fixing it inside a characterisation ticket would
+be exactly the reflex TRA-1167 was written to prevent.
+
+What is already known about it, from the mechanical check that a timeout demands
+(a timeout reads as slowness whatever the cause, so the waiter must be checked
+against its emitter rather than assumed to be a load problem):
+
+- **Not an unsatisfiable waiter.** Event name comes from the shared
+  `WorkerEventType` enum on both sides. Payload shape matches: emitter sends
+  `{ pressed: boolean }` (`worker/cs108/system/trigger.ts:42`, `:100`), waiter
+  filters on `payload.pressed`. The `reader.ts:123` interceptor debounces but
+  explicitly still emits (*"Still emit for UI feedback even if debounced"*).
+- **Not bridge-side crowding.** The bridge relay measures zero loss at 4500 msg/s
+  with p99 0.092 ms over 269,998 consecutive notifications — one to two orders of
+  magnitude above anything this bench generates. (Scope: that measurement injects
+  at the transport seam, so it covers the relay and WebSocket serialisation, not
+  the ESPHome ingress beneath it.)
+- That points at the **worker's own event dispatch** as the remaining venue.
+
+### Fixes applied, and how each was verified
+
+**1. `locate.spec.ts` stale assertion — fixed and verified both ways.**
+
+Now passes 3/3 alone. Run duration went 11s → 15s: it previously died on the
+store assertion before reaching the hardware phases, so the fix does not merely
+silence it, it lets the rest of the test actually execute.
+
+Per the ticket's acceptance — *"Any fix verified by deliberately reintroducing
+the problem once, confirming the suite still detects it"* — the old assertion was
+put back and run once: **exit 1 at 11s, the original signature exactly**. Then
+restored. The check can fail for the right reason.
+
+**2. `tra-1120-locate-ambiguous-width.spec.ts` → `locate-mask-length-variants.spec.ts`.**
+
+Renamed, with the `describe` block and header updated; the TRA-1120 reference is
+kept in the header for provenance. A regression spec outlives its ticket, and a
+ticket-named file misattributes its own failures once the ticket closes — during
+this very investigation it prompted "why are we still looking at TRA-1120?", which
+is the attribution failure the ticket exists to eliminate. Convention recorded in
+`CLAUDE.md`.
+
+The rename is provably inert: the only non-comment change in the diff is the
+`describe` string. A 3-test failure observed immediately after it did **not**
+reproduce (2/2 clean on repeat, 72s each vs 58s for the failing run, which bailed
+early) — that file is simply another intermittent, as the table above records.
+
+### What was NOT done, deliberately
+
+- **No blanket reset-between-files hook.** Phase 2 never named a leaked state,
+  because there is none. The ticket forbids it absent that, and the data agrees.
+- **No fix to `inventory.spec.ts`.** Real defect, BLE-worker change bar, belongs
+  in its own ticket with hardware confirmation.
+- **No physical-precondition check yet.** Proposed below, and it cannot be
+  honestly shipped tonight — see the recommendation.
+
+### Recommendations
+
+1. **File the `inventory.spec.ts` trigger timeout as its own defect** in the
+   TRA-1143 / TRA-1154 family, carrying the evidence above: ~35% reproduction,
+   order-independent, link-age-independent, waiter mechanically verified
+   satisfiable, bridge relay excluded.
+2. **Add a physical-precondition check to the hardware suite** — assert the bench
+   tags are readable *before* the specs that depend on them, failing with
+   "tag 10020 not readable" rather than surfacing three files later as an RSSI
+   assertion. `test-utils/constants.ts` already documents the assumption in a
+   comment and never enforces it: written down, so it looks handled; unenforced,
+   so it silently is not.
+   **This must ship labelled unproven until someone physically removes a tag once
+   and confirms the check reports it.** A check whose failure path has never
+   executed is a claim, not a check — and unlike a software control, this one
+   needs a person at the bench. It is scheduled work, not assumed work.
+3. **Soak `locate-mask-length-variants.spec.ts`** on its own. ~1/3 alone is too
+   small a sample to characterise and too large to ignore.
