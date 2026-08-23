@@ -30,6 +30,18 @@
 - Playwright e2e **never runs in CI** — green CI does not mean e2e passes; run it against preview yourself
 - **Name specs for the behaviour they cover, never for a ticket** — `locate-mask-length-variants.spec.ts`, not `tra-1120-locate-ambiguous-width.spec.ts`. Put the ticket reference in the file header instead. A regression spec outlives its ticket, so a ticket-named file misattributes its own failures the moment the ticket closes — a reader sees in-flight work where the truth is permanent coverage. Applies to the `describe` block too, since that is what appears in test output.
 
+## The BLE bridge is TEST TOOLING ONLY — and it holds the radio exclusively
+
+**`ble-mcp-test` is never part of the product.** The app has exactly one way to reach a CS108: **direct Web Bluetooth**, `navigator.bluetooth` in the browser. That is the path in prod, in preview, and in any normal build. There is no bridge in the product path and there never should be.
+
+The bridge exists solely so **tests** can drive real hardware from Node and from headless browsers. It is injected **only** when `VITE_BLE_BRIDGE_ENABLED === 'true'` (`frontend/vite.config.ts:40`, explicit early return otherwise) — set by integration tests and `pnpm dev:bridge`, never by a preview or prod build.
+
+**Why that still constrains you:** a CS108 accepts one connection at a time, and the Rust bridge calls `transport.connect()` **once at process start**, holding the BLE link for the entire life of the process. A WS client disconnecting releases *nothing*. The only release is `SIGTERM` → `transport.disconnect()`.
+
+So even though the bridge is only test tooling, **leaving it running blocks the real product path to that reader.** To hand-test preview or prod against hardware you must **stop the bridge process** — closing the tests is not enough. Conversely, an idle `:8080` does *not* mean the reader is free: someone may be holding it from a browser, and that never shows up as a WS client.
+
+`pgrep -f 'rust-bl[e]-test'` tells you whether the bridge is holding the radio. See `reference_ble_bridge_restart` for start/stop.
+
 ## Preview Deployments
 - Opening/updating a PR auto-deploys to `https://app.preview.trakrf.id`
 - See `.github/workflows/sync-preview.yml` for details
