@@ -1,6 +1,13 @@
 /**
- * TRA-1120 hardware verification — a leading-zero-stripped EPC must find its
- * tag at BOTH 96 and 128 bits.
+ * Locate mask length variants — a leading-zero-stripped EPC must find its tag
+ * at BOTH 96 and 128 bits.
+ *
+ * PERMANENT REGRESSION COVERAGE, not in-flight ticket work. This guards the
+ * overlay of 96-bit and 128-bit Select masks, which is ongoing product
+ * behaviour. Originally written to verify TRA-1120 (shipped); the ticket
+ * reference is kept here for provenance and deliberately kept OUT of the
+ * filename and describe block, so a failure reads as "mask-length overlay is
+ * broken" rather than as a regression in closed work (TRA-1167).
  *
  * This is the part CI cannot reach. The fix ORs two Select descriptors by
  * giving the second one sel_action 001 (assert SL on match, do nothing on a
@@ -30,7 +37,7 @@
  *   tag.
  *
  * Run with the bench tags in front of the reader:
- *   pnpm exec vitest run tests/integration/cs108/tra-1120-locate-ambiguous-width.spec.ts
+ *   pnpm exec vitest run tests/integration/cs108/locate-mask-length-variants.spec.ts
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -52,7 +59,7 @@ const TAG_96_STRIPPED = '10020';
 
 const SCAN_MS = 4000;
 
-describe('TRA-1120 — stripped EPC finds its tag at either width', () => {
+describe('Locate mask length variants — stripped EPC finds its tag at either width', () => {
   let harness: CS108WorkerTestHarness;
 
   beforeAll(async () => {

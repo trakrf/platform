@@ -101,7 +101,7 @@ describe('CS108 Locate Integration', () => {
 
     // Test tags are just decimal numbers with leading zeros (customer pattern)
     const testEPC = EPC_FORMATS.toCustomerInput(LOCATE_TEST_TAG); // Customer input with leading zeros
-    const trimmedEPC = EPC_FORMATS.toTrimmed(LOCATE_TEST_TAG); // What we expect to store (leading zeros stripped)
+    const trimmedEPC = EPC_FORMATS.toTrimmed(LOCATE_TEST_TAG); // Display form — NOT what the store holds
 
     // First, set the targetEPC in the settings store
     console.log(`    Setting targetEPC in settingsStore: ${testEPC}`);
@@ -109,7 +109,15 @@ describe('CS108 Locate Integration', () => {
     const epcSet = settingsStore.setTargetEPC(testEPC);
     expect(epcSet).toBe(true);
     const afterState = useSettingsStore.getState();
-    expect(afterState.rfid?.targetEPC).toBe(trimmedEPC); // Should store trimmed value
+    // The store preserves the value AS ENTERED (uppercased), it does not strip
+    // leading zeros — see utils/settingsValidation.test.ts, 'preserves EPC value
+    // as-is (uppercase only)' and 'preserves zeros as entered'. Trimming is a
+    // DISPLAY concern (EPC_FORMATS.toDisplay, the showLeadingZeros setting).
+    // This previously asserted toBe(trimmedEPC), which no code path could ever
+    // satisfy — a stale expectation left over from when validateEPC stripped
+    // zeros. It failed 10/10 runs, including alone, and was the single loudest
+    // line in the suite's output (TRA-1167).
+    expect(afterState.rfid?.targetEPC).toBe(testEPC);
     console.log('    ✓ targetEPC stored in settingsStore');
 
     // Mode and targetEPC already set in beforeAll
