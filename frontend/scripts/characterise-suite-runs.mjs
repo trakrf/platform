@@ -1,11 +1,18 @@
 #!/usr/bin/env node
 /**
- * TRA-1167 — run-shape driver for characterising the hardware integration suite.
+ * Run-shape driver for characterising the hardware integration suite.
  *
- * Phase 1 of TRA-1167 is "characterise, change nothing". This script therefore
- * produces every run shape from CLI flags and process lifecycle ONLY. It never
+ * Answers "does this suite fail because of WHAT ran before, or because of WHICH
+ * file it is?" by driving the suite repeatedly under controlled run shapes and
+ * recording which file fails each time.
+ *
+ * It produces every shape from CLI flags and process lifecycle ONLY. It never
  * edits vitest.config.ts, package.json, or any spec — the suite under test
- * cannot observe that it is being characterised.
+ * cannot observe that it is being characterised. Keep that property: the moment
+ * this script changes the subject, its measurements stop describing the suite
+ * anyone else runs.
+ *
+ * First used for TRA-1167 (record: docs/investigations/tra-1167-phase1-record.md).
  *
  * Shapes:
  *   fixed    current behaviour — the same flags `pnpm test:integration` uses
@@ -22,10 +29,10 @@
  * `cold` shape exists separately.
  *
  * Usage:
- *   node scripts/tra-1167-characterise.mjs --shape fixed --reps 5
- *   node scripts/tra-1167-characterise.mjs --shape shuffle --reps 5
- *   node scripts/tra-1167-characterise.mjs --shape alone --reps 3 --target tests/integration/cs108/locate.spec.ts
- *   node scripts/tra-1167-characterise.mjs --shape cold --reps 3
+ *   node scripts/characterise-suite-runs.mjs --shape fixed --reps 5
+ *   node scripts/characterise-suite-runs.mjs --shape shuffle --reps 5
+ *   node scripts/characterise-suite-runs.mjs --shape alone --reps 3 --target tests/integration/cs108/locate.spec.ts
+ *   node scripts/characterise-suite-runs.mjs --shape cold --reps 3
  */
 
 import { spawnSync } from 'node:child_process';
@@ -33,7 +40,7 @@ import { mkdirSync, readFileSync, appendFileSync, rmSync, existsSync } from 'nod
 import path from 'node:path';
 
 const RECORD_SCHEMA = 1;
-const ARTIFACT_DIR = path.resolve(process.cwd(), '.tra-1167');
+const ARTIFACT_DIR = path.resolve(process.cwd(), '.suite-runs');
 const RECORD_PATH = path.join(ARTIFACT_DIR, 'runs.jsonl');
 const SUITE_ROOT = 'tests/integration/';
 const VALID_SHAPES = ['fixed', 'shuffle', 'alone', 'cold'];
@@ -185,7 +192,7 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   mkdirSync(ARTIFACT_DIR, { recursive: true });
 
-  console.log(`[tra-1167] shape=${args.shape} reps=${args.reps}${args.target ? ` target=${args.target}` : ''}`);
+  console.log(`[suite-runs] shape=${args.shape} reps=${args.reps}${args.target ? ` target=${args.target}` : ''}`);
 
   for (let rep = 1; rep <= args.reps; rep += 1) {
     const record = runOnce({ ...args, rep });
@@ -194,7 +201,7 @@ function main() {
       ? failedFiles.map((f) => `${f.name} (${f.failed.length})`).join(', ')
       : 'none';
     console.log(
-      `[tra-1167] ${args.shape} rep ${rep}/${args.reps}` +
+      `[suite-runs] ${args.shape} rep ${rep}/${args.reps}` +
         ` exit=${record.exitCode}` +
         ` ${Math.round(record.durationMs / 1000)}s` +
         ` clients@start=${record.wsClientsAtStart}` +
@@ -203,7 +210,7 @@ function main() {
     );
   }
 
-  console.log(`[tra-1167] record: ${RECORD_PATH}`);
+  console.log(`[suite-runs] record: ${RECORD_PATH}`);
 }
 
 main();

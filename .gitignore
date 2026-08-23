@@ -197,5 +197,5 @@ docs/superpowers/
 # from a developer branch.
 .preview-manifest
 
-# TRA-1167 characterisation artifacts (raw JSONL; only the summarised record is committed)
-.tra-1167/
+# Suite run-shape characterisation artifacts (raw JSONL; only summarised records are committed)
+.suite-runs/

@@ -163,9 +163,9 @@ CLI flags and process lifecycle only:
 | alone | one file per invocation |
 | cold | as `fixed`, with a bridge restart immediately before |
 
-Tooling: `frontend/scripts/tra-1167-characterise.mjs` (driver) and
-`frontend/scripts/tra-1167-summarise.mjs` (tables). Raw per-repetition records
-land in `frontend/.tra-1167/runs.jsonl` (gitignored); only the summarised tables
+Tooling: `frontend/scripts/characterise-suite-runs.mjs` (driver) and
+`frontend/scripts/summarise-suite-runs.mjs` (tables). Raw per-repetition records
+land in `frontend/.suite-runs/runs.jsonl` (gitignored); only the summarised tables
 below are committed.
 
 ### The instrument was verified before it was trusted

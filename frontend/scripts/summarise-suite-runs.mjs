@@ -1,25 +1,24 @@
 #!/usr/bin/env node
 /**
- * TRA-1167 — summarise the run-shape record into the tables the ticket's
- * Acceptance asks to be attached.
+ * Summarise the run-shape record produced by characterise-suite-runs.mjs.
  *
- * Pure function of .tra-1167/runs.jsonl. Safe to re-run at any time; it never
+ * Pure function of .suite-runs/runs.jsonl. Safe to re-run at any time; it never
  * touches hardware and never mutates the record.
  *
  * The load-bearing output is the PREDECESSOR table. Order-dependence shows up
  * as "locate.spec.ts fails when it runs after inventory.spec.ts" — a flat
  * failure count cannot show that, and reading a flat count as evidence of a
- * leak is exactly the mistake TRA-1167 was filed to stop.
+ * leak is the mistake this whole tool exists to prevent.
  */
 
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
-const RECORD_PATH = path.resolve(process.cwd(), '.tra-1167', 'runs.jsonl');
+const RECORD_PATH = path.resolve(process.cwd(), '.suite-runs', 'runs.jsonl');
 
 function loadRecords() {
   if (!existsSync(RECORD_PATH)) {
-    console.error(`No record at ${RECORD_PATH} — run tra-1167-characterise.mjs first.`);
+    console.error(`No record at ${RECORD_PATH} — run characterise-suite-runs.mjs first.`);
     process.exit(1);
   }
   return readFileSync(RECORD_PATH, 'utf8')
@@ -155,7 +154,7 @@ function contaminationNote(records) {
 
 function main() {
   const records = loadRecords();
-  console.log(`# TRA-1167 Phase 1 — run record\n`);
+  console.log(`# Integration suite — run-shape record\n`);
   console.log(`${records.length} repetitions recorded.\n`);
   console.log(`## Per-run failures\n`);
   console.log(perRunTable(records));
