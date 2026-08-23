@@ -192,14 +192,22 @@ openapitools.json
 # skills recreate this directory on demand.
 docs/superpowers/
 
+# Investigation records — same rationale as docs/superpowers/ above. They earn
+# their keep while a ticket is being built and reviewed, then go stale fast
+# (PIDs, bench state, host facts) while still reading as authoritative because
+# they are checked in. Durable conclusions belong in CLAUDE.md, an ADR or a code
+# comment; the narrative and evidence belong on the ticket.
+docs/investigations/
+
 # Written by sync-preview CI on the preview branch only; read by docker-build
 # to embed the merged-PR list into the version string (TRA-851). Never commit
 # from a developer branch.
 .preview-manifest
 
 # Suite run-shape characterisation artifacts — raw vitest JSON dumps and the
-# append-only run log. Only summarised records and the run log copied into
-# docs/investigations/ are committed.
+# append-only run log written by frontend/scripts/characterise-suite-runs.mjs.
+# Working data: summarise it, put the conclusions somewhere durable, attach the
+# evidence to the ticket. Nothing here is committed.
 # NOTE: renaming this pattern un-ignores any stale directory still on disk, which
 # is how 21 of these were once swept into a PR by `git add -A`. Delete the old
 # directory in the same change that renames the pattern.

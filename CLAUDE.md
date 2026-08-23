@@ -29,7 +29,7 @@
 ## Testing
 - Playwright e2e **never runs in CI** — green CI does not mean e2e passes; run it against preview yourself
 - **Name specs and tooling for what they do, never for a ticket** — `locate-mask-length-variants.spec.ts`, not `tra-1120-locate-ambiguous-width.spec.ts`; `characterise-suite-runs.mjs`, not `tra-1167-characterise.mjs`. Put the ticket reference in the file header instead. Anything reusable outlives its ticket, so a ticket-named file misattributes its own output the moment the ticket closes — a reader sees in-flight work where the truth is permanent tooling or coverage. Applies to `describe` blocks, log prefixes, and artifact directories too, since those are what appear in output.
-  - **The exception is a point-in-time record**, which is *about* one investigation and does not outlive it: `docs/investigations/tra-1167-phase1-record.md` is correctly ticket-named, the same way a dated design doc is correctly date-named. The test is whether the artifact will be re-used or merely re-read.
+  - The test is whether the artifact will be **re-used or merely re-read**. Anything re-used gets a behaviour name and lives in the repo. Anything merely re-read is a point-in-time record — it belongs on the ticket, not in `docs/` (see `.gitignore` for `docs/superpowers/` and `docs/investigations/`).
 
 ## The BLE bridge is TEST TOOLING ONLY — and it holds the radio exclusively
 

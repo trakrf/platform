@@ -12,7 +12,8 @@
  * this script changes the subject, its measurements stop describing the suite
  * anyone else runs.
  *
- * First used for TRA-1167 (record: docs/investigations/tra-1167-phase1-record.md).
+ * First used for TRA-1167, whose full run record and findings are attached to that
+ * ticket — investigation records are deliberately not kept in the repo.
  *
  * Shapes:
  *   fixed    current behaviour — the same flags `pnpm test:integration` uses
