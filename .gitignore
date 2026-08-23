@@ -192,11 +192,13 @@ openapitools.json
 # skills recreate this directory on demand.
 docs/superpowers/
 
-# Investigation records — same rationale as docs/superpowers/ above. They earn
-# their keep while a ticket is being built and reviewed, then go stale fast
-# (PIDs, bench state, host facts) while still reading as authoritative because
-# they are checked in. Durable conclusions belong in CLAUDE.md, an ADR or a code
-# comment; the narrative and evidence belong on the ticket.
+# Working notes — investigation records, scratch analysis, session notes. Same
+# rationale as docs/superpowers/ above: they earn their keep while a ticket is
+# being built and reviewed, then go stale fast (PIDs, bench state, host facts)
+# while still reading as authoritative because they are checked in. Durable
+# conclusions belong in CLAUDE.md, an ADR or a code comment; the narrative and
+# evidence belong on the ticket. Named to match ble-mcp-test.
+docs/notes/
 docs/investigations/
 
 # Written by sync-preview CI on the preview branch only; read by docker-build

@@ -29,7 +29,7 @@
 ## Testing
 - Playwright e2e **never runs in CI** — green CI does not mean e2e passes; run it against preview yourself
 - **Name specs and tooling for what they do, never for a ticket** — `locate-mask-length-variants.spec.ts`, not `tra-1120-…`. Cite the ticket in the file header. Applies to `describe` blocks, log prefixes and artifact dirs, since those appear in output
-- **Re-used vs merely re-read** — reusable things live in the repo under a behaviour name; point-in-time records go on the ticket, not `docs/` (`.gitignore` ignores `docs/superpowers/` and `docs/investigations/`)
+- **Re-used vs merely re-read** — reusable things live in the repo under a behaviour name; point-in-time records go on the ticket, and working notes in `docs/notes/` stay untracked (see `.gitignore`)
 
 ## Hardware access
 - **`ble-mcp-test` is test tooling only, never the product path** — the app reaches a CS108 solely via browser `navigator.bluetooth`
