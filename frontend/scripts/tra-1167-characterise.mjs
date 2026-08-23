@@ -95,7 +95,10 @@ function readBridgeProcess() {
 }
 
 function buildVitestArgs(shape, rep, target) {
-  const filter = shape === 'alone' ? target : SUITE_ROOT;
+  // A target narrows any shape, not just `alone`. `cold` in particular needs it:
+  // the useful cold measurement is one file run against a freshly restarted
+  // bridge, directly comparable against the same file run warm.
+  const filter = target ?? SUITE_ROOT;
   // Same flags package.json's test:integration uses, plus JSON reporting.
   const args = ['vitest', 'run', filter, '--no-file-parallelism'];
   let seed = null;
@@ -161,7 +164,7 @@ function runOnce({ shape, rep, target, note }) {
     shape,
     rep,
     seed,
-    target: shape === 'alone' ? target : null,
+    target: target ?? null,
     startedAt: startedAt.toISOString(),
     endedAt: endedAt.toISOString(),
     durationMs: endedAt - startedAt,
