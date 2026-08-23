@@ -42,7 +42,6 @@ export interface E2EConfig {
     httpUrl: string;
   };
   device: {
-    name: string;
     serviceUuid: string;
     writeUuid: string;
     notifyUuid: string;
@@ -79,7 +78,6 @@ export function getE2EConfig(): E2EConfig {
       httpUrl: bleConfig.bridge.httpUrl,
     },
     device: {
-      name: bleConfig.device.name,
       serviceUuid: bleConfig.device.serviceUuid,
       writeUuid: bleConfig.device.writeUuid,
       notifyUuid: bleConfig.device.notifyUuid

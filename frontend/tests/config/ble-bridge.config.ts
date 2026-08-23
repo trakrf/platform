@@ -9,7 +9,6 @@
  * - BLE_MCP_WS_PORT: WebSocket port (default: 8080)
  * - BLE_MCP_HTTP_PORT: HTTP/MCP port (default: 8081)
  * - BLE_MCP_HTTP_TOKEN: Auth token for MCP
- * - BLE_DEVICE_NAME: Device name filter (default: CS108)
  * - BLE_SERVICE_UUID: BLE service UUID (default: 9800)
  * - BLE_WRITE_UUID: Write characteristic UUID (default: 9900)
  * - BLE_NOTIFY_UUID: Notify characteristic UUID (default: 9901)
@@ -21,8 +20,7 @@ import * as dotenv from 'dotenv';
 import {
   CS108_BLE_SERVICE_UUID,
   CS108_BLE_WRITE_UUID,
-  CS108_BLE_NOTIFY_UUID,
-  CS108_DEVICE_NAME
+  CS108_BLE_NOTIFY_UUID
 } from '../../src/lib/device/transport/cs108-ble-transport';
 
 // Load environment variables once
@@ -46,9 +44,8 @@ export interface BleBridgeConfig {
     token?: string;
   };
   
-  // BLE device settings
+  // BLE device settings — selection is by service UUID only, never by name
   device: {
-    name: string;
     service: string;
     write: string;
     notify: string;
@@ -73,7 +70,6 @@ export function getBleBridgeConfig(): BleBridgeConfig {
   const token = process.env.BLE_MCP_HTTP_TOKEN;
   
   // BLE device settings - use constants from transport module
-  const deviceName = process.env.BLE_DEVICE_NAME || process.env.VITE_DEVICE_NAME || CS108_DEVICE_NAME;
   const service = CS108_BLE_SERVICE_UUID;
   const write = CS108_BLE_WRITE_UUID;
   const notify = CS108_BLE_NOTIFY_UUID;
@@ -95,7 +91,6 @@ export function getBleBridgeConfig(): BleBridgeConfig {
       token
     },
     device: {
-      name: deviceName,
       service,
       write,
       notify
@@ -135,8 +130,7 @@ export function getIntegrationTestConfig() {
     // Include extra metadata for debugging
     host: config.bridge.host,
     port: config.bridge.wsPort,
-    systemHostname: config.session.hostname,
-    deviceName: config.device.name
+    systemHostname: config.session.hostname
   };
 }
 
@@ -151,7 +145,6 @@ export function getE2EBridgeConfig() {
       httpUrl: config.bridge.httpUrl
     },
     device: {
-      name: config.device.name,
       serviceUuid: config.device.service,
       writeUuid: config.device.write,
       notifyUuid: config.device.notify
@@ -170,8 +163,7 @@ export function buildBridgeUrl(options?: {
   const config = getBleBridgeConfig();
   const url = new URL(config.bridge.wsUrl);
   
-  // Add device parameters
-  url.searchParams.set('device', config.device.name);
+  // Add device parameters — service UUID identifies the device, not its name
   url.searchParams.set('service', config.device.service);
   url.searchParams.set('write', config.device.write);
   url.searchParams.set('notify', config.device.notify);
