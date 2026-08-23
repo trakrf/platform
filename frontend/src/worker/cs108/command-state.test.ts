@@ -186,3 +186,23 @@ describe('CommandManager State Transitions', () => {
     expect(mockStateContext.setReaderState).toHaveBeenNthCalledWith(2, ReaderState.CONNECTED);
   });
 });
+describe('CommandManager transport write failure', () => {
+  it('fails the in-flight command immediately instead of waiting out its timeout', async () => {
+    // A dropped write means no ACK will ever arrive. Without this the command sits
+    // until its own timeout expires and reports "Command timeout", which hides the
+    // real cause (queue full / not connected / retries exhausted).
+    vi.useFakeTimers();
+    try {
+      const manager = new CommandManager(vi.fn());
+      const pending = manager.executeCommand(GET_BATTERY_VOLTAGE);
+
+      manager.failCurrentCommand('Command queue full, write dropped');
+
+      // No timer advance: if this only resolved via the timeout, it would hang.
+      await expect(pending).rejects.toThrow(/write dropped/);
+      expect(manager.isIdle()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

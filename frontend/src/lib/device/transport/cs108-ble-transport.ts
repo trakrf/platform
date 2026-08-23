@@ -19,9 +19,6 @@ export const CS108_BLE_SERVICE_UUID = '00009800-0000-1000-8000-00805f9b34fb';
 export const CS108_BLE_WRITE_UUID = '00009900-0000-1000-8000-00805f9b34fb';
 export const CS108_BLE_NOTIFY_UUID = '00009901-0000-1000-8000-00805f9b34fb';
 
-// Default device name for CS108
-export const CS108_DEVICE_NAME = 'CS108';
-
 // Web Bluetooth API type declarations
 declare global {
   interface BluetoothDevice {
@@ -69,7 +66,6 @@ declare global {
 
 // Minimal config - CS108 UUIDs are hardcoded
 export interface CS108BLETransportConfig {
-  deviceNameFilter?: string;
   retryCount?: number;
   retryDelays?: number[];
 }
@@ -81,7 +77,6 @@ export class CS108BLETransport implements Transport {
   private readonly notifyUUID = CS108_BLE_NOTIFY_UUID;
   
   // Configurable options
-  private readonly deviceNameFilter: string;
   private readonly retryCount: number;
   private readonly retryDelays: number[];
   private device: BluetoothDevice | null = null;
@@ -105,7 +100,6 @@ export class CS108BLETransport implements Transport {
   private boundHandleDisconnect: (event: Event) => void;
   
   constructor(config: CS108BLETransportConfig = {}) {
-    this.deviceNameFilter = config.deviceNameFilter || '';
     this.retryCount = config.retryCount || 3;
     this.retryDelays = config.retryDelays || [500, 1500, 5000];
     
@@ -124,14 +118,12 @@ export class CS108BLETransport implements Transport {
     
     try {
       // Request device selection
+      // Selection is by service UUID only. Web Bluetooth ORs the filters array,
+      // so a second { name } filter would WIDEN the match rather than narrow it.
       const filters: BluetoothLEScanFilter[] = [
         { services: [this.serviceUUID] }
       ];
-      
-      if (this.deviceNameFilter) {
-        filters.push({ name: this.deviceNameFilter });
-      }
-      
+
       this.device = await navigator.bluetooth.requestDevice({
         filters,
         optionalServices: [this.serviceUUID]
@@ -262,7 +254,9 @@ export class CS108BLETransport implements Transport {
    * Check if connected
    */
   isConnected(): boolean {
-    return !!(this.device && this.server && this.writeCharacteristic);
+    // server.connected matters: between a GATT drop and handleDisconnect running,
+    // the objects are all still here while the link is gone.
+    return !!(this.device && this.server?.connected && this.writeCharacteristic);
   }
   
   /**
@@ -342,17 +336,17 @@ export class CS108BLETransport implements Transport {
   /**
    * Queue a write operation with retry logic
    */
-  private async queueWrite(data: Uint8Array): Promise<void> {
-    return new Promise<void>((resolve) => {
+  private async queueWrite(data: Uint8Array): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
       if (this.commandQueue.length >= this.MAX_QUEUE_LENGTH) {
-        console.warn('Command queue full, rejecting write');
-        resolve();
+        this.reportWriteFailure('Command queue full, write dropped');
+        resolve(false);
         return;
       }
       
       this.commandQueue.push({
         data,
-        resolve: () => resolve(),
+        resolve,
         retriesLeft: this.retryCount
       });
       
@@ -373,7 +367,7 @@ export class CS108BLETransport implements Transport {
     
     try {
       if (!this.isConnected()) {
-        // Not connected, skipping command
+        this.reportWriteFailure('Transport not connected, write dropped');
         command.resolve(false);
         return;
       }
@@ -404,20 +398,26 @@ export class CS108BLETransport implements Transport {
         // Put command back at front of queue
         this.commandQueue.unshift(command);
       } else {
-        console.error('Write failed:', errorMessage);
+        this.reportWriteFailure(errorMessage);
         command.resolve(false);
-        
-        // Send error to worker
-        if (this.messagePort) {
-          this.messagePort.postMessage({
-            type: 'ble:error',
-            error: errorMessage
-          } as BLEMessage);
-        }
       }
     } finally {
       this.commandInProgress = false;
       this.processNextCommand();
+    }
+  }
+  
+  /**
+   * Tell the worker a write did not reach the device.
+   *
+   * Without this the worker cannot distinguish "command sent, awaiting ACK" from
+   * "command never left", so every dropped write surfaced only as the command's
+   * own 5s timeout. Two of the three failure paths previously reported nothing.
+   */
+  private reportWriteFailure(error: string): void {
+    console.error('Write failed:', error);
+    if (this.messagePort) {
+      this.messagePort.postMessage({ type: 'ble:error', error } as BLEMessage);
     }
   }
   
