@@ -176,7 +176,7 @@ timescale_data/
 docker-compose.override.yml
 .docker/
 
-# CSW symlink (local installation)
+# Local scratch
 tmp/
 
 # openapi-generator-cli: auto-created on `pnpm dlx openapi-generator-cli` runs
@@ -184,13 +184,12 @@ tmp/
 # default version fresh each run. See .github/workflows/api-spec.yml.
 openapitools.json
 
-# Superpowers brainstorm / visual companion session data
-.superpowers/
-
 # Superpowers design specs + implementation plans: generated per-session as
-# working artifacts, not kept in the repo. The brainstorming / writing-plans
-# skills recreate this directory on demand.
+# working artifacts, never tracked. Both paths: the skills default to
+# docs/superpowers/, and repos whose docs/ is published content use the root.
+superpowers/
 docs/superpowers/
+.superpowers/
 
 # Working notes — investigation records, scratch analysis, session notes. Same
 # rationale as docs/superpowers/ above: they earn their keep while a ticket is
