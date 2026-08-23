@@ -223,6 +223,29 @@ export class CommandManager {
   }
   
   /**
+   * Fail the in-flight command because its write never reached the device.
+   *
+   * A dropped write means no ACK will ever arrive, so waiting out the command's
+   * own timeout only delays the failure and reports "Command timeout" instead of
+   * the real cause.
+   */
+  failCurrentCommand(reason: string): void {
+    if (!this.currentCommandReject) return;
+
+    const reject = this.currentCommandReject;
+
+    if (this.currentTimeout) {
+      clearTimeout(this.currentTimeout);
+    }
+    this.currentCommandResolve = null;
+    this.currentCommandReject = null;
+    this.currentTimeout = null;
+
+    logger.warn(`[CommandManager] Command failed before send: ${reason}`);
+    reject(new Error(reason));
+  }
+  
+  /**
    * Abort current sequence execution
    * Waits for current command to complete (including settling delay)
    * then prevents any further commands in the sequence

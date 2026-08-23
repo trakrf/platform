@@ -285,6 +285,11 @@ class CS108Reader extends BaseReader {
     return this.packetHandler.getFragmentMetrics();
   }
 
+  protected handleTransportError(error: string): void {
+    super.handleTransportError(error);
+    this.commandManager.failCurrentCommand(error);
+  }
+
   protected handleBleData(data: Uint8Array): void {
     // Log incoming BLE data
     logger.trace('Received BLE data', data);

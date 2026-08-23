@@ -103,3 +103,99 @@ describe('CS108BLETransport link classification', () => {
     expect(transport.isNetworked()).toBe(true);
   });
 });
+
+/**
+ * Write-failure visibility.
+ *
+ * Every write-failure path used to converge on silence: the queue entry's
+ * `resolve` was built as `() => resolve()`, discarding the success boolean, and
+ * two of the three failure paths told the worker nothing at all. The worker
+ * therefore could not distinguish "command sent, awaiting ACK" from "command
+ * never left", and simply waited out its 5s timeout — surfacing as
+ * "Command timeout" no matter what actually went wrong.
+ */
+type WritePrivates = {
+  queueWrite: (d: Uint8Array) => Promise<boolean>;
+  commandQueue: unknown[];
+  commandInProgress: boolean;
+  messagePort: { postMessage: (m: unknown) => void };
+};
+
+function transportWithCapturedPort(): { transport: CS108BLETransport; posted: Array<{ type: string; error?: string }> } {
+  const transport = new CS108BLETransport();
+  const posted: Array<{ type: string; error?: string }> = [];
+  (transport as unknown as WritePrivates).messagePort = {
+    postMessage: (msg: unknown) => posted.push(msg as { type: string; error?: string })
+  };
+  return { transport, posted };
+}
+
+describe('CS108BLETransport write-failure visibility', () => {
+  it('resolves false when the transport is not connected', async () => {
+    const { transport } = transportWithCapturedPort();
+
+    const ok = await (transport as unknown as WritePrivates).queueWrite(new Uint8Array([0x01]));
+
+    expect(ok).toBe(false);
+  });
+
+  it('tells the worker when a write is dropped because the transport is not connected', async () => {
+    const { transport, posted } = transportWithCapturedPort();
+
+    await (transport as unknown as WritePrivates).queueWrite(new Uint8Array([0x01]));
+
+    expect(posted.some(m => m.type === 'ble:error')).toBe(true);
+  });
+
+  it('tells the worker when a write is dropped because the queue is full', async () => {
+    const { transport, posted } = transportWithCapturedPort();
+    const priv = transport as unknown as WritePrivates;
+    // Fill to MAX_QUEUE_LENGTH and hold the pump so nothing drains.
+    priv.commandInProgress = true;
+    priv.commandQueue = [{}, {}, {}, {}, {}];
+
+    const ok = await priv.queueWrite(new Uint8Array([0x01]));
+
+    expect(ok).toBe(false);
+    expect(posted.some(m => m.type === 'ble:error')).toBe(true);
+  });
+
+  it('treats a GATT server that has dropped the link as not connected', () => {
+    const transport = new CS108BLETransport();
+    Object.assign(transport as unknown as Record<string, unknown>, {
+      device: {},
+      server: { connected: false },
+      writeCharacteristic: {}
+    });
+
+    expect(transport.isConnected()).toBe(false);
+  });
+});
+
+describe('CS108BLETransport device selection', () => {
+  // Restore rather than delete: removing globalThis.navigator outright leaks out of
+  // this file and breaks every later test that reads it (HelpScreen's browser guidance).
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('selects the device by service UUID alone, never by name', async () => {
+    // Web Bluetooth ORs the filters array, so a second {name} filter WIDENS the
+    // match rather than narrowing it. Selection is by service UUID by decision.
+    let captured: { filters: Array<Record<string, unknown>> } | undefined;
+    vi.stubGlobal('navigator', {
+      bluetooth: {
+        requestDevice: (opts: { filters: Array<Record<string, unknown>> }) => {
+          captured = opts;
+          return Promise.reject(new Error('stop here'));
+        }
+      }
+    });
+
+    const transport = new CS108BLETransport({ deviceNameFilter: 'CS108' } as never);
+    await expect(transport.connect()).rejects.toThrow();
+
+    expect(captured!.filters).toHaveLength(1);
+    expect(captured!.filters[0]).not.toHaveProperty('name');
+  });
+});

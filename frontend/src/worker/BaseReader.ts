@@ -151,6 +151,8 @@ export abstract class BaseReader implements IReader {
       } else if (event.data?.type === 'ble:disconnected') {
         // Handle unexpected transport disconnection
         this.handleTransportDisconnect();
+      } else if (event.data?.type === 'ble:error') {
+        this.handleTransportError(event.data.error ?? 'Unknown transport error');
       }
     };
   }
@@ -193,6 +195,14 @@ export abstract class BaseReader implements IReader {
    * Handle transport disconnection (BLE connection lost)
    * Notifies DeviceManager that transport is gone and singleton should be cleaned up
    */
+  /**
+   * A write did not reach the device. Subclasses that own a command layer should
+   * fail the in-flight command rather than let it wait out its own timeout.
+   */
+  protected handleTransportError(error: string): void {
+    logger.warn(`[BaseReader] Transport write failed: ${error}`);
+  }
+
   protected handleTransportDisconnect(): void {
     logger.warn('[BaseReader] Transport disconnected unexpectedly');
 

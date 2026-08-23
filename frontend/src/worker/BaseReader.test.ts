@@ -328,3 +328,23 @@ describe('BaseReader', () => {
     });
   });
 });
+describe('BaseReader transport error routing', () => {
+  class ErrorCapturingReader extends TestReader {
+    public transportErrors: string[] = [];
+    protected handleTransportError(error: string): void {
+      this.transportErrors.push(error);
+    }
+  }
+
+  it('routes a transport write error to the error handler', () => {
+    // ble:error was posted by the transport but nothing listened for it, so a
+    // dropped write was indistinguishable from one still awaiting its ACK.
+    const reader = new ErrorCapturingReader();
+    const port = { onmessage: null } as unknown as MessagePort;
+
+    reader.setTransportPort(port);
+    port.onmessage!({ data: { type: 'ble:error', error: 'write dropped' } } as MessageEvent);
+
+    expect(reader.transportErrors).toEqual(['write dropped']);
+  });
+});
