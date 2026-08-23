@@ -13,6 +13,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
+import { resolveSignals } from './suite-run-signals.mjs';
 
 const RECORD_PATH = path.resolve(process.cwd(), '.suite-runs', 'runs.jsonl');
 
@@ -152,6 +153,77 @@ function contaminationNote(records) {
   return notes.length ? notes.join('\n\n') : '_No contention, no missing reports, one continuous bridge process._';
 }
 
+/**
+ * Cross-tabulate suite failure against the log signatures captured for the same
+ * repetition.
+ *
+ * The question this answers: when a repetition fails, does the failure coincide
+ * with a signature naming a DIFFERENT subsystem than the error message does?
+ * A `Timeout waiting for event: TRIGGER_STATE_CHANGED` that always co-occurs
+ * with `[Reader] Failed to start scanning:` is a symptom of scan-start, not a
+ * trigger defect — and the test report argues for the wrong one.
+ *
+ * Records whose capture was void are EXCLUDED rather than counted as zeros.
+ * A zero from a working capture and a zero from a broken one mean opposite
+ * things, and merging them is how a detector that sees nothing gets read as a
+ * subsystem that did nothing.
+ */
+function signalPairingTable(records) {
+  const resolved = records.map((r) => ({ r, ...resolveSignals(r) }));
+  const captured = resolved.filter(
+    ({ signals }) => signals && !signals.logMissing && (signals.harnessLines ?? 0) > 0
+  );
+  // A repetition that never reached the bridge measured the absence of a
+  // transport, not the behaviour of one. Counting it as a failure-without-the-
+  // signature turns an environmental outage into evidence against a hypothesis.
+  const refused = captured.filter(({ signals }) => (signals.transportRefused ?? 0) > 0);
+  const usable = captured.filter(({ signals }) => (signals.transportRefused ?? 0) === 0);
+  const excluded = resolved.length - captured.length;
+  const recomputed = usable.filter((u) => u.source === 'recomputed').length;
+  if (!usable.length) {
+    const why = excluded
+      ? ` ${excluded} record(s) excluded: no signals, or the \`[Harness]\` canary is 0, ` +
+        'which means the capture was void rather than the signatures absent.'
+      : '';
+    return `_No repetition carries a verified capture._${why}`;
+  }
+
+  const cell = { 'fail+sig': 0, 'fail+nosig': 0, 'pass+sig': 0, 'pass+nosig': 0 };
+  for (const { r, signals } of usable) {
+    const failed = r.files.some((f) => f.status === 'failed');
+    // EITHER limb. The trigger case awaits startScanning() on press and
+    // stopScanning() on release; either rethrowing skips the postWorkerEvent()
+    // below it, so both produce an identical missing-event symptom.
+    const sig = ((signals.startScanFailed ?? 0) + (signals.stopScanFailed ?? 0)) > 0;
+    cell[`${failed ? 'fail' : 'pass'}+${sig ? 'sig' : 'nosig'}`] += 1;
+  }
+
+  const lines = [
+    '| | `Failed to start/stop scanning:` present | absent |',
+    '| -- | -- | -- |',
+    `| **suite failed** | ${cell['fail+sig']} | ${cell['fail+nosig']} |`,
+    `| **suite passed** | ${cell['pass+sig']} | ${cell['pass+nosig']} |`,
+    '',
+    `_${usable.length} repetition(s) with a verified capture` +
+      (recomputed ? `, ${recomputed} recomputed from retained logs` : '') +
+      (excluded ? `; ${excluded} excluded as void or unverifiable` : '') +
+      (refused.length
+        ? `; ${refused.length} excluded as ECONNREFUSED (no bridge — measured an outage, not the subsystem)`
+        : '') +
+      '._',
+  ];
+
+  if (cell['fail+sig'] === 0 && cell['fail+nosig'] > 0) {
+    lines.push(
+      '',
+      `**No failure coincided with a scan-start error** (${cell['fail+nosig']} failure(s) checked). ` +
+        'That is evidence against scan-start being the mechanism — read it as such only if the ' +
+        'count is large enough to carry the claim.'
+    );
+  }
+  return lines.join('\n');
+}
+
 function main() {
   const records = loadRecords();
   console.log(`# Integration suite — run-shape record\n`);
@@ -162,6 +234,8 @@ function main() {
   console.log(perFileTable(records));
   console.log(`\n## Order-dependence — what preceded each failure\n`);
   console.log(predecessorTable(records));
+  console.log(`\n## Failure vs. scan-start signature\n`);
+  console.log(signalPairingTable(records));
   console.log(`\n## Record integrity\n`);
   console.log(contaminationNote(records));
 }

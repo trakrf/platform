@@ -37,10 +37,24 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, appendFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, appendFileSync, rmSync, existsSync, openSync, closeSync } from 'node:fs';
 import path from 'node:path';
+import { readSignals } from './suite-run-signals.mjs';
 
-const RECORD_SCHEMA = 1;
+// 2 adds `signals` + `outputLog`; schema-1 records carry neither.
+const RECORD_SCHEMA = 2;
+
+/**
+ * Per-invocation stamp, so a later invocation cannot overwrite an earlier one's
+ * captured output.
+ *
+ * `runs.jsonl` accumulates across invocations but repetition numbers restart at
+ * 1 every time, so keying the log by shape+rep alone means the next run of the
+ * same shape silently overwrites the logs the previous records still point at —
+ * the record survives, its evidence does not. Found the hard way: an instrument
+ * check's log was replaced by rep 1 of the run it was meant to validate.
+ */
+const RUN_ID = new Date().toISOString().replace(/[:.]/g, '-');
 const ARTIFACT_DIR = path.resolve(process.cwd(), '.suite-runs');
 const RECORD_PATH = path.join(ARTIFACT_DIR, 'runs.jsonl');
 const SUITE_ROOT = 'tests/integration/';
@@ -149,23 +163,50 @@ function readReport(reportPath) {
 function runOnce({ shape, rep, target, note }) {
   const { args, seed } = buildVitestArgs(shape, rep, target);
   const reportPath = path.join(ARTIFACT_DIR, `report-${shape}-${rep}.json`);
+  const logPath = path.join(ARTIFACT_DIR, `output-${RUN_ID}-${shape}-${rep}.log`);
   rmSync(reportPath, { force: true });
+  rmSync(logPath, { force: true });
 
   const wsClientsAtStart = countBridgeClients();
   const { bridgePid, bridgeStartedAt } = readBridgeProcess();
   const startedAt = new Date();
 
-  // stdio 'inherit' for stderr keeps live progress visible; the exit status is
-  // read straight off the spawned process. Never pipe this into anything — a
-  // pipeline reports its LAST stage's status, which is how a red suite reads
-  // green.
-  const res = spawnSync('npx', [...args, '--reporter=json', `--outputFile=${reportPath}`], {
-    encoding: 'utf8',
-    stdio: ['ignore', 'ignore', 'inherit'],
-  });
+  // BOTH streams go to the per-repetition file. stderr is the one that matters:
+  // under `--reporter=json` the only thing on stdout is "JSON report written
+  // to ...", while every console line the suite and the worker emit — including
+  // `[Reader] Failed to start scanning:` — goes to stderr. Capturing stdout
+  // alone produced a detector that reported 0 occurrences of everything, which
+  // looks exactly like "it never happened".
+  //
+  // This costs the live progress stdio 'inherit' used to give. The driver's own
+  // per-repetition line covers that, and evidence that survives the run is worth
+  // more than a scrolling one.
+  //
+  // The exit status is read straight off the spawned process. Never pipe this
+  // into anything — a pipeline reports its LAST stage's status, which is how a
+  // red suite reads green.
+  const logFd = openSync(logPath, 'w');
+  let res;
+  try {
+    // Two reporters on purpose. `json` alone INTERCEPTS the suite's console
+    // output and prints none of it, so capturing the streams yields nothing but
+    // a "JSON report written to ..." line — a log-based detector reads 0
+    // occurrences of everything and looks identical to "it never happened".
+    // Adding `default` puts the console lines back on the streams while `json`
+    // still writes the machine-readable verdict. With more than one reporter,
+    // vitest 1.x requires the per-reporter `--outputFile.json=` form; plain
+    // `--outputFile` is silently ignored and the report never appears.
+    res = spawnSync('npx', [...args, '--reporter=json', '--reporter=default', `--outputFile.json=${reportPath}`], {
+      encoding: 'utf8',
+      stdio: ['ignore', logFd, logFd],
+    });
+  } finally {
+    closeSync(logFd);
+  }
 
   const endedAt = new Date();
   const { files, reportMissing } = readReport(reportPath);
+  const signals = readSignals(logPath);
 
   const record = {
     schema: RECORD_SCHEMA,
@@ -179,6 +220,8 @@ function runOnce({ shape, rep, target, note }) {
     exitCode: res.status,
     files,
     reportMissing,
+    signals,
+    outputLog: path.relative(process.cwd(), logPath),
     bridgePid,
     bridgeStartedAt,
     wsClientsAtStart,
