@@ -1,6 +1,12 @@
-import { describe, it, expect } from 'vitest';
-import { resolveModeForTab, hasLocateTarget, shouldReapplyModeForTarget } from './device-manager';
+import { describe, it, expect, beforeEach } from 'vitest';
+import {
+  resolveModeForTab,
+  hasLocateTarget,
+  shouldReapplyModeForTarget,
+  tagReadToStoreTags,
+} from './device-manager';
 import { ReaderMode } from '@/worker/types/reader';
+import { useTagStore } from '@/stores/tagStore';
 
 describe('resolveModeForTab (TRA-1031)', () => {
   it('scan tab in rfid mode maps to INVENTORY', () => {
@@ -112,5 +118,74 @@ describe('shouldReapplyModeForTarget (TRA-1121)', () => {
 
   it('stays quiet on any other tab, which does not care about the target', () => {
     expect(shouldReapplyModeForTarget(true, false, 'scan')).toBe(false);
+  });
+});
+
+/**
+ * TRA-1150: a TAG_READ packet must reach the store as ONE write. The mapping is
+ * a pure function so it can be checked without standing up a worker, and the
+ * event arm that uses it is then a single addTags call.
+ */
+describe('tagReadToStoreTags (TRA-1150)', () => {
+  beforeEach(() => {
+    useTagStore.setState({ tags: [], _lookupQueue: new Set(), _lookupTimer: null });
+  });
+
+  it('maps a packet to one store record per read', () => {
+    const mapped = tagReadToStoreTags([
+      { epc: 'AAA', rssi: -60, pc: 0, antennaPort: 2, timestamp: 111 },
+      { epc: 'BBB', rssi: -62, pc: 0, antennaPort: 1, timestamp: 222 },
+    ]);
+
+    expect(mapped).toEqual([
+      { epc: 'AAA', rssi: -60, count: 1, antenna: 2, timestamp: 111, source: 'rfid' },
+      { epc: 'BBB', rssi: -62, count: 1, antenna: 1, timestamp: 222, source: 'rfid' },
+    ]);
+  });
+
+  it('defaults a missing antenna port to 1', () => {
+    const [mapped] = tagReadToStoreTags([{ epc: 'AAA', rssi: -60, pc: 0, timestamp: 111 }]);
+    expect(mapped.antenna).toBe(1);
+  });
+
+  it('falls back to the supplied clock when a tag carries no timestamp', () => {
+    const [mapped] = tagReadToStoreTags(
+      [{ epc: 'AAA', rssi: -60, pc: 0 } as never],
+      999
+    );
+    expect(mapped.timestamp).toBe(999);
+  });
+
+  it('keeps repeats of the same EPC as separate reads', () => {
+    const mapped = tagReadToStoreTags([
+      { epc: 'AAA', rssi: -60, pc: 0, timestamp: 1 },
+      { epc: 'AAA', rssi: -59, pc: 0, timestamp: 2 },
+    ]);
+
+    expect(mapped, 'deduplicating here would undercount reads').toHaveLength(2);
+  });
+
+  it('lands a whole packet in the store as a single write', () => {
+    let writes = 0;
+    const unsub = useTagStore.subscribe((state, prev) => {
+      if (state.tags !== prev.tags) writes++;
+    });
+
+    useTagStore.getState().addTags(
+      tagReadToStoreTags([
+        { epc: '000000000000000000010018', rssi: -60, pc: 0, timestamp: 1 },
+        { epc: '000000000000000000010019', rssi: -62, pc: 0, timestamp: 2 },
+        { epc: '000000000000000000010018', rssi: -59, pc: 0, timestamp: 3 },
+      ])
+    );
+
+    unsub();
+
+    expect(writes, 'one packet must be one store write').toBe(1);
+    expect(useTagStore.getState().tags).toHaveLength(2);
+    expect(
+      useTagStore.getState().tags.reduce((sum, t) => sum + (t.count || 1), 0),
+      'all three reads must be counted'
+    ).toBe(3);
   });
 });

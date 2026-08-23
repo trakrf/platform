@@ -29,7 +29,7 @@ interface CS108WorkerAPI {
 
 // Import stores for direct updates
 import { useDeviceStore } from '../../stores/deviceStore';
-import { useTagStore } from '../../stores/tagStore';
+import { useTagStore, type TagInfo } from '../../stores/tagStore';
 import { useLocateStore } from '../../stores/locateStore';
 import type { ScanTabMode } from '../../stores/uiStore';
 import { routeBarcodeRead } from './barcode-bridge';
@@ -50,6 +50,38 @@ const TAB_TO_MODE: Record<string, ReaderModeType> = {
   'assets': ReaderMode.BARCODE,
   // Everything else gets IDLE
 };
+
+/**
+ * Map a TAG_READ packet to tag-store records (TRA-1150).
+ *
+ * Pure and exported so the mapping is testable without standing up a worker,
+ * which leaves the TAG_READ arm of setupEventCallback as a single addTags call.
+ * That single call is the point: the previous arm looped addTag per read, and
+ * each of those did an O(n) scan plus its own store notification on the same
+ * thread that dispatches BLE notifications — including the stop-scan ACK.
+ *
+ * Every read is preserved, repeats of an EPC within one packet included. The
+ * store counts reads, and inventory.spec.ts asserts on that total, so
+ * deduplicating here would silently undercount.
+ */
+export function tagReadToStoreTags(
+  tags: ReadonlyArray<{
+    epc: string;
+    rssi?: number;
+    antennaPort?: number;
+    timestamp?: number;
+  }>,
+  now: number = Date.now()
+): Array<Partial<TagInfo>> {
+  return tags.map(tag => ({
+    epc: tag.epc,
+    rssi: tag.rssi,
+    count: 1,
+    antenna: tag.antennaPort ?? 1,
+    timestamp: tag.timestamp ?? now,
+    source: 'rfid' as const
+  }));
+}
 
 /**
  * Whether the Locate screen already knows what it is looking for. A blank or
@@ -305,17 +337,11 @@ export class DeviceManager {
           break;
 
         case WorkerEventType.TAG_READ:
-          // Handle array of tags from TAG_READ event
-          event.payload.tags.forEach(tag => {
-            useTagStore.getState().addTag({
-              epc: tag.epc,
-              rssi: tag.rssi,
-              count: 1,
-              antenna: tag.antennaPort ?? 1,
-              timestamp: tag.timestamp ?? Date.now(),
-              source: 'rfid'
-            });
-          });
+          // TRA-1150: one store write for the whole packet. The previous
+          // forEach(addTag) issued an O(n) scan and a store notification per
+          // read, which on a dense field kept the main thread busy and starved
+          // the BLE notification carrying the stop-scan ACK.
+          useTagStore.getState().addTags(tagReadToStoreTags(event.payload.tags));
           break;
 
         case WorkerEventType.BARCODE_READ:

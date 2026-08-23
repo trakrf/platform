@@ -460,3 +460,124 @@ describe('TagStore - barcode source (TRA-1031)', () => {
     expect(t.reconciled).toBe(true);
   });
 });
+
+describe('TagStore - batched addTags (TRA-1150)', () => {
+  beforeEach(() => {
+    useTagStore.setState({ tags: [], _lookupQueue: new Set(), _lookupTimer: null });
+  });
+
+  // Counts writes that replace the tags array. That identity change is what
+  // re-renders every component subscribed to state.tags, so it is the quantity
+  // that starved the main thread — not the raw number of set() calls.
+  const countTagWrites = (fn: () => void): number => {
+    let writes = 0;
+    const unsub = useTagStore.subscribe((state, prev) => {
+      if (state.tags !== prev.tags) writes++;
+    });
+    try {
+      fn();
+    } finally {
+      unsub();
+    }
+    return writes;
+  };
+
+  it('counts every read in a batch, including repeats of the same EPC', () => {
+    const a = EPC_FORMATS.toFullEPC(PRIMARY_TEST_TAG);
+    const b = EPC_FORMATS.toFullEPC(LOCATE_TEST_TAG);
+
+    useTagStore.getState().addTags([
+      { epc: a, rssi: -60, count: 1, source: 'rfid' },
+      { epc: b, rssi: -55, count: 1, source: 'rfid' },
+      { epc: a, rssi: -58, count: 1, source: 'rfid' },
+    ]);
+
+    const tags = useTagStore.getState().tags;
+    expect(tags).toHaveLength(2);
+    expect(
+      tags.reduce((sum, t) => sum + (t.count || 1), 0),
+      'three reads must count as three'
+    ).toBe(3);
+
+    const tagA = tags.find(t => t.epc === a)!;
+    expect(tagA.count).toBe(2);
+    expect(tagA.readCount).toBe(2);
+  });
+
+  it('merges a batch into tags already in the store', () => {
+    const a = EPC_FORMATS.toFullEPC(PRIMARY_TEST_TAG);
+    useTagStore.getState().addTags([{ epc: a, rssi: -60, count: 1, source: 'rfid' }]);
+    useTagStore.getState().addTags([{ epc: a, rssi: -61, count: 1, source: 'rfid' }]);
+
+    const tags = useTagStore.getState().tags;
+    expect(tags).toHaveLength(1);
+    expect(tags[0].count).toBe(2);
+  });
+
+  it('replaces the tags array exactly once per batch', () => {
+    const writes = countTagWrites(() => {
+      useTagStore.getState().addTags([
+        { epc: '000000000000000000010018', count: 1, source: 'rfid' },
+        { epc: '000000000000000000010019', count: 1, source: 'rfid' },
+        { epc: '000000000000000000010020', count: 1, source: 'rfid' },
+      ]);
+    });
+
+    expect(writes, 'a three-tag batch must be one store write, not three').toBe(1);
+    expect(useTagStore.getState().tags).toHaveLength(3);
+  });
+
+  it('keeps the single write when the batch merges into existing tags', () => {
+    useTagStore.getState().addTags([
+      { epc: '000000000000000000010018', count: 1, source: 'rfid' },
+      { epc: '000000000000000000010019', count: 1, source: 'rfid' },
+    ]);
+
+    const writes = countTagWrites(() => {
+      useTagStore.getState().addTags([
+        { epc: '000000000000000000010018', count: 1, source: 'rfid' },
+        { epc: '000000000000000000010019', count: 1, source: 'rfid' },
+        { epc: '000000000000000000010018', count: 1, source: 'rfid' },
+      ]);
+    });
+
+    expect(writes).toBe(1);
+    expect(
+      useTagStore.getState().tags.reduce((sum, t) => sum + (t.count || 1), 0),
+      'two reads then three more reads is five reads'
+    ).toBe(5);
+  });
+
+  it('addTag still works and is one batch of one', () => {
+    const a = EPC_FORMATS.toFullEPC(PRIMARY_TEST_TAG);
+    const writes = countTagWrites(() => {
+      useTagStore.getState().addTag({ epc: a, rssi: -60, count: 1 });
+    });
+
+    expect(writes).toBe(1);
+    expect(useTagStore.getState().tags).toHaveLength(1);
+    expect(useTagStore.getState().tags[0].count).toBe(1);
+  });
+
+  it('ignores an empty batch without touching the store', () => {
+    const writes = countTagWrites(() => {
+      useTagStore.getState().addTags([]);
+    });
+
+    expect(writes).toBe(0);
+    expect(useTagStore.getState().tags).toHaveLength(0);
+  });
+
+  it('promotes a reconciliation stub matched inside a batch', () => {
+    useTagStore.getState().mergeReconciliationTags([
+      { epc: 'BATCH1', assetIdentifier: 'A-7', count: 0, found: false },
+    ]);
+
+    useTagStore.getState().addTags([{ epc: 'BATCH1', count: 1, source: 'rfid' }]);
+
+    const t = useTagStore.getState().tags.find(x => x.epc === 'BATCH1')!;
+    expect(t.reconciled).toBe(true);
+    expect(t.source).toBe('rfid');
+    expect(t.assetIdentifier).toBe('A-7');
+  });
+});
