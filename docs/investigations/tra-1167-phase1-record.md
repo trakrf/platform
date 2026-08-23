@@ -221,4 +221,118 @@ as observations rather than conclusions:
 
 ## Results
 
-_Pending — filled in after the soak completes._
+### Finding 1 — `locate.spec.ts` is not flaky, it is deterministically broken
+
+This is the largest single result of Phase 1, and it overturns the ticket's
+framing of its own most-cited symptom.
+
+`cs108/locate.spec.ts` failed **9 out of 9** runs: the timing baseline, all five
+fixed-order repetitions, and **all three runs alone**. Always the same single
+test, always the same assertion:
+
+```
+CS108 Locate Integration > should handle complete locate flow with trigger scanning and RSSI validation
+expected '000000010020' to be '10020' // Object.is equality
+```
+
+Alone, it fails in **11 seconds** — the assertion sits near the top of the test
+body, before the trigger is ever pressed. **No hardware is involved in this
+failure at all.**
+
+The ticket states *"Individual files pass in isolation"* and names
+`locate.spec.ts` as *"the most frequent offender"*. Both are wrong. It is not an
+offender and it is not intermittent; it is a constant, and being the loudest and
+most frequent line in the output is precisely what made it look like the
+principal symptom.
+
+**Test-vs-product call: this is a test bug — specifically a stale expectation.**
+
+`locate.spec.ts:110` asserts that `setTargetEPC` stores a leading-zero-stripped
+value:
+
+```js
+const epcSet = settingsStore.setTargetEPC(testEPC);   // '000000010020'
+expect(afterState.rfid?.targetEPC).toBe(trimmedEPC);  // expects '10020'
+```
+
+Nothing in that path strips leading zeros. `setTargetEPC`
+(`stores/settingsStore.ts:114`) delegates to `validateEPC`
+(`utils/settingsValidation.ts:23`), which removes whitespace and uppercases —
+nothing else.
+
+Preserving the zeros is the **deliberate, tested contract**, asserted twice at
+unit level:
+
+```js
+// utils/settingsValidation.test.ts:46
+it('preserves EPC value as-is (uppercase only)', () => {
+  const input = EPC_FORMATS.toCustomerInput(PRIMARY_TEST_TAG);  // zero-padded
+  expect(result.normalizedValue).toBe(input.toUpperCase());
+});
+
+// utils/settingsValidation.test.ts:52
+it('preserves zeros as entered', () => {
+  expect(validateEPC('0000').normalizedValue).toBe('0000');
+});
+```
+
+Trimming is a **display** concern elsewhere in the codebase: `EPC_FORMATS.toDisplay`
+is an alias for `toTrimmed`, there is a `showLeadingZeros` setting, and
+`stores/tagStore.test.ts:44` is "should trim leading zeros from EPC **for display**".
+
+A fossil confirms the direction of drift: `settingsValidation.test.ts:29` is still
+titled *"allows odd number of characters (due to leading zero stripping)"* while
+testing a function that no longer strips anything. Stripping was removed from the
+product; this integration assertion and that test title are both leftovers.
+
+So the fix is to correct the assertion in `locate.spec.ts`, not to change
+`validateEPC` — changing the product to satisfy this test would break two unit
+tests that deliberately assert the opposite.
+
+Under the ticket's own decision table this is the **file-intrinsic** outcome:
+*"a real flake in that file; fix it directly"* — with the caveat that it is not a
+flake but a hard failure.
+
+### Finding 2 — the bench was not in the state the tests assume
+
+**Discovered mid-soak, and it voids every hardware measurement taken before it.**
+
+Test tag `10020` — `LOCATE_TEST_TAG`, the tag the locate specs search for — had
+been physically **out of the reader's field**, occluded by the rest of the tag
+stack on the bench, for the whole of the run set above. It was repositioned at
+**2026-08-23T19:39:43Z**, during shuffle repetition 1.
+
+`test-utils/constants.ts` documents the assumed physical environment in a header
+comment — *"Test RFID tags 10018-10023 positioned in front of reader"* — and that
+precondition was silently false.
+
+Consequences, applied honestly:
+
+- The five fixed-order repetitions and the three `locate.spec.ts`-alone
+  repetitions were all measured against a bench that did not meet the tests'
+  stated precondition. **The fixed-order baseline is void and is re-run.**
+- Shuffle repetition 1 straddles the reposition and is **discarded**, not
+  averaged in.
+- **Finding 1 is unaffected.** That failure is a store assertion reached in 11s
+  with no RF involved, so tag position cannot bear on it. It reproduced 9/9 both
+  before the reposition and across shapes.
+
+This is the ticket's third reading — *"environmental drift"* — arriving as a
+physical fact rather than a statistical one, and it is a strong candidate for at
+least part of the original 2026-08-23 non-determinism. A tag drifting in and out
+of a reader's field produces exactly the signature the ticket describes: failures
+that move between files and runs, and that vanish when a file is re-run on its own
+at a moment when the geometry happens to be favourable.
+
+**Method note worth keeping.** No amount of software instrumentation would have
+surfaced this. The suite has no assertion that its own physical preconditions
+hold, so a bench that silently stops meeting them is indistinguishable from a
+software defect. That is the single most useful thing Phase 1 has produced so far,
+and it generalises beyond this ticket: a hardware test suite should assert its
+preconditions, not assume them.
+
+### Remaining shapes
+
+Re-run after the reposition, and reported separately from the voided set above.
+
+_Pending._
