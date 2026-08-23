@@ -28,31 +28,12 @@
 
 ## Testing
 - Playwright e2e **never runs in CI** — green CI does not mean e2e passes; run it against preview yourself
-- **Name specs and tooling for what they do, never for a ticket** — `locate-mask-length-variants.spec.ts`, not `tra-1120-locate-ambiguous-width.spec.ts`; `characterise-suite-runs.mjs`, not `tra-1167-characterise.mjs`. Put the ticket reference in the file header instead. Anything reusable outlives its ticket, so a ticket-named file misattributes its own output the moment the ticket closes — a reader sees in-flight work where the truth is permanent tooling or coverage. Applies to `describe` blocks, log prefixes, and artifact directories too, since those are what appear in output.
-  - The test is whether the artifact will be **re-used or merely re-read**. Anything re-used gets a behaviour name and lives in the repo. Anything merely re-read is a point-in-time record — it belongs on the ticket, not in `docs/` (see `.gitignore` for `docs/superpowers/` and `docs/investigations/`).
+- **Name specs and tooling for what they do, never for a ticket** — `locate-mask-length-variants.spec.ts`, not `tra-1120-…`. Cite the ticket in the file header. Applies to `describe` blocks, log prefixes and artifact dirs, since those appear in output
+- **Re-used vs merely re-read** — reusable things live in the repo under a behaviour name; point-in-time records go on the ticket, not `docs/` (`.gitignore` ignores `docs/superpowers/` and `docs/investigations/`)
 
-## The BLE bridge is TEST TOOLING ONLY — and it holds the radio exclusively
-
-**`ble-mcp-test` is never part of the product.** The app has exactly one way to reach a CS108: **direct Web Bluetooth**, `navigator.bluetooth` in the browser. That is the path in prod, in preview, and in any normal build. There is no bridge in the product path and there never should be.
-
-The bridge exists solely so **tests** can drive real hardware from Node and from headless browsers. It is injected **only** when `VITE_BLE_BRIDGE_ENABLED === 'true'` (`frontend/vite.config.ts:40`, explicit early return otherwise) — set by integration tests and `pnpm dev:bridge`, never by a preview or prod build.
-
-**Why that still constrains you:** a CS108 accepts **one connection at a time**. Whatever holds the radio excludes everything else — so test tooling that is connected blocks the real product path to that reader, and a browser session blocks the tests. That much is a property of the hardware and outlives any bridge implementation.
-
-The inverse is the one that misleads: **an idle bridge port does not mean the reader is free.** Someone may be holding it from a browser, and that never appears as a bridge client.
-
-> **Current implementation — expected to change.** Today's bridge (`rust-ble-test`) connects at
-> **process start** and holds the link for its whole lifetime; a client disconnecting releases
-> nothing, and only `SIGTERM` frees the radio. So today you must **stop the process** — closing the
-> tests is not enough — and `pgrep -f 'rust-bl[e]-test'` is how you tell whether it is holding.
-> `rust-ble-test` **goes away** in the replatform to `bleak`-based Python tooling, where the
-> intent — not yet a guarantee — is to release the radio whenever no mock-to-bridge connection is
-> active. If that lands, the rule relaxes from *"the bridge process must not be running"* to
-> *"no test must be connected"*, and leaving the bridge up between runs stops being a problem.
-> **Verify that behaviour before relying on it, and re-check this paragraph after the replatform.
-> The paragraphs above it hold either way.**
-
-See `reference_ble_bridge_restart` for start/stop.
+## Hardware access
+- **`ble-mcp-test` is test tooling only, never the product path** — the app reaches a CS108 solely via browser `navigator.bluetooth`
+- **One connection at a time**: a running bridge blocks preview/prod hand-testing, and an idle bridge port does *not* mean the reader is free — see `docs/ble-hardware-access.md`
 
 ## Preview Deployments
 - Opening/updating a PR auto-deploys to `https://app.preview.trakrf.id`
