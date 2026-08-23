@@ -197,5 +197,11 @@ docs/superpowers/
 # from a developer branch.
 .preview-manifest
 
-# Suite run-shape characterisation artifacts (raw JSONL; only summarised records are committed)
+# Suite run-shape characterisation artifacts — raw vitest JSON dumps and the
+# append-only run log. Only summarised records and the run log copied into
+# docs/investigations/ are committed.
+# NOTE: renaming this pattern un-ignores any stale directory still on disk, which
+# is how 21 of these were once swept into a PR by `git add -A`. Delete the old
+# directory in the same change that renames the pattern.
 .suite-runs/
+.tra-1167/

@@ -165,8 +165,15 @@ CLI flags and process lifecycle only:
 
 Tooling: `frontend/scripts/characterise-suite-runs.mjs` (driver) and
 `frontend/scripts/summarise-suite-runs.mjs` (tables). Raw per-repetition records
-land in `frontend/.suite-runs/runs.jsonl` (gitignored); only the summarised tables
-below are committed.
+land in `frontend/.suite-runs/runs.jsonl` (gitignored, along with vitest's JSON
+dumps).
+
+**The complete run log is committed beside this document as
+`tra-1167-phase1-runs.jsonl`** — 37 repetitions, one JSON object each, the raw
+data behind every table below. Re-render it any time with
+`node scripts/summarise-suite-runs.mjs` after copying it back to
+`frontend/.suite-runs/runs.jsonl`. The per-run vitest dumps are not committed:
+they are large, and every claim made here is derivable from the run log.
 
 ### The instrument was verified before it was trusted
 
