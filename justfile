@@ -50,7 +50,7 @@ alias be := backend
 
 lint: (frontend "lint") (backend "lint") (cli "lint")
 
-test: test-ops test-release-guards test-db-init (frontend "test") (backend "test") (cli "test")
+test: test-ops test-release-guards test-db-init test-bootstrap (frontend "test") (backend "test") (cli "test")
 
 build: (frontend "build") (backend "build") (cli "build")
 
@@ -137,6 +137,11 @@ check-changelog:
 test-db-init:
     @./scripts/test-db-init.sh
 
+# TRA-1172: `just bootstrap` fails loudly and is a cheap no-op when warm. Runs
+# the real script against a stub toolchain in a temp dir — no network, no vite.
+test-bootstrap:
+    @./scripts/test-bootstrap.sh
+
 # ============================================================================
 # Full Stack Development
 # ============================================================================
@@ -184,10 +189,28 @@ dev-logs:
 # Worktree Support
 # ============================================================================
 
+# TRA-1172. The first thing to run in a fresh worktree, before `just validate`.
+# Installs deps and generates the two gitignored go:embed targets — without them
+# the backend does not compile, and says so in terms that name neither the step
+# nor the fix (`pattern frontend/dist: no matching files found`).
+#
+# Idempotent, and near-instant when there is nothing to do, so it is safe to run
+# reflexively — including backgrounded at the start of a session, which is the
+# intended use: it takes a couple of minutes cold and needs no supervision.
+#
+# `just bootstrap --force` rebuilds regardless of the staleness checks.
+bootstrap *ARGS:
+    @./scripts/bootstrap.sh "$@"
+
 # Copy gitignored build artifacts (openapi.internal/public specs, frontend/dist)
 # from the main worktree so `go run . migrate` and friends work without
 # regenerating them. Safe to run repeatedly; no-op if already in the main
 # worktree.
+#
+# Prefer `just bootstrap` (above). This one is the shortcut: it is faster
+# because it builds nothing, but it copies MAIN's artifacts, so the specs and
+# the frontend it leaves behind describe main's code rather than this branch's.
+# Fine for `go run . migrate`; wrong for anything that reads what it embedded.
 worktree-bootstrap:
     #!/usr/bin/env bash
     set -euo pipefail

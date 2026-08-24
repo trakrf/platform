@@ -36,6 +36,27 @@ platform/
 
 **Note:** Go and Node.js are NOT required for Docker-based development. Install them only if you want to run services natively.
 
+### First step in any fresh checkout or worktree
+
+```bash
+just bootstrap
+```
+
+The backend embeds two generated, gitignored artifacts — `backend/frontend/dist`
+and the OpenAPI specs under `backend/internal/handlers/swaggerspec/` — so a
+fresh tree does not compile until they exist. Without this step `just validate`
+fails with `pattern frontend/dist: no matching files found`, which names neither
+the missing step nor the fix.
+
+`just bootstrap` installs workspace dependencies, builds the frontend and
+generates the specs. It is idempotent and near-instant once satisfied, so it is
+safe to re-run whenever; `just bootstrap --force` rebuilds regardless. It fails
+loudly and non-zero — if it did not, the next command to fail would be an
+unrelated-looking one.
+
+Cold, it takes a couple of minutes and needs no supervision, so it is worth
+backgrounding at the start of a session rather than waiting on it.
+
 ### Quick Start (Docker-First)
 
 **1. Configure environment**
