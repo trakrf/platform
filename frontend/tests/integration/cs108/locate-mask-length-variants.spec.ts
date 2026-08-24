@@ -59,6 +59,46 @@ const TAG_96_STRIPPED = '10020';
 
 const SCAN_MS = 4000;
 
+/**
+ * Reads within one scan below which an EPC is noise, not a selection.
+ *
+ * RFID is a lossy, fragmented stream — at mtu=23 every CS108 frame over 20
+ * bytes is reassembled, and `parser.ts` deliberately byte-slides to resync on
+ * an unrecognised header rather than stall. Recovering sync beats stalling, so
+ * an occasional phantom record is normal and correct behaviour, not a defect.
+ * The frame CRC does not cover it: the bytes are right, the walk through them
+ * is not.
+ *
+ * So judge the STREAM, never a single read. A tag the Select genuinely admits
+ * answers steadily for the whole scan; a phantom appears once. MEASURED over
+ * SCAN_MS on 2026-08-23/24: genuine matches x32-x63, phantom x1. The floor sits
+ * at 5 — 6x below the weakest genuine read observed, 5x above the phantom.
+ *
+ * Those are the numbers to overturn if you move it. Do not "tune" it: the point
+ * is the separation, not the value, and anything from ~5 to ~30 splits the two
+ * populations. Widening it does not buy accuracy, it buys the failure below.
+ *
+ * THE RISK IS ASYMMETRIC, WHICH IS WHY REJECTIONS ARE LOGGED. A phantom that
+ * slips under a too-low floor produces a LOUD wrong answer. A genuine detection
+ * floored by a too-high one produces "nothing found" — which, for the
+ * `toEqual([])` assertions here, is a silent PASS. That direction is invisible,
+ * and it is not hypothetical: the WALDO probes read x329 vs x66 on the same
+ * board in the same run, so coupling varies ~5x with position alone. A weakly
+ * coupled tag is exactly the case that could read low.
+ *
+ * So every discarded EPC is printed with its count. A floor that ate a real
+ * detection stays observable in the log rather than vanishing into a pass —
+ * otherwise this fix repeats the shape of the bug it fixes, discarding the
+ * content at judgement, just on the other side of the threshold.
+ *
+ * Observed 2026-08-23: one x1 phantom failed `toEqual([])` and read as a mask
+ * regression on the guard protecting the 128-bit EPC fix — where ~20% of field
+ * tags live. Locate itself averages such a read away and no operator could
+ * perceive it, so the spec was strictly more sensitive than the product it
+ * guards.
+ */
+const MIN_READS_FOR_SELECTION = 5;
+
 describe('Locate mask length variants — stripped EPC finds its tag at either width', () => {
   let harness: CS108WorkerTestHarness;
 
@@ -131,12 +171,19 @@ describe('Locate mask length variants — stripped EPC finds its tag at either w
     for (const update of updates as any[]) {
       counts.set(update.payload.epc, (counts.get(update.payload.epc) ?? 0) + 1);
     }
-    const epcs = [...counts.keys()].sort((a, b) => counts.get(b)! - counts.get(a)!);
+    const ranked = [...counts.keys()].sort((a, b) => counts.get(b)! - counts.get(a)!);
 
-    console.log(`\n  locate('${targetEPC}') -> ${updates.length} updates, ${epcs.length} distinct EPC(s):`);
-    for (const epc of epcs) console.log(`      ${epc}  x${counts.get(epc)}`);
+    console.log(`\n  locate('${targetEPC}') -> ${updates.length} updates, ${ranked.length} distinct EPC(s):`);
+    for (const epc of ranked) {
+      const n = counts.get(epc)!;
+      console.log(`      ${epc}  x${n}${n < MIN_READS_FOR_SELECTION ? '   (below floor — not a selection)' : ''}`);
+    }
 
-    return epcs;
+    // Apply the floor the comment above describes. Returning the bare distinct
+    // set threw that discrimination away and made every assertion here strictly
+    // more sensitive than the product: `toEqual([])` failed on a single stray
+    // read exactly as it would on a tag answering sixty times.
+    return ranked.filter(epc => counts.get(epc)! >= MIN_READS_FOR_SELECTION);
   };
 
   it('finds a 96-bit tag from its stripped value', { timeout: 60000 }, async () => {
