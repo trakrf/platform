@@ -111,10 +111,22 @@ trap 'rm -rf "$fixture"' EXIT
     git tag v1.3.0
     git checkout -q -b sidebranch
     git commit -q --allow-empty -m "not on main"
+    # A hotfix line (TRA-1127). It branches from a shipped tag, so none of its
+    # commits is ever an ancestor of main — which is the whole reason the
+    # ancestry rule had to be restated.
+    git checkout -q -b release/1.2.x main~1
+    git commit -q --allow-empty -m "hotfix on the 1.2 line"
+    # An ordinary release PR branch. Same `release/` prefix, but `X.Y.Z`-shaped
+    # and an unmerged proposal — it must stay unpromotable, or an open release
+    # PR's head becomes promotable the moment it flips VERSION clean.
+    git checkout -q -b release/1.5.0 main
+    git commit -q --allow-empty -m "release: 1.5.0"
     git checkout -q main
     # promote-prod runs against a real remote; emulate origin/* locally.
     git update-ref refs/remotes/origin/main refs/heads/main
     git update-ref refs/remotes/origin/sidebranch refs/heads/sidebranch
+    git update-ref refs/remotes/origin/release/1.2.x refs/heads/release/1.2.x
+    git update-ref refs/remotes/origin/release/1.5.0 refs/heads/release/1.5.0
 ) >/dev/null 2>&1
 
 main_sha=$(git -C "$fixture" rev-parse main)
@@ -180,6 +192,42 @@ expect "says why it refused" "not an ancestor" "$out"
 out=$(cd "$fixture" && "$resolve" no-such-ref 2>&1) && status=0 || status=$?
 expect_status "refuses an unresolvable ref" 1 "$status"
 expect "names the unresolvable ref" "no-such-ref" "$out"
+
+# TRA-1127 item 2 — hotfix lines. A patch on a shipped release branches from its
+# tag, so `ancestor of origin/main` refuses it. The rule the check actually wants
+# to enforce is "not the force-rewritten preview composition", and that survives
+# widening it to the `release/X.Y.x` maintenance lines.
+hotfix_sha=$(git -C "$fixture" rev-parse release/1.2.x)
+hotfix_short="sha-${hotfix_sha:0:7}"
+
+out=$(cd "$fixture" && "$resolve" release/1.2.x 2>&1) && status=0 || status=$?
+expect_status "accepts a release/X.Y.x hotfix line head" 0 "$status"
+expect "hotfix line resolves to its 7-char sha tag" "$hotfix_short" "$out"
+
+out=$(cd "$fixture" && "$resolve" "$hotfix_short" 2>&1) && status=0 || status=$?
+expect_status "accepts a sha- tag naming a hotfix-line commit" 0 "$status"
+expect "hotfix sha- tag round-trips to itself" "$hotfix_short" "$out"
+
+out=$(cd "$fixture" && "$resolve" "$hotfix_sha" 2>&1) && status=0 || status=$?
+expect_status "accepts a full sha on a hotfix line" 0 "$status"
+expect "hotfix full sha truncates to 7" "$hotfix_short" "$out"
+
+# The `release/` prefix alone must not confer promotability. `release/X.Y.Z` is
+# the ordinary release PR branch (docs/releasing.md step 1) — an unmerged
+# proposal whose head declares a clean VERSION, which is precisely the shape
+# TRA-1126 Finding 3 closed off. Only the `.x` maintenance lines widen the rule.
+propose_sha=$(git -C "$fixture" rev-parse release/1.5.0)
+out=$(cd "$fixture" && "$resolve" release/1.5.0 2>&1) && status=0 || status=$?
+expect_status "refuses an unmerged release/X.Y.Z PR head" 1 "$status"
+expect "says why the release PR head was refused" "not an ancestor" "$out"
+
+out=$(cd "$fixture" && "$resolve" "sha-${propose_sha:0:7}" 2>&1) && status=0 || status=$?
+expect_status "refuses a sha- tag for an unmerged release PR head" 1 "$status"
+
+# The refusal has to name both halves of the widened rule, or the operator is
+# left guessing which one they missed.
+out=$(cd "$fixture" && "$resolve" sidebranch 2>&1) && status=0 || status=$?
+expect "refusal names the hotfix-line half of the rule" "release/X.Y.x" "$out"
 
 # ---------------------------------------------------------------------------
 echo

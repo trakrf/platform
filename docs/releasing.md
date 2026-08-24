@@ -118,19 +118,59 @@ job logs a `stale` warning on every merge inside it. Merge the bump-back.
 
 ### Hotfixes
 
-A patch on a shipped release branches from its tag rather than from main, and
-sets `VERSION` to the next patch of that line:
+A patch on a shipped release branches from its tag rather than from main, onto a
+**maintenance line** named `release/X.Y.x` — note the literal `x`. That name is
+load-bearing, and is not the same thing as the `release/X.Y.Z` branch step 1
+cuts: `X.Y.Z` is an unmerged *proposal*, `X.Y.x` is a *line* that patches merge
+into and that mints tags. CI tells them apart by that suffix and nothing else.
+
+Cut the line from the tag it patches, once:
 
 ```bash
 git checkout -b release/X.Y.x vX.Y.Z
-printf 'X.Y.<Z+1>\n' > VERSION
+git push -u origin release/X.Y.x
 ```
 
-`resolve-promote-source.sh` currently requires the source be an ancestor of
-`origin/main`, which a `release/*` head is not; the rule wants restating as
-*promotable = ancestor of main or of a `release/*` head*, and the auto-tag
-trigger wants extending to `release/*`. Decided, not built — this is the shape
-to build at the first real hotfix, not a thing to improvise under pressure.
+Then the fix goes in by PR against that line, exactly as any change goes into
+main — the same `VERSION` flip and the same changelog section:
+
+```bash
+git checkout -b fix/tra-NNNN-whatever release/X.Y.x
+# ... the fix ...
+printf 'X.Y.<Z+1>\n' > VERSION
+$EDITOR CHANGELOG.md                    # a real ## [X.Y.<Z+1>] section
+just check-changelog
+gh pr create --base release/X.Y.x
+```
+
+`lint-test` and `api-spec` run on a PR whatever its base, so the changelog gate
+applies here too. Note that **branch protection covers `main`, not the hotfix
+line** — the required checks report, but nothing blocks a merge on them. Read
+them yourself.
+
+**On merge into `release/X.Y.x`** the same `release` job runs as on main: it
+builds the image, mints the git tag `vX.Y.<Z+1>` at the merge commit, and
+publishes `ghcr.io/trakrf/backend:vX.Y.<Z+1>`. Promote it in step 2 unchanged.
+
+Two deliberate differences from a main release:
+
+- **No bump-back PR.** On main the follow-up returns `VERSION` to the next minor
+  `-dev`; neither that number nor that base branch is right for a hotfix line.
+  The line simply keeps its released `VERSION` until the next hotfix's PR sets
+  it forward. The `release` job logs a `stale` warning on any further merge in
+  between, which is the same harmless window step 1 describes.
+- **The fix is not on main.** Forward-port it as an ordinary PR against main.
+  The hotfix line is not merged back — merging it would drag the released
+  `VERSION` and its changelog section onto main.
+
+Hotfix PRs are excluded from the preview composition, because preview is a
+composition of *main* (`sync-preview.yml`). A hotfix has no preview environment;
+verify it locally, and against prod after promoting.
+
+Built under TRA-1127, having been designed and deliberately deferred under
+TRA-1126. Two things it did **not** need: `assert-release-commit.sh` and
+`resolve-release-action.sh` both bind a version to its tag's commit without
+caring which branch that commit sits on.
 
 ### If a release is reverted
 
@@ -160,7 +200,7 @@ The workflow refuses, before touching `:prod`, if:
 | Refusal | Meaning |
 |---|---|
 | `Cannot resolve '<ref>' to a commit` | Typo, or a ref that does not exist |
-| `not an ancestor of origin/main` | Not a main-derived commit. `preview` is a force-rewritten PR composition and must never reach prod. As of TRA-1126 a raw `sha-xxxxxxx` input gets this check too |
+| `not an ancestor of origin/main, nor of any release/X.Y.x hotfix line` | Not a released-line commit. `preview` is a force-rewritten PR composition and must never reach prod, and an open `release/X.Y.Z` PR head is not a release yet. As of TRA-1126 a raw `sha-xxxxxxx` input gets this check too |
 | `<image>: not found` | The image for that commit was never built, or the build has not finished yet |
 | `Refusing to promote an image whose version is '<x>'` | Not a release build. `VERSION` carries `-dev` outside a release, so this is a preview or in-development image |
 | `there is no git tag <vX.Y.Z>` | The image was built while `VERSION` was clean but is not the release commit — see the bump-back window in step 1 |
@@ -332,7 +372,9 @@ documented (TRA-1085, TRA-1126):
 - **`promote-prod` resolves its source from a git ref**, so the 7-vs-8 character
   short-SHA convention is no longer knowledge the operator has to carry — and a
   raw `sha-xxxxxxx` input is ancestry-checked like any other ref rather than
-  waved through.
+  waved through. Promotable means an ancestor of `origin/main` **or** of a
+  `release/X.Y.x` hotfix line (TRA-1127); a hotfix commit is never main's
+  ancestor, and everything the rule was written to refuse it still refuses.
 - **A release cannot be cut without its `CHANGELOG.md` section.** `lint-test`
   fails a PR that flips `VERSION` clean without the matching `## [X.Y.Z]`
   heading (TRA-1085 item 4, built under TRA-1126).

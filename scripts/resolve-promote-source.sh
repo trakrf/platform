@@ -11,7 +11,18 @@
 #
 # Accepting arbitrary refs would lose the guarantee the old input regex gave —
 # that only main-derived images can reach :prod — so every ref resolved here is
-# ancestry-checked against origin/main.
+# ancestry-checked.
+#
+# TRA-1127 item 2: that check is *promotable = an ancestor of `origin/main`, or
+# of a `release/X.Y.x` hotfix line*. The rule exists to keep the force-rewritten
+# `preview` composition out of prod, and the wider form still does that. A patch
+# on a shipped release branches from its tag rather than from main, so its
+# commits are never main's ancestors and the narrower form refused them outright.
+#
+# Only the `.x` maintenance lines widen it, NOT `release/` as a prefix.
+# `release/X.Y.Z` is the ordinary release PR branch (docs/releasing.md step 1) —
+# an unmerged proposal whose head declares a clean VERSION, which is exactly the
+# shape Finding 3 below closed off.
 #
 # TRA-1126 Finding 3: `sha-<hex>` used to be passed through unchecked, on the
 # stated belief that it "cannot be ancestry-checked because it names an image,
@@ -30,6 +41,8 @@
 #   latest                   -> passed through unchanged
 #   sha-<hex>                -> resolved as a commit, ancestry-checked, renormalised
 #   anything else            -> resolved as a git ref -> sha-<first 7 of its sha>
+#
+# TRA-1085 item 2 / TRA-1127 item 2.
 set -euo pipefail
 
 ref="${1-}"
@@ -59,11 +72,29 @@ if ! sha=$(git rev-parse --verify --quiet "${ref}^{commit}"); then
     exit 1
 fi
 
-if ! git merge-base --is-ancestor "${sha}" origin/main; then
+# Ancestor of main, or of any hotfix line. `for-each-ref` reads the remote refs
+# because that is what promote-prod has: it runs on a CI checkout, where local
+# branches other than the checked-out one do not exist.
+promotable=false
+if git merge-base --is-ancestor "${sha}" origin/main; then
+    promotable=true
+else
+    while read -r line; do
+        [ -n "${line}" ] || continue
+        if git merge-base --is-ancestor "${sha}" "${line}"; then
+            promotable=true
+            break
+        fi
+    done < <(git for-each-ref --format='%(refname)' 'refs/remotes/origin/release/*.x')
+fi
+
+if [ "${promotable}" != true ]; then
     {
-        echo "::error::Refusing to promote '${ref}' (${sha}): it is not an ancestor of origin/main."
-        echo "Only main-derived images may be promoted to :prod. The preview branch in"
-        echo "particular is a force-rewritten PR composition and must never reach prod."
+        echo "::error::Refusing to promote '${ref}' (${sha}): it is not an ancestor of"
+        echo "origin/main, nor of any release/X.Y.x hotfix line."
+        echo "Only main-derived and hotfix-line images may be promoted to :prod. The"
+        echo "preview branch in particular is a force-rewritten PR composition and must"
+        echo "never reach prod, and an open release/X.Y.Z PR head is not a release yet."
     } >&2
     exit 1
 fi

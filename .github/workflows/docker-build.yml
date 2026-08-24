@@ -6,13 +6,27 @@ on:
     # `preview` is the PR-stacked composition built by sync-preview.yml. It is
     # force-rewritten on every PR open/sync/close, so expect frequent builds —
     # intended. Each push publishes two tags:
-    #   - `ghcr.io/trakrf/backend:sha-<short>`  — immutable, for traceability
+    #   - `ghcr.io/trakrf/backend:sha-<short>`  — idempotent, for traceability
     #   - `ghcr.io/trakrf/backend:preview`      — floating, for the GKE
     #     auto-track (TRA-483, ArgoCD Image Updater w/ digest strategy)
     # The `latest` tag stays gated on the default branch; the floating
     # `preview` tag is gated on `refs/heads/preview`. Prod uses semver tags
     # — no path for `preview` to promote into a stable ref.
-    branches: [main, preview]
+    #
+    # `sha-<short>` reads *idempotent*, not *immutable* (TRA-1125's third
+    # acceptance item, discharged in TRA-1127). A workflow re-run does rewrite
+    # it — but the version is a property of the commit now (TRA-1126), so the
+    # rewrite is byte-for-byte identical and the re-run is a no-op. The word was
+    # dangerously wrong while two builds of one commit could write *different*
+    # content there, which is what broke v1.4.0; it is now merely imprecise.
+    #
+    # `release/X.Y.x` is a hotfix line (TRA-1127): a maintenance branch cut from
+    # a shipped tag, which a patch on a released version lands on rather than on
+    # main. Without a push build there is no image for the `release` job below to
+    # tag. Note the `.x`. `release/X.Y.Z` is the ordinary release PR branch
+    # (docs/releasing.md step 1) and stays pull_request-only — a bare `release/*`
+    # here would build, and then tag, an unmerged release PR's head.
+    branches: [main, preview, 'release/*.x']
     # No `tags:` trigger, deliberately (TRA-1126). It existed only so a tag
     # build could re-resolve `git describe` after a merge had already baked a
     # dev-shaped version into the image. With the version declared in the commit
@@ -114,7 +128,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY_IMAGE }}
           # `preview` is given priority=50 (below `sha`'s default 100) so the
-          # immutable `sha-<short>` remains the primary version output — that
+          # commit-pinned `sha-<short>` remains the primary version output — that
           # keeps BUILD_TAG/VITE_BUILD_TAG pinned to a real commit instead of
           # the floating label, so /health and /version.json stay honest.
           tags: |
@@ -270,8 +284,19 @@ jobs:
   # The tag push uses the default GITHUB_TOKEN on purpose: pushes made with it
   # do not trigger workflows, so there is no path back into this workflow even
   # if a `tags:` trigger were ever reintroduced.
+  #
+  # TRA-1127 item 2: a hotfix line mints its tag exactly the same way, so the
+  # trigger is main plus `release/X.Y.x`. resolve-release-action.sh needs no
+  # change for it and assert-release-commit.sh needs none either — both bind a
+  # version to its tag's commit without caring which branch that commit is on.
+  # The `.x` is load-bearing: `refs/heads/release/*` would match the ordinary
+  # release PR branch `release/X.Y.Z`, whose head declares a clean VERSION
+  # before anyone has reviewed it, and mint vX.Y.Z off the unmerged proposal.
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' ||
+       (startsWith(github.ref, 'refs/heads/release/') && endsWith(github.ref, '.x')))
     runs-on: ubuntu-latest
     needs: merge
     permissions:
@@ -379,8 +404,19 @@ jobs:
   # (`build`, `lint-test`, `api-spec`, `main contract-tests must be green`)
   # would never report and the PR would sit permanently BLOCKED — the same
   # anti-recursion gate sync-preview.yml documents for its push to `preview`.
+  #
+  # That App installation needs `pull-requests: write` on top of the
+  # `contents: write` sync-preview.yml gave it. It did not have it on the v1.4.1
+  # release and this job died on `createPullRequest` with "Resource not
+  # accessible by integration" (TRA-1127 item 1) — a settings-side grant, not
+  # something this file can fix.
+  #
+  # main only. On a hotfix line the next `-dev` is not a minor bump, and the
+  # branch the PR would target is not main; the hotfix procedure sets VERSION
+  # explicitly when the line is cut, so there is nothing to bump back to
+  # (docs/releasing.md, Hotfixes).
   bump-back:
-    if: needs.release.outputs.action == 'create'
+    if: needs.release.outputs.action == 'create' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     needs: release
     permissions:

@@ -60,8 +60,14 @@ jobs:
               direction: 'asc'
             });
 
-            // Filter out draft PRs if desired
-            const activePRs = prs.filter(pr => !pr.draft);
+            // Drafts are excluded, and so is anything not based on main:
+            // preview is a composition OF MAIN, so a PR based elsewhere is not
+            // a candidate for it. Hotfix PRs target a `release/X.Y.x` line cut
+            // from a shipped tag (TRA-1127, docs/releasing.md) — stacking one
+            // here conflicts on VERSION and then tells its author to "resolve
+            // conflicts with the main branch", which is exactly the wrong move
+            // on a hotfix.
+            const activePRs = prs.filter(pr => !pr.draft && pr.base.ref === 'main');
 
             // Return PR numbers and their branch names
             const prInfo = activePRs.map(pr => ({
