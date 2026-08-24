@@ -373,8 +373,16 @@ func (s *Service) ForgotPassword(ctx context.Context, emailAddr, resetURL string
 		return nil
 	}
 
-	// Store token with 24h expiry
-	expiresAt := time.Now().Add(24 * time.Hour)
+	// Store token with 72h expiry.
+	//
+	// TRA-1135 / TRA-1164: this was 24h, and a corporate mail gateway that
+	// quarantines and later releases our messages (MCPSS runs Cisco IronPort)
+	// routinely delivered the link after it had already died. Nothing in our
+	// logs recorded that: the send succeeded and the token simply aged out, so
+	// the user clicked a dead link and we saw nothing. 72h survives a slow
+	// gateway and is still well short of the invitation flow's 7 days
+	// (services/orgs/invitations.go), which has never had this problem.
+	expiresAt := time.Now().Add(72 * time.Hour)
 	if err := s.storage.CreatePasswordResetToken(ctx, usr.ID, token, expiresAt); err != nil {
 		fmt.Printf("Warning: failed to store reset token: %v\n", err)
 		return nil
