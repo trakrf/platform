@@ -45,6 +45,5 @@
 
 ## Worktrees
 - Git worktrees live in `.claude/worktrees/` (gitignored) — where the native `EnterWorktree` tool writes
-- **`just bootstrap` is the first thing to run in a new worktree** — installs deps and generates the two gitignored `go:embed` targets. Without it `just validate` fails with `pattern frontend/dist: no matching files found`, naming neither the step nor the fix
-- Idempotent and near-instant when warm, so re-run it freely. Cold it takes a couple of minutes with no decisions in it — **run it backgrounded** at session start and let planning overlap it, rather than blocking or delegating it to a subagent
-- **An unbootstrapped tree can invalidate a verification, not just delay it.** Everything fails, so a deliberate-break check records the failure it expected and proves nothing. If a check fails, confirm bootstrap ran before believing the result
+- **`just bootstrap` first, backgrounded** — generates the gitignored `go:embed` targets; without it `just validate` fails with `pattern frontend/dist: no matching files found`. Idempotent, near-instant warm
+- **An unbootstrapped tree invalidates verifications** — everything fails, so a deliberate-break check proves nothing. Confirm bootstrap ran before believing a failure
