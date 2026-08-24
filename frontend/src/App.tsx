@@ -43,6 +43,10 @@ const SuperadminOrgsScreen = lazyWithRetry(() => import('@/components/Superadmin
 const MusteringScreen = lazyWithRetry(() => import('@/components/mustering/MusteringScreen'));
 const KitsScreen = lazyWithRetry(() => import('@/components/kits/KitsScreen'));
 const ProfileScreen = lazyWithRetry(() => import('@/components/ProfileScreen'));
+// TRA-1135. Lazy like every other screen: the flag is set on a handful of
+// operator-provisioned accounts, so this chunk should not ride in the bundle
+// everyone else downloads.
+const ForcedPasswordChangeScreen = lazyWithRetry(() => import('@/components/auth/ForcedPasswordChangeScreen'));
 
 // Capability-gated tabs (mustering, output-devices, org-geofence-defaults) are
 // valid hash targets here; whether they *resolve* is decided by the capability
@@ -63,6 +67,14 @@ export default function App() {
   // calls initialize() to flip isAuthenticated. Its presence on first paint
   // is the "answer not known yet" signal the auth gate needs (TRA-1057).
   const hasPersistedToken = useAuthStore((state) => !!state.token);
+  // TRA-1135 forced rotation. The profile is re-derived from the server on
+  // every load, so it wins once it has landed; the persisted login user covers
+  // the window before that. A session persisted before this field existed
+  // rehydrates without it, which reads as "not gated" — correct, since the
+  // server will say otherwise on the next profile fetch if it disagrees.
+  const mustChangePassword = useAuthStore(
+    (state) => state.profile?.must_change_password ?? state.user?.must_change_password ?? false
+  );
 
   useEffect(() => {
     initOpenReplay();
@@ -311,9 +323,37 @@ export default function App() {
     );
   };
 
+  // TRA-1135: a user still on the password an operator typed for them gets the
+  // change-password screen instead of the app — not instead of the tab content.
+  // Returning above the layout is what makes it undismissable: no sidebar, no
+  // header, no account menu, and no hash that routes anywhere else.
+  if (isAuthenticated && mustChangePassword) {
+    return (
+      <>
+        <Toaster
+          position="top-center"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#1f2937',
+              color: '#ffffff',
+              borderRadius: '8px',
+              border: '1px solid #374151',
+            },
+          }}
+        />
+        <ErrorBoundary name="ForcedPasswordChange">
+          <Suspense fallback={<LoadingScreen />}>
+            <ForcedPasswordChangeScreen />
+          </Suspense>
+        </ErrorBoundary>
+      </>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex relative">
-      <Toaster 
+      <Toaster
         position="top-center"
         toastOptions={{
           duration: 4000,

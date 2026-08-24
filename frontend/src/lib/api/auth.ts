@@ -25,6 +25,13 @@ export interface User {
   name: string;
   created_at: string;
   updated_at: string;
+  /**
+   * TRA-1135: set on accounts an operator provisioned with a bootstrap
+   * password. Optional because this record is persisted to localStorage —
+   * a session that predates the field rehydrates without it, and an absent
+   * value must read as "not gated" rather than throw.
+   */
+  must_change_password?: boolean;
 }
 
 export interface AuthResponse {
