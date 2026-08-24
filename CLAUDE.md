@@ -45,3 +45,5 @@
 
 ## Worktrees
 - Git worktrees live in `.claude/worktrees/` (gitignored) — where the native `EnterWorktree` tool writes
+- **`just bootstrap` first, backgrounded** — generates the gitignored `go:embed` targets; without it `just validate` fails with `pattern frontend/dist: no matching files found`. Idempotent, near-instant warm
+- **An unbootstrapped tree invalidates verifications** — everything fails, so a deliberate-break check proves nothing. Confirm bootstrap ran before believing a failure
