@@ -102,8 +102,12 @@ export const useDeviceStore = create<DeviceState>(createStoreWithTracking((set, 
     try {
       // Use new simplified DeviceManager.create pattern
       // This creates and connects in one step, and subscriptions are handled internally
+      //
+      // No transport mode to select any more: there is one transport, and a
+      // browser without Web Bluetooth is an error rather than a silent switch
+      // to fabricated data (TRA-1177 §5).
       await DeviceManager.create({
-        transport: { mode: 'auto' }
+        transport: {}
       });
 
       // Connection successful (create throws on failure)
