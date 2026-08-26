@@ -68,21 +68,37 @@ test.describe('Worker Log Level', () => {
     // Should not see DEBUG messages with WARN level
     expect(debugLogsAfterWarn.length).toBe(0);
 
-    // But we should see INFO/WARN/ERROR messages (at least the "Log level set to WARN" message)
-    const infoLogsAfterWarn = consoleLogs.filter(log =>
-      log.includes('[Worker] INFO') ||
-      log.includes('[Worker] WARN') ||
-      log.includes('[Worker] ERROR')
+    // Deliberately NOT asserting that something logged at WARN or above.
+    //
+    // The removed assertion expected `[Worker] INFO|WARN|ERROR` to be non-empty,
+    // reasoning "at least the 'Log level set to WARN' message". That message is
+    // emitted at INFO — which a WARN filter suppresses, by definition. So the
+    // assertion required the filter to leak in order to pass.
+    //
+    // Rewriting it to look for a WARN-level message instead would be no better:
+    // nothing is guaranteed to log at WARN or above during a quiet two-second
+    // window, so it would assert on incidental noise and fail whenever the
+    // device behaved itself.
+    //
+    // The claim this test exists to make is the one above — DEBUG is silenced
+    // when the level is WARN — and that is checked. (TRA-1179)
+    const aboveWarn = consoleLogs.filter(log =>
+      log.includes('[Worker] WARN') || log.includes('[Worker] ERROR')
     );
-
-    console.log(`INFO/WARN/ERROR logs after setting WARN: ${infoLogsAfterWarn.length}`);
-    expect(infoLogsAfterWarn.length).toBeGreaterThan(0);
+    console.log(`WARN/ERROR logs after setting WARN: ${aboveWarn.length}`);
 
     // Now switch to DEBUG level
     consoleLogs.length = 0;
 
     await page.click('[data-testid="menu-item-settings"]');
     await page.waitForTimeout(500);
+
+    // Advanced Settings collapses when the screen is left, so re-expand it.
+    // Without this the select exists but is not visible, and selectOption waits
+    // out the full 90s timeout — the wait-condition class presenting as
+    // slowness rather than as "not found" (TRA-1179).
+    await page.click('button:has-text("Advanced Settings")');
+    await page.waitForTimeout(200);
 
     // Find the select again after navigating back
     const logLevelSelect2 = page.getByTestId('worker-log-level');
