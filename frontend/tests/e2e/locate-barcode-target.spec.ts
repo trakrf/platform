@@ -78,7 +78,7 @@ async function typeTarget(p: Page, value: string) {
 
 test.describe.configure({ mode: 'serial' });
 
-test.describe('Locate barcode target acquisition (TRA-1121)', () => {
+test.describe('Locate barcode target acquisition (TRA-1121) @hardware', () => {
   test.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
     page.on('console', (msg) => consoleLines.push(`[${msg.type()}] ${msg.text()}`));
