@@ -47,9 +47,13 @@ After recent consolidation, the project uses simplified environment variables:
 # Bridge server configuration (simplified naming)
 BLE_MCP_HOST=localhost          # Bridge server host
 BLE_MCP_WS_PORT=8080           # Bridge server WebSocket port
-BLE_MCP_HTTP_PORT=8081         # Bridge server HTTP/MCP port
-BLE_MCP_HTTP_TOKEN=            # Optional auth token
 BLE_MCP_LOG_LEVEL=info         # Bridge server log level
+
+# There is no HTTP port. TRA-1161 replaced the bridge's HTTP/MCP server with a
+# stdio shim over a unix socket, so BLE_MCP_HTTP_PORT and BLE_MCP_HTTP_TOKEN no
+# longer exist. Set BLE_MCP_SOCKET_PATH only if you need a non-default socket;
+# the shim otherwise uses $XDG_RUNTIME_DIR/ble-bridge.sock, else
+# /tmp/ble-bridge-$UID.sock.
 
 # Device configuration
 BLE_DEVICE_NAME=CS108          # Device name/MAC address
@@ -129,15 +133,20 @@ pnpm test:e2e:mock <file>       # Specific test file
 
 ### 3. Manual Mock Server
 
+The bridge is a Python server. The npm package ships the browser mock and its
+test tooling, not a server binary — there is no `ble-mcp-test serve` to run.
+Start it from your ble-mcp-test checkout:
+
 ```bash
-# Start mock server manually
-pnpm dlx ble-mcp-test serve
+# Start the bridge manually
+just bridge          # or: uv run bridge/main.py
 
-# With custom port
-PORT=9090 pnpm dlx ble-mcp-test serve
+# With a custom WebSocket port
+BLE_MCP_WS_PORT=9090 just bridge
 
-# Check server status
-curl http://localhost:8081/status
+# Check it is listening — 426 Upgrade Required is the expected answer from a
+# WebSocket listener; connection refused means it is not running.
+curl -so /dev/null -w '%{http_code}\n' http://localhost:8080/
 ```
 
 ### 4. External Bridge Server
@@ -182,8 +191,8 @@ Configure via URL parameter: `?availability=<mode>`
 # Browser console
 localStorage.setItem('debug', 'ble:*')
 
-# Server logs
-DEBUG=* pnpm dlx ble-mcp-test serve
+# Server logs (from the ble-mcp-test checkout)
+LOG_LEVEL=DEBUG just bridge
 ```
 
 ### Monitor BLE Traffic
@@ -200,7 +209,7 @@ mcp__ble-mcp-test__get_connection_state
 ### Common Issues
 
 1. **"Device not found"**
-   - Check mock server is running: `curl http://localhost:8081/status`
+   - Check the bridge is running: `curl -so /dev/null -w '%{http_code}\n' http://localhost:8080/` (426 = listening)
    - Verify environment variables are set
    - Check browser console for injection confirmation
 
