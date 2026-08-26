@@ -39,7 +39,6 @@ export const HARDWARE_TEST_TIMEOUT_MS = 90000;
 export interface E2EConfig {
   bridge: {
     wsUrl: string;
-    httpUrl: string;
   };
   device: {
     serviceUuid: string;
@@ -75,7 +74,6 @@ export function getE2EConfig(): E2EConfig {
   return {
     bridge: {
       wsUrl: bleConfig.bridge.wsUrl,
-      httpUrl: bleConfig.bridge.httpUrl,
     },
     device: {
       serviceUuid: bleConfig.device.serviceUuid,
@@ -113,11 +111,6 @@ export { buildBridgeUrl } from '../config/ble-bridge.config';
 // Helper to get bridge WS URL
 export function getBridgeWsUrl(): string {
   return getE2EConfig().bridge.wsUrl;
-}
-
-// Helper to get bridge HTTP URL  
-export function getBridgeHttpUrl(): string {
-  return getE2EConfig().bridge.httpUrl;
 }
 
 // Legacy helper for compatibility during migration
