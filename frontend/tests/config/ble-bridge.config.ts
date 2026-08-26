@@ -7,8 +7,6 @@
  * Environment Variables:
  * - BLE_MCP_HOST: Bridge server hostname (default: localhost)
  * - BLE_MCP_WS_PORT: WebSocket port (default: 8080)
- * - BLE_MCP_HTTP_PORT: HTTP/MCP port (default: 8081)
- * - BLE_MCP_HTTP_TOKEN: Auth token for MCP
  * - BLE_SERVICE_UUID: BLE service UUID (default: 9800)
  * - BLE_WRITE_UUID: Write characteristic UUID (default: 9900)
  * - BLE_NOTIFY_UUID: Notify characteristic UUID (default: 9901)
@@ -32,16 +30,18 @@ const systemHostname = os.hostname();
 /**
  * Core BLE bridge configuration
  * All other configs derive from this
+ *
+ * There is no HTTP surface. TRA-1161 replaced ble-mcp-test's HTTP/MCP server
+ * with a PEP 723 stdio shim over a unix socket, so BLE_MCP_HTTP_PORT and
+ * BLE_MCP_HTTP_TOKEN no longer exist anywhere — see the guard in
+ * no-dead-http-config.test.ts before adding either back (TRA-1177 row H).
  */
 export interface BleBridgeConfig {
   // Bridge server settings
   bridge: {
     host: string;
     wsPort: string;
-    httpPort: string;
     wsUrl: string;
-    httpUrl: string;
-    token?: string;
   };
   
   // BLE device settings — selection is by service UUID only, never by name
@@ -66,9 +66,7 @@ export function getBleBridgeConfig(): BleBridgeConfig {
   // Core bridge server settings (BLE_MCP_* prefix for bridge server vars)
   const host = process.env.BLE_MCP_HOST || process.env.BLE_MCP_WS_HOST || 'localhost';
   const wsPort = process.env.BLE_MCP_WS_PORT || '8080';
-  const httpPort = process.env.BLE_MCP_HTTP_PORT || '8081';
-  const token = process.env.BLE_MCP_HTTP_TOKEN;
-  
+
   // BLE device settings - use constants from transport module
   const service = CS108_BLE_SERVICE_UUID;
   const write = CS108_BLE_WRITE_UUID;
@@ -79,16 +77,12 @@ export function getBleBridgeConfig(): BleBridgeConfig {
   
   // Build URLs from components (no more VITE_BLE_BRIDGE_URL duplication!)
   const wsUrl = `ws://${host}:${wsPort}`;
-  const httpUrl = `http://${host}:${httpPort}`;
-  
+
   return {
     bridge: {
       host,
       wsPort,
-      httpPort,
-      wsUrl,
-      httpUrl,
-      token
+      wsUrl
     },
     device: {
       service,
@@ -141,8 +135,7 @@ export function getE2EBridgeConfig() {
   const config = getBleBridgeConfig();
   return {
     bridge: {
-      wsUrl: config.bridge.wsUrl,
-      httpUrl: config.bridge.httpUrl
+      wsUrl: config.bridge.wsUrl
     },
     device: {
       serviceUuid: config.device.service,

@@ -1,1 +1,0 @@
-../node_modules/ble-mcp-test/dist/web-ble-mock.bundle.js

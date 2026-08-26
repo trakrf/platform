@@ -375,8 +375,17 @@ export function detectBluetoothSupport(): BluetoothSupport {
     hasBluetoothAPI = false;
   }
 
-  // ble-mcp-test injects a bridge without ever defining navigator.bluetooth,
-  // and it must keep reporting supported or Playwright loses its connect path.
+  // ble-mcp-test's injected mock *does* define navigator.bluetooth — verified
+  // against the 0.7.3 bundle, which assigns it directly — so hasBluetoothAPI is
+  // already true under the bridge and this flag is belt-and-braces rather than a
+  // second support path. vite.config.ts sets it only after confirming the
+  // injection took, which makes it a cheap corroborating signal worth keeping.
+  //
+  // Do not read it as evidence that the mock works without navigator.bluetooth;
+  // it does not. An earlier version of this comment claimed exactly that, and
+  // the claim was load-bearing enough to be worth correcting: TRA-1153 realigns
+  // mock-bluetooth.ts to the real BLE lifecycle, and someone reading the old
+  // wording would have taken it as a guarantee the mock never gave (TRA-1177).
   const isBridged = typeof window !== 'undefined' && !!window.__webBluetoothBridged;
 
   if (hasBluetoothAPI || isBridged) {

@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { getViteBridgeConfig } from './tests/config/vite-bridge.config';
+import { resolveMockBundlePath } from './tests/config/resolve-mock-bundle';
 
 // Define __dirname for ES modules
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -48,15 +49,23 @@ function injectBleBridgePlugin(env: Record<string, string>) {
         return html;
       }
 
-      // Load the ble-mcp-test bundle from public folder
-      const bundlePath = path.join(process.cwd(), 'public/web-ble-mock.bundle.js');
+      // Resolve through the package's exports map rather than a literal path
+      // into its dist/ — see tests/config/resolve-mock-bundle.ts (TRA-1177 §1).
+      //
+      // This deliberately throws where it used to `return html`. Serving the
+      // page without navigator.bluetooth is worse than failing: it presents as
+      // a dead reader rather than a packaging error, and injection only runs
+      // under VITE_BLE_BRIDGE_ENABLED (i.e. `pnpm dev:bridge`), where a missing
+      // mock makes the whole run worthless anyway.
       let bundleCode = '';
-
       try {
-        bundleCode = fs.readFileSync(bundlePath, 'utf-8');
+        bundleCode = fs.readFileSync(resolveMockBundlePath(), 'utf-8');
       } catch (err) {
-        console.error('[BLE Bridge Plugin] Failed to read bundle:', err);
-        return html;
+        throw new Error(
+          `[BLE Bridge Plugin] Failed to load the ble-mcp-test browser bundle. ` +
+            `Refusing to serve a page without navigator.bluetooth, which would ` +
+            `present as a dead reader. Cause: ${(err as Error).message}`
+        );
       }
 
       // Get shared configuration from ble-bridge-config

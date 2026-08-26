@@ -2,6 +2,7 @@ import React from 'react';
 import { useDeviceStore } from '@/stores/deviceStore';
 import { ReaderState } from '@/worker/types/reader';
 import { ConnectIcon } from '@/components/icons/ConnectIcon';
+import { useBluetoothSupport } from '@/hooks/useBluetoothSupport';
 
 /**
  * Start/Stop scan button for the kit flows — same contract as the Inventory
@@ -17,6 +18,11 @@ export const ScanControls: React.FC = () => {
   const scanButtonActive = useDeviceStore((state) => state.scanButtonActive);
   const toggleScanButton = useDeviceStore((state) => state.toggleScanButton);
   const [isReconnecting, setIsReconnecting] = React.useState(false);
+  // The same gate Header and SettingsScreen apply before calling connect().
+  // Without it this button reached TransportFactory on a browser with no Web
+  // Bluetooth, which used to mean a MockTransport streaming invented tags to a
+  // real user (TRA-1177 §5).
+  const { supported: isBrowserSupported } = useBluetoothSupport();
 
   const needsConnect =
     readerState === ReaderState.DISCONNECTED || readerState === ReaderState.ERROR;
@@ -24,6 +30,8 @@ export const ScanControls: React.FC = () => {
     readerState === ReaderState.BUSY || readerState === ReaderState.CONNECTING;
 
   const handleReconnect = async () => {
+    if (!isBrowserSupported) return;
+
     setIsReconnecting(true);
     const { connect, disconnect } = useDeviceStore.getState();
     try {
@@ -47,7 +55,7 @@ export const ScanControls: React.FC = () => {
       <button
         data-testid="kit-reconnect"
         onClick={handleReconnect}
-        disabled={isReconnecting}
+        disabled={isReconnecting || !isBrowserSupported}
         className="flex items-center px-4 py-2 rounded-lg font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         <ConnectIcon className="w-5 h-5 mr-2" />

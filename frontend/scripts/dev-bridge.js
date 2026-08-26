@@ -30,13 +30,14 @@ if (!envValidation.isValid) {
   process.exit(1);
 }
 
-// Build URLs from standard ble-mcp-test env vars
+// Build URLs from standard ble-mcp-test env vars.
+//
+// There is no HTTP surface any more: TRA-1161 replaced it with a stdio MCP
+// shim over a unix socket, so the HTTP port and token variables were deleted
+// everywhere (TRA-1177 row H).
 const host = process.env.BLE_MCP_HOST || process.env.BLE_MCP_WS_HOST || 'localhost';
 const wsPort = process.env.BLE_MCP_WS_PORT || '8080';
-const httpPort = process.env.BLE_MCP_HTTP_PORT || '8081';
 const BLE_BRIDGE_WS_URL = `ws://${host}:${wsPort}`;
-const BLE_BRIDGE_HTTP_URL = `http://${host}:${httpPort}`;
-const BLE_MCP_TOKEN = process.env.BLE_MCP_HTTP_TOKEN;
 
 // Parse URL to get host
 const wsUrl = new URL(BLE_BRIDGE_WS_URL);
@@ -44,63 +45,61 @@ const isLocalhost = wsUrl.hostname === 'localhost' || wsUrl.hostname === '127.0.
 
 console.log('🔌 BLE Bridge Configuration:');
 console.log(`   WebSocket URL: ${BLE_BRIDGE_WS_URL}`);
-console.log(`   HTTP URL: ${BLE_BRIDGE_HTTP_URL}`);
 console.log(`   Host: ${wsUrl.hostname}:${wsUrl.port}`);
-console.log(`   Auth: ${BLE_MCP_TOKEN ? 'Token configured' : 'No auth token'}`);
 console.log('');
 
 /**
- * Check if the bridge server is available via HTTP health endpoint
+ * Check whether the bridge is listening.
+ *
+ * There is no /health endpoint any more. This function used to fetch it on the
+ * HTTP port and exit(1) when it failed — which it always did, because TRA-1161
+ * deleted that server. So `pnpm dev:bridge` was broken outright rather than
+ * merely printing stale advice: it reported "bridge server is not available"
+ * with a healthy bridge running right there on the WebSocket port
+ * (TRA-1177 row H).
+ *
+ * The WebSocket port answers a plain HTTP request with 426 Upgrade Required.
+ * Any HTTP status proves something is listening and speaking the upgrade
+ * protocol; a connection error is the real "not running" signal.
  */
 async function checkBridgeServer() {
+  const probeUrl = `http://${host}:${wsPort}/`;
+
   try {
-    console.log(`🔍 Checking bridge server at ${BLE_BRIDGE_HTTP_URL}/health...`);
+    console.log(`🔍 Checking bridge server at ${probeUrl} ...`);
 
-    const headers = {};
-    if (BLE_MCP_TOKEN) {
-      headers['Authorization'] = `Bearer ${BLE_MCP_TOKEN}`;
-    }
-
-    const response = await fetch(`${BLE_BRIDGE_HTTP_URL}/health`, {
+    const response = await fetch(probeUrl, {
       method: 'GET',
-      headers,
       signal: AbortSignal.timeout(3000)
     });
 
-    if (response.ok) {
-      const health = await response.json();
-      console.log('✅ Bridge server is available');
-      console.log(`   Version: ${health.version || 'unknown'}`);
-      console.log(`   Status: ${health.status || 'unknown'}`);
-      return true;
-    } else {
-      console.log(`❌ Bridge server health check failed: HTTP ${response.status}`);
-      return false;
-    }
+    // 426 Upgrade Required is the expected answer from a WebSocket listener.
+    console.log(`✅ Bridge server is listening (HTTP ${response.status})`);
+    return true;
   } catch (err) {
-    console.log(`❌ Bridge server connection failed: ${err.message}`);
+    console.log(`❌ Bridge server not reachable at ${probeUrl}: ${err.message}`);
     return false;
   }
 }
 
 /**
- * Show MCP configuration instructions
+ * Show MCP configuration instructions.
+ *
+ * The MCP server is a PEP 723 stdio shim that connects to a unix socket the
+ * bridge listens on ($BLE_MCP_SOCKET_PATH, else $XDG_RUNTIME_DIR/ble-bridge.sock,
+ * else /tmp/ble-bridge-$UID.sock, mode 0600). The `--transport http` line that
+ * used to be printed here registered against a port nothing serves, generating
+ * a dead endpoint fresh on every run (TRA-1177 rows F and H). ble-mcp-test's
+ * docs/MCP-SERVER.md is the reference for the tools and the socket contract.
  */
 function showMcpInstructions() {
   console.log('\n📋 MCP Configuration Instructions:');
-  console.log('   For better development experience, configure Claude with MCP:');
+  console.log('   For real-time BLE monitoring in Claude while developing:');
   console.log('');
-  
-  const httpUrl = BLE_BRIDGE_HTTP_URL.replace(/\/$/, ''); // Remove trailing slash
-  
-  if (BLE_MCP_TOKEN) {
-    console.log(`   claude mcp add ble-mcp-test --transport http ${httpUrl} --header "Authorization: Bearer $BLE_MCP_HTTP_TOKEN"`);
-  } else {
-    console.log(`   claude mcp add ble-mcp-test --transport http ${httpUrl}`);
-  }
-  
+  console.log('   claude mcp add ble-mcp-test -- uv run --script /path/to/ble-mcp-test/mcp-server/ble_mcp.py');
   console.log('');
-  console.log('   This enables real-time BLE monitoring in Claude while developing.');
+  console.log('   Replace /path/to/ble-mcp-test with your checkout. The shim talks to');
+  console.log('   the bridge over a unix socket — there is no HTTP port to configure.');
   console.log('');
 }
 
@@ -145,18 +144,14 @@ async function main() {
 
     if (isLocalhost) {
       console.error('   The bridge server needs to be running on localhost.');
-      console.error('   You can start it with:');
+      console.error('   Start it from your ble-mcp-test checkout with:');
       console.error('');
-      console.error('   pnpm dlx ble-mcp-test serve --port ' + wsUrl.port);
+      console.error('   just bridge     # or: uv run bridge/main.py');
       console.error('');
-      console.error('   Or use the test:e2e:with-app command which starts it automatically.');
+      console.error('   The bridge is a Python server now — there is no npm bin to run.');
     } else {
       console.error(`   The configured bridge server at ${wsUrl.hostname}:${wsUrl.port} is not responding.`);
       console.error('   Please ensure the remote server is running and accessible.');
-
-      if (BLE_MCP_TOKEN) {
-        console.error('   Note: Auth token is configured, make sure it\'s correct.');
-      }
     }
 
     process.exit(1);
