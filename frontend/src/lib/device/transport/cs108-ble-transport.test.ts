@@ -241,3 +241,62 @@ describe('CS108BLETransport teardown ownership', () => {
     expect(w.__TRANSPORT_MANAGER__).toBeUndefined();
   });
 });
+
+/**
+ * TRA-1179 — a failing `stopNotifications()` must not vanish.
+ *
+ * `disconnect()` wrapped it in `try { … } catch { /* comment *\/ }` — an empty
+ * catch. That was harmless only because the ble-mcp-test mock's
+ * `stopNotifications()` is a no-op that returns `this` and cannot fail.
+ *
+ * TRA-1153 makes it a real subscription gate, at which point it can reject and
+ * the empty catch would discard it in silence: no log, no throw, no failed test.
+ * That is CLAUDE.md's first bug class, dormant, waiting for a precondition that
+ * a correctness fix elsewhere is about to supply.
+ *
+ * Teardown must still complete — the requirement is visibility, not propagation.
+ * Same shape as #583 for writes: it did not make writes blocking, it made
+ * failures observable.
+ */
+describe('CS108BLETransport teardown error visibility', () => {
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).__TRANSPORT_MANAGER__;
+  });
+
+  function transportMidDisconnect(stopNotifications: () => Promise<void>) {
+    const transport = new CS108BLETransport();
+    const posted: Array<{ type: string; error?: string }> = [];
+
+    Object.assign(transport as unknown as Record<string, unknown>, {
+      notifyCharacteristic: { stopNotifications, removeEventListener: () => {} },
+      device: { removeEventListener: () => {}, gatt: { connected: false } },
+      messagePort: {
+        postMessage: (m: unknown) => posted.push(m as { type: string; error?: string }),
+        close: () => {}
+      }
+    });
+
+    return { transport, posted };
+  }
+
+  it('reports a rejecting stopNotifications instead of swallowing it', async () => {
+    const { transport, posted } = transportMidDisconnect(() =>
+      Promise.reject(new Error('transport gone'))
+    );
+
+    await transport.disconnect();
+
+    const err = posted.find(m => m.type === 'ble:error');
+    expect(err).toBeDefined();
+    expect(err?.error).toContain('transport gone');
+  });
+
+  it('still completes teardown when stopNotifications rejects', async () => {
+    const { transport } = transportMidDisconnect(() =>
+      Promise.reject(new Error('transport gone'))
+    );
+
+    await expect(transport.disconnect()).resolves.toBeUndefined();
+    expect(transport.isConnected()).toBe(false);
+  });
+});

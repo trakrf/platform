@@ -207,13 +207,22 @@ export class CS108BLETransport implements Transport {
     if (this.notifyCharacteristic) {
       try {
         await this.notifyCharacteristic.stopNotifications();
-        this.notifyCharacteristic.removeEventListener(
-          'characteristicvaluechanged',
-          this.boundHandleNotifications
-        );
       } catch (e) {
-        // Error stopping notifications
+        // Report, do not rethrow: teardown must still complete. Visibility is
+        // the requirement, not propagation — the same trade #583 made for
+        // writes. This catch was dead while stopNotifications() was a no-op;
+        // TRA-1153 makes it a real gate that can reject (TRA-1179).
+        this.reportTransportError(
+          `stopNotifications failed: ${e instanceof Error ? e.message : String(e)}`
+        );
       }
+
+      // Unhook regardless — a listener left on a characteristic we are dropping
+      // is exactly the orphan cleanup() exists to prevent.
+      this.notifyCharacteristic.removeEventListener(
+        'characteristicvaluechanged',
+        this.boundHandleNotifications
+      );
     }
     
     // Remove disconnect listener
@@ -331,7 +340,7 @@ export class CS108BLETransport implements Transport {
   private async queueWrite(data: Uint8Array): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
       if (this.commandQueue.length >= this.MAX_QUEUE_LENGTH) {
-        this.reportWriteFailure('Command queue full, write dropped');
+        this.reportTransportError('Command queue full, write dropped');
         resolve(false);
         return;
       }
@@ -359,7 +368,7 @@ export class CS108BLETransport implements Transport {
     
     try {
       if (!this.isConnected()) {
-        this.reportWriteFailure('Transport not connected, write dropped');
+        this.reportTransportError('Transport not connected, write dropped');
         command.resolve(false);
         return;
       }
@@ -390,7 +399,7 @@ export class CS108BLETransport implements Transport {
         // Put command back at front of queue
         this.commandQueue.unshift(command);
       } else {
-        this.reportWriteFailure(errorMessage);
+        this.reportTransportError(errorMessage);
         command.resolve(false);
       }
     } finally {
@@ -406,7 +415,7 @@ export class CS108BLETransport implements Transport {
    * "command never left", so every dropped write surfaced only as the command's
    * own 5s timeout. Two of the three failure paths previously reported nothing.
    */
-  private reportWriteFailure(error: string): void {
+  private reportTransportError(error: string): void {
     console.error('Write failed:', error);
     if (this.messagePort) {
       this.messagePort.postMessage({ type: 'ble:error', error } as BLEMessage);
