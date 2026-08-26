@@ -411,3 +411,46 @@ describe('CS108BLETransport disconnect awaits the GATT close', () => {
     expect(closed).toBe(true);
   });
 });
+
+/**
+ * TRA-1179 — a retry must leave a trace.
+ *
+ * The retry branch was silent: the only marker was a `// Retrying write after
+ * delay` *comment*. So a retry firing and a retry never firing were
+ * indistinguishable from outside, which is why nobody noticed that
+ * `retryDelays` summed to 7000ms inside a 2500ms command timeout — the path had
+ * been unobservable for as long as it had been wrong.
+ *
+ * It also means a green hardware run proves nothing about this path: if the
+ * mechanism cannot announce itself, "no issues" and "never executed" look the
+ * same. Pin the observability, not just the behaviour.
+ */
+describe('CS108BLETransport retry observability', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('logs each retry with attempt, delay and cause', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const transport = new CS108BLETransport({ retryCount: 2, retryDelays: [1, 1] });
+
+    Object.assign(transport as unknown as Record<string, unknown>, {
+      device: {},
+      server: { connected: true },
+      writeCharacteristic: {
+        writeValue: () => Promise.reject(new Error('GATT operation already in progress'))
+      },
+      messagePort: { postMessage: () => {} }
+    });
+
+    await (transport as unknown as {
+      queueWrite: (d: Uint8Array) => Promise<boolean>;
+    }).queueWrite(new Uint8Array([0x01]));
+
+    const retryLogs = warn.mock.calls.filter(c => String(c[0]).includes('retry'));
+
+    expect(retryLogs.length).toBeGreaterThan(0);
+    // The cause must travel with it — a retry count alone does not tell you why.
+    expect(String(retryLogs[0][0])).toContain('GATT operation already in progress');
+  });
+});

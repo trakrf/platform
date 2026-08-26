@@ -418,8 +418,17 @@ export class CS108BLETransport implements Transport {
 
       if (this.isRetryable(errorMessage) && command_.retriesLeft > 0 && withinBudget) {
         command_.retriesLeft--;
+        const attempt = this.retryCount - command_.retriesLeft;
 
-        // Retrying write after delay
+        // Leave a trace. This branch used to be silent — the only marker was a
+        // comment — so a retry firing and a retry never firing looked identical
+        // from outside. That is how `retryDelays` came to sum to 7000ms inside a
+        // 2500ms command timeout without anyone noticing: the path had been
+        // unobservable for as long as it had been wrong (TRA-1179).
+        console.warn(
+          `[CS108BLETransport] write retry ${attempt}/${this.retryCount} in ${delay}ms: ${errorMessage}`
+        );
+
         await new Promise(r => setTimeout(r, delay));
 
         // Put command back at front of queue
@@ -458,7 +467,8 @@ export class CS108BLETransport implements Transport {
   }
 
   private reportTransportError(error: string): void {
-    console.error('Write failed:', error);
+    // Not "write failed" any more — teardown reports through here too.
+    console.error('[CS108BLETransport]', error);
     if (this.messagePort) {
       this.messagePort.postMessage({ type: 'ble:error', error } as BLEMessage);
     }
