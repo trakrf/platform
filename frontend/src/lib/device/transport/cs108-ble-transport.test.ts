@@ -300,3 +300,114 @@ describe('CS108BLETransport teardown error visibility', () => {
     expect(transport.isConnected()).toBe(false);
   });
 });
+
+/**
+ * TRA-1179 — the retry budget must fit inside the command timeout it lives in.
+ *
+ * `retryDelays` was [500, 1500, 5000] with retryCount 3, nested inside
+ * `CommandManager.DEFAULT_TIMEOUT = 2500ms` (worker/cs108/command.ts:40). Worst
+ * case: 7000ms of sleeping for a command that rejected at 2500ms — and the retry
+ * then *still issued the write*, delivering a stale command into the stream
+ * after its owner had given up. The third delay alone is 2x the timeout.
+ *
+ * A write nobody is waiting for is not a retry, it is an injection.
+ *
+ * Also: 'GATT Server is disconnected' was treated as retryable. A disconnected
+ * server does not recover by waiting, and a late write landing on a reconnected
+ * link is the most harmful version of the above.
+ */
+describe('CS108BLETransport write retry budget', () => {
+  it('does not sleep longer than the command budget across all retries', () => {
+    const transport = new CS108BLETransport();
+    const priv = transport as unknown as { retryDelays: number[]; WRITE_BUDGET_MS: number };
+
+    const total = priv.retryDelays.reduce((a, b) => a + b, 0);
+
+    expect(total).toBeLessThanOrEqual(priv.WRITE_BUDGET_MS);
+  });
+
+  it('abandons a retry once the budget has elapsed rather than writing late', async () => {
+    const transport = new CS108BLETransport({ retryCount: 3, retryDelays: [1, 1, 1] });
+    const posted: Array<{ type: string }> = [];
+    let writes = 0;
+
+    Object.assign(transport as unknown as Record<string, unknown>, {
+      device: {},
+      server: { connected: true },
+      writeCharacteristic: {
+        writeValue: () => {
+          writes++;
+          return Promise.reject(new Error('GATT operation already in progress'));
+        }
+      },
+      messagePort: { postMessage: (m: unknown) => posted.push(m as { type: string }) }
+    });
+
+    const priv = transport as unknown as { queueWrite: (d: Uint8Array) => Promise<boolean> };
+
+    const ok = await priv.queueWrite(new Uint8Array([0x01]));
+
+    expect(ok).toBe(false);
+    expect(writes).toBeLessThanOrEqual(4);
+    expect(posted.some(m => m.type === 'ble:error')).toBe(true);
+  });
+
+  it('does not retry a disconnected GATT server', () => {
+    const transport = new CS108BLETransport();
+    const priv = transport as unknown as { isRetryable: (m: string) => boolean };
+
+    expect(priv.isRetryable('GATT operation already in progress')).toBe(true);
+    expect(priv.isRetryable('Device busy')).toBe(true);
+    expect(priv.isRetryable('GATT Server is disconnected')).toBe(false);
+  });
+});
+
+/**
+ * TRA-1179 / TRA-1153 cross-repo contract — `gatt.disconnect()` must be awaited.
+ *
+ * Real Web Bluetooth returns `void` here, so nothing was awaited and nothing
+ * needed to be. The ble-mcp-test mock returns a settleable value, and per
+ * TRA-1153 the command-path release lands when the *server* processes the
+ * socket close — not when `server.connected` flips, which happens synchronously
+ * before it.
+ *
+ * So a fire-and-forget disconnect lets the next connect race ahead of the
+ * release and be refused as busy **by its own previous session** — an error that
+ * reads as an ownership bug rather than a lifecycle one. The bridge session hit
+ * exactly this in its e2e helpers and had to fix it twice.
+ *
+ * `await Promise.resolve(...)` is correct against both: a no-op for `void`, a
+ * real await for a thenable.
+ */
+describe('CS108BLETransport disconnect awaits the GATT close', () => {
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).__TRANSPORT_MANAGER__;
+  });
+
+  it('does not resolve before a promise-returning gatt.disconnect settles', async () => {
+    const transport = new CS108BLETransport();
+    let closed = false;
+
+    Object.assign(transport as unknown as Record<string, unknown>, {
+      device: {
+        removeEventListener: () => {},
+        gatt: {
+          connected: true,
+          disconnect: () =>
+            new Promise<void>(r =>
+              setTimeout(() => {
+                closed = true;
+                r();
+              }, 5)
+            )
+        }
+      },
+      messagePort: { postMessage: () => {}, close: () => {} }
+    });
+
+    await transport.disconnect();
+
+    // If disconnect() returned before the close settled, this is still false.
+    expect(closed).toBe(true);
+  });
+});
