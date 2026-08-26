@@ -1,6 +1,16 @@
 /**
- * Trigger simulation utilities for E2E tests
- * Uses ble-mcp-test v0.7.0 testing API with testSimulateNotification
+ * Trigger simulation utilities for E2E tests.
+ *
+ * Injects CS108 trigger packets through the ble-mcp-test testing API
+ * (`navigator.bluetooth.testing.simulateNotification`) into the notify
+ * characteristic the product itself subscribed to.
+ *
+ * The helpers deliberately do NOT call `startNotifications()`. They target
+ * `window.__TRANSPORT_MANAGER__.notifyCharacteristic`, which is the same
+ * characteristic instance `Cs108BleTransport` subscribed before exposing it,
+ * so the subscription already exists by the time any helper runs. See
+ * TRA-1179 Deliverable 1 for the evidence behind that claim, and TRA-1153 for
+ * the mock-side lifecycle changes this file is written to survive.
  */
 
 import type { Page } from '@playwright/test';
@@ -8,117 +18,160 @@ import { ReaderState } from './device-state';
 import { cs108TriggerPressPacket, cs108TriggerReleasePacket } from '../../config/cs108.config';
 
 /**
- * Simulate trigger press using ble-mcp-test v0.7.0 testing API with retries
- * @param page - Playwright page
- * @param maxRetries - Maximum number of retry attempts (default 3)
- * @returns Success status, message, and trigger state
+ * How long to wait for `characteristicvaluechanged` after injecting a packet.
+ *
+ * Dispatch is synchronous in the current mock, so this normally resolves on the
+ * first microtask. The budget exists so that a delivery path which becomes
+ * asynchronous (TRA-1153) degrades into a slower pass rather than a hard fail.
  */
-export async function simulateTriggerPress(page: Page, maxRetries: number = 3): Promise<{ success: boolean; message: string; triggerState: boolean }> {
-  // First check the initial trigger state
-  const initialState = await getTriggerState(page);
-  
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    console.log(`[Trigger] Press attempt ${attempt}/${maxRetries}`);
-    
-    // Hook into characteristicvaluechanged event to verify notification dispatch
-    const result = await page.evaluate(async (packet) => {
-      // Check if the v0.7.0 testing API exists
+const NOTIFICATION_DELIVERY_TIMEOUT_MS = 1000;
+
+/** Diagnostics returned from the in-page injection, surfaced on failure. */
+interface InjectionResult {
+  success: boolean;
+  message: string;
+  hasTestingApi?: boolean;
+  hasBluetoothApi?: boolean;
+  hasTransportManager?: boolean;
+  hasMockFlag?: boolean;
+  eventReceived?: boolean;
+  eventData?: number[] | null;
+  error?: string;
+}
+
+/**
+ * Inject one trigger packet and confirm it reached the transport's listener.
+ *
+ * Shared by press and release, which previously carried this logic duplicated
+ * verbatim — so a fix to one silently left the other wrong.
+ */
+async function injectTriggerPacket(
+  page: Page,
+  packet: number[],
+  action: 'press' | 'release'
+): Promise<InjectionResult> {
+  return page.evaluate(
+    async ({ packet, action, timeoutMs }): Promise<InjectionResult> => {
       if (!navigator.bluetooth?.testing?.simulateNotification) {
-        console.log('[DEBUG] Testing API not found, checking structure:');
-        console.dir(navigator.bluetooth);
-        console.dir(navigator.bluetooth?.testing);
-        return { 
-          success: false, 
-          message: 'TESTING_API_NOT_FOUND: navigator.bluetooth.testing.simulateNotification not available. Check ble-mcp-test v0.7.0+ mock is loaded.',
+        return {
+          success: false,
+          message:
+            'TESTING_API_NOT_FOUND: navigator.bluetooth.testing.simulateNotification not available. Check the ble-mcp-test mock is loaded.',
           hasTestingApi: false,
           hasBluetoothApi: !!navigator.bluetooth,
           hasMockFlag: !!window?.__webBluetoothBridged
         };
       }
-      
-      // Get the current notify characteristic from transport manager
+
+      // The characteristic the product subscribed to. Taking it by reference —
+      // rather than re-resolving it via getCharacteristic() — is what keeps the
+      // helper on the subscribed instance: the mock currently mints a fresh
+      // characteristic object on every getCharacteristic() call.
       const tm = window.__TRANSPORT_MANAGER__;
       if (!tm?.notifyCharacteristic) {
-        return { 
-          success: false, 
-          message: 'NOTIFY_CHAR_NOT_FOUND: No notify characteristic found in transport manager. Ensure device is connected.',
+        return {
+          success: false,
+          message:
+            'NOTIFY_CHAR_NOT_FOUND: No notify characteristic found in transport manager. Ensure device is connected.',
           hasTestingApi: true,
           hasTransportManager: !!tm
         };
       }
-      
-      // Set up event listener to verify the notification reaches the transport
-      let eventReceived = false;
-      let eventData: Uint8Array | null = null;
-      
+      const characteristic = tm.notifyCharacteristic;
+
+      let eventData: number[] | null = null;
+      let signalReceived: () => void = () => {};
+      const received = new Promise<void>((resolve) => {
+        signalReceived = resolve;
+      });
+
       const eventHandler = (event: Event) => {
-        const bleEvent = event as Event & { target?: { value?: DataView } };
-        if (bleEvent?.target?.value) {
-          eventReceived = true;
-          eventData = new Uint8Array(bleEvent.target.value.buffer);
-          console.log('[Trigger] CharacteristicValueChanged event received:', Array.from(eventData).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
-        }
+        const value = (event as Event & { target?: { value?: DataView } }).target?.value;
+        if (!value) return;
+        // Honour the view window. A real DataView (TRA-1153) may be a slice of a
+        // larger ArrayBuffer; reading .buffer alone takes the whole backing
+        // store and yields wrong bytes in a plausible-looking shape.
+        eventData = Array.from(
+          new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+        );
+        console.log(
+          `[Trigger] characteristicvaluechanged received:`,
+          eventData.map((b) => '0x' + b.toString(16).padStart(2, '0')).join(' ')
+        );
+        signalReceived();
       };
-      
-      tm.notifyCharacteristic.addEventListener('characteristicvaluechanged', eventHandler);
-      
+
+      characteristic.addEventListener('characteristicvaluechanged', eventHandler);
+
       try {
-        // Use the testing API for simulation (ble-mcp-test v0.7+)
-        if (navigator.bluetooth?.testing?.simulateNotification) {
-          const { simulateNotification } = navigator.bluetooth.testing;
-          await simulateNotification({
-            characteristic: tm.notifyCharacteristic,
-            data: new Uint8Array(packet)
-          });
-        } else {
-          // Fallback: Create and dispatch the event manually
-          const dataView = new DataView(new Uint8Array(packet).buffer);
-          const event = new Event('characteristicvaluechanged');
-          Object.defineProperty(event, 'target', {
-            value: {
-              value: dataView
-            },
-            writable: false
-          });
-          tm.notifyCharacteristic.dispatchEvent(event);
-        }
+        await navigator.bluetooth.testing.simulateNotification({
+          characteristic,
+          data: new Uint8Array(packet)
+        });
 
-        // Give a brief moment for synchronous event dispatch
-        // The event should fire immediately
-        let waited = 0;
-        while (!eventReceived && waited < 50) {
-          // Busy wait for a very short time to catch immediate events
-          const start = Date.now();
-          while (Date.now() - start < 2) { /* busy wait */ }
-          waited += 2;
-        }
-
-        tm.notifyCharacteristic.removeEventListener('characteristicvaluechanged', eventHandler);
+        // Await delivery instead of busy-waiting on it. The previous spin loop
+        // blocked the event loop for up to 50ms, so it could only ever observe a
+        // synchronous dispatch — an async one would be starved out and fail
+        // 100% of the time while reading as a mock defect.
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const eventReceived = await Promise.race([
+          received.then(() => true),
+          new Promise<boolean>((resolve) => {
+            timer = setTimeout(() => resolve(false), timeoutMs);
+          })
+        ]);
+        if (timer !== undefined) clearTimeout(timer);
 
         return {
           success: eventReceived,
-          message: eventReceived ?
-            'NOTIFICATION_SENT: Trigger press packet injected successfully' :
-            'NOTIFICATION_FAILED: Event was dispatched but not received',
-          hasTestingApi: !!navigator.bluetooth?.testing?.simulateNotification,
+          message: eventReceived
+            ? `NOTIFICATION_SENT: Trigger ${action} packet injected successfully`
+            : `NOTIFICATION_FAILED: Event dispatched but not received within ${timeoutMs}ms`,
+          hasTestingApi: true,
           hasTransportManager: true,
           eventReceived,
-          eventData: eventData ? Array.from(eventData) : null
+          eventData
         };
       } catch (e) {
-        tm.notifyCharacteristic.removeEventListener('characteristicvaluechanged', eventHandler);
-        return { 
-          success: false, 
+        return {
+          success: false,
           message: `NOTIFICATION_ERROR: Failed to inject packet - ${e}`,
           hasTestingApi: true,
           hasTransportManager: true,
           error: String(e)
         };
+      } finally {
+        characteristic.removeEventListener('characteristicvaluechanged', eventHandler);
       }
-    }, Array.from(cs108TriggerPressPacket));
+    },
+    { packet, action, timeoutMs: NOTIFICATION_DELIVERY_TIMEOUT_MS }
+  );
+}
+
+/**
+ * Drive one trigger transition to completion: inject, confirm the packet
+ * reached the transport, then wait for the device store to reflect it.
+ *
+ * @param page - Playwright page
+ * @param action - Which transition to simulate
+ * @param maxRetries - Maximum number of retry attempts (default 3)
+ */
+async function simulateTrigger(
+  page: Page,
+  action: 'press' | 'release',
+  maxRetries: number = 3
+): Promise<{ success: boolean; message: string; triggerState: boolean }> {
+  const packet = action === 'press' ? cs108TriggerPressPacket : cs108TriggerReleasePacket;
+  const desiredState = action === 'press';
+  const initialState = await getTriggerState(page);
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    console.log(`[Trigger] ${action} attempt ${attempt}/${maxRetries}`);
+
+    const result = await injectTriggerPacket(page, Array.from(packet), action);
 
     if (!result.success) {
-      console.error(`[Trigger] Press simulation failed on attempt ${attempt}:`, result.message);
+      console.error(`[Trigger] ${action} simulation failed on attempt ${attempt}:`, result.message);
       console.error('[Trigger] Diagnostics:', {
         hasTestingApi: result.hasTestingApi,
         hasBluetoothApi: result.hasBluetoothApi,
@@ -126,224 +179,74 @@ export async function simulateTriggerPress(page: Page, maxRetries: number = 3): 
         hasMockFlag: result.hasMockFlag,
         error: result.error
       });
-      
+
       if (attempt === maxRetries) {
         return { ...result, triggerState: initialState };
       }
-      
-      // Wait before retry
+
       await page.waitForTimeout(200);
       continue;
     }
 
-    // Log event dispatch verification
-    if (result.eventReceived && result.eventData) {
-      console.log('[Trigger] Event dispatch verified - data reached transport layer');
-    } else {
-      console.warn('[Trigger] Event dispatch not verified - notification may not have reached transport');
-    }
+    console.log('[Trigger] Event dispatch verified - data reached transport layer');
 
-    // Wait up to 500ms for the state to update
+    // Wait up to 500ms for the store to catch up with the injected packet.
     const startTime = Date.now();
     while (Date.now() - startTime < 500) {
       const triggerState = await getTriggerState(page);
-      if (triggerState === true) {
-        console.log('[Trigger] Press confirmed - state changed from', initialState, 'to', triggerState);
-        return { 
-          success: true, 
-          message: 'STATE_UPDATED: Trigger press successful and state confirmed',
-          triggerState: true 
+      if (triggerState === desiredState) {
+        console.log(`[Trigger] ${action} confirmed - state changed from`, initialState, 'to', triggerState);
+        return {
+          success: true,
+          message: `STATE_UPDATED: Trigger ${action} successful and state confirmed`,
+          triggerState: desiredState
         };
       }
       await page.waitForTimeout(50);
     }
 
-    // State didn't update on this attempt
     const finalState = await getTriggerState(page);
     console.warn(`[Trigger] State did not update on attempt ${attempt}/${maxRetries}`);
     console.warn('[Trigger] Initial state:', initialState, '| Final state:', finalState);
-    
+
     if (attempt < maxRetries) {
-      console.log('[Trigger] Retrying press simulation...');
-      await page.waitForTimeout(300); // Longer wait between retries
+      console.log(`[Trigger] Retrying ${action} simulation...`);
+      await page.waitForTimeout(300);
     }
   }
 
-  // All retries exhausted
   const finalState = await getTriggerState(page);
-  return { 
-    success: false, 
-    message: `STATE_NOT_UPDATED: All ${maxRetries} attempts failed. Trigger state did not change from ${initialState} to true. Check deviceManager notification handler.`,
-    triggerState: finalState 
+  return {
+    success: false,
+    message: `STATE_NOT_UPDATED: All ${maxRetries} attempts failed. Trigger state did not change from ${initialState} to ${desiredState}. Check deviceManager notification handler.`,
+    triggerState: finalState
   };
 }
 
 /**
- * Simulate trigger release using ble-mcp-test v0.7.0 testing API with retries
+ * Simulate trigger press with retries
  * @param page - Playwright page
  * @param maxRetries - Maximum number of retry attempts (default 3)
  * @returns Success status, message, and trigger state
  */
-export async function simulateTriggerRelease(page: Page, maxRetries: number = 3): Promise<{ success: boolean; message: string; triggerState: boolean }> {
-  // First check the initial trigger state
-  const initialState = await getTriggerState(page);
-  
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    console.log(`[Trigger] Release attempt ${attempt}/${maxRetries}`);
-    
-    // Hook into characteristicvaluechanged event to verify notification dispatch
-    const result = await page.evaluate(async (packet) => {
-      // Check if the v0.7.0 testing API exists
-      if (!navigator.bluetooth?.testing?.simulateNotification) {
-        return { 
-          success: false, 
-          message: 'TESTING_API_NOT_FOUND: navigator.bluetooth.testing.simulateNotification not available. Check ble-mcp-test v0.7.0+ mock is loaded.',
-          hasTestingApi: false,
-          hasBluetoothApi: !!navigator.bluetooth,
-          hasMockFlag: !!window?.__webBluetoothBridged
-        };
-      }
-      
-      // Get the current notify characteristic from transport manager
-      const tm = window.__TRANSPORT_MANAGER__;
-      if (!tm?.notifyCharacteristic) {
-        return { 
-          success: false, 
-          message: 'NOTIFY_CHAR_NOT_FOUND: No notify characteristic found in transport manager. Ensure device is connected.',
-          hasTestingApi: true,
-          hasTransportManager: !!tm
-        };
-      }
-      
-      // Set up event listener to verify the notification reaches the transport
-      let eventReceived = false;
-      let eventData: Uint8Array | null = null;
-      
-      const eventHandler = (event: Event) => {
-        const bleEvent = event as Event & { target?: { value?: DataView } };
-        if (bleEvent?.target?.value) {
-          eventReceived = true;
-          eventData = new Uint8Array(bleEvent.target.value.buffer);
-          console.log('[Trigger] CharacteristicValueChanged event received:', Array.from(eventData).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
-        }
-      };
-      
-      tm.notifyCharacteristic.addEventListener('characteristicvaluechanged', eventHandler);
-      
-      try {
-        // Use the testing API for simulation (ble-mcp-test v0.7+)
-        if (navigator.bluetooth?.testing?.simulateNotification) {
-          const { simulateNotification } = navigator.bluetooth.testing;
-          await simulateNotification({
-            characteristic: tm.notifyCharacteristic,
-            data: new Uint8Array(packet)
-          });
-        } else {
-          // Fallback: Create and dispatch the event manually
-          const dataView = new DataView(new Uint8Array(packet).buffer);
-          const event = new Event('characteristicvaluechanged');
-          Object.defineProperty(event, 'target', {
-            value: {
-              value: dataView
-            },
-            writable: false
-          });
-          tm.notifyCharacteristic.dispatchEvent(event);
-        }
+export async function simulateTriggerPress(
+  page: Page,
+  maxRetries: number = 3
+): Promise<{ success: boolean; message: string; triggerState: boolean }> {
+  return simulateTrigger(page, 'press', maxRetries);
+}
 
-        // Give a brief moment for synchronous event dispatch
-        // The event should fire immediately
-        let waited = 0;
-        while (!eventReceived && waited < 50) {
-          // Busy wait for a very short time to catch immediate events
-          const start = Date.now();
-          while (Date.now() - start < 2) { /* busy wait */ }
-          waited += 2;
-        }
-
-        tm.notifyCharacteristic.removeEventListener('characteristicvaluechanged', eventHandler);
-
-        return {
-          success: eventReceived,
-          message: eventReceived ?
-            'NOTIFICATION_SENT: Trigger release packet injected successfully' :
-            'NOTIFICATION_FAILED: Event was dispatched but not received',
-          hasTestingApi: !!navigator.bluetooth?.testing?.simulateNotification,
-          hasTransportManager: true,
-          eventReceived,
-          eventData: eventData ? Array.from(eventData) : null
-        };
-      } catch (e) {
-        tm.notifyCharacteristic.removeEventListener('characteristicvaluechanged', eventHandler);
-        return { 
-          success: false, 
-          message: `NOTIFICATION_ERROR: Failed to inject packet - ${e}`,
-          hasTestingApi: true,
-          hasTransportManager: true,
-          error: String(e)
-        };
-      }
-    }, Array.from(cs108TriggerReleasePacket));
-
-    if (!result.success) {
-      console.error(`[Trigger] Release simulation failed on attempt ${attempt}:`, result.message);
-      console.error('[Trigger] Diagnostics:', {
-        hasTestingApi: result.hasTestingApi,
-        hasBluetoothApi: result.hasBluetoothApi,
-        hasTransportManager: result.hasTransportManager,
-        hasMockFlag: result.hasMockFlag,
-        error: result.error
-      });
-      
-      if (attempt === maxRetries) {
-        return { ...result, triggerState: initialState };
-      }
-      
-      // Wait before retry
-      await page.waitForTimeout(200);
-      continue;
-    }
-
-    // Log event dispatch verification
-    if (result.eventReceived && result.eventData) {
-      console.log('[Trigger] Event dispatch verified - data reached transport layer');
-    } else {
-      console.warn('[Trigger] Event dispatch not verified - notification may not have reached transport');
-    }
-
-    // Wait up to 500ms for the state to update
-    const startTime = Date.now();
-    while (Date.now() - startTime < 500) {
-      const triggerState = await getTriggerState(page);
-      if (triggerState === false) {
-        console.log('[Trigger] Release confirmed - state changed from', initialState, 'to', triggerState);
-        return { 
-          success: true, 
-          message: 'STATE_UPDATED: Trigger release successful and state confirmed',
-          triggerState: false 
-        };
-      }
-      await page.waitForTimeout(50);
-    }
-
-    // State didn't update on this attempt
-    const finalState = await getTriggerState(page);
-    console.warn(`[Trigger] State did not update on attempt ${attempt}/${maxRetries}`);
-    console.warn('[Trigger] Initial state:', initialState, '| Final state:', finalState);
-    
-    if (attempt < maxRetries) {
-      console.log('[Trigger] Retrying release simulation...');
-      await page.waitForTimeout(300); // Longer wait between retries
-    }
-  }
-
-  // All retries exhausted
-  const finalState = await getTriggerState(page);
-  return { 
-    success: false, 
-    message: `STATE_NOT_UPDATED: All ${maxRetries} attempts failed. Trigger state did not change from ${initialState} to false. Check deviceManager notification handler.`,
-    triggerState: finalState 
-  };
+/**
+ * Simulate trigger release with retries
+ * @param page - Playwright page
+ * @param maxRetries - Maximum number of retry attempts (default 3)
+ * @returns Success status, message, and trigger state
+ */
+export async function simulateTriggerRelease(
+  page: Page,
+  maxRetries: number = 3
+): Promise<{ success: boolean; message: string; triggerState: boolean }> {
+  return simulateTrigger(page, 'release', maxRetries);
 }
 
 /**
