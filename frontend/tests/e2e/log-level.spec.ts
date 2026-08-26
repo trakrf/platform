@@ -43,8 +43,7 @@ test.describe('Worker Log Level', () => {
     await page.waitForTimeout(200);
 
     // Find and set the Worker Log Level dropdown to WARN
-    const logLevelLabel = page.locator('h3', { hasText: 'Worker Log Level' });
-    const logLevelSelect = logLevelLabel.locator('..').locator('select');
+    const logLevelSelect = page.getByTestId('worker-log-level');
     await logLevelSelect.selectOption('warn');
 
     // Verify setting was saved
@@ -86,8 +85,7 @@ test.describe('Worker Log Level', () => {
     await page.waitForTimeout(500);
 
     // Find the select again after navigating back
-    const logLevelLabel2 = page.locator('h3', { hasText: 'Worker Log Level' });
-    const logLevelSelect2 = logLevelLabel2.locator('..').locator('select');
+    const logLevelSelect2 = page.getByTestId('worker-log-level');
     await logLevelSelect2.selectOption('debug');
     await expect(logLevelSelect2).toHaveValue('debug');
     await page.waitForTimeout(500);
@@ -123,8 +121,7 @@ test.describe('Worker Log Level', () => {
     await page.waitForTimeout(200);
 
     // Find and set the Worker Log Level dropdown to ERROR
-    const logLevelLabel = page.locator('h3', { hasText: 'Worker Log Level' });
-    const logLevelSelect = logLevelLabel.locator('..').locator('select');
+    const logLevelSelect = page.getByTestId('worker-log-level');
     await logLevelSelect.selectOption('error');
     await expect(logLevelSelect).toHaveValue('error');
 
@@ -147,8 +144,7 @@ test.describe('Worker Log Level', () => {
     await page.waitForTimeout(200);
 
     // Verify the setting persisted
-    const logLevelLabelAfter = page.locator('h3', { hasText: 'Worker Log Level' });
-    const logLevelSelectAfter = logLevelLabelAfter.locator('..').locator('select');
+    const logLevelSelectAfter = page.getByTestId('worker-log-level');
     await expect(logLevelSelectAfter).toHaveValue('error');
 
     // Clean up
