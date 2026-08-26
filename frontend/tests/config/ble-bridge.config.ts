@@ -6,7 +6,7 @@
  * 
  * Environment Variables:
  * - BLE_MCP_HOST: Bridge server hostname (default: localhost)
- * - BLE_MCP_WS_PORT: WebSocket port (default: 8080)
+ * - BLE_MCP_WS_PORT: WebSocket port (REQUIRED — no default; see TRA-1179)
  * - BLE_SERVICE_UUID: BLE service UUID (default: 9800)
  * - BLE_WRITE_UUID: Write characteristic UUID (default: 9900)
  * - BLE_NOTIFY_UUID: Notify characteristic UUID (default: 9901)
@@ -65,7 +65,17 @@ export interface BleBridgeConfig {
 export function getBleBridgeConfig(): BleBridgeConfig {
   // Core bridge server settings (BLE_MCP_* prefix for bridge server vars)
   const host = process.env.BLE_MCP_HOST || process.env.BLE_MCP_WS_HOST || 'localhost';
-  const wsPort = process.env.BLE_MCP_WS_PORT || '8080';
+  const wsPort = process.env.BLE_MCP_WS_PORT;
+  if (!wsPort) {
+    throw new Error(
+      'BLE_MCP_WS_PORT is not set. There is no safe default: the bridge once ' +
+        'defaulted to 8080, which is the port the platform backend publishes on ' +
+        '0.0.0.0 — so the two could never run together, and the @hardware e2e ' +
+        'suite (which needs both) could not pass on this host regardless of what ' +
+        'it asserted. Set it explicitly in .env.local; 15104 is the current value. ' +
+        'See TRA-1179.'
+    );
+  }
 
   // BLE device settings - use constants from transport module
   const service = CS108_BLE_SERVICE_UUID;
