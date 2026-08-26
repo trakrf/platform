@@ -73,6 +73,38 @@ describe('bridge port must never default to the backend port', () => {
     expect(() => getBleBridgeConfig()).toThrow(/BLE_MCP_WS_PORT/);
   });
 
+  /**
+   * The range rule, matching ble-mcp-test's own validation.
+   *
+   * Refusing only an *unset* port leaves a gap: the bridge would refuse to
+   * start on 80 or 40000 while platform happily built a ws:// URL for it and
+   * failed later as a connection problem — the same "reads as something else"
+   * shape as the collision this file exists for.
+   *
+   * Below 1024 needs privilege we do not have. 32768 and above is this host's
+   * ephemeral range (32768-60999), where the kernel hands out source ports for
+   * outbound connections — a listener there collides rarely, non-deterministically,
+   * and miserably.
+   */
+  it.each(['80', '1023', '32768', '60999', 'sixteen', '0'])(
+    'getBleBridgeConfig rejects the unusable port %s',
+    async port => {
+      vi.stubEnv('BLE_MCP_WS_PORT', port);
+
+      const { getBleBridgeConfig } = await import('./ble-bridge.config');
+
+      expect(() => getBleBridgeConfig()).toThrow(/1024/);
+    }
+  );
+
+  it.each(['1024', '15104', '32767'])('getBleBridgeConfig accepts %s', async port => {
+    vi.stubEnv('BLE_MCP_WS_PORT', port);
+
+    const { getBleBridgeConfig } = await import('./ble-bridge.config');
+
+    expect(getBleBridgeConfig().bridge.wsPort).toBe(port);
+  });
+
   it('getBleBridgeConfig uses the configured port when set', async () => {
     vi.stubEnv('BLE_MCP_WS_PORT', '15104');
 

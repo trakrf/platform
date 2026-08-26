@@ -77,6 +77,20 @@ export function getBleBridgeConfig(): BleBridgeConfig {
     );
   }
 
+  // Range rule, matching ble-mcp-test's own validation. Below 1024 needs
+  // privilege we do not have; 32768 and above is the ephemeral range the kernel
+  // draws outbound source ports from, where a listener collides rarely and
+  // non-deterministically. Rejecting only an unset port would leave the bridge
+  // refusing to start on a value platform had already built a URL from.
+  const portNumber = Number(wsPort);
+  if (!Number.isInteger(portNumber) || portNumber < 1024 || portNumber > 32767) {
+    throw new Error(
+      `BLE_MCP_WS_PORT must be an integer in 1024-32767, got "${wsPort}". ` +
+        'Below 1024 is privileged; 32768 and above is the ephemeral range. ' +
+        'See TRA-1179.'
+    );
+  }
+
   // BLE device settings - use constants from transport module
   const service = CS108_BLE_SERVICE_UUID;
   const write = CS108_BLE_WRITE_UUID;
