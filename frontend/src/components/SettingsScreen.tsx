@@ -273,6 +273,7 @@ export default function SettingsScreen() {
                 <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Worker Log Level</h3>
               </div>
               <select
+                data-testid="worker-log-level"
                 value={workerLogLevel}
                 onChange={(e) => {
                   const newLevel = e.target.value as 'error' | 'warn' | 'info' | 'debug';

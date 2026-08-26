@@ -91,6 +91,8 @@ export class CS108BLETransport implements Transport {
     data: Uint8Array;
     resolve: (success: boolean) => void;
     retriesLeft: number;
+    /** Wall-clock point past which this write must be abandoned, not retried. */
+    deadline: number;
   }> = [];
   private commandInProgress = false;
   private readonly MAX_QUEUE_LENGTH = 5;
@@ -99,9 +101,23 @@ export class CS108BLETransport implements Transport {
   private boundHandleNotifications: (event: Event) => void;
   private boundHandleDisconnect: (event: Event) => void;
   
+  /**
+   * How long a single write may spend retrying, in total.
+   *
+   * Deliberately under `CommandManager.DEFAULT_TIMEOUT` (2500 ms,
+   * `worker/cs108/command.ts`). The retries live *inside* a command's lifetime,
+   * so a retry budget larger than the command timeout means sleeping on behalf
+   * of a command that has already rejected — and then issuing the write anyway.
+   * A write nobody is waiting for is not a retry, it is an injection into the
+   * command stream. The old defaults summed to 7000 ms against that 2500 ms
+   * timeout (TRA-1179).
+   */
+  private readonly WRITE_BUDGET_MS = 2000;
+
   constructor(config: CS108BLETransportConfig = {}) {
     this.retryCount = config.retryCount || 3;
-    this.retryDelays = config.retryDelays || [500, 1500, 5000];
+    // Sums to 1750 ms — inside WRITE_BUDGET_MS, which is inside the command timeout.
+    this.retryDelays = config.retryDelays || [250, 500, 1000];
     
     // Bind event handlers
     this.boundHandleNotifications = this.handleNotifications.bind(this);
@@ -207,13 +223,22 @@ export class CS108BLETransport implements Transport {
     if (this.notifyCharacteristic) {
       try {
         await this.notifyCharacteristic.stopNotifications();
-        this.notifyCharacteristic.removeEventListener(
-          'characteristicvaluechanged',
-          this.boundHandleNotifications
-        );
       } catch (e) {
-        // Error stopping notifications
+        // Report, do not rethrow: teardown must still complete. Visibility is
+        // the requirement, not propagation — the same trade #583 made for
+        // writes. This catch was dead while stopNotifications() was a no-op;
+        // TRA-1153 makes it a real gate that can reject (TRA-1179).
+        this.reportTransportError(
+          `stopNotifications failed: ${e instanceof Error ? e.message : String(e)}`
+        );
       }
+
+      // Unhook regardless — a listener left on a characteristic we are dropping
+      // is exactly the orphan cleanup() exists to prevent.
+      this.notifyCharacteristic.removeEventListener(
+        'characteristicvaluechanged',
+        this.boundHandleNotifications
+      );
     }
     
     // Remove disconnect listener
@@ -224,9 +249,17 @@ export class CS108BLETransport implements Transport {
       );
     }
     
-    // Disconnect GATT
+    // Disconnect GATT, and wait for it.
+    //
+    // Real Web Bluetooth returns void here, so this is a no-op await. The
+    // ble-mcp-test mock returns a settleable value, and per TRA-1153 the
+    // command-path release lands when the *server* processes the socket close —
+    // not when `server.connected` flips, which happens synchronously before it.
+    // Fire-and-forget lets the next connect race ahead of the release and be
+    // refused as busy by our own previous session, which reads as an ownership
+    // bug rather than a lifecycle one (TRA-1179).
     if (this.device?.gatt?.connected) {
-      this.device.gatt.disconnect();
+      await Promise.resolve(this.device.gatt.disconnect());
     }
     
     // Notify worker and close port
@@ -237,16 +270,8 @@ export class CS108BLETransport implements Transport {
       this.messagePort.close();
     }
     
-    // Clean up test exposure
-    if (typeof window !== 'undefined') {
-      const testWindow = window as TestWindow;
-      if (testWindow.__TRANSPORT_MANAGER__) {
-        // Clearing __TRANSPORT_MANAGER__ on disconnect
-        delete testWindow.__TRANSPORT_MANAGER__;
-      }
-    }
-
-    // Clean up
+    // Clean up — cleanup() owns the test exposure too, so an unexpected GATT
+    // drop clears exactly as much as an explicit disconnect (TRA-1179).
     await this.cleanup();
   }
   
@@ -339,7 +364,7 @@ export class CS108BLETransport implements Transport {
   private async queueWrite(data: Uint8Array): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
       if (this.commandQueue.length >= this.MAX_QUEUE_LENGTH) {
-        this.reportWriteFailure('Command queue full, write dropped');
+        this.reportTransportError('Command queue full, write dropped');
         resolve(false);
         return;
       }
@@ -347,7 +372,8 @@ export class CS108BLETransport implements Transport {
       this.commandQueue.push({
         data,
         resolve,
-        retriesLeft: this.retryCount
+        retriesLeft: this.retryCount,
+        deadline: Date.now() + this.WRITE_BUDGET_MS
       });
       
       this.processNextCommand();
@@ -367,7 +393,7 @@ export class CS108BLETransport implements Transport {
     
     try {
       if (!this.isConnected()) {
-        this.reportWriteFailure('Transport not connected, write dropped');
+        this.reportTransportError('Transport not connected, write dropped');
         command.resolve(false);
         return;
       }
@@ -381,24 +407,34 @@ export class CS108BLETransport implements Transport {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       
-      // Check if we should retry
-      const shouldRetry = 
-        errorMessage.includes('GATT operation already in progress') ||
-        errorMessage.includes('Device busy') ||
-        errorMessage.includes('GATT Server is disconnected');
-      
-      if (shouldRetry && command.retriesLeft > 0) {
-        command.retriesLeft--;
-        const delayIndex = this.retryCount - command.retriesLeft - 1;
-        const delay = this.retryDelays[Math.min(delayIndex, this.retryDelays.length - 1)];
-        
-        // Retrying write after delay
+      const command_ = command;
+      const delayIndex = this.retryCount - command_.retriesLeft;
+      const delay = this.retryDelays[Math.min(delayIndex, this.retryDelays.length - 1)];
+
+      // A retry is only worth attempting if the command that owns it will still
+      // be listening when the write lands. Past the deadline it is not a retry,
+      // it is a stale command injected into the stream (TRA-1179).
+      const withinBudget = Date.now() + delay < command_.deadline;
+
+      if (this.isRetryable(errorMessage) && command_.retriesLeft > 0 && withinBudget) {
+        command_.retriesLeft--;
+        const attempt = this.retryCount - command_.retriesLeft;
+
+        // Leave a trace. This branch used to be silent — the only marker was a
+        // comment — so a retry firing and a retry never firing looked identical
+        // from outside. That is how `retryDelays` came to sum to 7000ms inside a
+        // 2500ms command timeout without anyone noticing: the path had been
+        // unobservable for as long as it had been wrong (TRA-1179).
+        console.warn(
+          `[CS108BLETransport] write retry ${attempt}/${this.retryCount} in ${delay}ms: ${errorMessage}`
+        );
+
         await new Promise(r => setTimeout(r, delay));
-        
+
         // Put command back at front of queue
-        this.commandQueue.unshift(command);
+        this.commandQueue.unshift(command_);
       } else {
-        this.reportWriteFailure(errorMessage);
+        this.reportTransportError(errorMessage);
         command.resolve(false);
       }
     } finally {
@@ -414,8 +450,25 @@ export class CS108BLETransport implements Transport {
    * "command never left", so every dropped write surfaced only as the command's
    * own 5s timeout. Two of the three failure paths previously reported nothing.
    */
-  private reportWriteFailure(error: string): void {
-    console.error('Write failed:', error);
+  /**
+   * Which write failures are worth another attempt.
+   *
+   * `GATT Server is disconnected` is deliberately NOT here. A disconnected
+   * server does not recover by waiting, so retrying spends the budget for
+   * nothing — and if the link *does* come back, the retry lands a stale command
+   * on a fresh connection, which is the most harmful outcome available
+   * (TRA-1179).
+   */
+  private isRetryable(errorMessage: string): boolean {
+    return (
+      errorMessage.includes('GATT operation already in progress') ||
+      errorMessage.includes('Device busy')
+    );
+  }
+
+  private reportTransportError(error: string): void {
+    // Not "write failed" any more — teardown reports through here too.
+    console.error('[CS108BLETransport]', error);
     if (this.messagePort) {
       this.messagePort.postMessage({ type: 'ble:error', error } as BLEMessage);
     }
@@ -436,13 +489,31 @@ export class CS108BLETransport implements Transport {
   /**
    * Clean up resources
    */
+  /**
+   * Release everything this transport owns.
+   *
+   * This is the single teardown owner: both the explicit `disconnect()` and the
+   * `gattserverdisconnected` handler route here, so they cannot clear different
+   * amounts. They used to — `disconnect()` deleted `__TRANSPORT_MANAGER__` and
+   * `handleDisconnect()` did not, which left the e2e trigger helpers injecting
+   * into an orphaned characteristic after any unexpected drop. That surfaced as
+   * `NOTIFY_CHAR_NOT_FOUND` on real hardware (TRA-1179).
+   */
   private async cleanup(): Promise<void> {
     this.device = null;
     this.server = null;
     this.service = null;
     this.writeCharacteristic = null;
     this.notifyCharacteristic = null;
-    
+
+    // The test hook points at a characteristic that no longer receives anything.
+    if (typeof window !== 'undefined') {
+      const testWindow = window as TestWindow;
+      if (testWindow.__TRANSPORT_MANAGER__) {
+        delete testWindow.__TRANSPORT_MANAGER__;
+      }
+    }
+
     if (this.messagePort) {
       this.messagePort.close();
       this.messagePort = null;
