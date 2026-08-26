@@ -199,3 +199,45 @@ describe('CS108BLETransport device selection', () => {
     expect(captured!.filters[0]).not.toHaveProperty('name');
   });
 });
+
+/**
+ * TRA-1179 — teardown ownership.
+ *
+ * There are two ways down: the explicit `disconnect()` and the
+ * `gattserverdisconnected` handler. They cleared different amounts. `disconnect()`
+ * deleted `window.__TRANSPORT_MANAGER__`; `handleDisconnect()` -> `cleanup()` did
+ * not, so after an *unexpected* drop the e2e trigger helpers kept injecting into
+ * an orphaned characteristic.
+ *
+ * Observed live, not theorised: the 0.8.0-rc.1 hardware run produced three
+ * `NOTIFY_CHAR_NOT_FOUND: No notify characteristic found in transport manager`
+ * retries and failed `locate.spec.ts:184`.
+ *
+ * The invariant this pins: **cleanup() owns everything disconnect() owns.**
+ * Sibling teardown paths that clear different amounts is how they drift.
+ */
+describe('CS108BLETransport teardown ownership', () => {
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).__TRANSPORT_MANAGER__;
+  });
+
+  it('clears __TRANSPORT_MANAGER__ on cleanup, not only on explicit disconnect', async () => {
+    const transport = new CS108BLETransport();
+    const w = window as unknown as Record<string, unknown>;
+    w.__TRANSPORT_MANAGER__ = { notifyCharacteristic: {} };
+
+    await (transport as unknown as { cleanup: () => Promise<void> }).cleanup();
+
+    expect(w.__TRANSPORT_MANAGER__).toBeUndefined();
+  });
+
+  it('clears it on an unexpected GATT drop, which routes through handleDisconnect', () => {
+    const transport = new CS108BLETransport();
+    const w = window as unknown as Record<string, unknown>;
+    w.__TRANSPORT_MANAGER__ = { notifyCharacteristic: {} };
+
+    (transport as unknown as { handleDisconnect: () => void }).handleDisconnect();
+
+    expect(w.__TRANSPORT_MANAGER__).toBeUndefined();
+  });
+});

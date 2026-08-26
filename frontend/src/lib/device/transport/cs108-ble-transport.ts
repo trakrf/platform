@@ -237,16 +237,8 @@ export class CS108BLETransport implements Transport {
       this.messagePort.close();
     }
     
-    // Clean up test exposure
-    if (typeof window !== 'undefined') {
-      const testWindow = window as TestWindow;
-      if (testWindow.__TRANSPORT_MANAGER__) {
-        // Clearing __TRANSPORT_MANAGER__ on disconnect
-        delete testWindow.__TRANSPORT_MANAGER__;
-      }
-    }
-
-    // Clean up
+    // Clean up — cleanup() owns the test exposure too, so an unexpected GATT
+    // drop clears exactly as much as an explicit disconnect (TRA-1179).
     await this.cleanup();
   }
   
@@ -436,13 +428,31 @@ export class CS108BLETransport implements Transport {
   /**
    * Clean up resources
    */
+  /**
+   * Release everything this transport owns.
+   *
+   * This is the single teardown owner: both the explicit `disconnect()` and the
+   * `gattserverdisconnected` handler route here, so they cannot clear different
+   * amounts. They used to — `disconnect()` deleted `__TRANSPORT_MANAGER__` and
+   * `handleDisconnect()` did not, which left the e2e trigger helpers injecting
+   * into an orphaned characteristic after any unexpected drop. That surfaced as
+   * `NOTIFY_CHAR_NOT_FOUND` on real hardware (TRA-1179).
+   */
   private async cleanup(): Promise<void> {
     this.device = null;
     this.server = null;
     this.service = null;
     this.writeCharacteristic = null;
     this.notifyCharacteristic = null;
-    
+
+    // The test hook points at a characteristic that no longer receives anything.
+    if (typeof window !== 'undefined') {
+      const testWindow = window as TestWindow;
+      if (testWindow.__TRANSPORT_MANAGER__) {
+        delete testWindow.__TRANSPORT_MANAGER__;
+      }
+    }
+
     if (this.messagePort) {
       this.messagePort.close();
       this.messagePort = null;
