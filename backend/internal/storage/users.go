@@ -14,7 +14,7 @@ import (
 func (s *Storage) ListUsers(ctx context.Context, limit, offset int) ([]user.User, int, error) {
 	query := `
 		SELECT id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at,
-		       is_superadmin, last_org_id
+		       is_superadmin, last_org_id, must_change_password
 		FROM trakrf.users
 		WHERE deleted_at IS NULL
 		ORDER BY created_at DESC
@@ -32,7 +32,7 @@ func (s *Storage) ListUsers(ctx context.Context, limit, offset int) ([]user.User
 		var usr user.User
 		err := rows.Scan(&usr.ID, &usr.Email, &usr.Name, &usr.PasswordHash, &usr.LastLoginAt,
 			&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt,
-			&usr.IsSuperadmin, &usr.LastOrgID)
+			&usr.IsSuperadmin, &usr.LastOrgID, &usr.MustChangePassword)
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to scan user: %w", err)
 		}
@@ -55,7 +55,7 @@ func (s *Storage) ListUsers(ctx context.Context, limit, offset int) ([]user.User
 func (s *Storage) ListSuperadmins(ctx context.Context) ([]user.User, error) {
 	query := `
 		SELECT id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at,
-		       is_superadmin, last_org_id
+		       is_superadmin, last_org_id, must_change_password
 		FROM trakrf.users
 		WHERE is_superadmin = true AND deleted_at IS NULL
 		ORDER BY email ASC
@@ -72,7 +72,7 @@ func (s *Storage) ListSuperadmins(ctx context.Context) ([]user.User, error) {
 		var usr user.User
 		err := rows.Scan(&usr.ID, &usr.Email, &usr.Name, &usr.PasswordHash, &usr.LastLoginAt,
 			&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt,
-			&usr.IsSuperadmin, &usr.LastOrgID)
+			&usr.IsSuperadmin, &usr.LastOrgID, &usr.MustChangePassword)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan superadmin: %w", err)
 		}
@@ -89,7 +89,7 @@ func (s *Storage) ListSuperadmins(ctx context.Context) ([]user.User, error) {
 func (s *Storage) GetUserByID(ctx context.Context, id int) (*user.User, error) {
 	query := `
 		SELECT id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at,
-		       is_superadmin, last_org_id
+		       is_superadmin, last_org_id, must_change_password
 		FROM trakrf.users
 		WHERE id = $1 AND deleted_at IS NULL
 	`
@@ -98,7 +98,7 @@ func (s *Storage) GetUserByID(ctx context.Context, id int) (*user.User, error) {
 	err := s.pool.QueryRow(ctx, query, id).Scan(
 		&usr.ID, &usr.Email, &usr.Name, &usr.PasswordHash, &usr.LastLoginAt,
 		&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt,
-		&usr.IsSuperadmin, &usr.LastOrgID)
+		&usr.IsSuperadmin, &usr.LastOrgID, &usr.MustChangePassword)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -114,7 +114,7 @@ func (s *Storage) GetUserByID(ctx context.Context, id int) (*user.User, error) {
 func (s *Storage) GetUserByEmail(ctx context.Context, email string) (*user.User, error) {
 	query := `
 		SELECT id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at,
-		       is_superadmin, last_org_id
+		       is_superadmin, last_org_id, must_change_password
 		FROM trakrf.users
 		WHERE email = $1 AND deleted_at IS NULL
 	`
@@ -123,7 +123,7 @@ func (s *Storage) GetUserByEmail(ctx context.Context, email string) (*user.User,
 	err := s.pool.QueryRow(ctx, query, email).Scan(
 		&usr.ID, &usr.Email, &usr.Name, &usr.PasswordHash, &usr.LastLoginAt,
 		&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt,
-		&usr.IsSuperadmin, &usr.LastOrgID)
+		&usr.IsSuperadmin, &usr.LastOrgID, &usr.MustChangePassword)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -156,6 +156,14 @@ func (s *Storage) UpdateUser(ctx context.Context, id int, request user.UpdateUse
 		args = append(args, *request.Email)
 		argPos++
 	}
+	// TRA-1135: the superadmin forced-rotation toggle. Nil means "not
+	// mentioned", not "false" — renaming a flagged user must not let them
+	// back into the app.
+	if request.MustChangePassword != nil {
+		updates = append(updates, fmt.Sprintf("must_change_password = $%d", argPos))
+		args = append(args, *request.MustChangePassword)
+		argPos++
+	}
 
 	if len(updates) == 0 {
 		return s.GetUserByID(ctx, id)
@@ -166,14 +174,14 @@ func (s *Storage) UpdateUser(ctx context.Context, id int, request user.UpdateUse
 		SET %s, updated_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING id, email, name, password_hash, last_login_at, settings, metadata, created_at, updated_at,
-		          is_superadmin, last_org_id
+		          is_superadmin, last_org_id, must_change_password
 	`, strings.Join(updates, ", "))
 
 	var usr user.User
 	err := s.pool.QueryRow(ctx, query, args...).Scan(
 		&usr.ID, &usr.Email, &usr.Name, &usr.PasswordHash, &usr.LastLoginAt,
 		&usr.Settings, &usr.Metadata, &usr.CreatedAt, &usr.UpdatedAt,
-		&usr.IsSuperadmin, &usr.LastOrgID)
+		&usr.IsSuperadmin, &usr.LastOrgID, &usr.MustChangePassword)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {

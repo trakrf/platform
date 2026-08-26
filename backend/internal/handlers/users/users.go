@@ -138,7 +138,7 @@ func (handler *Handler) Get(w http.ResponseWriter, r *http.Request) {
 // be building the thing we would then have to deprecate.
 
 // @Summary Update user
-// @Description Superadmin-only (TRA-1103). Editing your own profile goes through PATCH /api/v1/users/me.
+// @Description Superadmin-only (TRA-1103). Editing your own profile goes through PATCH /api/v1/users/me. Setting must_change_password gates the user behind the change-password screen at their next login (TRA-1135); omitting the field leaves the flag as it is.
 // @Tags users,internal
 // @Accept json
 // @Produce json

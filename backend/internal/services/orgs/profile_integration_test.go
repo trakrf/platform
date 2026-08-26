@@ -60,3 +60,41 @@ func TestGetUserProfile_IncludesEntitlement(t *testing.T) {
 	assert.True(t, profile.CurrentOrg.IsEntitled, "fresh org must be entitled")
 	assert.True(t, profile.CurrentOrg.SubscriptionEnabled, "fresh org must have subscription_enabled=true")
 }
+
+// TRA-1135: /users/me must surface must_change_password so a page reload
+// re-derives the forced-rotation gate from the server. The login response
+// carries it too, but that value is persisted in localStorage — a gate that
+// only ever reads persisted state is a gate that lasts exactly as long as
+// nobody edits it.
+func TestGetUserProfile_IncludesMustChangePassword(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	var flaggedID, ordinaryID int
+	require.NoError(t, db.AdminPool.QueryRow(ctx,
+		`INSERT INTO trakrf.users (email, name, password_hash, must_change_password)
+		 VALUES ('forced@t.com', 'Forced', 'x', true) RETURNING id`,
+	).Scan(&flaggedID))
+	require.NoError(t, db.AdminPool.QueryRow(ctx,
+		`INSERT INTO trakrf.users (email, name, password_hash)
+		 VALUES ('ordinary@t.com', 'Ordinary', 'x') RETURNING id`,
+	).Scan(&ordinaryID))
+
+	for _, id := range []int{flaggedID, ordinaryID} {
+		_, err := db.AdminPool.Exec(ctx,
+			`INSERT INTO trakrf.org_users (org_id, user_id, role, status) VALUES ($1, $2, 'admin', 'active')`,
+			orgID, id)
+		require.NoError(t, err)
+	}
+
+	svc := orgsservice.NewService(db.AdminPool, db.Store, nil)
+
+	flagged, err := svc.GetUserProfile(ctx, flaggedID)
+	require.NoError(t, err)
+	assert.True(t, flagged.MustChangePassword)
+
+	ordinary, err := svc.GetUserProfile(ctx, ordinaryID)
+	require.NoError(t, err)
+	assert.False(t, ordinary.MustChangePassword)
+}

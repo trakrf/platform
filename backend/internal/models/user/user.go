@@ -20,6 +20,10 @@ type User struct {
 	// RBAC fields
 	IsSuperadmin bool `json:"is_superadmin"`
 	LastOrgID    *int `json:"last_org_id,omitempty"`
+	// MustChangePassword gates the app behind the change-password screen
+	// (TRA-1135). It is set on accounts an operator provisioned with a
+	// bootstrap password and cleared by any password write.
+	MustChangePassword bool `json:"must_change_password"`
 }
 
 // CreateUserRequest is gone with POST /api/v1/users (TRA-1103). It carried a
@@ -31,6 +35,12 @@ type User struct {
 type UpdateUserRequest struct {
 	Name  *string `json:"name" validate:"omitempty,min=1,max=255"`
 	Email *string `json:"email" validate:"omitempty,email"`
+	// MustChangePassword is the superadmin-only forced-rotation toggle
+	// (TRA-1135) — the onsite operator's tool for an account they just
+	// provisioned with a bootstrap password. Nil leaves the flag untouched;
+	// this endpoint is a partial update, and an unrelated rename must never
+	// let a flagged user back into the app.
+	MustChangePassword *bool `json:"must_change_password"`
 }
 
 // UserListResponse for GET /api/v1/users

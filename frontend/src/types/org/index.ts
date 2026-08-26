@@ -46,6 +46,13 @@ export interface UserProfile {
   name: string;
   email: string;
   is_superadmin: boolean;
+  /**
+   * TRA-1135: the account was provisioned with a bootstrap password and is
+   * held behind the change-password screen until the user sets their own.
+   * Re-derived from the server on every load, unlike the copy on the
+   * persisted login user.
+   */
+  must_change_password: boolean;
   current_org: UserOrgWithRole | null;
   orgs: UserOrg[];
 }

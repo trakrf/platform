@@ -196,11 +196,12 @@ func (s *Service) GetUserProfile(ctx context.Context, userID int) (*organization
 	}
 
 	profile := &organization.UserProfile{
-		ID:           user.ID,
-		Name:         user.Name,
-		Email:        user.Email,
-		IsSuperadmin: user.IsSuperadmin,
-		Orgs:         orgs,
+		ID:                 user.ID,
+		Name:               user.Name,
+		Email:              user.Email,
+		IsSuperadmin:       user.IsSuperadmin,
+		MustChangePassword: user.MustChangePassword,
+		Orgs:               orgs,
 	}
 
 	// Determine current org: use last_org_id if set and valid, otherwise first org

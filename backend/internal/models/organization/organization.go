@@ -175,12 +175,17 @@ type SetCurrentOrgRequest struct {
 
 // UserProfile represents the enhanced /users/me response
 type UserProfile struct {
-	ID           int              `json:"id"`
-	Name         string           `json:"name"`
-	Email        string           `json:"email"`
-	IsSuperadmin bool             `json:"is_superadmin"`
-	CurrentOrg   *UserOrgWithRole `json:"current_org,omitempty"`
-	Orgs         []UserOrg        `json:"orgs"`
+	ID           int    `json:"id"`
+	Name         string `json:"name"`
+	Email        string `json:"email"`
+	IsSuperadmin bool   `json:"is_superadmin"`
+	// MustChangePassword mirrors users.must_change_password (TRA-1135). The
+	// login response carries it too, but that copy is persisted client-side;
+	// this one is re-derived from the database on every page load, so the
+	// forced-rotation gate survives a reload.
+	MustChangePassword bool             `json:"must_change_password"`
+	CurrentOrg         *UserOrgWithRole `json:"current_org,omitempty"`
+	Orgs               []UserOrg        `json:"orgs"`
 }
 
 // OrgMember represents a member in an organization for the list response

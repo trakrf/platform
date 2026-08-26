@@ -79,11 +79,17 @@ func (s *Storage) DeleteUserPasswordResetTokens(ctx context.Context, userID int)
 	return nil
 }
 
-// UpdateUserPassword updates a user's password hash
+// UpdateUserPassword updates a user's password hash.
+//
+// It also clears must_change_password (TRA-1135). This is the single funnel
+// both routes to a new password write through — the authenticated change
+// (TRA-1130) and the emailed reset token — so putting the clear here is what
+// makes "the flag comes off when the user picks their own password" true of
+// both without either caller knowing the flag exists.
 func (s *Storage) UpdateUserPassword(ctx context.Context, userID int, passwordHash string) error {
 	query := `
 		UPDATE trakrf.users
-		SET password_hash = $2, updated_at = NOW()
+		SET password_hash = $2, must_change_password = FALSE, updated_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
