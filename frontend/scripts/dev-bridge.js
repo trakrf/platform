@@ -36,16 +36,10 @@ if (!envValidation.isValid) {
 // shim over a unix socket, so the HTTP port and token variables were deleted
 // everywhere (TRA-1177 row H).
 const host = process.env.BLE_MCP_HOST || process.env.BLE_MCP_WS_HOST || 'localhost';
-const wsPort = process.env.BLE_MCP_WS_PORT;
-if (!wsPort) {
-  console.error(
-    '❌ BLE_MCP_WS_PORT is not set, and there is no safe default.\n' +
-      '   It used to default to 8080 — the port the platform backend publishes\n' +
-      '   on 0.0.0.0 — so the bridge and the backend could never run together.\n' +
-      '   Set it in .env.local (currently 15104). See TRA-1179.'
-  );
-  process.exit(1);
-}
+// Defaults to 25153. The rule is not "no default" — it is that the default must
+// never be a port a co-resident service owns. It used to be 8080, which the
+// platform backend publishes on 0.0.0.0, so the two could never run together.
+const wsPort = process.env.BLE_MCP_WS_PORT || '25153';
 const portNumber = Number(wsPort);
 if (!Number.isInteger(portNumber) || portNumber < 1024 || portNumber > 32767) {
   console.error(

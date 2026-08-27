@@ -11,11 +11,20 @@
  * change cannot be partially applied. dev-bridge.js keeps its own copy because
  * it is plain JS run outside the TS build, and the guard covers it.
  *
- * There is deliberately no default. The backend is published on 0.0.0.0:8080,
- * which subsumes loopback, so a bridge defaulting to 8080 could never run
- * alongside it — and the @hardware e2e suite needs both. A default here is not
- * a convenience, it is the defect: guessing a value the code cannot know is
- * what put the bridge on the backend's port in the first place. See ADR-0007.
+ * The default is 25153, and the rule is that it must never be a port a
+ * co-resident service owns. The original defect was not defaultness — it was
+ * defaulting to 8080, which the platform backend publishes on 0.0.0.0, so the
+ * bridge could never run alongside it and the @hardware e2e suite (which needs
+ * both) could not pass on this host.
+ *
+ * 25153 is chosen to be unowned: clear of the alternate-HTTP clusters, clear of
+ * ESPHome's 6053, below the ephemeral range, and — unlike the 15104 first
+ * picked — carrying no IDS reputation. See TRA-1179.
+ *
+ * The residual cost of having a default at all, stated so nobody has to
+ * rediscover it: an asymmetrically configured pair now fails as a connection
+ * error rather than a config error. Set one side to a custom port and forget
+ * the other, and you get "cannot connect" instead of "you did not set this."
  */
 
 /**
@@ -23,6 +32,12 @@
  * binary 1024 rather than decimal 1000.
  */
 const MIN_PORT = 1024;
+
+/**
+ * The bridge's conventional port. Must never be one a co-resident service
+ * owns — that, not the existence of a default, was the 8080 defect.
+ */
+const DEFAULT_PORT = '25153';
 
 /**
  * First ephemeral port. The kernel draws source ports for outbound connections
@@ -36,17 +51,7 @@ const MIN_PORT = 1024;
 const MAX_PORT = 32767;
 
 export function resolveBridgePort(env: NodeJS.ProcessEnv = process.env): string {
-  const wsPort = env.BLE_MCP_WS_PORT;
-
-  if (!wsPort) {
-    throw new Error(
-      'BLE_MCP_WS_PORT is not set. There is no safe default: the bridge once ' +
-        'defaulted to 8080, which is the port the platform backend publishes on ' +
-        '0.0.0.0 — so the two could never run together, and the @hardware e2e ' +
-        'suite (which needs both) could not pass on this host regardless of what ' +
-        'it asserted. Set it explicitly in .env.local. See TRA-1179.'
-    );
-  }
+  const wsPort = env.BLE_MCP_WS_PORT || DEFAULT_PORT;
 
   const portNumber = Number(wsPort);
   if (!Number.isInteger(portNumber) || portNumber < MIN_PORT || portNumber > MAX_PORT) {

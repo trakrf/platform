@@ -70,12 +70,21 @@ describe('bridge port must never default to the backend port', () => {
     expect(code).not.toContain(`|| "${BACKEND_PORT}"`);
   });
 
-  it('getBleBridgeConfig throws when BLE_MCP_WS_PORT is unset', async () => {
+  /**
+   * The default is a real default again, deliberately — but it must never be a
+   * port a co-resident service owns. That, not defaultness, was the 8080 defect.
+   *
+   * Pinned to the exact value rather than "not 8080": a negative check passes
+   * against any wrong-but-different default, including the next one somebody
+   * renumbers to without removing the fallback.
+   */
+  it('getBleBridgeConfig defaults to 25153 when BLE_MCP_WS_PORT is unset', async () => {
     vi.stubEnv('BLE_MCP_WS_PORT', '');
 
     const { getBleBridgeConfig } = await import('./ble-bridge.config');
 
-    expect(() => getBleBridgeConfig()).toThrow(/BLE_MCP_WS_PORT/);
+    expect(getBleBridgeConfig().bridge.wsPort).toBe('25153');
+    expect(getBleBridgeConfig().bridge.wsUrl).toContain(':25153');
   });
 
   /**
@@ -102,7 +111,7 @@ describe('bridge port must never default to the backend port', () => {
     }
   );
 
-  it.each(['1024', '15104', '32767'])('getBleBridgeConfig accepts %s', async port => {
+  it.each(['1024', '25153', '32767'])('getBleBridgeConfig accepts %s', async port => {
     vi.stubEnv('BLE_MCP_WS_PORT', port);
 
     const { getBleBridgeConfig } = await import('./ble-bridge.config');
@@ -111,13 +120,13 @@ describe('bridge port must never default to the backend port', () => {
   });
 
   it('getBleBridgeConfig uses the configured port when set', async () => {
-    vi.stubEnv('BLE_MCP_WS_PORT', '15104');
+    vi.stubEnv('BLE_MCP_WS_PORT', '25153');
 
     const { getBleBridgeConfig } = await import('./ble-bridge.config');
 
     // Assert the exact value, not merely "not 8080" — a negative check passes
     // against any wrong-but-different port.
-    expect(getBleBridgeConfig().bridge.wsPort).toBe('15104');
-    expect(getBleBridgeConfig().bridge.wsUrl).toContain(':15104');
+    expect(getBleBridgeConfig().bridge.wsPort).toBe('25153');
+    expect(getBleBridgeConfig().bridge.wsUrl).toContain(':25153');
   });
 });
