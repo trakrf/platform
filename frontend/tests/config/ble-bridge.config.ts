@@ -14,6 +14,7 @@
  */
 
 import os from 'os';
+import { resolveBridgePort } from './resolve-bridge-port';
 import * as dotenv from 'dotenv';
 import {
   CS108_BLE_SERVICE_UUID,
@@ -65,31 +66,7 @@ export interface BleBridgeConfig {
 export function getBleBridgeConfig(): BleBridgeConfig {
   // Core bridge server settings (BLE_MCP_* prefix for bridge server vars)
   const host = process.env.BLE_MCP_HOST || process.env.BLE_MCP_WS_HOST || 'localhost';
-  const wsPort = process.env.BLE_MCP_WS_PORT;
-  if (!wsPort) {
-    throw new Error(
-      'BLE_MCP_WS_PORT is not set. There is no safe default: the bridge once ' +
-        'defaulted to 8080, which is the port the platform backend publishes on ' +
-        '0.0.0.0 — so the two could never run together, and the @hardware e2e ' +
-        'suite (which needs both) could not pass on this host regardless of what ' +
-        'it asserted. Set it explicitly in .env.local; 15104 is the current value. ' +
-        'See TRA-1179.'
-    );
-  }
-
-  // Range rule, matching ble-mcp-test's own validation. Below 1024 needs
-  // privilege we do not have; 32768 and above is the ephemeral range the kernel
-  // draws outbound source ports from, where a listener collides rarely and
-  // non-deterministically. Rejecting only an unset port would leave the bridge
-  // refusing to start on a value platform had already built a URL from.
-  const portNumber = Number(wsPort);
-  if (!Number.isInteger(portNumber) || portNumber < 1024 || portNumber > 32767) {
-    throw new Error(
-      `BLE_MCP_WS_PORT must be an integer in 1024-32767, got "${wsPort}". ` +
-        'Below 1024 is privileged; 32768 and above is the ephemeral range. ' +
-        'See TRA-1179.'
-    );
-  }
+  const wsPort = resolveBridgePort();
 
   // BLE device settings - use constants from transport module
   const service = CS108_BLE_SERVICE_UUID;

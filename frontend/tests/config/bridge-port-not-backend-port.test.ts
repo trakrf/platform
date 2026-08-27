@@ -31,7 +31,12 @@ const BACKEND_PORT = '8080';
 
 const SOURCES = [
   'scripts/dev-bridge.js',
-  'tests/config/ble-bridge.config.ts'
+  'tests/config/ble-bridge.config.ts',
+  // The third reader, and the one vite.config.ts actually calls. It was missed
+  // on the first pass of this fix precisely because the guard listed two of
+  // three sites — a check whose scope is narrower than the defect it names
+  // passes while the defect survives in the live path.
+  'tests/config/vite-bridge.config.ts'
 ];
 
 describe('bridge port must never default to the backend port', () => {

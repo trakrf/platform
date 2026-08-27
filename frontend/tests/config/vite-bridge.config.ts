@@ -12,6 +12,7 @@ import {
   CS108_BLE_WRITE_UUID,
   CS108_BLE_NOTIFY_UUID
 } from '../../src/lib/device/transport/cs108-ble-transport';
+import { resolveBridgePort } from './resolve-bridge-port';
 
 // Load environment variables once
 dotenv.config({ path: '.env.local' });
@@ -26,7 +27,7 @@ const systemHostname = os.hostname();
 export function getViteBridgeConfig() {
   // Core bridge server settings
   const host = process.env.BLE_MCP_HOST || process.env.BLE_MCP_WS_HOST || 'localhost';
-  const wsPort = process.env.BLE_MCP_WS_PORT || '8080';
+  const wsPort = resolveBridgePort();
   
   // BLE device settings - use constants from transport module
   const service = CS108_BLE_SERVICE_UUID;
