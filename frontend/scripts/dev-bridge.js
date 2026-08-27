@@ -36,7 +36,20 @@ if (!envValidation.isValid) {
 // shim over a unix socket, so the HTTP port and token variables were deleted
 // everywhere (TRA-1177 row H).
 const host = process.env.BLE_MCP_HOST || process.env.BLE_MCP_WS_HOST || 'localhost';
-const wsPort = process.env.BLE_MCP_WS_PORT || '8080';
+// Defaults to 25153. The rule is not "no default" — it is that the default must
+// never be a port a co-resident service owns. It used to be 8080, which the
+// platform backend publishes on 0.0.0.0, so the two could never run together.
+const wsPort = process.env.BLE_MCP_WS_PORT || '25153';
+const portNumber = Number(wsPort);
+if (!Number.isInteger(portNumber) || portNumber < 1024 || portNumber > 32767) {
+  console.error(
+    `❌ BLE_MCP_WS_PORT must be an integer in 1024-32767, got "${wsPort}".\n` +
+      '   Below 1024 is privileged; 32768 and above is the ephemeral range the\n' +
+      '   kernel draws outbound source ports from. See TRA-1179.'
+  );
+  process.exit(1);
+}
+
 const BLE_BRIDGE_WS_URL = `ws://${host}:${wsPort}`;
 
 // Parse URL to get host

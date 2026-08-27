@@ -28,6 +28,23 @@ const FILES = [
 ];
 
 /**
+ * The repo-root template, added TRA-1179.
+ *
+ * This guard was rooted at frontend/, so `.env.local.example` sat outside it —
+ * and shipped `BLE_MCP_HTTP_PORT=8081` and `BLE_MCP_HTTP_TOKEN=` for two
+ * tickets after TRA-1161 deleted both variables. The live config was clean and
+ * the guard was green the whole time.
+ *
+ * A template is the worst place for dead config to survive, because it is not
+ * merely stale — it is *copied*. Every fresh clone reconstructs whatever it
+ * says, which is also how the 8080 collision would have propagated to the next
+ * machine after we fixed this one.
+ */
+const REPO_ROOT = path.resolve(__dirname, '../../..');
+
+const ROOT_FILES = ['.env.local.example'];
+
+/**
  * Strip comments before scanning.
  *
  * The guard is about code, not prose: these files carry comments explaining
@@ -43,6 +60,21 @@ function codeOnly(source: string): string {
 }
 
 describe('the deleted ble-mcp-test HTTP surface', () => {
+  it.each(ROOT_FILES)('%s does not seed BLE_MCP_HTTP_* into a fresh clone', (file) => {
+    const code = codeOnly(readFileSync(path.join(REPO_ROOT, file), 'utf-8'));
+
+    // Assignments only — the prose above them explains why they are gone and
+    // has to name them, same reasoning as codeOnly() below.
+    expect(code).not.toMatch(/^\s*BLE_MCP_HTTP_PORT\s*=/m);
+    expect(code).not.toMatch(/^\s*BLE_MCP_HTTP_TOKEN\s*=/m);
+  });
+
+  it('.env.local.example does not seed the backend port for the bridge', () => {
+    const code = codeOnly(readFileSync(path.join(REPO_ROOT, '.env.local.example'), 'utf-8'));
+
+    expect(code).not.toMatch(/^\s*BLE_MCP_WS_PORT\s*=\s*8080\s*$/m);
+  });
+
   it.each(FILES)('%s does not read BLE_MCP_HTTP_* or hardcode :8081', (file) => {
     const code = codeOnly(readFileSync(path.join(FRONTEND_ROOT, file), 'utf-8'));
 
