@@ -63,10 +63,15 @@ async function injectTriggerPacket(
         };
       }
 
-      // The characteristic the product subscribed to. Taking it by reference —
-      // rather than re-resolving it via getCharacteristic() — is what keeps the
-      // helper on the subscribed instance: the mock currently mints a fresh
-      // characteristic object on every getCharacteristic() call.
+      // The characteristic the product subscribed to, taken by reference rather
+      // than re-resolved via getCharacteristic().
+      //
+      // The original reason was that the mock minted a fresh characteristic per
+      // call, so a re-resolved one was never subscribed. TRA-1153 item 1 fixed
+      // that in 0.8.0 — the mock now caches per canonical UUID — so this is no
+      // longer a workaround. It stays because it is still the more direct
+      // statement of intent: this helper wants THE instance the product
+      // subscribed, not an equivalent one.
       const tm = window.__TRANSPORT_MANAGER__;
       if (!tm?.notifyCharacteristic) {
         return {
