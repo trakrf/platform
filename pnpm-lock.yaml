@@ -133,8 +133,8 @@ importers:
         specifier: ^10.4.21
         version: 10.4.21(postcss@8.5.6)
       ble-mcp-test:
-        specifier: ^0.8.0
-        version: 0.8.0
+        specifier: ^0.9.0
+        version: 0.9.0
       concurrently:
         specifier: ^8.2.2
         version: 8.2.2
@@ -1501,8 +1501,8 @@ packages:
     resolution: {integrity: sha512-Ceh+7ox5qe7LJuLHoY0feh3pHuUDHAcRUeyL2VYghZwfpkNIy/+8Ocg0a3UuSoYzavmylwuLWQOf3hl0jjMMIw==}
     engines: {node: '>=8'}
 
-  ble-mcp-test@0.8.0:
-    resolution: {integrity: sha512-OiivkdqU/2Ci58m951RZa2eTVrHbBWFELsWGB3yZvse2Bchn12zK3JpDDJiZJIF3mI7rwufzWIg+Wfxzg9pL9g==}
+  ble-mcp-test@0.9.0:
+    resolution: {integrity: sha512-PIjclR/V6yDOdWEtYT03OD4pPmR3Dp+qDiWBny+XvUBdb2ewfaDF0QfmzmbRrJKbuBZAHmWpB6nHNcI3YgR21g==}
     engines: {node: '>=24.0.0'}
 
   boxen@7.0.0:
@@ -5278,12 +5278,7 @@ snapshots:
 
   binary-extensions@2.3.0: {}
 
-  ble-mcp-test@0.8.0:
-    dependencies:
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
+  ble-mcp-test@0.9.0: {}
 
   boxen@7.0.0:
     dependencies:

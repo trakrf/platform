@@ -352,6 +352,52 @@ describe('CS108BLETransport write retry budget', () => {
     expect(posted.some(m => m.type === 'ble:error')).toBe(true);
   });
 
+  /**
+   * Ack latency lives INSIDE the retry budget, and the budget cannot bound the
+   * last attempt.
+   *
+   * ble-mcp-test 0.9.0 resolves `writeValue()` on the bridge's ack rather than on
+   * enqueue, so every attempt costs real time. `withinBudget` gates the SLEEP
+   * before a retry, never the write itself — so the final attempt starts inside
+   * the budget and finishes wherever it finishes.
+   *
+   * This drives the real transport with a slow-failing characteristic rather than
+   * recomputing the arithmetic, because a test that re-implements the thing it is
+   * checking passes on its own mistakes.
+   *
+   * Documenting a hazard, not endorsing one: at ~600ms ack latency the last write
+   * lands after `CommandManager.DEFAULT_TIMEOUT` (2500ms) has already rejected the
+   * command that owns it. If the final attempt is ever made to respect the
+   * deadline too, this goes red — update it deliberately. TRA-1189 Phase 1 is
+   * measuring whether the distribution actually occupies the window.
+   */
+  it('lets the final attempt outlive the command timeout at ~600ms ack latency (known — TRA-1189)', async () => {
+    const ACK_MS = 600;
+    const COMMAND_TIMEOUT_MS = 2500; // CommandManager.DEFAULT_TIMEOUT
+    const transport = new CS108BLETransport();
+
+    let lastWriteEndedAt = 0;
+    const started = Date.now();
+
+    Object.assign(transport as unknown as Record<string, unknown>, {
+      device: {},
+      server: { connected: true },
+      writeCharacteristic: {
+        writeValue: async () => {
+          await new Promise(r => setTimeout(r, ACK_MS));
+          lastWriteEndedAt = Date.now() - started;
+          throw new Error('GATT operation already in progress');
+        }
+      },
+      messagePort: { postMessage: () => {} }
+    });
+
+    const priv = transport as unknown as { queueWrite: (d: Uint8Array) => Promise<boolean> };
+    await priv.queueWrite(new Uint8Array([0x01]));
+
+    expect(lastWriteEndedAt).toBeGreaterThan(COMMAND_TIMEOUT_MS);
+  }, 15000);
+
   it('does not retry a disconnected GATT server', () => {
     const transport = new CS108BLETransport();
     const priv = transport as unknown as { isRetryable: (m: string) => boolean };
