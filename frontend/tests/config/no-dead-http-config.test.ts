@@ -127,13 +127,30 @@ function presentsBridgeOn8080(line: string): boolean {
   return false;
 }
 
-/** Every tracked text file, minus the allowlist. */
+/**
+ * Binary and generated files, which cannot instruct anybody to do anything.
+ *
+ * An EXCLUSION list, deliberately, because the inclusion version of this filter
+ * is the bug it is guarding against. The first widened pass listed the
+ * extensions worth scanning — and that list silently omitted `justfile`,
+ * `.envrc`, `Dockerfile` and `deploy/edge/quadlets/*.container`, none of which
+ * have one. The bridge repo shipped the same filter and it skipped
+ * `.env.local.example`: TRA-1186's own subject file.
+ *
+ * So the shape recurs at every layer. TRA-1179 scoped the fix to the files it
+ * knew, #600 scoped the guard to the files it knew, and the first version of
+ * this sweep scoped the *scan* to the extensions it knew. Unbounded scanning
+ * plus a narrow exclusion cannot be partially applied; an allowlist always can.
+ */
+const NOT_TEXT = /\.(png|jpe?g|gif|svg|ico|webp|woff2?|ttf|eot|pdf|zip|gz|tgz|wasm|lock|sum|tsv|csv)$/i;
+
+/** Every tracked file that could carry an instruction to a human. */
 function trackedTextFiles(): string[] {
-  const out = execSync('git ls-files', { cwd: REPO_ROOT, encoding: 'utf-8' });
+  const out = execSync('git ls-files -z', { cwd: REPO_ROOT, encoding: 'utf-8', maxBuffer: 32 * 1024 * 1024 });
   return out
-    .split('\n')
+    .split('\0')
     .filter(Boolean)
-    .filter((f) => /\.(ts|tsx|js|mjs|cjs|md|json|ya?ml|sh|example|env)$/.test(f) || f.endsWith('.env.local.example'))
+    .filter((f) => !NOT_TEXT.test(f))
     .filter((f) => !BRIDGE_PORT_HISTORY_OK.includes(f) && !HISTORY_DIR.test(f));
 }
 
