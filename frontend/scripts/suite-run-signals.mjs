@@ -59,6 +59,19 @@ export const SIGNALS = {
   // Node-side caller can still produce the errno form.
   transportRefused: 'ECONNREFUSED',
   transportUnreachable: 'WebSocket error',
+  // CANARY for the ack-latency instrument, and it is a canary in the same sense
+  // as `harnessLines`: a captured run with zero of these did not measure a clean
+  // link, it measured nothing. Every write attempt emits one, so 0 across a
+  // repetition that ran any command means the transport lines are not reaching
+  // the captured log — a detector that cannot see what it measures reads as an
+  // empty distribution, which is indistinguishable from a healthy one.
+  ackSamples: '[ble-timing] write-ack',
+  // A link close with a write outstanding is the signature the soak watches for.
+  // Counted here so the driver's own record shows it; the JOIN that decides
+  // whether it landed inside a write window needs the timestamps and lives in
+  // scripts/ack-latency-report.mjs.
+  linkCloses: '[ble-timing] link-close',
+  connectSamples: '[ble-timing] connect',
 };
 
 /**
