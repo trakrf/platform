@@ -149,7 +149,14 @@ test.describe('Locate Navigation Tests @hardware', () => {
     await expect(locateButton).toHaveCount(1);
 
     // The row itself still shows the operator the trimmed form.
-    await expect(page.getByText('533034313633')).toBeVisible();
+    //
+    // Scoped to the tag row rather than the page. The trimmed value now renders
+    // in two places, so a bare getByText is a strict-mode violation — Playwright
+    // refuses an ambiguous match rather than silently taking the first. The
+    // assertion's own intent is "the ROW shows the trimmed form", so the row is
+    // what it should look in; the unscoped version passed only while the second
+    // element did not exist yet.
+    await expect(page.getByTestId(`tag-${EPC_128}`).getByText('533034313633')).toBeVisible();
 
     await locateButton.click();
     await page.waitForSelector('h2:text("Configuring Reader")', { state: 'detached', timeout: 10000 }).catch(() => {});
