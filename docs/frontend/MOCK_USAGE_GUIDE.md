@@ -198,13 +198,19 @@ LOG_LEVEL=DEBUG just bridge
 ### Monitor BLE Traffic
 
 ```bash
-# Real-time log streaming
-wscat -c "ws://localhost:8080?command=log-stream"
-
-# Use MCP tools (if configured)
+# Use the MCP tools — this is the only way to read the stream.
 mcp__ble-mcp-test__get_logs
+mcp__ble-mcp-test__read_stream
+mcp__ble-mcp-test__search_packets
 mcp__ble-mcp-test__get_connection_state
 ```
+
+> A `wscat` log-stream incantation used to live here. It is removed rather than
+> renumbered, because it was dead twice over: it named the backend's port, and
+> **the Python bridge has no `command` query parameter at all** — the WS endpoint
+> *requires* `service`, `write` and `notify`, so that connection is refused, not
+> upgraded to a log stream. TRA-1161 moved the observability surface to the MCP
+> control socket; the tools above are it.
 
 ### Common Issues
 
@@ -215,7 +221,10 @@ mcp__ble-mcp-test__get_connection_state
 
 2. **"WebSocket connection failed"**
    - Ensure no firewall blocking WebSocket
-   - Try different port if 8080 is in use
+   - If 25153 is already taken, set `BLE_MCP_WS_PORT` on both the bridge and the
+     client. Do **not** reach for 8080 — that is the platform backend's port,
+     published on `0.0.0.0`, so the bridge would appear to start and the reader
+     would appear dead (TRA-1179)
    - Check server logs for errors
 
 3. **"Mock not injected"**
