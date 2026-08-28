@@ -4,7 +4,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { connectToDevice } from './helpers/connection';
+import { connectToDevice, disconnectDevice } from './helpers/connection';
 import { setupConsoleMonitoring } from './helpers/console-utils';
 import { HARDWARE_TEST_TIMEOUT_MS } from './e2e.config';
 
@@ -40,6 +40,19 @@ test.describe('Locate Navigation Tests @hardware', () => {
         (window as any).__TEST_LOGS__.push(logText);
       }, text);
     });
+  });
+
+  /**
+   * Release the command path explicitly, rather than leaving it to page close.
+   *
+   * This file connects per test and had no teardown, relying on Playwright
+   * closing the fixture page. That does close the socket — but the bridge's
+   * release completes when the SERVER processes that close, so the next
+   * connect races it (TRA-1153). Disconnecting through the UI first makes the
+   * handoff ordered instead of hopeful.
+   */
+  test.afterEach(async ({ page }) => {
+    await disconnectDevice(page).catch(() => { /* best effort */ });
   });
 
   test('navigate from inventory: clicking locate link sets correct targetEPC', async ({ page }) => {

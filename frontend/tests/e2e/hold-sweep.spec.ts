@@ -5,7 +5,7 @@
  * Scratch instrument for TRA-1150 density work; not part of the suite.
  */
 import { test, expect, type Page } from '@playwright/test';
-import { connectToDevice } from './helpers/connection';
+import { connectToDevice, disconnectDevice } from './helpers/connection';
 import { simulateTriggerPress, simulateTriggerRelease } from './helpers/trigger-utils';
 import type { WindowWithStores } from './types';
 
@@ -31,6 +31,26 @@ test.describe('Trigger hold saturation sweep', () => {
       { timeout: 10000 }
     );
     await page.waitForTimeout(3000);
+  });
+
+  /**
+   * Hand the reader back. This file had NO teardown at all.
+   *
+   * It holds the command path for the whole sweep — minutes — and then simply
+   * ended, leaving the bridge's single-writer ownership with a session nobody
+   * was using. The next spec file's `beforeAll` connect then waited out its full
+   * 30s timeout and reported "the reader would not connect", which is a true
+   * statement about the wrong subject: the reader was fine, this file never let
+   * go of it.
+   *
+   * That is why `inventory-save.spec.ts` — which runs immediately after this one
+   * — failed in `connectToDevice` while its own assertions were never reached.
+   */
+  test.afterAll(async () => {
+    if (!page || page.isClosed()) return;
+    await simulateTriggerRelease(page).catch(() => { /* may not be pressed */ });
+    await disconnectDevice(page).catch(() => { /* best effort */ });
+    await page.close();
   });
 
   test('sweep hold durations @hardware', async () => {

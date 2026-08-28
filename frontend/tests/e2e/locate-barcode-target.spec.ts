@@ -88,6 +88,27 @@ test.describe('Locate barcode target acquisition (TRA-1121) @hardware', () => {
   });
 
   test.afterAll(async () => {
+    // Cancel any barcode capture still armed before letting go of the reader.
+    //
+    // The last test in this file leaves the screen in BARCODE mode by design.
+    // If the module is still armed when the next spec file takes the reader, a
+    // physical label in the scanner's view lands as a BARCODE_READ and writes
+    // itself into the target — which is exactly how `locate.spec.ts`'s
+    // validation test came to assert 'ZZZZ' and receive '10018'. A stray read
+    // silently overwriting another spec's state is not flake; it is this file
+    // failing to hand the device back in the state it borrowed it in.
+    await page
+      .evaluate(() => {
+        const btn = document.querySelector<HTMLButtonElement>(
+          '[data-testid="locate-barcode-scan"]'
+        );
+        // The button is a toggle: it cancels an in-flight capture. Clicking it
+        // when nothing is capturing would START one, so only click while the
+        // screen says a scan is running.
+        if (btn && /cancel/i.test(btn.textContent ?? '')) btn.click();
+      })
+      .catch(() => { /* best effort: the page may already be gone */ });
+
     await disconnectDevice(page).catch(() => { /* best effort */ });
     await page.close();
   });
