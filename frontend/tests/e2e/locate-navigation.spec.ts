@@ -5,6 +5,11 @@
 
 import { test, expect } from '@playwright/test';
 import { connectToDevice, disconnectDevice } from './helpers/connection';
+import {
+  LOCATE_TEST_TAG_128,
+  LOCATE_TEST_TAG_128_STRIPPED,
+  TEST_TAGS,
+} from '@test-utils/constants';
 import { setupConsoleMonitoring } from './helpers/console-utils';
 import { HARDWARE_TEST_TIMEOUT_MS } from './e2e.config';
 
@@ -111,7 +116,7 @@ test.describe('Locate Navigation Tests @hardware', () => {
 
     // Verify the URL has the correct EPC parameter
     const url = page.url();
-    expect(url).toContain('#locate?epc=10019');
+    expect(url).toContain(`#locate?epc=${TEST_TAGS.TAG_2}`);
 
     // Verify the input shows the correct EPC. The test id is `target-epc-display`
     // — `locate-epc-input` has never existed (TRA-1088).
@@ -140,7 +145,7 @@ test.describe('Locate Navigation Tests @hardware', () => {
     // Locate link has to carry `tag.epc`. The mask builder pads a deep-linked
     // value back out, and at 128 bits that padding cannot be the inverse of
     // the stripping — it lands on entirely the wrong 96 bits.
-    const EPC_128 = '00000000000000000000533034313633';
+    const EPC_128 = LOCATE_TEST_TAG_128;
 
     await page.click('[data-testid="menu-item-scan"]');
     await page.waitForTimeout(3000);
@@ -180,7 +185,7 @@ test.describe('Locate Navigation Tests @hardware', () => {
     // So: filter by visibility, not by which component happens to carry a
     // testid. That states the actual intent — the operator sees the trimmed
     // form — and stays correct if the responsive breakpoint or the testids move.
-    await expect(page.getByText('533034313633').filter({ visible: true })).toBeVisible();
+    await expect(page.getByText(LOCATE_TEST_TAG_128_STRIPPED).filter({ visible: true })).toBeVisible();
 
     await locateButton.click();
     await page.waitForSelector('h2:text("Configuring Reader")', { state: 'detached', timeout: 10000 }).catch(() => {});
@@ -190,7 +195,7 @@ test.describe('Locate Navigation Tests @hardware', () => {
   });
 
   test('direct URL: navigate to #locate?epc=X sets targetEPC', async ({ page }) => {
-    const testEpc = '10019';
+    const testEpc = TEST_TAGS.TAG_2;
 
     // Navigate directly to locate with EPC parameter
     await page.goto(`/#locate?epc=${testEpc}`);
@@ -227,7 +232,7 @@ test.describe('Locate Navigation Tests @hardware', () => {
 
   test('URL changes: navigating to new ?epc=Y updates targetEPC', async ({ page }) => {
     // First EPC
-    const firstEpc = '10021';
+    const firstEpc = TEST_TAGS.TAG_4;
     await page.goto(`/#locate?epc=${firstEpc}`);
 
     // Give time for navigation and mode configuration
@@ -237,7 +242,7 @@ test.describe('Locate Navigation Tests @hardware', () => {
     await expect(epcInput).toHaveValue(firstEpc);
 
     // Change to second EPC via URL
-    const secondEpc = '10023';
+    const secondEpc = TEST_TAGS.TAG_6;
     await page.goto(`/#locate?epc=${secondEpc}`);
 
     await page.waitForTimeout(500);

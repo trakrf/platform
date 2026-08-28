@@ -26,6 +26,45 @@ export const TEST_TAGS = {
 } as const;
 
 /**
+ * Physical 128-bit RFID test tags ("waldo" tags) available on the bench.
+ *
+ * Kept as full 32-char EPCs rather than derived, because `EPC_FORMATS.toFullEPC`
+ * pads to 24 — it is a 96-bit helper and cannot produce these.
+ *
+ * The pair is deliberate and load-bearing: they are identical through hex char
+ * 24 and differ only in the last character. That is what makes them able to
+ * demonstrate TRA-1108's false positive — a 96-bit mask covers only the leading
+ * bits, so masking one reports the other. Do not replace one of them with an
+ * unrelated 128-bit tag; the test needs the collision.
+ */
+export const TEST_TAGS_128 = {
+  /** TRA-1098 probe 20 — the target in mask-length tests. */
+  TAG_A: '00000000000000000000533034313633',
+  /** TRA-1098 probe 19 — the decoy that must NOT be reported. */
+  TAG_B: '00000000000000000000533034313634',
+} as const;
+
+export const LOCATE_TEST_TAG_128 = TEST_TAGS_128.TAG_A;
+export const LOCATE_DECOY_TAG_128 = TEST_TAGS_128.TAG_B;
+
+/** Leading-zero-stripped forms, as the Scan tab renders them (`displayEpc`). */
+export const LOCATE_TEST_TAG_128_STRIPPED = '533034313633';
+export const LOCATE_DECOY_TAG_128_STRIPPED = '533034313634';
+
+/**
+ * rfidCollect barcode labels on the bench, **as the app reports them**.
+ *
+ * The physical labels are zero-padded — the wire carries `010020` — and the
+ * barcode parser strips leading zeros from numeric barcodes
+ * (`worker/cs108/barcode/parser.ts`). So these are the PARSED values, which is
+ * what a test comparing against `barcodeStore` or the Locate target must use.
+ *
+ * A list rather than one value on purpose: pinning a single label turns a
+ * bench-aim change into a red test. Assert membership, not identity.
+ */
+export const BENCH_BARCODE_LABELS = ['10020', '10021', '10022', '10023'] as const;
+
+/**
  * Array of all test tag values for iteration
  */
 export const TEST_TAG_ARRAY = Object.values(TEST_TAGS);

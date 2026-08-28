@@ -258,7 +258,22 @@ test.describe('Locate Functionality Tests @hardware', () => {
 
     // Press must actually start a scan, not merely leave the reader connected.
     const held = await sampleLocateScreen(sharedPage, 3000);
-    expect(held.some((s) => s.readerState === ReaderState.SCANNING), 'press should start scanning').toBe(true);
+    // INTERMITTENT, and the flake is the product's, not this test's (TRA-1171).
+    //
+    // `reader.ts` discards a trigger press unless `readerState === CONNECTED` —
+    // `BUSY` is silently dropped with only a `logger.debug`. `gotoLocateWithEPC`
+    // now waits for CONNECTED before returning, which narrows the window but
+    // cannot close it: the state can move back to BUSY between that wait
+    // resolving and this press being delivered.
+    //
+    // Deliberately NOT retried here. A retry would make this green while hiding
+    // the exact behaviour TRA-1171 needs to measure — how often a real press
+    // lands on a non-CONNECTED state. A red here is a data point, not noise.
+    expect(
+      held.some((s) => s.readerState === ReaderState.SCANNING),
+      'press should start scanning — if this is red, the press was dropped on a ' +
+        'non-CONNECTED reader state (TRA-1171), not a broken trigger simulation'
+    ).toBe(true);
 
     console.log('[Test] Simulating trigger release...');
     const releaseResult = await simulateTriggerRelease(sharedPage);
