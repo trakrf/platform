@@ -398,6 +398,57 @@ describe('CS108BLETransport write retry budget', () => {
     expect(lastWriteEndedAt).toBeGreaterThan(COMMAND_TIMEOUT_MS);
   }, 15000);
 
+  /**
+   * The ack timeout caps `L`, and that cap is what closes the widest overrun
+   * window — but only by accident of wording, so it is pinned here.
+   *
+   * ble-mcp-test rejects an unacknowledged write at 1500ms with "write N was not
+   * acknowledged within 1500ms". `isRetryable` does not match that, so the loop
+   * stops on the first attempt and a very slow bridge fails fast instead of
+   * writing late. Nothing states that dependency anywhere else: it holds because
+   * two strings in two repos happen not to overlap.
+   *
+   * If the bridge ever rewords its timeout to contain "busy", the ack timeout
+   * becomes retryable, two capped attempts plus a 250ms delay reach 3250ms, and
+   * the >2500ms overrun window reopens with no other signal. This test is the
+   * signal.
+   */
+  it('treats the mock ack timeout as non-retryable, which is what caps the budget', () => {
+    const transport = new CS108BLETransport();
+    const priv = transport as unknown as { isRetryable: (m: string) => boolean };
+
+    // Verbatim shape from ble-mcp-test's ws-transport sendAwaitingAck.
+    expect(priv.isRetryable('write 7 was not acknowledged within 1500ms; the bridge may be wedged'))
+      .toBe(false);
+  });
+
+  it('fails fast rather than writing late when ack latency exceeds the 1500ms cap', async () => {
+    const transport = new CS108BLETransport();
+    let writes = 0;
+    let endedAt = 0;
+    const started = Date.now();
+
+    Object.assign(transport as unknown as Record<string, unknown>, {
+      device: {},
+      server: { connected: true },
+      writeCharacteristic: {
+        writeValue: async () => {
+          writes++;
+          await new Promise(r => setTimeout(r, 1500)); // the mock's cap, not the caller's wish
+          endedAt = Date.now() - started;
+          throw new Error('write 7 was not acknowledged within 1500ms; the bridge may be wedged');
+        }
+      },
+      messagePort: { postMessage: () => {} }
+    });
+
+    const priv = transport as unknown as { queueWrite: (d: Uint8Array) => Promise<boolean> };
+    await priv.queueWrite(new Uint8Array([0x01]));
+
+    expect(writes).toBe(1);            // no retry: the timeout is not retryable
+    expect(endedAt).toBeLessThan(2500); // so it cannot outlive the command
+  }, 15000);
+
   it('does not retry a disconnected GATT server', () => {
     const transport = new CS108BLETransport();
     const priv = transport as unknown as { isRetryable: (m: string) => boolean };

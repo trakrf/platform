@@ -160,8 +160,21 @@ export class CS108BLETransport implements Transport {
    * three DISJOINT windows, with safe bands between them:
    *
    *      584 ms <= L <  625 ms     2 retries, ends up to 2624 ms
-   *     1126 ms <= L < 1750 ms     1 retry,   ends up to 3749 ms
-   *     2501 ms <= L               0 retries, the bare write outlives it
+   *     1126 ms <= L <= 1500 ms    1 retry,   ends up to 3250 ms
+   *
+   * The third window the raw arithmetic predicts (L >= 2501) is UNREACHABLE, and
+   * the second is truncated from 1750 to 1500, because `L` is capped: the mock's
+   * ack timeout rejects at 1500 ms, and that rejection is **not retryable** --
+   * `isRetryable` matches only 'GATT operation already in progress' and
+   * 'Device busy', while the ack timeout says "write N was not acknowledged
+   * within 1500ms". So past 1500 ms the loop stops on the first attempt.
+   *
+   * That is load-bearing and implicit: window 3 is closed by a STRING MISMATCH
+   * between this retry list and ble-mcp-test's timeout text, not by any explicit
+   * bound. Reword either -- give the timeout a message containing "busy", say --
+   * and the ack timeout becomes retryable, two capped attempts plus a delay reach
+   * 3250 ms, and the window silently reopens. There is a test pinning exactly
+   * that, and it is the reason it exists.
    *
    * Inside a window the last write lands after the command that owns it has
    * already rejected — precisely the "stale command injected into the stream"
