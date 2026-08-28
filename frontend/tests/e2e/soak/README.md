@@ -48,7 +48,30 @@ SWEEP_REPS=2 PLAYWRIGHT_BASE_URL=http://localhost:5173 \
   pnpm exec playwright test tests/e2e/hold-sweep.spec.ts --reporter=list
 ```
 
-Reference result (2026-08-23, static field, ~200 tags): `N(t) = 167 * (1 - e^(-t/4.8s))`.
+> ### ⚠ THE REFERENCE CURVE BELOW IS NO LONGER COMPARABLE
+>
+> `N(t) = 167 * (1 - e^(-t/4.8s))` was measured **2026-08-23 on a 96-bit-only tag
+> field**. 128-bit tags were added to the bench on 2026-08-28.
+>
+> This is a **saturation curve, and its population changed underneath it**. A
+> saturation curve is a statement about a specific field — how many distinct tags
+> are reachable and how fast they are discovered — so a different field produces a
+> different curve for reasons that have nothing to do with the reader, the
+> firmware, or whatever change is being evaluated.
+>
+> Re-cutting a density comparison against this number gives a **confidently wrong
+> answer with no tell**: both runs complete, both produce a clean exponential, and
+> the difference reads as a regression.
+>
+> Same shape as ble-mcp-test's reconnect probe curve (0ms→25%, 250ms→100%), which
+> measured single-shot success while the retry list matched nothing the bridge
+> sent — a real measurement of the wrong thing, which two sessions had to be
+> warned not to re-cut constants on.
+>
+> **Re-measure on the current field before comparing anything to it.** The number
+> stays here as a record of that day's field, not as a baseline.
+
+Reference result (2026-08-23, **96-bit-only field**, ~200 tags): `N(t) = 167 * (1 - e^(-t/4.8s))`.
 Total read rate is flat at ~40-48 reads/s regardless of hold length — saturation is
 discovery, not throughput. The suite's 2s window samples only ~34% of the reachable
 population; ~11s would be needed for 90%.
