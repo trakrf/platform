@@ -4,7 +4,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { connectToDevice } from './helpers/connection';
+import { connectToDevice, disconnectDevice } from './helpers/connection';
 import { setupConsoleMonitoring } from './helpers/console-utils';
 import { HARDWARE_TEST_TIMEOUT_MS } from './e2e.config';
 
@@ -40,6 +40,19 @@ test.describe('Locate Navigation Tests @hardware', () => {
         (window as any).__TEST_LOGS__.push(logText);
       }, text);
     });
+  });
+
+  /**
+   * Release the command path explicitly, rather than leaving it to page close.
+   *
+   * This file connects per test and had no teardown, relying on Playwright
+   * closing the fixture page. That does close the socket — but the bridge's
+   * release completes when the SERVER processes that close, so the next
+   * connect races it (TRA-1153). Disconnecting through the UI first makes the
+   * handoff ordered instead of hopeful.
+   */
+  test.afterEach(async ({ page }) => {
+    await disconnectDevice(page).catch(() => { /* best effort */ });
   });
 
   test('navigate from inventory: clicking locate link sets correct targetEPC', async ({ page }) => {
@@ -148,8 +161,26 @@ test.describe('Locate Navigation Tests @hardware', () => {
     const locateButton = page.locator('[data-testid="locate-button"]:visible');
     await expect(locateButton).toHaveCount(1);
 
-    // The row itself still shows the operator the trimmed form.
-    await expect(page.getByText('533034313633')).toBeVisible();
+    // The row the OPERATOR can see still shows the trimmed form.
+    //
+    // Two corrections live here, and the second undid the first.
+    //
+    // 1. A bare `getByText('533034313633')` is a strict-mode violation: the
+    //    value renders twice, once in the desktop table row and once in the
+    //    mobile card, and Playwright refuses an ambiguous match rather than
+    //    silently taking the first.
+    //
+    // 2. Scoping to `getByTestId(\`tag-${EPC_128}\`)` fixed the ambiguity and
+    //    introduced a permanent failure, because that testid exists ONLY on
+    //    `InventoryMobileCard` — which is CSS-hidden at the desktop viewport
+    //    these tests run in. The assertion then read `Received: hidden`, which
+    //    looks like a broken deep link and is really "you scoped to the copy
+    //    nobody can see".
+    //
+    // So: filter by visibility, not by which component happens to carry a
+    // testid. That states the actual intent — the operator sees the trimmed
+    // form — and stays correct if the responsive breakpoint or the testids move.
+    await expect(page.getByText('533034313633').filter({ visible: true })).toBeVisible();
 
     await locateButton.click();
     await page.waitForSelector('h2:text("Configuring Reader")', { state: 'detached', timeout: 10000 }).catch(() => {});

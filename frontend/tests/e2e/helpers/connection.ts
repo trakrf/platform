@@ -18,7 +18,45 @@ const config = getE2EConfig();
  * Includes retry logic with backoff for bridge server recovery
  */
 export async function connectToDevice(page: Page): Promise<void> {
-  // v0.4.2: Mock has built-in retry logic, no need for test-side retries
+  // ONE test-side retry, and the reason is specific.
+  //
+  // This used to read "v0.4.2: Mock has built-in retry logic, no need for
+  // test-side retries". Two versions of wrong: 0.4.2 is eight releases back, and
+  // the claim is not true of the failure this suite actually hits.
+  //
+  // ble-mcp-test 0.12.0 does retry connect failures — but only
+  // RETRYABLE_CONNECT_CODES, which is `['NOT_READY']`. The command path being
+  // owned by another connection is `Device is busy`, and upstream refuses to
+  // retry it ON PURPOSE: it is a loud refusal that no amount of waiting inside
+  // one connect attempt will fix.
+  //
+  // Which is precisely our shape. Playwright opens a fresh page per spec, so the
+  // previous spec's session may still own the command path for a moment after
+  // its socket closes. That is not a fault to retry INSIDE a connect; it is a
+  // handoff that needs a beat between attempts. So the retry belongs here, in
+  // the suite, and nowhere else.
+  //
+  // Bounded to two attempts on purpose. If a second attempt cannot connect, the
+  // path is genuinely held and hiding that behind more retries would turn a
+  // contention bug into a slow flake.
+  const ATTEMPTS = 2;
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    try {
+      await connectToDeviceOnce(page);
+      return;
+    } catch (error) {
+      if (attempt === ATTEMPTS) throw error;
+      console.warn(
+        `[Connection] Connect attempt ${attempt}/${ATTEMPTS} failed, retrying once: ${error}`
+      );
+      // Long enough for the bridge to process the previous socket close, which
+      // is what releases the command path (TRA-1153).
+      await page.waitForTimeout(1000);
+    }
+  }
+}
+
+async function connectToDeviceOnce(page: Page): Promise<void> {
   try {
       console.log('[Connection] Starting connection process...');
       
@@ -186,7 +224,7 @@ export async function connectToDevice(page: Page): Promise<void> {
       
     } catch (error) {
       console.log('[Connection] Connection failed:', (error as Error).message);
-      throw error; // Let the mock handle retries
+      throw error; // Retried by connectToDevice, once, for the busy handoff.
     }
 }
 
@@ -362,9 +400,34 @@ async function disconnectDeviceUnbounded(page: Page): Promise<'disconnected' | '
     //   timeout: config.timeouts.ui
     // });
     
-    // Wait after disconnect for bridge to complete cleanup
-    // 0.4.3 has postDisconnectDelay of 1.1s, plus bridge recovery time
-    await page.waitForTimeout(1500); // Allow mock and bridge to fully reset
+    // Wait for the bridge to actually release the command path.
+    //
+    // This used to be `waitForTimeout(1500)` justified as "0.4.3 has
+    // postDisconnectDelay of 1.1s". That constant is from a version we are eight
+    // releases past — 0.12.0's postDisconnectDelay is 250ms, measured over 997
+    // cycles — so the number was neither current nor derived from anything this
+    // suite can observe.
+    //
+    // It is also the wrong SHAPE. The command-path release completes when the
+    // bridge processes the socket close, which is not a fixed duration: under
+    // contention it is longer than any sleep anyone would write, and idle it is
+    // far shorter. A fixed sleep is therefore simultaneously too slow for the
+    // common case and too short for the case that actually fails — which is what
+    // `inventory-save` hit, timing out in the NEXT spec's connect while this
+    // teardown had already reported success.
+    //
+    // Poll the observable condition instead: the page reports disconnected and
+    // the connect button has come back enabled, which is the UI's own statement
+    // that a fresh connect is possible.
+    await page
+      .waitForSelector(config.selectors.connectButton + ':not([disabled])', {
+        timeout: config.timeouts.ui
+      })
+      .catch(() => {
+        // Not fatal in teardown: report it rather than hang. A connect that then
+        // fails is a better signal than a teardown that silently passed.
+        console.warn('[Connection] Connect button did not re-enable after disconnect');
+      });
     
     // Check final state after disconnect
     const finalState = await page.evaluate(() => {

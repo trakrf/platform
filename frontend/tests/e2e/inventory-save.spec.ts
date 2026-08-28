@@ -57,7 +57,12 @@ async function createTestLocation(
 ): Promise<TestLocation> {
   const token = await getAuthToken(page);
 
-  const tags = rfidTag ? [{ type: 'rfid', value: rfidTag }] : [];
+  // `tag_type`, not `type`. The v1 API rename landed and this fixture did not
+  // follow, so every asset creation here failed with
+  // `unknown field "type" in request body` — a 400 that reads as a test
+  // asserting something wrong rather than a fixture describing a shape the API
+  // stopped accepting. See shared.TagRequest.
+  const tags = rfidTag ? [{ tag_type: 'rfid', value: rfidTag }] : [];
 
   const response = await page.request.post(`${getApiBaseUrl()}/locations`, {
     headers: {
@@ -105,7 +110,7 @@ async function createTestAsset(
       name,
       external_key: `ASSET-${uniqueId()}`,
       is_active: true,
-      tags: [{ type: 'rfid', value: rfidEpc }],
+      tags: [{ tag_type: 'rfid', value: rfidEpc }],
     },
   });
 

@@ -83,8 +83,34 @@ async function gotoLocateWithEPC(page: Page, epc: string) {
   const epcInput = page.locator('[data-testid="target-epc-display"]');
   await epcInput.fill(epc);
   await epcInput.blur();
-  // The tag-mask push keeps the reader BUSY for ~1.3s after blur.
-  await page.waitForTimeout(2500);
+
+  // Wait for the reader to be CONNECTED, not for a duration.
+  //
+  // This slept a flat 2500ms for a tag-mask push described as "~1.3s". That is
+  // not a margin, it is a guess about a quantity nobody measured — and the cost
+  // of guessing low is invisible, because `reader.ts` DISCARDS a trigger press
+  // unless `readerState === CONNECTED`:
+  //
+  //     if (this.readerState === ReaderState.CONNECTED) { startScanning() }
+  //     else { logger.debug(`Trigger pressed ignored - reader state is ...`) }
+  //
+  // So a press arriving while the push is still BUSY is dropped silently, the
+  // scan never starts, and the test reports "press should start scanning" —
+  // which reads as a broken trigger rather than a press delivered too early.
+  await page
+    .waitForFunction(
+      () => window.__ZUSTAND_STORES__?.deviceStore?.getState()?.readerState === 'Connected',
+      { timeout: 15000 }
+    )
+    .catch(() => {
+      console.warn('[Locate] reader did not settle to Connected; a press here will be ignored');
+    });
+
+  // Clear the trigger debounce window. `reader.ts` sets `triggerDebounceMs =
+  // 100`, so 250 is 2.5x the actual value rather than another round number
+  // chosen for comfort. Without it a press issued immediately after this helper
+  // can be swallowed as a repeat of whatever the previous test did.
+  await page.waitForTimeout(250);
 }
 
 // Locate mode tests - EPC filtering integration with CS108 hardware
@@ -136,6 +162,48 @@ test.describe('Locate Functionality Tests @hardware', () => {
     if (!connectionHealthy) {
       test.skip();
     }
+  });
+
+  /**
+   * Hand the reader back between tests, whatever happened during one.
+   *
+   * These tests share one page and one reader, and a trigger press is STATE:
+   * a test that fails between press and release leaves the reader SCANNING.
+   * The Locate screen disables its EPC input while scanning
+   * (`disabled={readerState === ReaderState.SCANNING}`), so the very next test's
+   * `fill()` silently does not commit and it asserts against the PREVIOUS test's
+   * target.
+   *
+   * That is exactly how the validation test came to expect 'ZZZZ' and receive
+   * '10018' — which is this file's own LOCATE_TEST_TAG, not a stray value. The
+   * reported failure was in the wrong test: one test failed, and a different one
+   * was blamed.
+   *
+   * Best-effort by design: teardown must not convert one red test into two.
+   */
+  test.afterEach(async () => {
+    if (!sharedPage || sharedPage.isClosed()) return;
+
+    // Only attempt a release if the injection point is actually there. A test
+    // that navigated has torn the transport down, which deletes
+    // `__TRANSPORT_MANAGER__` (see cs108-ble-transport cleanup), and calling the
+    // helper anyway spends three retries producing NOTIFY_CHAR_NOT_FOUND on
+    // every single test — noise that looks like a hardware fault in the log.
+    const canRelease = await sharedPage
+      .evaluate(() => !!window.__TRANSPORT_MANAGER__?.notifyCharacteristic)
+      .catch(() => false);
+    if (!canRelease) return;
+
+    await simulateTriggerRelease(sharedPage).catch(() => { /* may not be pressed */ });
+    await sharedPage
+      .waitForFunction(
+        () =>
+          window.__ZUSTAND_STORES__?.deviceStore?.getState()?.readerState !== 'SCANNING',
+        { timeout: 5000 }
+      )
+      .catch(() => {
+        console.warn('[Locate] reader still SCANNING after release; next test may inherit it');
+      });
   });
 
   test.afterAll(async () => {
@@ -220,35 +288,71 @@ test.describe('Locate Functionality Tests @hardware', () => {
     await sharedPage.waitForTimeout(1500);
   });
 
-  test('validation: non-hex EPC is accepted with a warning, not rejected', async () => {
-    // TRA-1088: this test used to assert that 'DEADBEEF' was REJECTED as an
-    // "invalid EPC format". It could never pass — and not because DEADBEEF is
-    // valid hex. `validateEPC` has no `isValid: false` branch at all, so
-    // `setTargetEPC` always succeeds and the screen's "Invalid EPC format"
-    // message is unreachable. The relaxation is deliberate: the validator's own
-    // comment says it exists "to allow any alphanumeric tag value for use with
-    // the locate feature". Assert the contract that actually holds.
+  test('validation: non-hex EPC is refused and leaves the target unchanged', async () => {
+    // CORRECTED 2026-08-28, and the previous correction is the interesting part.
+    //
+    // This test was rewritten under TRA-1088 to assert that a non-hex EPC is
+    // ACCEPTED, on the reasoning that `validateEPC` has no `isValid: false`
+    // branch, so `setTargetEPC` always succeeds and "Invalid EPC format" is
+    // unreachable. Every clause of that is true about the STORE's validator, and
+    // it is the wrong layer: `LocateScreen.commitTarget` has its own guard,
+    //
+    //     if (!/^[0-9A-F]+$/.test(value)) { setStatusMessage('Invalid EPC
+    //     format...'); return; }
+    //
+    // which returns BEFORE `setTargetEPC` is ever called. The message is not
+    // unreachable; it is produced right there. So the screen does refuse non-hex
+    // and the previous target survives — which is why this test asserted 'ZZZZ'
+    // and received '10018', this file's own LOCATE_TEST_TAG left by the test
+    // before it.
+    //
+    // A dead branch in one layer was read as a dead behaviour in the system.
+    // Assert what the screen actually does.
     await gotoLocate(sharedPage);
+
+    const targetBefore = await sharedPage.evaluate(
+      () => window.__ZUSTAND_STORES__?.settingsStore?.getState()?.rfid?.targetEPC
+    );
 
     const epcInput = sharedPage.locator('[data-testid="target-epc-display"]');
     await epcInput.fill('ZZZZ');
     await epcInput.blur();
-    await sharedPage.waitForTimeout(1000);
+    await sharedPage.waitForTimeout(500);
 
-    // Accepted and stored — not rejected.
+    // The typed text stays visible so the operator can correct it...
     await expect(epcInput).toHaveValue('ZZZZ');
+
+    // ...but it must NOT become the target. Masking on a value the reader cannot
+    // hunt reports "no signal", which on a tag finder reads as "the item is not
+    // here" — the most harmful wrong answer this screen can give.
+    //
+    // Asserted against the value held BEFORE this test typed anything, rather
+    // than a hardcoded constant: what matters is that the target did not move,
+    // not which target it happened to be.
     const stored = await sharedPage.evaluate(
       () => window.__ZUSTAND_STORES__?.settingsStore?.getState()?.rfid?.targetEPC
     );
-    expect(stored).toBe('ZZZZ');
+    expect(stored).toBe(targetBefore);
+    expect(stored).not.toBe('ZZZZ');
 
     // The screen reports success, not the (unreachable) format error.
-    const statusMessage = await sharedPage.evaluate(() => {
-      const input = document.querySelector('[data-testid="target-epc-display"]');
-      return input?.parentElement?.lastElementChild?.textContent?.trim() ?? '';
-    });
+    // Read the status the same way locate-barcode-target.spec.ts does, from the
+    // container two levels up. The previous reader walked
+    // `input.parentElement.lastElementChild`, which returned '' — a DOM shape
+    // this screen no longer has. An empty string from a broken reader is
+    // indistinguishable from a screen that said nothing, so it could only ever
+    // satisfy a `not.toContain` assertion. That is what made the inverted
+    // assertion above look correct for as long as it did.
+    const statusMessage =
+      (await sharedPage
+        .locator('[data-testid="target-epc-display"]')
+        .locator('xpath=../..')
+        .textContent()) ?? '';
     console.log('[Test] status message:', statusMessage);
-    expect(statusMessage).not.toContain('Invalid EPC format');
+    // The screen says why it refused. This is the assertion that was inverted:
+    // it previously required the message to be ABSENT, on the belief that it
+    // could never be produced.
+    expect(statusMessage).toContain('Invalid EPC format');
   });
 
   test('edge case: reports no signal for a tag that is not present', async () => {

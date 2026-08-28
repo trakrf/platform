@@ -28,6 +28,70 @@ export class SequenceAbortedError extends Error {
   }
 }
 
+/**
+ * Thrown when a second command is issued while one is still in flight.
+ *
+ * Typed rather than a bare `Error` because it has a real consumer: `reader.ts`
+ * treats it as benign on the settings path — a concurrent `setMode()` leaves the
+ * mutex held, and the settings are already stored, so the mode change applies
+ * what the losing call could not (TRA-1091).
+ *
+ * That consumer used to identify it by `message.includes('Command already
+ * active')`, which is an OVER-SATISFIABLE match: any error whose message
+ * happened to contain that text took the benign branch. A benign branch that
+ * matches too widely does not fail loudly — it SWALLOWS the real error and
+ * records a success, which is the one failure mode an unattended soak cannot
+ * recover from afterwards. The message stays identical for the log; the class is
+ * what decides.
+ */
+/**
+ * Marks an error as having already been through the sequence retry.
+ *
+ * A PROPERTY, not a message suffix. This used to be the string
+ * `' (already retried)'` appended to the message, tested with
+ * `errorMessage.includes('(already retried)')` — a flag carried in prose, which
+ * meant the only way to propagate it was to build a NEW `Error`, and building a
+ * new Error discarded the class of the one being wrapped.
+ *
+ * That destroyed error identity on the retry path: a retried
+ * `SequenceAbortedError` reached its consumer as a plain `Error` whose text
+ * still contained "aborted". `reader.ts` matched on that text and therefore
+ * still behaved correctly — the over-wide match was accidentally compensating
+ * for the identity loss. Narrowing that match to `instanceof` exposed this, on
+ * hardware, as a failing inventory sequence (TRA-1187).
+ *
+ * Two message-shaped mechanisms propping each other up: neither was visible
+ * while both were in place.
+ */
+const ALREADY_RETRIED = Symbol.for('trakrf.cs108.alreadyRetried');
+
+function wasAlreadyRetried(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && ALREADY_RETRIED in error;
+}
+
+/**
+ * Flag the error and return IT — never a copy.
+ *
+ * Preserving the object preserves its class and its stack, which is the whole
+ * point: every consumer downstream discriminates by class now.
+ */
+function markRetried(error: unknown): unknown {
+  if (typeof error === 'object' && error !== null) {
+    Object.defineProperty(error, ALREADY_RETRIED, { value: true, enumerable: false });
+    return error;
+  }
+  const wrapped = new Error(String(error));
+  Object.defineProperty(wrapped, ALREADY_RETRIED, { value: true, enumerable: false });
+  return wrapped;
+}
+
+export class CommandInFlightError extends Error {
+  constructor(message = 'Command already active - executeCommand called concurrently') {
+    super(message);
+    this.name = 'CommandInFlightError';
+  }
+}
+
 export class CommandManager {
   private packetHandler: PacketHandler;
   private currentCommandResolve: ((result: unknown) => void) | null = null;
@@ -71,7 +135,7 @@ export class CommandManager {
 
     // Check if another command is already active
     if (this.currentCommandResolve) {
-      throw new Error('Command already active - executeCommand called concurrently');
+      throw new CommandInFlightError();
     }
 
     // Create and track the promise
@@ -339,16 +403,16 @@ export class CommandManager {
 
         // If retryOnError is set and this is the first failure, retry once
         const errorMessage = error instanceof Error ? error.message : String(error);
-        if (cmd.retryOnError && !errorMessage.includes('(already retried)')) {
+        if (cmd.retryOnError && !wasAlreadyRetried(error)) {
           logger.debug(`[CommandManager] Command failed with: ${errorMessage}`);
           logger.debug(`[CommandManager] Retrying ${cmd.event.name} per sequence configuration`);
           await new Promise(resolve => setTimeout(resolve, 100)); // Brief delay
           try {
             await this.executeCommand(cmd.event, cmd.payload);
           } catch (retryError: unknown) {
-            // Add marker to prevent infinite retry
-            const message = retryError instanceof Error ? retryError.message : String(retryError);
-            throw new Error(`${message} (already retried)`);
+            // Mark to prevent infinite retry, WITHOUT rebuilding the error —
+            // see ALREADY_RETRIED. Rebuilding is what lost the class.
+            throw markRetried(retryError);
           }
         } else {
           throw error; // Re-throw if no retry configured or already retried

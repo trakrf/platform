@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { CS108Reader } from './reader.js';
 import { ReaderState, ReaderMode, RainTarget } from '../types/reader.js';
-import { CommandManager, SequenceAbortedError } from './command.js';
+import { CommandManager, SequenceAbortedError, CommandInFlightError } from './command.js';
 import { PacketHandler } from './packet.js';
 import { NotificationManager } from './notification/manager.js';
 import { IDLE_SEQUENCE } from './system/sequences.js';
@@ -13,7 +13,13 @@ import { removeLeadingZeros } from '../../utils/reconciliationUtils';
 import type { CS108Packet } from './type.js';
 
 // Mock all dependencies
-vi.mock('./command.js', () => ({
+// `importOriginal` for the error classes, deliberately. They used to be
+// hand-redeclared here, which makes the mock a SECOND definition that can drift
+// from the real one without any test noticing — and since reader.ts now
+// discriminates by class rather than by message, a drifted copy would silently
+// stop matching. Taking the real classes means the mock cannot disagree.
+vi.mock('./command.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./command.js')>()),
   CommandManager: vi.fn().mockImplementation((sendToTransport, notificationHandler, stateContext) => {
     // Store the stateContext to simulate state transitions
     const mockManager = {
@@ -42,12 +48,6 @@ vi.mock('./command.js', () => ({
     };
     return mockManager;
   }),
-  SequenceAbortedError: class SequenceAbortedError extends Error {
-    constructor(message: string) {
-      super(message);
-      this.name = 'SequenceAbortedError';
-    }
-  }
 }));
 
 vi.mock('./packet.js', () => ({
@@ -532,13 +532,51 @@ describe('CS108Reader', () => {
       expect(maskTail(lastModeSequence(), expected.length)).toEqual(expected);
     });
 
+    /**
+     * The defect this replaced: `error.message.includes('aborted')`.
+     *
+     * That match was OVER-SATISFIABLE — any error whose text happened to contain
+     * the word took the swallow-and-return branch. It is the worst shape to
+     * carry into an unattended run, because the branch it guards CONSUMES the
+     * evidence: an unrelated failure is recorded as a success and cannot be
+     * recovered from the log afterwards. A narrow match fails loudly; this one
+     * launders.
+     *
+     * Both messages below contain "aborted" and neither is an abort.
+     */
+    it('does not swallow an unrelated error whose message merely says aborted', async () => {
+      for (const message of [
+        'RFID module aborted the power ramp',
+        'upload aborted by peer',
+      ]) {
+        (commandManagerMock.executeSequence as Mock).mockRejectedValueOnce(new Error(message));
+
+        await expect(
+          reader.setSettings({ rfid: { transmitPower: 25, targetEPC: TARGET_EPC } })
+        ).rejects.toThrow(message);
+      }
+    });
+
+    it('still swallows a genuine SequenceAbortedError', async () => {
+      // The other half: narrowing the match must not have closed the branch it
+      // was there for. Asserting only the negative would pass on a predicate
+      // that never fires at all.
+      (commandManagerMock.executeSequence as Mock).mockRejectedValueOnce(
+        new SequenceAbortedError('mode change in progress')
+      );
+
+      await expect(
+        reader.setSettings({ rfid: { transmitPower: 25, targetEPC: TARGET_EPC } })
+      ).resolves.toBeUndefined();
+    });
+
     it('treats the mutex collision as benign and still builds the mask', async () => {
       // Reproduce the reported interleaving: the settings push loses the race
-      // and rejects with the plain mutex Error. It contains no "aborted", so
-      // it used to miss setSettings' graceful branch and surface as ERROR on
+      // and rejects with the mutex error, which is not a SequenceAbortedError,
+      // so it used to miss setSettings' graceful branch and surface as ERROR on
       // the primary Locate path. It is now swallowed like an abort, because
       // the mode change applies the mask this call could not.
-      const mutexError = new Error('Command already active - executeCommand called concurrently');
+      const mutexError = new CommandInFlightError();
       (commandManagerMock.executeSequence as Mock).mockRejectedValueOnce(mutexError);
 
       await expect(
@@ -833,7 +871,7 @@ describe('CS108Reader', () => {
       (reader as any).readerState = ReaderState.CONNECTED;
       (commandManagerMock.executeSequence as Mock).mockClear();
       (commandManagerMock.executeSequence as Mock)
-        .mockRejectedValueOnce(new Error('Command already active'));
+        .mockRejectedValueOnce(new CommandInFlightError());
 
       await expect(reader.startScanning()).rejects.toThrow('Command already active');
 
