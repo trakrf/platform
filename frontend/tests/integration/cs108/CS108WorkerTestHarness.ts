@@ -113,18 +113,30 @@ interface MockTestingApi {
 /**
  * Minimum gap between one harness disconnecting and the next connecting.
  *
- * Carried over from the deleted `RfidReaderTestClient`, which enforced it
- * globally across instances. It may well be redundant now:
- * `CS108BLETransport.disconnect()` awaits `gatt.disconnect()` specifically so
- * the bridge-side release lands before the next connect (see the comment at
- * cs108-ble-transport.ts, TRA-1179). But "may well be" is not evidence, and the
- * failure it prevents — the next connect racing ahead of the release and being
- * refused as busy by our own previous session — reads as an ownership bug
- * rather than a timing one, which is expensive to diagnose at 03:00 in a soak.
+ * MEASURED 2026-08-28, not guessed. The bridge session probed reconnect
+ * directly -- disconnect, then reattempt with no client pacing -- producing a
+ * curve rather than a number:
  *
- * Delete it when a run without it is green, not before.
+ *   0ms    ->  25% connect   (15/20 refused "Device is busy")
+ *   100ms  ->  95%           (1/20 refused)
+ *   250ms  -> 100%           (0/20)
+ *   500ms  -> 100%
+ *   1000ms -> 100%
+ *
+ * 250 is the lowest rung with a clean 100%, so that is the value.
+ *
+ * It was 1000, inherited from the deleted `RfidReaderTestClient` and measured by
+ * nobody. That cost more than the wasted second: platform tried to derive the
+ * bridge's recovery time from soak logs and got min 791ms / median 3083ms, which
+ * looked like recovery data and was not -- the client never ATTEMPTED sooner
+ * than 791ms BECAUSE THIS CONSTANT FORBADE IT. The instrument was measuring its
+ * own pacing. The probe tested at 0, which is why it found a floor an order of
+ * magnitude lower.
+ *
+ * The general lesson: platform and the mock had each independently invented a
+ * number for the same physical quantity, and neither had measured it.
  */
-const CONNECTION_COOLDOWN_MS = 1000;
+const CONNECTION_COOLDOWN_MS = 250;
 
 /** Shared across harness instances, because the reader is shared across them. */
 let lastDisconnectAt = 0;
@@ -204,9 +216,15 @@ export class CS108WorkerTestHarness {
    * packet that arrived that way proved nothing about whether a real one would.
    *
    * The characteristic is taken by reference from `__TRANSPORT_MANAGER__`
-   * rather than re-resolved through `getCharacteristic()`, because the mock
-   * mints a fresh characteristic object per call and a fresh one is not
-   * subscribed.
+   * rather than re-resolved through `getCharacteristic()` — this helper wants
+   * THE instance the transport subscribed, not an equivalent one.
+   *
+   * An earlier version of this comment said the mock "mints a fresh
+   * characteristic object per call". That was true before 0.8.0 and false when
+   * it was written: TRA-1153 item 1 made the mock cache per canonical UUID. It
+   * was copied here from tests/e2e/helpers/trigger-utils.ts without checking,
+   * which is the failure this codebase keeps re-learning -- a claim inherited
+   * rather than verified.
    */
   private async injectNotification(packet: Uint8Array): Promise<void> {
     const testing = (navigator.bluetooth as unknown as { testing?: MockTestingApi })?.testing;
