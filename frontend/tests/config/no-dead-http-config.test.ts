@@ -59,6 +59,12 @@ function codeOnly(source: string): string {
     .replace(/(^|[^:])\/\/.*$/gm, '$1');
 }
 
+/** Documents that tell a human which port the bridge is on. */
+const BRIDGE_PORT_DOCS = [
+  'docs/frontend/MOCK_USAGE_GUIDE.md',
+  'frontend/tests/e2e/README.md',
+];
+
 describe('the deleted ble-mcp-test HTTP surface', () => {
   it.each(ROOT_FILES)('%s does not seed BLE_MCP_HTTP_* into a fresh clone', (file) => {
     const code = codeOnly(readFileSync(path.join(REPO_ROOT, file), 'utf-8'));
@@ -73,6 +79,30 @@ describe('the deleted ble-mcp-test HTTP surface', () => {
     const code = codeOnly(readFileSync(path.join(REPO_ROOT, '.env.local.example'), 'utf-8'));
 
     expect(code).not.toMatch(/^\s*BLE_MCP_WS_PORT\s*=\s*8080\s*$/m);
+  });
+
+  /**
+   * TRA-1186. The 8080 -> 25153 sweep fixed `.env.local.example` and the code,
+   * and MISSED the docs — `docs/frontend/MOCK_USAGE_GUIDE.md` told readers to
+   * set `BLE_MCP_WS_PORT=8080` in four places and to probe the bridge at
+   * `http://localhost:8080/`, and `tests/e2e/README.md` said the same.
+   *
+   * That is worse than a stale doc. 8080 is the port the platform BACKEND
+   * publishes on 0.0.0.0, so anyone following those instructions points the
+   * bridge at the backend and gets a connection that succeeds against entirely
+   * the wrong service. The guard above covers the example env file; nothing
+   * covered the documents people actually read first.
+   *
+   * Docs, not just code, because the sweep proved the docs are where it hides.
+   */
+  it.each(BRIDGE_PORT_DOCS)('%s does not document the backend port as the bridge', (file) => {
+    const text = readFileSync(path.join(REPO_ROOT, file), 'utf-8');
+
+    expect(text).not.toMatch(/BLE_MCP_WS_PORT\s*=\s*8080\b/);
+    // The bridge liveness probe. `426 Upgrade Required` is a WebSocket
+    // listener answering, so a curl at :8080 returning 426 would be the
+    // backend, not the bridge.
+    expect(text).not.toMatch(/localhost:8080\/[^\s`]*`?\s*\(426/);
   });
 
   it.each(FILES)('%s does not read BLE_MCP_HTTP_* or hardcode :8081', (file) => {
