@@ -39,12 +39,24 @@
  *      by the radio. Bare presence is deliberately NOT the trigger — a genuine
  *      ack timeout at genuinely 1500ms is a real radio event.
  *
- *   3. CONNECT CLUSTER NEAR 10s (attribution, not a failure)
- *      ble-mcp-test's `connect()` rejects promptly only on close codes
- *      4000-4999 and the Python bridge never sends one, so every real
- *      connect-time close waits out the full 10s timeout. Connect failures
- *      clustered there are that path, NOT the reader. Reported so the
- *      attribution is made from data rather than from memory.
+ *   3. CONNECT CLUSTER NEAR 10s — INVERTED AS OF ble-mcp-test 0.12.0
+ *      This used to mean "the known upstream hang". `connect()` rejected
+ *      promptly only on close codes 4000-4999 and the Python bridge never sent
+ *      one, so every real connect-time close waited out the full 10s timeout,
+ *      and a cluster there was that path rather than the reader.
+ *
+ *      0.12.0 rejects immediately with `CLOSED_BEFORE_CONNECTED`. So the
+ *      cluster now means something NEW and unexplained, and the old sentence
+ *      would send its reader to a bug that no longer exists. The threshold is
+ *      unchanged; only what it implies has flipped.
+ *
+ *      Two consequences for the baseline, both easy to misread:
+ *      - a connect failure is now cheap, so against an unhealthy bridge
+ *        attempts land ~250ms apart (the harness cooldown) instead of ~10.25s.
+ *        A raw connect-failure COUNT is therefore not comparable across this
+ *        version boundary; the rate per unit time is.
+ *      - connect rejections now carry a `code`, which this instrument already
+ *        records generically, so they classify themselves.
  *
  * Baseline instrument for TRA-1189 Phase 1.
  *
@@ -289,9 +301,27 @@ function main() {
   console.log('## Connect attribution\n');
   console.log(`  attempts ${connects.length}   failures ${connectFailures.length}   ≥${CONNECT_HANG_MS}ms ${hung.length}`);
   if (hung.length) {
-    console.log('\n  These are the upstream onclose gap (rejects promptly only on close codes');
-    console.log('  4000-4999; the Python bridge never sends one), NOT the reader. Do not');
-    console.log('  attribute them to radio or tag conditions.');
+    console.log('\n  ⚠ FINDING: connect failures at or past the old 10s timeout.');
+    console.log('    Before ble-mcp-test 0.12.0 this was the known upstream onclose gap and');
+    console.log('    could be dismissed. 0.12.0 rejects immediately with CLOSED_BEFORE_CONNECTED,');
+    console.log('    so a cluster here is NOT that bug and is not explained. Check the `outcome`');
+    console.log('    codes below before attributing anything to the radio.');
+    const byCode = new Map();
+    for (const c of hung) byCode.set(c.outcome, (byCode.get(c.outcome) ?? 0) + 1);
+    for (const [code, n] of byCode) console.log(`      ${code} ${n}`);
+    process.exitCode = 1;
+  }
+
+  // Attempts per unit time, because the raw count is not comparable across the
+  // 0.12.0 boundary: the old 10s hang was an accidental backoff, and removing it
+  // multiplies attempts against an unhealthy bridge without anything being worse.
+  if (connects.length > 1) {
+    const span = Math.max(...connects.map((c) => c.t)) - Math.min(...connects.map((c) => c.t));
+    if (span > 0) {
+      const perMin = (connects.length / (span / 60000)).toFixed(2);
+      const failPerMin = (connectFailures.length / (span / 60000)).toFixed(2);
+      console.log(`\n  attempts/min ${perMin}   failures/min ${failPerMin}   over ${(span / 60000).toFixed(1)} min`);
+    }
   }
   console.log('');
 }

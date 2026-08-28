@@ -9,8 +9,6 @@ const isRemote = !!process.env.PLAYWRIGHT_BASE_URL;
 
 export default defineConfig({
   testDir: './tests/e2e',
-  testIgnore: '**/to-fix/**',  // Skip all tests in to-fix directory
-  // globalSetup: './tests/e2e/global-setup.ts',  // Disabled - was killing servers
 
   // IMPORTANT: 30 second timeout per test - fail fast instead of hanging!
   // If a test needs more time, it should be split into smaller tests
@@ -21,10 +19,40 @@ export default defineConfig({
     timeout: 5000
   },
   fullyParallel: false,
+
+  /*
+   * ONE WORKER, and the reason is the reader, not a library.
+   *
+   * This used to read "TEMPORARY: Single worker + rate limiting in
+   * e2e.setup.ts to work around Noble.js listener leak". Every noun in that
+   * sentence is gone: `noble` is not a dependency of this package, and
+   * `tests/e2e/e2e.setup.ts` does not exist. It survived the Noble era as
+   * scaffolding and read as a live constraint for as long as nobody checked.
+   *
+   * The setting is still right, for a reason that outlives any library: 11 of
+   * these specs are tagged `@hardware` and reach ONE physical CS108 through one
+   * bridge. Two workers would fight over the radio, and the loser's failure
+   * would look like a device fault. A serial run is the price of a shared
+   * reader.
+   *
+   * That also means the constraint is narrower than it looks: the non-hardware
+   * specs have nothing to contend over. Splitting them into their own project
+   * with real parallelism is available whenever the suite's wall-clock starts to
+   * hurt — it is not blocked on anything, it has simply never been done.
+   */
+  workers: 1,
+
+  /*
+   * The `process.env.CI` branches below have never run.
+   *
+   * Verified 2026-08-28: no workflow under `.github/workflows/` references
+   * playwright or `test:e2e`. Playwright e2e is deliberately not in CI — it
+   * needs hardware — so green CI says nothing about this suite, and these
+   * branches are kept for whenever that changes rather than because they are
+   * exercised. Do not read their presence as coverage.
+   */
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: 1, // Force single worker to ensure sequential execution
-  // TEMPORARY: Single worker + rate limiting in e2e.setup.ts to work around Noble.js listener leak
   reporter: process.env.CI ? 'github' : 'list',
   use: {
     baseURL,

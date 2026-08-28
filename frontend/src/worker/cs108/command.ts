@@ -28,6 +28,29 @@ export class SequenceAbortedError extends Error {
   }
 }
 
+/**
+ * Thrown when a second command is issued while one is still in flight.
+ *
+ * Typed rather than a bare `Error` because it has a real consumer: `reader.ts`
+ * treats it as benign on the settings path — a concurrent `setMode()` leaves the
+ * mutex held, and the settings are already stored, so the mode change applies
+ * what the losing call could not (TRA-1091).
+ *
+ * That consumer used to identify it by `message.includes('Command already
+ * active')`, which is an OVER-SATISFIABLE match: any error whose message
+ * happened to contain that text took the benign branch. A benign branch that
+ * matches too widely does not fail loudly — it SWALLOWS the real error and
+ * records a success, which is the one failure mode an unattended soak cannot
+ * recover from afterwards. The message stays identical for the log; the class is
+ * what decides.
+ */
+export class CommandInFlightError extends Error {
+  constructor(message = 'Command already active - executeCommand called concurrently') {
+    super(message);
+    this.name = 'CommandInFlightError';
+  }
+}
+
 export class CommandManager {
   private packetHandler: PacketHandler;
   private currentCommandResolve: ((result: unknown) => void) | null = null;
@@ -71,7 +94,7 @@ export class CommandManager {
 
     // Check if another command is already active
     if (this.currentCommandResolve) {
-      throw new Error('Command already active - executeCommand called concurrently');
+      throw new CommandInFlightError();
     }
 
     // Create and track the promise

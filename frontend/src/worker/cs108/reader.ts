@@ -28,7 +28,7 @@ import {
   type ReaderSettings
 } from '../types/reader.js';
 import { postWorkerEvent, WorkerEventType, type WorkerEvent } from '../types/events.js';
-import { CommandManager, SequenceAbortedError } from './command.js';
+import { CommandManager, SequenceAbortedError, CommandInFlightError } from './command.js';
 import type { StateContext } from './state-context.js';
 import { PacketHandler, type LinkProfile, type FragmentMetrics } from './packet.js';
 import { NotificationManager } from './notification/manager.js';
@@ -661,8 +661,22 @@ class CS108Reader extends BaseReader {
         }
 
       } catch (error) {
-        // Handle sequence abortion gracefully
-        if (error instanceof Error && error.message.includes('aborted')) {
+        // Handle sequence abortion gracefully.
+        //
+        // Identified by CLASS, not by message. This used to read
+        // `error.message.includes('aborted')`, which matched any error whose
+        // text happened to contain the word — and the branch it guards SWALLOWS
+        // the error and returns as if nothing failed. An over-wide benign branch
+        // does not merely mis-handle: it consumes the evidence, so an unrelated
+        // failure is recorded as a success and cannot be recovered from the log
+        // afterwards. The narrow-match defects found this week fail loudly by
+        // comparison.
+        //
+        // The class was already imported at the top of this file and already
+        // used correctly 200 lines up, in the same kind of catch block for the
+        // same purpose — which is why review never caught this. The file
+        // demonstrably knows the right thing and forgets once.
+        if (error instanceof SequenceAbortedError) {
           logger.debug('[Reader] Settings application aborted (mode change in progress)');
           // Settings are already stored, will be used next time
           return;
@@ -670,12 +684,12 @@ class CS108Reader extends BaseReader {
         // Same situation, different error type (TRA-1091). A concurrent
         // setMode() — the Locate deep link dispatches both from one click —
         // leaves the command mutex held, and CommandManager rejects with a
-        // plain Error whose message contains no "aborted", so it misses the
-        // branch above and used to surface as ERROR on the primary Locate
-        // path. It is benign for the same reason: the settings are already
-        // stored, and buildModeSequences() reads the tag mask back out of
-        // them, so the mode change applies what this call could not.
-        if (error instanceof Error && error.message.includes('Command already active')) {
+        // CommandInFlightError, which is not a SequenceAbortedError, so it
+        // misses the branch above and used to surface as ERROR on the primary
+        // Locate path. It is benign for the same reason: the settings are
+        // already stored, and buildModeSequences() reads the tag mask back out
+        // of them, so the mode change applies what this call could not.
+        if (error instanceof CommandInFlightError) {
           logger.debug('[Reader] Settings application skipped (command in flight, mode change in progress)');
           return;
         }
