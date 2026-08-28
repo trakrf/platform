@@ -160,7 +160,15 @@ function buildVitestArgs(shape, rep, target) {
   // bridge, directly comparable against the same file run warm.
   const filter = target ?? SUITE_ROOT;
   // Same flags package.json's test:integration uses, plus JSON reporting.
-  const args = ['vitest', 'run', filter, '--no-file-parallelism'];
+  //
+  // `--hookTimeout` must stay in step with that script. These hooks do a real
+  // BLE connect plus RFID power-on and mode configuration; measured file
+  // duration is 16.5-20.7s against vitest's 10s default, so the default made a
+  // passing hook a coin flip. That is what the 2026-08-27 soak was actually
+  // measuring: 79 of 90 position-1 failures carried `Hook timed out in 10000ms`
+  // and 0 of 127 position-1 passes did. Raising it took locate.spec.ts from
+  // 30-83% failure to 0/24 across two arms.
+  const args = ['vitest', 'run', filter, '--no-file-parallelism', '--hookTimeout=30000'];
   let seed = null;
   if (shape === 'shuffle') {
     // Derived from rep so the order is reproducible from the record alone.
