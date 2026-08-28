@@ -44,18 +44,26 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { CS108WorkerTestHarness } from './CS108WorkerTestHarness';
 import { ReaderMode, ReaderState } from '@/worker/types/reader';
 import { WorkerEventType } from '@/worker/types/events';
+import {
+  LOCATE_TEST_TAG,
+  LOCATE_TEST_TAG_128,
+  LOCATE_TEST_TAG_128_STRIPPED,
+  LOCATE_DECOY_TAG_128,
+  LOCATE_DECOY_TAG_128_STRIPPED,
+  EPC_FORMATS,
+} from '@test-utils/constants';
 
 // The WALDO probes. ASCII 'S04163' / 'S04164' — identical through hex char 24,
 // differing only in the final char, inside the tail the old 96-bit mask never
 // covered. Both are on the bench, which is what makes the decoy test real.
-const TAG_128 = '00000000000000000000533034313633';
-const TAG_128_STRIPPED = '533034313633';
-const DECOY_128 = '00000000000000000000533034313634';
-const DECOY_128_STRIPPED = '533034313634';
+const TAG_128 = LOCATE_TEST_TAG_128;
+const TAG_128_STRIPPED = LOCATE_TEST_TAG_128_STRIPPED;
+const DECOY_128 = LOCATE_DECOY_TAG_128;
+const DECOY_128_STRIPPED = LOCATE_DECOY_TAG_128_STRIPPED;
 
 // One of the 1001x bench tags, in 96-bit form.
-const TAG_96 = '000000000000000000010020';
-const TAG_96_STRIPPED = '10020';
+const TAG_96 = EPC_FORMATS.toFullEPC(LOCATE_TEST_TAG);
+const TAG_96_STRIPPED = LOCATE_TEST_TAG;
 
 const SCAN_MS = 4000;
 

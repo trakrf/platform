@@ -26,12 +26,13 @@
 import { test, expect, type Page } from '@playwright/test';
 import { connectToDevice, disconnectDevice } from './helpers/connection';
 import { getReaderMode } from './helpers/device-state';
+import { BENCH_BARCODE_LABELS, EPC_FORMATS, TEST_TAGS } from '@test-utils/constants';
 
-const TARGET = '000000000000000000010021';
+const TARGET = EPC_FORMATS.toFullEPC(TEST_TAGS.TAG_4);
 // Whichever rfidCollect label is physically in front of the scanner. The point
 // of the assertion is that the scanned text becomes the target verbatim, not
 // which label it was — pinning one turns a bench-aim change into a red test.
-const BENCH_BARCODES = ['10020', '10021', '10022', '10023'];
+const BENCH_BARCODES = BENCH_BARCODE_LABELS;
 
 let page: Page;
 const consoleLines: string[] = [];
