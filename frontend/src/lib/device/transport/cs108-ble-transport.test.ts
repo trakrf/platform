@@ -6,7 +6,27 @@
  */
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { WriteError } from 'ble-mcp-test';
 import { CS108BLETransport } from './cs108-ble-transport';
+
+/**
+ * A transport whose link state is whatever the caller says it is.
+ *
+ * `isConnected()` reads device + server.connected + writeCharacteristic, so a
+ * bare `new CS108BLETransport()` reports DISCONNECTED. Retry tests written
+ * against one of those pass for the wrong reason: the predicate returns false
+ * because there is no link, not because of the error it was handed.
+ */
+function connectedTransport({ connected = true } = {}): CS108BLETransport {
+  const transport = new CS108BLETransport();
+  Object.assign(transport as unknown as Record<string, unknown>, {
+    device: {},
+    server: { connected },
+    writeCharacteristic: { writeValue: async () => {} },
+    messagePort: { postMessage: () => {} },
+  });
+  return transport;
+}
 
 /**
  * Drive the private notification handler with a characteristic whose `value` is
@@ -400,26 +420,100 @@ describe('CS108BLETransport write retry budget', () => {
 
   /**
    * The ack timeout caps `L`, and that cap is what closes the widest overrun
-   * window — but only by accident of wording, so it is pinned here.
+   * window. It used to hold by accident of wording — two strings in two repos
+   * that happened not to overlap — and a reword upstream would have reopened the
+   * window silently. ble-mcp-test 0.10.0 replaced that with a typed property, so
+   * what is pinned here is the property, and the message is free to change.
    *
-   * ble-mcp-test rejects an unacknowledged write at 1500ms with "write N was not
-   * acknowledged within 1500ms". `isRetryable` does not match that, so the loop
-   * stops on the first attempt and a very slow bridge fails fast instead of
-   * writing late. Nothing states that dependency anywhere else: it holds because
-   * two strings in two repos happen not to overlap.
-   *
-   * If the bridge ever rewords its timeout to contain "busy", the ack timeout
-   * becomes retryable, two capped attempts plus a 250ms delay reach 3250ms, and
-   * the >2500ms overrun window reopens with no other signal. This test is the
-   * signal.
+   * `mayHaveReachedDevice` is NECESSARY, NOT SUFFICIENT, which is the half most
+   * likely to be dropped: LINK_LOST and NOT_CONNECTED are both `false` and
+   * neither may be retried. Every code is asserted, both limbs, so a new code
+   * upstream cannot quietly land in the wrong bucket.
    */
-  it('treats the mock ack timeout as non-retryable, which is what caps the budget', () => {
-    const transport = new CS108BLETransport();
-    const priv = transport as unknown as { isRetryable: (m: string) => boolean };
+  it('retries only a write that neither reached the device nor lost the link', () => {
+    const transport = connectedTransport();
+    const priv = transport as unknown as {
+      isRetryable: (e: unknown, m: string) => boolean;
+    };
 
-    // Verbatim shape from ble-mcp-test's ws-transport sendAwaitingAck.
-    expect(priv.isRetryable('write 7 was not acknowledged within 1500ms; the bridge may be wedged'))
+    // Non-duplicative AND the link is up — the only retryable shape.
+    expect(priv.isRetryable(new WriteError('WRITE_REJECTED', 'bridge refused the write'), 'x'))
+      .toBe(true);
+
+    // May already be on the device: a retry would duplicate it.
+    expect(priv.isRetryable(new WriteError('ACK_TIMEOUT', 'no ack within the cap'), 'x'))
       .toBe(false);
+
+    // Non-duplicative, but there is no link to retry onto. Retrying spends the
+    // budget for nothing and risks landing stale on a fresh link (TRA-1179).
+    //
+    // Asserted on a transport that still reports CONNECTED, which is the whole
+    // point: server.connected lags a GATT drop, so this is precisely the state a
+    // link loss arrives in. An earlier spelling of the predicate — property plus
+    // isConnected() — passed every other case here and failed these two.
+    expect(priv.isRetryable(new WriteError('LINK_LOST', 'link dropped'), 'x')).toBe(false);
+    expect(priv.isRetryable(new WriteError('NOT_CONNECTED', 'no link'), 'x')).toBe(false);
+  });
+
+  /**
+   * A code this build has never heard of must NOT be retried.
+   *
+   * The staleness direction is the reason the predicate is written as an
+   * affirmative match: when ble-mcp-test adds a fifth code, the cost of being
+   * out of date is one missed retry, not a stale write landing on a fresh link.
+   */
+  it('does not retry a write error code it does not recognise', () => {
+    const transport = connectedTransport();
+    const priv = transport as unknown as {
+      isRetryable: (e: unknown, m: string) => boolean;
+    };
+
+    const future = Object.assign(new Error('some new upstream condition'), {
+      name: 'WriteError',
+      code: 'SOMETHING_NEW',
+      mayHaveReachedDevice: false,
+    });
+    expect(priv.isRetryable(future, future.message)).toBe(false);
+  });
+
+  /**
+   * The production path has no typed codes at all — real Web Bluetooth throws a
+   * DOMException. Chrome's own text is what discriminates there, and deleting it
+   * when the codes landed would have removed a live guard because a *different*
+   * guard replaced its cross-repo twin.
+   */
+  it('still reads Chrome text when the error carries no typed property', () => {
+    const transport = connectedTransport();
+    const priv = transport as unknown as {
+      isRetryable: (e: unknown, m: string) => boolean;
+    };
+    const chrome = new Error('GATT operation already in progress');
+
+    expect(priv.isRetryable(chrome, chrome.message)).toBe(true);
+    expect(priv.isRetryable(new Error('something else entirely'), 'something else entirely'))
+      .toBe(false);
+  });
+
+  /**
+   * Discrimination must not be `instanceof`. The mock arrives by two routes — an
+   * ESM import and an injected browser bundle — and class identity is scoped to
+   * the module instance that defined it. A structurally identical error from the
+   * other copy is still a WriteError to every consumer that reads it correctly.
+   */
+  it('discriminates a WriteError from another module instance', () => {
+    const transport = connectedTransport();
+    const priv = transport as unknown as {
+      isRetryable: (e: unknown, m: string) => boolean;
+    };
+
+    // Same shape, foreign identity: what an injected bundle's copy looks like.
+    const foreign = Object.assign(new Error('bridge refused the write'), {
+      name: 'WriteError',
+      code: 'WRITE_REJECTED',
+      mayHaveReachedDevice: false,
+    });
+    expect(foreign instanceof WriteError).toBe(false);
+    expect(priv.isRetryable(foreign, foreign.message)).toBe(true);
   });
 
   it('fails fast rather than writing late when ack latency exceeds the 1500ms cap', async () => {
@@ -436,7 +530,7 @@ describe('CS108BLETransport write retry budget', () => {
           writes++;
           await new Promise(r => setTimeout(r, 1500)); // the mock's cap, not the caller's wish
           endedAt = Date.now() - started;
-          throw new Error('write 7 was not acknowledged within 1500ms; the bridge may be wedged');
+          throw new WriteError('ACK_TIMEOUT', 'write 7 was not acknowledged within 1500ms');
         }
       },
       messagePort: { postMessage: () => {} }
@@ -449,13 +543,24 @@ describe('CS108BLETransport write retry budget', () => {
     expect(endedAt).toBeLessThan(2500); // so it cannot outlive the command
   }, 15000);
 
-  it('does not retry a disconnected GATT server', () => {
-    const transport = new CS108BLETransport();
-    const priv = transport as unknown as { isRetryable: (m: string) => boolean };
+  /**
+   * The link check is a condition in its own right, not a consequence of the
+   * error shape: the SAME error that retries on a live link must not retry once
+   * the link is gone.
+   */
+  it('does not retry once the link is gone, whatever the error says', () => {
+    const live = connectedTransport();
+    const dead = connectedTransport({ connected: false });
+    const priv = (t: CS108BLETransport) =>
+      t as unknown as { isRetryable: (e: unknown, m: string) => boolean };
 
-    expect(priv.isRetryable('GATT operation already in progress')).toBe(true);
-    expect(priv.isRetryable('Device busy')).toBe(true);
-    expect(priv.isRetryable('GATT Server is disconnected')).toBe(false);
+    const retryable = new WriteError('WRITE_REJECTED', 'bridge refused the write');
+    expect(priv(live).isRetryable(retryable, retryable.message)).toBe(true);
+    expect(priv(dead).isRetryable(retryable, retryable.message)).toBe(false);
+
+    const chrome = new Error('GATT operation already in progress');
+    expect(priv(live).isRetryable(chrome, chrome.message)).toBe(true);
+    expect(priv(dead).isRetryable(chrome, chrome.message)).toBe(false);
   });
 });
 

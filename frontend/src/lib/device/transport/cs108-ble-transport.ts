@@ -4,6 +4,21 @@
  */
 
 import type { Transport, BLEMessage } from './Transport';
+// TYPE-ONLY, and it has to stay that way. ble-mcp-test is a devDependency and
+// test tooling — the app reaches a CS108 solely through navigator.bluetooth — so
+// a value import would put test tooling on the product path and break the
+// production build. `import type` is erased at compile time and ships nothing.
+import type { WriteErrorCode } from 'ble-mcp-test';
+
+/**
+ * The one write failure worth retrying. See `isRetryable`.
+ *
+ * Typed as `WriteErrorCode` on purpose: the annotation is what makes the
+ * compiler fail if ble-mcp-test renames or drops this code, which is the check
+ * a bare string literal could not give us. Nothing of the package survives into
+ * the bundle — the type is erased, the string is ours.
+ */
+const RETRYABLE_WRITE_CODE: WriteErrorCode = 'WRITE_REJECTED';
 
 // Type for test environment window extensions
 interface TestWindow extends Window {
@@ -164,17 +179,20 @@ export class CS108BLETransport implements Transport {
    *
    * The third window the raw arithmetic predicts (L >= 2501) is UNREACHABLE, and
    * the second is truncated from 1750 to 1500, because `L` is capped: the mock's
-   * ack timeout rejects at 1500 ms, and that rejection is **not retryable** --
-   * `isRetryable` matches only 'GATT operation already in progress' and
-   * 'Device busy', while the ack timeout says "write N was not acknowledged
-   * within 1500ms". So past 1500 ms the loop stops on the first attempt.
+   * ack timeout rejects at 1500 ms, and that rejection is **not retryable**, so
+   * past 1500 ms the loop stops on the first attempt.
    *
-   * That is load-bearing and implicit: window 3 is closed by a STRING MISMATCH
-   * between this retry list and ble-mcp-test's timeout text, not by any explicit
-   * bound. Reword either -- give the timeout a message containing "busy", say --
-   * and the ack timeout becomes retryable, two capped attempts plus a delay reach
-   * 3250 ms, and the window silently reopens. There is a test pinning exactly
-   * that, and it is the reason it exists.
+   * UNTIL 0.10.0 THAT HELD BY ACCIDENT. Window 3 was closed by a STRING MISMATCH
+   * between this file's retry list and ble-mcp-test's timeout text — reword the
+   * timeout to contain "busy" and the ack timeout became retryable, two capped
+   * attempts plus a delay reached 3250 ms, and the window reopened with no other
+   * signal. Nothing on either side would have caught it.
+   *
+   * It is now closed on purpose. The ack timeout arrives as a typed
+   * `ACK_TIMEOUT` carrying `mayHaveReachedDevice: true`, and `isRetryable`
+   * retries only an affirmative `WRITE_REJECTED`, so no wording of any message
+   * can reopen the window. The messages are free to change; that freedom is the
+   * point of the codes.
    *
    * Inside a window the last write lands after the command that owns it has
    * already rejected — precisely the "stale command injected into the stream"
@@ -214,6 +232,8 @@ export class CS108BLETransport implements Transport {
       throw new Error('Web Bluetooth is not supported in this browser');
     }
     
+    const connectStartedAt = Date.now();
+
     try {
       // Request device selection
       // Selection is by service UUID only. Web Bluetooth ORs the filters array,
@@ -283,15 +303,47 @@ export class CS108BLETransport implements Transport {
       } as BLEMessage);
       
       console.info(`Connected to ${this.device.name || 'BLE Device'}`);
+      this.recordConnect(connectStartedAt, null);
       
       // Return port2 for worker
       return channel.port2;
       
     } catch (error) {
+      this.recordConnect(connectStartedAt, error);
       // Clean up on error
       await this.cleanup();
       throw error;
     }
+  }
+
+  /**
+   * Connect-duration instrument. One line per connect attempt, either outcome.
+   *
+   * Exists to keep a known slow path from being read as the radio. In
+   * ble-mcp-test's `connect()`, `onclose` rejects promptly ONLY on WebSocket
+   * close codes 4000-4999, and the Python bridge never sends one — so an
+   * ordinary close before `connected` arrives (bridge down, refused, killed
+   * mid-handshake) falls through to the 10s connect timeout instead of failing
+   * immediately. Every real connect-time close therefore costs the full 10s.
+   *
+   * A soak of this suite is substantially a connect/disconnect cycle test, so
+   * that path is on the measured route. Failures clustered near 10s are THIS,
+   * not the reader — `scripts/ack-latency-report.mjs` reports the cluster so the
+   * attribution is made from the data rather than from memory.
+   *
+   * Known and deliberately unfixed upstream: rewriting connect rejection
+   * semantics immediately before a connect-heavy baseline would destroy the
+   * before/after it is meant to establish.
+   */
+  private recordConnect(startedAt: number, error: unknown): void {
+    const finishedAt = Date.now();
+    const outcome = error === null
+      ? 'ok'
+      : ((error as { code?: string })?.code ?? 'UNTYPED');
+
+    console.info(
+      `[ble-timing] connect t=${finishedAt} ms=${finishedAt - startedAt} outcome=${outcome}`
+    );
   }
   
   /**
@@ -425,7 +477,16 @@ export class CS108BLETransport implements Transport {
    */
   private handleDisconnect(): void {
     // BLE device disconnected
-    
+    //
+    // `inflight` is the load-bearing field: a link close while a write is
+    // outstanding is the exact condition ble-mcp-test's `failPendingWrites`
+    // exists to make impossible. Logged before the queue is cleared, because
+    // clearing it is what destroys the evidence.
+    console.info(
+      `[ble-timing] link-close t=${Date.now()} inflight=${this.commandInProgress ? 1 : 0} ` +
+      `queued=${this.commandQueue.length}`
+    );
+
     // Clear command queue
     this.clearCommandQueue('Device disconnected');
     
@@ -482,7 +543,14 @@ export class CS108BLETransport implements Transport {
 
       // Writing to BLE characteristic
       // Create a new Uint8Array to ensure proper ArrayBuffer type
-      await this.writeCharacteristic!.writeValue(new Uint8Array(command.data));
+      const startedAt = Date.now();
+      try {
+        await this.writeCharacteristic!.writeValue(new Uint8Array(command.data));
+      } catch (error) {
+        this.recordWriteAck(command, startedAt, error);
+        throw error;
+      }
+      this.recordWriteAck(command, startedAt, null);
       // BLE write completed successfully
       command.resolve(true);
       
@@ -498,7 +566,7 @@ export class CS108BLETransport implements Transport {
       // it is a stale command injected into the stream (TRA-1179).
       const withinBudget = Date.now() + delay < command_.deadline;
 
-      if (this.isRetryable(errorMessage) && command_.retriesLeft > 0 && withinBudget) {
+      if (this.isRetryable(error, errorMessage) && command_.retriesLeft > 0 && withinBudget) {
         command_.retriesLeft--;
         const attempt = this.retryCount - command_.retriesLeft;
 
@@ -533,19 +601,125 @@ export class CS108BLETransport implements Transport {
    * own 5s timeout. Two of the three failure paths previously reported nothing.
    */
   /**
+   * Ack-latency instrument. One line per write ATTEMPT, success or failure.
+   *
+   * `L` — the time `writeValue()` takes — became a real quantity in ble-mcp-test
+   * 0.9.0, which moved the resolve from enqueue to the bridge's ack. It sits
+   * INSIDE `WRITE_BUDGET_MS` and the budget structurally cannot bound it (see
+   * that field's comment), so the overrun windows are narrow, disjoint and
+   * non-monotonic: 700ms is safe while 600ms is not.
+   *
+   * Consequently this records the DISTRIBUTION and nothing else. It deliberately
+   * computes no percentile: a p99 over a bimodal sample is arithmetically correct
+   * and answers a question nobody asked, hiding the second mode that is the whole
+   * reason to measure. Summarise with `scripts/ack-latency-report.mjs`.
+   *
+   * `outcome` reads `error.code` when the package supplies one and reports
+   * `UNTYPED` otherwise. It is NOT a list of the codes ble-mcp-test defines —
+   * enumerating another repo's values is the defect this instrument exists to
+   * watch for. A code added upstream appears here without a change.
+   *
+   * Baseline for TRA-1189 Phase 1.
+   */
+  private recordWriteAck(
+    command: { retriesLeft: number },
+    startedAt: number,
+    error: unknown
+  ): void {
+    const finishedAt = Date.now();
+    const attempt = this.retryCount - command.retriesLeft + 1;
+    const outcome = error === null
+      ? 'ok'
+      : ((error as { code?: string })?.code ?? 'UNTYPED');
+
+    // `t` is the END of the attempt and `ms` its duration, so a close event's
+    // timestamp can be tested against the half-open window [t - ms, t] — the
+    // join that decides whether an ack timeout and a link drop hit the same
+    // write. That co-occurrence is the signature of an unwired failPendingWrites
+    // and is a stop-the-soak finding on a single occurrence, not a rate.
+    console.info(
+      `[ble-timing] write-ack t=${finishedAt} ms=${finishedAt - startedAt} ` +
+      `attempt=${attempt}/${this.retryCount} outcome=${outcome}`
+    );
+  }
+
+  /**
    * Which write failures are worth another attempt.
    *
-   * `GATT Server is disconnected` is deliberately NOT here. A disconnected
-   * server does not recover by waiting, so retrying spends the budget for
-   * nothing — and if the link *does* come back, the retry lands a stale command
-   * on a fresh connection, which is the most harmful outcome available
-   * (TRA-1179).
+   * TWO conditions, and the second is the one that is easy to drop.
+   *
+   * 1. The write must not have reached the device — otherwise a retry
+   *    duplicates it. ble-mcp-test 0.10.0 states this as a fact on the error
+   *    (`mayHaveReachedDevice`) instead of leaving us to infer it from prose.
+   *
+   * 2. The link must still be up. That is NOT implied by the first: `LINK_LOST`
+   *    and `NOT_CONNECTED` are both non-duplicative, and both must still refuse
+   *    to retry. A disconnected server does not recover by waiting, so the retry
+   *    spends the budget for nothing — and if the link *does* come back, it lands
+   *    a stale command on a fresh connection, the most harmful outcome available
+   *    (TRA-1179).
+   *
+   * `mayHaveReachedDevice` alone is NECESSARY, NOT SUFFICIENT. The package can
+   * see whether its own write left; it cannot see whether this transport still
+   * has a link, so sufficiency has to be decided here.
+   *
+   * AND `isConnected()` CANNOT SUPPLY IT ON ITS OWN. It reads `server.connected`,
+   * which by its own comment lags a GATT drop — between the drop and
+   * `handleDisconnect` running, the objects are all still present while the link
+   * is gone. That is exactly the interval in which `LINK_LOST` is thrown, so
+   * `!mayHaveReachedDevice && isConnected()` would retry a link loss whenever the
+   * upstream close handler happens to settle the write before the mock flips its
+   * server flag. A test asserting the LINK_LOST limb is what surfaced this; the
+   * ordering it depends on lives in another repo and is nobody's stated contract.
+   *
+   * So the predicate demands AFFIRMATIVE evidence rather than the absence of a
+   * counter-signal: retry only what the peer says it refused outright. That is
+   * `WRITE_REJECTED`, which ble-mcp-test's own contract names as the only code it
+   * can promise is worth retrying.
+   *
+   * This does reference one upstream value, and the direction of its staleness is
+   * the whole justification. A code added upstream is not retried until this is
+   * updated — a missed retry, which costs a command one attempt. The inverse
+   * spelling (`!mayHaveReachedDevice`, minus a list of known-bad codes) fails the
+   * other way: a new code is retried by default, and the failure mode is the
+   * TRA-1179 stale-write harm. Prefer the arm that goes stale toward doing less.
+   * The code is pinned by the package's own `WriteErrorCode` type, so a rename
+   * upstream is a compile error here rather than a silent behaviour change.
+   *
+   * The Chrome fallback is production behaviour, not mock coupling. Real Web
+   * Bluetooth throws a `DOMException` carrying no such property, and 'GATT
+   * operation already in progress' is genuine Chrome text — the app reaches a
+   * CS108 through `navigator.bluetooth`, so that is the path that matters most.
+   *
+   * `'Device busy'` was the other arm and never once fired: the bridge says
+   * `Device is busy`, and `'Device is busy'.includes('Device busy')` is false.
+   * It came from the original baseline copy, not from anything the peer sends.
+   * Deleted rather than corrected — that refusal is deliberately non-retryable
+   * upstream, so matching it would have turned a dead branch into a live wrong
+   * one. Note the shape: a predicate taking `errorMessage: string` could only
+   * ever be written as a string match, so the signature was the defect and the
+   * dead arm was its symptom. It takes the error now.
+   *
+   * Discrimination is by `name`, not `instanceof`. The mock reaches this code by
+   * two routes — an ESM import and an injected browser bundle — and class
+   * identity is scoped to the module instance that defined it, so `instanceof`
+   * fails across the injected copy while the object is perfectly well-formed.
    */
-  private isRetryable(errorMessage: string): boolean {
-    return (
-      errorMessage.includes('GATT operation already in progress') ||
-      errorMessage.includes('Device busy')
-    );
+  private isRetryable(error: unknown, errorMessage: string): boolean {
+    // Condition 2, checked first because it overrides everything below it.
+    if (!this.isConnected()) return false;
+
+    const typed = error as
+      { name?: string; code?: string; mayHaveReachedDevice?: boolean } | null;
+    if (typed?.name === 'WriteError') {
+      // Both limbs: the code says the peer refused it, the property confirms it
+      // cannot have been delivered. If upstream ever changed one without the
+      // other, this stops retrying rather than guessing which to believe.
+      return typed.code === RETRYABLE_WRITE_CODE
+        && typed.mayHaveReachedDevice === false;
+    }
+
+    return errorMessage.includes('GATT operation already in progress');
   }
 
   private reportTransportError(error: string): void {
