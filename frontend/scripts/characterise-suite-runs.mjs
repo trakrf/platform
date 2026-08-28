@@ -138,14 +138,41 @@ function countBridgeClients() {
   return Math.max(0, lines.length - 1);
 }
 
+/**
+ * The pid LISTENING on the bridge port — identified by what it does, not by what
+ * it is called.
+ *
+ * Two name-based versions of this were wrong in a row, each silently:
+ *   `rust-ble-test`  — a binary deleted in the Python replatform (TRA-1155)
+ *   `ble_bridge`     — the Python MODULE name, which never appears in the
+ *                      process cmdline. The console script is `ble-bridge`,
+ *                      with a hyphen. Testing it from a shell gave a false
+ *                      positive because the test command's own argv contained
+ *                      the literal string; `pgrep` matched THAT.
+ *
+ * Both returned null forever, so `bridgePid` and `bridgeStartedAt` were null on
+ * every repetition and the summariser's "the bridge process changed mid-soak"
+ * check had nothing to compare — a detector that reads as covered because the
+ * field exists. Found 2026-08-28 by the bridge session reading runs.jsonl.
+ *
+ * Asking the socket removes the whole class: whatever is serving the port IS
+ * the bridge, whatever it is called, and a rename cannot break it.
+ */
 function readBridgeProcess() {
-  // `ble_bridge` is the Python module (TRA-1155). This matched `rust-ble-test`
-  // until 2026-08-27 — a binary that no longer exists — so it returned null
-  // forever and the summariser's "the bridge process changed mid-soak" check
-  // silently had nothing to compare.
-  const pidRes = spawnSync('pgrep', ['-f', 'ble_bridge'], { encoding: 'utf8' });
-  if (pidRes.status !== 0) return { bridgePid: null, bridgeStartedAt: null };
-  const pid = Number(pidRes.stdout.trim().split('\n')[0]);
+  const host = process.env.BLE_MCP_HOST || process.env.BLE_MCP_WS_HOST || 'localhost';
+  const port = process.env.BLE_MCP_WS_PORT || '25153';
+  if (!['localhost', '127.0.0.1', '::1'].includes(host)) {
+    return { bridgePid: null, bridgeStartedAt: null };
+  }
+
+  let pid = null;
+  const res = spawnSync('ss', ['-ltnpH', 'sport', `= :${port}`], { encoding: 'utf8' });
+  if (res.status === 0 && typeof res.stdout === 'string') {
+    // ss renders it as: users:(("ble-bridge",pid=338646,fd=12))
+    const match = res.stdout.match(/pid=(\d+)/);
+    if (match) pid = Number(match[1]);
+  }
+
   if (!Number.isInteger(pid)) return { bridgePid: null, bridgeStartedAt: null };
   const startRes = spawnSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8' });
   return {
