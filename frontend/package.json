@@ -18,7 +18,7 @@
     "test:watch": "vitest src/ tests/config/",
     "test:e2e": "playwright test",
     "test:integration": "vitest run tests/integration/ --no-file-parallelism --hookTimeout=30000",
-    "test:hardware": "vitest run tests/integration/ble-mcp-test/connection.spec.ts",
+    "test:hardware": "vitest run tests/integration/ble-mcp-test/connection.spec.ts --hookTimeout=30000",
     "test:ui": "playwright test --ui",
     "validate": "pnpm typecheck && pnpm lint && pnpm test",
     "lint": "eslint .",
