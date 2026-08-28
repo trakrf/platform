@@ -49,7 +49,12 @@ describe('BLE MCP Bridge Server Connection', () => {
     
     // Basic validation - we got some response
     expect(response).toBeDefined();
-    expect(response).toBeInstanceOf(Uint8Array);
+    // `ArrayBuffer.isView`, not `toBeInstanceOf(Uint8Array)`. The response has
+    // crossed the transport's MessageChannel, and under jsdom a structured
+    // clone is built with jsdom's constructors while this module's `Uint8Array`
+    // binding is Node's — so `instanceof` is false for a genuine, correct
+    // Uint8Array. See the note in src/worker/BaseReader.ts.
+    expect(ArrayBuffer.isView(response)).toBe(true);
     expect(response.length).toBeGreaterThan(0);
     
     console.log('📥 Received response:', Array.from(response).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));

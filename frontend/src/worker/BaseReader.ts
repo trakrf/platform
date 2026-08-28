@@ -145,9 +145,34 @@ export abstract class BaseReader implements IReader {
   public setTransportPort(port: MessagePort): void {
     this.port = port;
     this.port.onmessage = (event) => {
-      if (event.data?.type === 'ble:data' && event.data.data instanceof Uint8Array) {
+      if (event.data?.type === 'ble:data' && ArrayBuffer.isView(event.data.data)) {
+        // `ArrayBuffer.isView`, not `instanceof Uint8Array`, because this value
+        // has crossed a structured clone and `instanceof` is realm-scoped.
+        //
+        // In production that is harmless: the receiving side is a real Worker
+        // with its own global, and the clone materialises using THAT realm's
+        // constructors, so `instanceof Uint8Array` holds. Under vitest it does
+        // not — the port hop is in-process, the clone is built with jsdom's
+        // constructors, and the test module's `Uint8Array` binding is Node's.
+        // Measured: isView true, constructor.name 'Uint8Array', byteLength
+        // correct, `instanceof` FALSE, `constructor === Uint8Array` false.
+        //
+        // The old guard therefore dropped every frame silently and the reader
+        // looked dead — an unsatisfiable-waiter failure that surfaces as a
+        // timeout, i.e. as a flaky reader rather than as a type check. It went
+        // unnoticed because the integration harness used to hand-build its
+        // MessagePorts and pass objects by reference, never cloning at all
+        // (TRA-1187 item 3 put the real MessageChannel in the path).
+        //
+        // Normalised to this realm's Uint8Array, honouring byteOffset and
+        // byteLength for the same reason cs108-ble-transport does: a view is a
+        // window onto a possibly larger buffer, and copying it wholesale hands
+        // the parser a pool instead of a packet.
+        const view = event.data.data as ArrayBufferView;
+        const data = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+
         // Delegate protocol-specific parsing to child class
-        this.handleBleData(event.data.data);
+        this.handleBleData(data);
       } else if (event.data?.type === 'ble:disconnected') {
         // Handle unexpected transport disconnection
         this.handleTransportDisconnect();
