@@ -17,7 +17,26 @@ await harness.stopScanning();
 await harness.disconnect();
 ```
 
-These are the ONLY methods tests can call. Same as production.
+Plus the rest of the harness's public surface, which this list omitted:
+
+```typescript
+await harness.initialize();          // install the mock, connect the transport
+await harness.setSettings({ ... });  // and harness.getSettings()
+await harness.waitForState('Ready');
+await harness.simulateTriggerPress();
+await harness.simulateTriggerRelease();
+await harness.cleanup();             // quiesce, disconnect, uninstall
+```
+
+**These are the only methods tests may call.** The list above used to stop at
+`disconnect()`, which made it wrong rather than strict: `simulateTriggerPress`
+is used by five of the six specs, so every one of them violated this document's
+own rule. A rule that the codebase universally breaks is not a rule.
+
+`simulateTrigger*` earns its place because it is not internal access — it
+injects a notification through `navigator.bluetooth.testing.simulateNotification`
+onto the characteristic the transport subscribed, so it enters by the same door
+a real trigger packet does.
 
 ### 2. 👀 OBSERVE - Read State, Capture Events
 ```typescript
@@ -27,8 +46,8 @@ const mode = harness.getReaderMode();    // Read-only observation
 const events = harness.getEvents();      // Captured events
 
 // CORRECT - Wait for events
-const event = await harness.waitForEvent('TAG_READ');
-expect(event.payload.tags).toHaveLength(5);
+const event = await harness.waitForEvent('TRIGGER_STATE_CHANGED');
+expect(event.payload.pressed).toBe(true);
 ```
 
 We can OBSERVE internals to verify behavior, but never MODIFY them.
@@ -37,8 +56,7 @@ We can OBSERVE internals to verify behavior, but never MODIFY them.
 ```typescript
 // WRONG - Direct internal manipulation
 harness.worker.readerState = ReaderState.CONNECTED;  // FORBIDDEN
-harness.commandManager.executeCommand(...);      // FORBIDDEN
-harness.getWorker().somePrivateMethod();        // FORBIDDEN
+harness.getWorker().somePrivateMethod();            // FORBIDDEN
 ```
 
 ## Input Source Agnosticism
@@ -85,9 +103,14 @@ await harness.startScanning();
 ## Bidirectional Stream Architecture
 
 ### Transport Layer = Dumb Pipe
-- **Commands**: Fire-and-forget via `sendRawBytes()`
-- **Responses**: ALL through notification handler
-- **No RPC**: No request-response patterns in transport
+- **Commands**: the worker posts `{ type: 'ble:write' }` to the transport's `MessagePort`
+- **Responses**: ALL through notification handler, as `{ type: 'ble:data' }`
+- **No RPC**: no request-response pattern anywhere in the transport
+
+This used to read *"fire-and-forget via `sendRawBytes()`"*. That method lived on
+`RfidReaderTestClient`, which TRA-1187 item 3 deleted along with the flat
+`NodeBleClient` API it wrapped. The principle is unchanged; only the mechanism
+was renamed by reality.
 
 ### Worker = All Intelligence
 - **CommandManager**: Sends commands, waits for responses from notification stream
@@ -99,9 +122,21 @@ await harness.startScanning();
 ### ❌ WRONG - RPC Pattern
 ```typescript
 // This violates the architecture
-const response = await client.sendCommandAsync(cmd);  // NO!
-const result = await harness.executeCommand(cmd);     // NO!
+const response = await transportClient.sendCommand(cmd);  // NO! -- not from a spec
 ```
+
+Both previous examples here named methods that no longer exist:
+`client.sendCommandAsync()` went with `src/node/` in TRA-1187 item 4, and
+`harness.executeCommand()` never existed at all. **A warning against a method
+nobody can call teaches nothing** -- worse, it implies the harness has a surface
+it does not have.
+
+The live version of the hazard is `TransportCommandClient.sendCommand()`, which
+does correlate a write with the next inbound frame. It exists for
+`connection.spec.ts`, the byte-level smoke test that deliberately bypasses the
+worker. **Never reach for it from a worker-level spec**: correlation is the
+worker's `CommandManager`'s job, and doing it in a spec couples the test to
+command/response timing the CS108 does not guarantee.
 
 ### ✅ CORRECT - Stream Pattern
 ```typescript
