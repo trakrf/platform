@@ -46,7 +46,7 @@ After recent consolidation, the project uses simplified environment variables:
 ```bash
 # Bridge server configuration (simplified naming)
 BLE_MCP_HOST=localhost          # Bridge server host
-BLE_MCP_WS_PORT=8080           # Bridge server WebSocket port
+BLE_MCP_WS_PORT=25153           # Bridge server WebSocket port
 BLE_MCP_LOG_LEVEL=info         # Bridge server log level
 
 # There is no HTTP port. TRA-1161 replaced the bridge's HTTP/MCP server with a
@@ -76,11 +76,11 @@ The bridge URL is now built automatically from components:
    ```bash
    # For local mock server
    BLE_MCP_HOST=localhost
-   BLE_MCP_WS_PORT=8080
+   BLE_MCP_WS_PORT=25153
    
    # For external bridge (e.g., hardware on another machine)
    BLE_MCP_HOST=192.168.50.77
-   BLE_MCP_WS_PORT=8080
+   BLE_MCP_WS_PORT=25153
    ```
 
 2. **Shared Configuration**: `tests/config/ble-bridge.config.ts`
@@ -146,7 +146,7 @@ BLE_MCP_WS_PORT=9090 just bridge
 
 # Check it is listening — 426 Upgrade Required is the expected answer from a
 # WebSocket listener; connection refused means it is not running.
-curl -so /dev/null -w '%{http_code}\n' http://localhost:8080/
+curl -so /dev/null -w '%{http_code}\n' http://localhost:25153/
 ```
 
 ### 4. External Bridge Server
@@ -160,7 +160,7 @@ pnpm serve
 
 # On development machine (.env.local)
 BLE_MCP_HOST=192.168.50.77
-BLE_MCP_WS_PORT=8080
+BLE_MCP_WS_PORT=25153
 
 # Then run
 pnpm dev:mock
@@ -209,7 +209,7 @@ mcp__ble-mcp-test__get_connection_state
 ### Common Issues
 
 1. **"Device not found"**
-   - Check the bridge is running: `curl -so /dev/null -w '%{http_code}\n' http://localhost:8080/` (426 = listening)
+   - Check the bridge is running: `curl -so /dev/null -w '%{http_code}\n' http://localhost:25153/` (426 = listening)
    - Verify environment variables are set
    - Check browser console for injection confirmation
 

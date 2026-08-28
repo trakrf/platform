@@ -124,7 +124,7 @@ VITE_BLE_BRIDGE_ENABLED=true
 
 # For hardware tests
 BLE_MCP_HOST=localhost
-BLE_MCP_WS_PORT=8080
+BLE_MCP_WS_PORT=25153
 ```
 
 ## Running Against a Remote Deployment
