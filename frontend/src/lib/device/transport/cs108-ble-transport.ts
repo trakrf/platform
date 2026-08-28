@@ -48,22 +48,33 @@ declare global {
     service: BluetoothRemoteGATTService;
     value?: DataView;
     readValue(): Promise<DataView>;
+    /**
+     * Resolves when the bridge acknowledges THIS write, as of ble-mcp-test 0.9.0.
+     * It previously resolved on enqueue, which made the write-failure path below
+     * unreachable. See `WRITE_BUDGET_MS` — that change moved real time inside the
+     * retry budget and is the reason its arithmetic was restated.
+     */
     writeValue(value: BufferSource): Promise<void>;
-    // NOT writeValueWithResponse / writeValueWithoutResponse. Real Web Bluetooth
-    // has both and `src/types/web-bluetooth.d.ts` describes them correctly — but
-    // this block is a `declare global` augmentation, and what it actually types
-    // at the call site is ble-mcp-test's mock, where neither method exists.
-    //
-    // Declaring them here was TRA-1187's motivating example: a hand-written
-    // interface asserting a shape nobody had checked, partially satisfied so it
-    // read as validated. Nothing ever called them, so the fiction was harmless —
-    // but a consumer switching to `writeValueWithResponse()` in good faith would
-    // have thrown on the first write of every @hardware run.
-    //
-    // ble-mcp-test 0.9.0 makes the absence enforceable: an arm-A conformance
-    // check asserts both are absent, deferred until TRA-1153 5b-client gives
-    // them something to resolve on. Add them back when that lands, deliberately,
-    // and not before.
+    /**
+     * Legal on the CS108, which advertises `write`. The mock rejects only if the
+     * bridge actually wrote in without-response mode, since the guarantee this
+     * name makes would otherwise be a lie.
+     */
+    writeValueWithResponse(value: BufferSource): Promise<void>;
+    /**
+     * Declared because real Web Bluetooth and the mock both have it — but
+     * **illegal against the CS108**, whose write characteristic advertises
+     * `properties=['write']` only. The mock rejects it, matching Chrome's
+     * NotSupportedError. Use `writeValue` or `writeValueWithResponse`.
+     *
+     * These two were removed while 0.8.0 genuinely lacked them: a hand-written
+     * interface asserting a shape nobody had checked, partially satisfied so it
+     * read as validated. 0.9.0 ships both, so the declaration is now true — and
+     * the reason to be careful moved from "the method does not exist" to "this
+     * one is not permitted on this device," which the type cannot express and
+     * this comment therefore must.
+     */
+    writeValueWithoutResponse(value: BufferSource): Promise<void>;
     startNotifications(): Promise<BluetoothRemoteGATTCharacteristic>;
     stopNotifications(): Promise<BluetoothRemoteGATTCharacteristic>;
     addEventListener(type: 'characteristicvaluechanged', listener: (event: Event) => void): void;
@@ -127,9 +138,67 @@ export class CS108BLETransport implements Transport {
    */
   private readonly WRITE_BUDGET_MS = 2000;
 
+  /*
+   * Ack latency is inside this budget, and the arithmetic below is not what it
+   * looks like.
+   *
+   * `retryDelays` sums to 1750 ms, which reads as "1750 < 2000, comfortable."
+   * That was true when the mock resolved `writeValue()` on enqueue. Since
+   * ble-mcp-test 0.9.0 it resolves on the bridge's ack, so every attempt spends
+   * real time too, and the sum of the sleeps is no longer the sum of the pass.
+   *
+   * `withinBudget` gates the SLEEP, not the write. So the budget self-corrects
+   * on retry COUNT — as ack latency `L` rises, fewer retries fit — but it cannot
+   * bound the final attempt, which starts inside the budget and finishes
+   * wherever it finishes. With `L` folded in, the last write ends at:
+   *
+   *     3 retries fire (L≈0):    1750 ms
+   *     2 retries fire:          3L +  750 ms
+   *     1 retry   fires:         2L +  250 ms
+   *
+   * Set against `CommandManager.DEFAULT_TIMEOUT` (2500 ms), that overruns in
+   * three DISJOINT windows, with safe bands between them:
+   *
+   *      584 ms <= L <  625 ms     2 retries, ends up to 2624 ms
+   *     1126 ms <= L <= 1500 ms    1 retry,   ends up to 3250 ms
+   *
+   * The third window the raw arithmetic predicts (L >= 2501) is UNREACHABLE, and
+   * the second is truncated from 1750 to 1500, because `L` is capped: the mock's
+   * ack timeout rejects at 1500 ms, and that rejection is **not retryable** --
+   * `isRetryable` matches only 'GATT operation already in progress' and
+   * 'Device busy', while the ack timeout says "write N was not acknowledged
+   * within 1500ms". So past 1500 ms the loop stops on the first attempt.
+   *
+   * That is load-bearing and implicit: window 3 is closed by a STRING MISMATCH
+   * between this retry list and ble-mcp-test's timeout text, not by any explicit
+   * bound. Reword either -- give the timeout a message containing "busy", say --
+   * and the ack timeout becomes retryable, two capped attempts plus a delay reach
+   * 3250 ms, and the window silently reopens. There is a test pinning exactly
+   * that, and it is the reason it exists.
+   *
+   * Inside a window the last write lands after the command that owns it has
+   * already rejected — precisely the "stale command injected into the stream"
+   * that TRA-1179 removed, returning through ack latency instead of through
+   * oversized delays.
+   *
+   * Two consequences worth stating, because both invite a wrong instinct:
+   *
+   * - **Worse is not monotonically worse.** L=700 ms is safe; L=600 ms is not.
+   *   Watching a single threshold ("is p99 near 600?") cannot see the
+   *   1126–1750 ms window at all.
+   * - **A percentile cannot answer this.** The windows are narrow, so what
+   *   matters is how much of the DISTRIBUTION sits inside one — and a p99 that
+   *   summarises a bimodal sample hides exactly the second mode that would.
+   *   Record the distribution (TRA-1189 Phase 1), not the percentile.
+   *
+   * Left at 2000 deliberately. Widening it would let more stale writes through,
+   * not fewer; the fix if a window is ever occupied is to make the final attempt
+   * respect the deadline too, and that wants soak evidence first.
+   */
+
   constructor(config: CS108BLETransportConfig = {}) {
     this.retryCount = config.retryCount || 3;
-    // Sums to 1750 ms — inside WRITE_BUDGET_MS, which is inside the command timeout.
+    // Sums to 1750 ms of SLEEP. Ack latency is extra — see WRITE_BUDGET_MS.
     this.retryDelays = config.retryDelays || [250, 500, 1000];
     
     // Bind event handlers
