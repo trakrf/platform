@@ -129,6 +129,79 @@ const CONNECTION_COOLDOWN_MS = 1000;
 /** Shared across harness instances, because the reader is shared across them. */
 let lastDisconnectAt = 0;
 
+/**
+ * PROTOTYPE (TRA-1187): hold ONE link for the whole suite instead of one per file.
+ *
+ * Opt-in via `BLE_SHARED_LINK=1` so the two lifecycles can be measured against
+ * each other rather than swapped on conviction.
+ *
+ * ## Why this shape might be the right one
+ *
+ * Nothing in production connects per spec file. The app connects once, works,
+ * and disconnects when the user leaves or the page reloads — and e2e inherits
+ * that, one link per page. Only this suite opens and closes a link eight times
+ * a run, and since TRA-1157 the Python bridge acquires the radio on the first
+ * WebSocket client and releases it when the last one leaves, so each of those
+ * is a full acquire/release against the hardware that no user ever performs.
+ *
+ * The 2026-08-27 soak showed what that costs. `beforeAll` breached vitest's
+ * 10s hook budget mainly because it contained a cold connect; the e2e
+ * @hardware suite, run against the same reader and bridge the same morning,
+ * produced ZERO hook timeouts, zero command timeouts and zero scan-start/stop
+ * failures — its failures were selector and fixture rot. Same hardware,
+ * different connection lifecycle, entirely different failure profile.
+ *
+ * ## What it costs, stated plainly
+ *
+ * Per-file isolation. With one link there is also one `CS108Reader`, so reader
+ * mode, settings and any firmware-side state carry across files. `cleanup()`
+ * returning to IDLE stops being belt-and-braces and becomes load-bearing: a
+ * file that leaves the reader mid-inventory now poisons its successors. That
+ * is a real regression in blast radius, and it is the reason this is a flag
+ * and not yet a decision.
+ *
+ * ## Teardown, and what is deliberately not solved here
+ *
+ * Nothing disconnects the shared link. `singleFork` means one process for the
+ * whole run, and the bridge releases the radio when the socket closes, which
+ * process exit does. That is adequate for measuring the idea and NOT adequate
+ * to ship: it is an unawaited release, exactly what bridge warned lets the
+ * next run's connect race ahead and be refused as busy. A real version needs
+ * an awaited teardown hook.
+ */
+const SHARE_LINK = process.env.BLE_SHARED_LINK === '1';
+
+interface SharedLink {
+  transport: CS108BLETransport;
+  worker: CS108Reader;
+  uninstallMock: () => void;
+}
+
+/**
+ * On `globalThis`, NOT a module-scoped `let`.
+ *
+ * The first attempt used a module variable and never shared anything: with
+ * `singleFork` the files share a PROCESS but vitest still gives each file a
+ * fresh MODULE GRAPH, so the variable was reinitialised to null per file. The
+ * harness then reconnected every time while `cleanup()` — believing it was
+ * sharing — had stopped disconnecting, so each file left its link open and the
+ * next was refused `Device is busy: the command path is owned by another
+ * connection (session 'trakrf-handheld-…')`. Refused by its own predecessor,
+ * which is the precise failure the connection cooldown was written to prevent.
+ *
+ * `vitest.setup.ts` already documents this module-graph reset for zustand
+ * stores (TRA-1052). The process global survives it; the module scope does not.
+ */
+const LINK_KEY = '__TRAKRF_SHARED_BLE_LINK__';
+
+function getSharedLink(): SharedLink | null {
+  return (globalThis as Record<string, unknown>)[LINK_KEY] as SharedLink | null ?? null;
+}
+
+function setSharedLink(link: SharedLink | null): void {
+  (globalThis as Record<string, unknown>)[LINK_KEY] = link;
+}
+
 export class CS108WorkerTestHarness {
   private worker!: CS108Reader;
   private transport: CS108BLETransport | null = null;
@@ -146,6 +219,25 @@ export class CS108WorkerTestHarness {
    * accident rather than by measurement.
    */
   async initialize(): Promise<void> {
+    const existing = getSharedLink();
+    if (SHARE_LINK && existing) {
+      // Adopt the live link. No connect, no settle, no mock re-injection — the
+      // point of the experiment is that none of that happens per file.
+      this.transport = existing.transport;
+      this.worker = existing.worker;
+      this.uninstallMock = null; // not this instance's to remove
+
+      // Re-point event capture at THIS harness. `globalThis.postMessage` is a
+      // single slot, so the previous file's harness still owns it until now,
+      // and its `domainEvents` would collect this file's events.
+      this.setupEventCapture();
+      this.domainEvents = [];
+      this.eventWaiters.clear();
+
+      console.log('[Harness] reusing shared transport link');
+      return;
+    }
+
     const sinceDisconnect = Date.now() - lastDisconnectAt;
     if (lastDisconnectAt > 0 && sinceDisconnect < CONNECTION_COOLDOWN_MS) {
       await new Promise((resolve) => setTimeout(resolve, CONNECTION_COOLDOWN_MS - sinceDisconnect));
@@ -172,6 +264,14 @@ export class CS108WorkerTestHarness {
     // so one line per connect keeps that detector honest. It also records the
     // resolved link profile, which nothing else states.
     console.log(`[Harness] transport connected, link profile ${linkProfile}`);
+
+    if (SHARE_LINK) {
+      setSharedLink({
+        transport: this.transport,
+        worker: this.worker,
+        uninstallMock: this.uninstallMock,
+      });
+    }
   }
 
   /**
@@ -401,6 +501,16 @@ export class CS108WorkerTestHarness {
       } catch {
         // Already disconnected.
       }
+    }
+
+    if (SHARE_LINK && getSharedLink()) {
+      // Quiesced above (stopped, IDLE) but still connected. Leave the link and
+      // the mock in place for the next file; drop only this harness's state.
+      this.domainEvents = [];
+      this.eventWaiters.clear();
+      this.transport = null;
+      this.uninstallMock = null;
+      return;
     }
 
     try {
