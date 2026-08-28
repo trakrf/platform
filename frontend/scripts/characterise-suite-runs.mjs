@@ -188,13 +188,32 @@ function readReport(reportPath) {
     return { files: [], reportMissing: true };
   }
   const suites = Array.isArray(parsed.testResults) ? parsed.testResults : [];
-  const files = suites.map((suite) => ({
-    name: path.relative(process.cwd(), suite.name),
-    status: suite.status === 'passed' ? 'passed' : 'failed',
-    failed: (suite.assertionResults || [])
-      .filter((a) => a.status === 'failed')
-      .map((a) => a.fullName || a.title),
-  }));
+
+  // SORTED BY startTime, because `files` is read as EXECUTION ORDER downstream —
+  // the predecessor table in summarise-suite-runs.mjs is built by walking this
+  // array and calling element i-1 the predecessor of element i.
+  //
+  // vitest's JSON report does not emit testResults in execution order; it was
+  // stable across repetitions regardless of how the files actually ran. So on
+  // the 2026-08-27 soak every one of 210 shuffled repetitions recorded the SAME
+  // order, the predecessor table showed each file following one predecessor
+  // 214/214 times, and the shape's whole purpose was silently defeated. The
+  // shuffle itself was working the entire time — 209 distinct true orders, once
+  // startTime was consulted.
+  //
+  // That is the failure this tool exists to avoid: an instrument reporting a
+  // confident, well-formed, wrong answer. It read as "no order-dependence" when
+  // the real signal was a 4-6x failure rate on whichever file ran FIRST.
+  const files = [...suites]
+    .sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0))
+    .map((suite) => ({
+      name: path.relative(process.cwd(), suite.name),
+      status: suite.status === 'passed' ? 'passed' : 'failed',
+      startTime: suite.startTime ?? null,
+      failed: (suite.assertionResults || [])
+        .filter((a) => a.status === 'failed')
+        .map((a) => a.fullName || a.title),
+    }));
   return { files, reportMissing: false };
 }
 

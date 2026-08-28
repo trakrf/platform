@@ -124,6 +124,49 @@ function predecessorTable(records) {
   return lines.join('\n');
 }
 
+/**
+ * Failure rate by EXECUTION POSITION, not by predecessor.
+ *
+ * Added 2026-08-28 because the predecessor table asks "what poisoned this file?"
+ * and the 210-repetition soak answered a different question: nothing poisoned
+ * it. Whichever file ran FIRST failed at 41%, every later position at 5-10% —
+ * a cold-start defect on the run's first BLE connect, invisible to a table
+ * organised around predecessors because "(ran first)" is only one row among
+ * many there.
+ *
+ * Reads `files` as execution order, which is only true since the startTime sort
+ * in characterise-suite-runs.mjs. Records written before that are in report
+ * order and will show a flat profile whether or not one exists — so this table
+ * is only meaningful for records carrying `startTime`.
+ */
+function positionTable(records) {
+  const dated = records.filter((r) => r.files.some((f) => f.startTime != null));
+  const slots = [];
+  for (const r of records) {
+    r.files.forEach((f, i) => {
+      slots[i] = slots[i] || { runs: 0, failures: 0 };
+      slots[i].runs += 1;
+      if (f.status === 'failed') slots[i].failures += 1;
+    });
+  }
+  if (!slots.length) return '_No records._';
+
+  const lines = ['| position | failures / runs | rate |', '| -- | -- | -- |'];
+  slots.forEach((c, i) => {
+    const pct = c.runs ? Math.round((c.failures / c.runs) * 100) : 0;
+    lines.push(`| ${i + 1}${i === 0 ? ' (first)' : ''} | ${c.failures}/${c.runs} | ${pct}% |`);
+  });
+  if (dated.length !== records.length) {
+    lines.push('');
+    lines.push(
+      `_⚠️ ${records.length - dated.length} of ${records.length} records predate the ` +
+        'execution-order fix and carry report order instead. Their positions are not ' +
+        'execution positions; re-derive from `.suite-runs/report-*.json` startTime.'
+    );
+  }
+  return lines.join('\n');
+}
+
 function contaminationNote(records) {
   const dirty = records.filter((r) => r.wsClientsAtStart);
   const missing = records.filter((r) => r.reportMissing);
@@ -241,6 +284,8 @@ function main() {
   console.log(perRunTable(records));
   console.log(`\n## Failure rate by file and shape\n`);
   console.log(perFileTable(records));
+  console.log(`\n## Failure rate by execution position\n`);
+  console.log(positionTable(records));
   console.log(`\n## Order-dependence — what preceded each failure\n`);
   console.log(predecessorTable(records));
   console.log(`\n## Failure vs. scan-start signature\n`);
