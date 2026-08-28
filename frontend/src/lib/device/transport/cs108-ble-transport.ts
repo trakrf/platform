@@ -49,8 +49,21 @@ declare global {
     value?: DataView;
     readValue(): Promise<DataView>;
     writeValue(value: BufferSource): Promise<void>;
-    writeValueWithResponse(value: BufferSource): Promise<void>;
-    writeValueWithoutResponse(value: BufferSource): Promise<void>;
+    // NOT writeValueWithResponse / writeValueWithoutResponse. Real Web Bluetooth
+    // has both and `src/types/web-bluetooth.d.ts` describes them correctly — but
+    // this block is a `declare global` augmentation, and what it actually types
+    // at the call site is ble-mcp-test's mock, where neither method exists.
+    //
+    // Declaring them here was TRA-1187's motivating example: a hand-written
+    // interface asserting a shape nobody had checked, partially satisfied so it
+    // read as validated. Nothing ever called them, so the fiction was harmless —
+    // but a consumer switching to `writeValueWithResponse()` in good faith would
+    // have thrown on the first write of every @hardware run.
+    //
+    // ble-mcp-test 0.9.0 makes the absence enforceable: an arm-A conformance
+    // check asserts both are absent, deferred until TRA-1153 5b-client gives
+    // them something to resolve on. Add them back when that lands, deliberately,
+    // and not before.
     startNotifications(): Promise<BluetoothRemoteGATTCharacteristic>;
     stopNotifications(): Promise<BluetoothRemoteGATTCharacteristic>;
     addEventListener(type: 'characteristicvaluechanged', listener: (event: Event) => void): void;
