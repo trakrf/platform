@@ -104,7 +104,7 @@ describe('Locate mask length variants — stripped EPC finds its tag at either w
 
   beforeAll(async () => {
     harness = new CS108WorkerTestHarness();
-    await harness.initialize(true);
+    await harness.initialize();
     expect(await harness.connect()).toBe(true);
 
     const setModePromise = harness.setMode(ReaderMode.LOCATE, {

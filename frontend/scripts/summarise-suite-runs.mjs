@@ -176,8 +176,17 @@ function signalPairingTable(records) {
   // A repetition that never reached the bridge measured the absence of a
   // transport, not the behaviour of one. Counting it as a failure-without-the-
   // signature turns an environmental outage into evidence against a hypothesis.
-  const refused = captured.filter(({ signals }) => (signals.transportRefused ?? 0) > 0);
-  const usable = captured.filter(({ signals }) => (signals.transportRefused ?? 0) === 0);
+  //
+  // BOTH unreachable shapes, or the exclusion silently stops working on the
+  // path that now produces most of the runs: since TRA-1187 the integration
+  // suite reaches the bridge through jsdom's WebSocket, which reports a bare
+  // `WebSocket error` and never an errno. Partitioning on `transportRefused`
+  // alone would have put every dead-bridge repetition of an overnight soak into
+  // `usable` — i.e. into the evidence.
+  const unreachable = ({ signals }) =>
+    (signals.transportRefused ?? 0) > 0 || (signals.transportUnreachable ?? 0) > 0;
+  const refused = captured.filter(unreachable);
+  const usable = captured.filter((entry) => !unreachable(entry));
   const excluded = resolved.length - captured.length;
   const recomputed = usable.filter((u) => u.source === 'recomputed').length;
   if (!usable.length) {
@@ -208,7 +217,7 @@ function signalPairingTable(records) {
       (recomputed ? `, ${recomputed} recomputed from retained logs` : '') +
       (excluded ? `; ${excluded} excluded as void or unverifiable` : '') +
       (refused.length
-        ? `; ${refused.length} excluded as ECONNREFUSED (no bridge — measured an outage, not the subsystem)`
+        ? `; ${refused.length} excluded as bridge-unreachable (no bridge — measured an outage, not the subsystem)`
         : '') +
       '._',
   ];

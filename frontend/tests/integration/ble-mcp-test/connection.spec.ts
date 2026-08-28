@@ -11,15 +11,15 @@
  * - Clean disconnect and resource cleanup
  */
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
-import { RfidReaderTestClient } from './rfid-reader-test-client';
+import { TransportCommandClient } from './transport-command-client';
 import { cs108TestCommand } from '../../config/ble-bridge.config';
 
 describe('BLE MCP Bridge Server Connection', () => {
-  let client: RfidReaderTestClient;
+  let client: TransportCommandClient;
 
   beforeEach(async () => {
     console.log('\n🧪 Setting up bridge server connection test...');
-    client = new RfidReaderTestClient();
+    client = new TransportCommandClient();
   });
 
   afterEach(async () => {
@@ -45,11 +45,16 @@ describe('BLE MCP Bridge Server Connection', () => {
 
     // Use shared test command from config
     console.log('\n📤 Sending test command...');
-    const response = await client.smokeTestCommand(cs108TestCommand,10000);
+    const response = await client.sendCommand(cs108TestCommand,10000);
     
     // Basic validation - we got some response
     expect(response).toBeDefined();
-    expect(response).toBeInstanceOf(Uint8Array);
+    // `ArrayBuffer.isView`, not `toBeInstanceOf(Uint8Array)`. The response has
+    // crossed the transport's MessageChannel, and under jsdom a structured
+    // clone is built with jsdom's constructors while this module's `Uint8Array`
+    // binding is Node's — so `instanceof` is false for a genuine, correct
+    // Uint8Array. See the note in src/worker/BaseReader.ts.
+    expect(ArrayBuffer.isView(response)).toBe(true);
     expect(response.length).toBeGreaterThan(0);
     
     console.log('📥 Received response:', Array.from(response).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));

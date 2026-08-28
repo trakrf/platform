@@ -23,11 +23,31 @@
  *   cold     same as fixed, but the caller restarted the bridge process first;
  *            this script only records that the claim was made
  *
- * NOTE ON "alone": it does NOT give a cold reader. The Rust bridge calls
+ * NOTE ON "alone" AND "cold" — REVISED 2026-08-27, and the revision reverses it.
+ *
+ * This used to read: "alone does NOT give a cold reader. The Rust bridge calls
  * transport.connect() once at process start and holds the BLE link for the life
- * of the process; a WS disconnect tears down nothing. So a file run alone still
- * attaches to a link carrying whatever the previous run left. That is why the
- * `cold` shape exists separately.
+ * of the process; a WS disconnect tears down nothing." That was true of
+ * `rust-ble-test` and is false of what runs now.
+ *
+ * The Python bridge constructs its transport INSIDE the per-connection handler
+ * (TRA-1157, docs/design/2026-08-23-transport-lifecycle-decision.md in the
+ * ble-mcp-test repo). A daemon with no WebSocket clients holds no device, and
+ * the last client disconnecting releases it. So every run boundary is already a
+ * full BLE teardown and reconnect:
+ *
+ *   - `alone` now DOES give a cold reader, which is what it always claimed to.
+ *   - `cold` is close to redundant. Restarting the bridge process no longer
+ *     releases anything a normal run boundary did not already release. It still
+ *     distinguishes "fresh process" from "fresh link", which is a narrower
+ *     question than it used to be — do not read a cold-vs-fixed difference as
+ *     evidence about the radio.
+ *
+ * This also changes what a long soak of this suite measures. Since TRA-1187 the
+ * suite reaches the bridge through CS108BLETransport, one connect and disconnect
+ * per spec file, against a bridge that acquires and releases the radio on each
+ * one. A soak is therefore substantially a BLE connect/disconnect cycle test,
+ * and connect-time flakes will dominate anything the specs assert.
  *
  * Usage:
  *   node scripts/characterise-suite-runs.mjs --shape fixed --reps 5
@@ -95,7 +115,21 @@ function parseArgs(argv) {
  * silently mixed into it.
  */
 function countBridgeClients() {
-  const res = spawnSync('ss', ['-tn', 'state', 'established', 'dst', '127.0.0.1:8080'], {
+  // Resolved the way the suite resolves it, not hardcoded. This read
+  // `dst 127.0.0.1:8080` until 2026-08-27, which by then was the wrong port
+  // (TRA-1179 moved the bridge to 25153, off the backend's) — so it matched
+  // nothing and recorded a confident 0 clients for every repetition. A
+  // contention detector that cannot see the socket reports "uncontended", which
+  // is the answer everyone wants and nobody can check.
+  const host = process.env.BLE_MCP_HOST || process.env.BLE_MCP_WS_HOST || 'localhost';
+  const port = process.env.BLE_MCP_WS_PORT || '25153';
+
+  // A bridge on another host is not observable with local `ss`, and 0 would be a
+  // lie rather than a measurement. null means "unknown", which the summariser
+  // already renders as `?`.
+  if (!['localhost', '127.0.0.1', '::1'].includes(host)) return null;
+
+  const res = spawnSync('ss', ['-tn', 'state', 'established', 'dst', `127.0.0.1:${port}`], {
     encoding: 'utf8',
   });
   if (res.status !== 0 || typeof res.stdout !== 'string') return null;
@@ -105,7 +139,11 @@ function countBridgeClients() {
 }
 
 function readBridgeProcess() {
-  const pidRes = spawnSync('pgrep', ['-f', 'rust-ble-test'], { encoding: 'utf8' });
+  // `ble_bridge` is the Python module (TRA-1155). This matched `rust-ble-test`
+  // until 2026-08-27 — a binary that no longer exists — so it returned null
+  // forever and the summariser's "the bridge process changed mid-soak" check
+  // silently had nothing to compare.
+  const pidRes = spawnSync('pgrep', ['-f', 'ble_bridge'], { encoding: 'utf8' });
   if (pidRes.status !== 0) return { bridgePid: null, bridgeStartedAt: null };
   const pid = Number(pidRes.stdout.trim().split('\n')[0]);
   if (!Number.isInteger(pid)) return { bridgePid: null, bridgeStartedAt: null };
@@ -232,13 +270,63 @@ function runOnce({ shape, rep, target, note }) {
   return record;
 }
 
+/**
+ * Refuse to run against a bridge that is not there.
+ *
+ * Long unattended runs are where this earns its keep. Every repetition against a
+ * dead bridge produces a well-formed record saying the suite failed, and a night
+ * of those is indistinguishable at a glance from a night of real flakes — the
+ * `transportUnreachable` signal exists to separate them afterwards, but there is
+ * no reason to spend eight hours generating rows that get excluded.
+ *
+ * Deliberately only checks that something is listening. Whether that something
+ * relays to a real radio is the bridge's own problem, and it now refuses to
+ * start without an ESPHome device configured, so a bridge that is up is a bridge
+ * with a device (ble-mcp-test `_select_transport`).
+ */
+function preflight() {
+  const host = process.env.BLE_MCP_HOST || process.env.BLE_MCP_WS_HOST || 'localhost';
+  const port = process.env.BLE_MCP_WS_PORT || '25153';
+
+  if (!['localhost', '127.0.0.1', '::1'].includes(host)) {
+    console.log(`[suite-runs] bridge host ${host} is remote; skipping the listening check.`);
+    return;
+  }
+
+  const res = spawnSync('ss', ['-ltn', 'sport', `= :${port}`], { encoding: 'utf8' });
+  const listening =
+    res.status === 0 && typeof res.stdout === 'string' && res.stdout.trim().split('\n').length > 1;
+
+  if (!listening) {
+    console.error(
+      `[suite-runs] FATAL: nothing is listening on ${host}:${port}.\n` +
+        '  Every repetition would fail at WebSocket connect and measure the absence of a\n' +
+        '  bridge rather than the suite. Start the bridge, or set BLE_MCP_WS_PORT/BLE_MCP_HOST\n' +
+        '  to point at the one that is running.'
+    );
+    process.exit(1);
+  }
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   mkdirSync(ARTIFACT_DIR, { recursive: true });
+  preflight();
+
+  // Stop an unattended run without killing it mid-repetition, which would leave
+  // the reader held and the record's last row a lie. Checked between reps only.
+  const stopFile = path.join(ARTIFACT_DIR, 'STOP');
+  if (existsSync(stopFile)) rmSync(stopFile);
 
   console.log(`[suite-runs] shape=${args.shape} reps=${args.reps}${args.target ? ` target=${args.target}` : ''}`);
+  console.log(`[suite-runs] stop cleanly with: touch ${path.relative(process.cwd(), stopFile)}`);
 
   for (let rep = 1; rep <= args.reps; rep += 1) {
+    if (existsSync(stopFile)) {
+      console.log(`[suite-runs] STOP seen; finished ${rep - 1}/${args.reps} repetitions.`);
+      rmSync(stopFile);
+      break;
+    }
     const record = runOnce({ ...args, rep });
     const failedFiles = record.files.filter((f) => f.status === 'failed');
     const summary = failedFiles.length

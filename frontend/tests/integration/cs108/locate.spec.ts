@@ -29,7 +29,7 @@ describe('CS108 Locate Integration', () => {
   beforeAll(async () => {
     console.log('\n🔧 Connecting to CS108 hardware for locate test...');
     harness = new CS108WorkerTestHarness();
-    await harness.initialize(true); // Connect ONCE for the test
+    await harness.initialize(); // Connect ONCE for the test
 
     // Call connect() on the worker
     console.log('📡 Calling worker connect()...');

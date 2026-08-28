@@ -20,7 +20,7 @@ describe('CS108 Inventory Integration', () => {
   beforeAll(async () => {
     console.log('\n🔧 Initializing test harness and connecting...');
     harness = new CS108WorkerTestHarness();
-    await harness.initialize(true);
+    await harness.initialize();
 
     // Connect to reader
     const connected = await harness.connect();
