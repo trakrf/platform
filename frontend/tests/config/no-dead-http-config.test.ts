@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
+import { execSync } from 'child_process';
 import path from 'path';
 import { getBleBridgeConfig } from './ble-bridge.config';
 
@@ -59,11 +60,82 @@ function codeOnly(source: string): string {
     .replace(/(^|[^:])\/\/.*$/gm, '$1');
 }
 
-/** Documents that tell a human which port the bridge is on. */
-const BRIDGE_PORT_DOCS = [
-  'docs/frontend/MOCK_USAGE_GUIDE.md',
-  'frontend/tests/e2e/README.md',
+/**
+ * Files where 8080 legitimately appears as a bridge port — history, and the
+ * rationale that explains the move.
+ *
+ * An allowlist, not a target list. The previous version of this guard named the
+ * two documents it knew were broken, which is how there was a second time:
+ * TRA-1179 fixed the code and `.env.local.example`, the guard asserted only
+ * `.env.local.example`, and the docs drifted unwatched for a week. A guard
+ * scoped to the files someone already found is a record of the last incident,
+ * not a defence against the next one.
+ */
+const BRIDGE_PORT_HISTORY_OK = [
+  // This file: the patterns below are literals in its own source.
+  'frontend/tests/config/no-dead-http-config.test.ts',
+  // Explains WHY the default moved off 8080; must keep saying 8080.
+  'frontend/tests/config/resolve-bridge-port.ts',
+  'frontend/tests/config/bridge-port-not-backend-port.test.ts',
 ];
+
+/** Superseded designs, kept verbatim on purpose. */
+const HISTORY_DIR = /(^|\/)(archive|CHANGELOG)/i;
+
+/**
+ * 8080 presented as THE BRIDGE's port, in any tracked text file.
+ *
+ * Deliberately narrow patterns rather than a bare `8080`. The platform backend
+ * publishes on `0.0.0.0:8080` and is referenced correctly in docker-compose, the
+ * root README, the Dockerfile, the justfile and every e2e fixture's
+ * `PLAYWRIGHT_BASE_URL` fallback. TRA-1186's rule is *8080-as-bridge-port*, not
+ * *8080* — a guard that cannot tell those apart gets weakened the first time it
+ * fires on a correct line.
+ */
+const BRIDGE_WORD = /(bridge|BLE_MCP|ble-mcp)/i;
+const BACKEND_WORD = /(backend|api|playwright|docker|healthz|readyz)/i;
+
+/**
+ * Does this line present 8080 as THE BRIDGE's port?
+ *
+ * Deliberately not a bare `8080`. The platform backend publishes on
+ * `0.0.0.0:8080` and is named correctly in docker-compose, the root README, the
+ * justfile and several e2e headers. TRA-1186's rule is *8080-as-bridge-port*,
+ * not *8080* — and a guard that fires on a correct line is a guard the next
+ * person deletes instead of reading.
+ *
+ * Attribution is positional: English hangs a port off the noun BEFORE it
+ * ("backend on :8080", "bridge server on …:8080"), so only the text preceding
+ * the number decides, and a backend word standing between the bridge word and
+ * the number breaks the association. `kits.spec.ts` is the case that forces
+ * this — "backend on :8080 + BLE bridge with a reader" is entirely correct, and
+ * a symmetric proximity match flags it.
+ */
+function presentsBridgeOn8080(line: string): boolean {
+  if (/BLE_MCP_WS_PORT\s*[=:]\s*['"]?8080/.test(line)) return true;
+  // A ws:// scheme is always the bridge; the backend speaks http.
+  if (/wss?:\/\/[^\s'"`]*:8080/.test(line)) return true;
+
+  for (const m of line.matchAll(/\b8080\b/g)) {
+    const before = line.slice(Math.max(0, m.index - 60), m.index);
+    const bridge = [...before.matchAll(new RegExp(BRIDGE_WORD, 'gi'))].pop();
+    if (!bridge) continue;
+    // Anything after the bridge word that re-attributes the port.
+    if (BACKEND_WORD.test(before.slice(bridge.index))) continue;
+    return true;
+  }
+  return false;
+}
+
+/** Every tracked text file, minus the allowlist. */
+function trackedTextFiles(): string[] {
+  const out = execSync('git ls-files', { cwd: REPO_ROOT, encoding: 'utf-8' });
+  return out
+    .split('\n')
+    .filter(Boolean)
+    .filter((f) => /\.(ts|tsx|js|mjs|cjs|md|json|ya?ml|sh|example|env)$/.test(f) || f.endsWith('.env.local.example'))
+    .filter((f) => !BRIDGE_PORT_HISTORY_OK.includes(f) && !HISTORY_DIR.test(f));
+}
 
 describe('the deleted ble-mcp-test HTTP surface', () => {
   it.each(ROOT_FILES)('%s does not seed BLE_MCP_HTTP_* into a fresh clone', (file) => {
@@ -95,14 +167,24 @@ describe('the deleted ble-mcp-test HTTP surface', () => {
    *
    * Docs, not just code, because the sweep proved the docs are where it hides.
    */
-  it.each(BRIDGE_PORT_DOCS)('%s does not document the backend port as the bridge', (file) => {
-    const text = readFileSync(path.join(REPO_ROOT, file), 'utf-8');
+  it('no tracked file presents 8080 as the bridge port', () => {
+    const offenders: string[] = [];
 
-    expect(text).not.toMatch(/BLE_MCP_WS_PORT\s*=\s*8080\b/);
-    // The bridge liveness probe. `426 Upgrade Required` is a WebSocket
-    // listener answering, so a curl at :8080 returning 426 would be the
-    // backend, not the bridge.
-    expect(text).not.toMatch(/localhost:8080\/[^\s`]*`?\s*\(426/);
+    for (const file of trackedTextFiles()) {
+      let text: string;
+      try {
+        text = readFileSync(path.join(REPO_ROOT, file), 'utf-8');
+      } catch {
+        continue; // deleted-but-tracked, or binary
+      }
+      text.split('\n').forEach((line, i) => {
+        if (presentsBridgeOn8080(line)) {
+          offenders.push(`${file}:${i + 1}  ${line.trim().slice(0, 90)}`);
+        }
+      });
+    }
+
+    expect(offenders, `8080 presented as the bridge port:\n${offenders.join('\n')}`).toEqual([]);
   });
 
   it.each(FILES)('%s does not read BLE_MCP_HTTP_* or hardcode :8081', (file) => {

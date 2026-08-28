@@ -232,8 +232,13 @@ describe('CS108Reader Unit Tests', () => {
 
 ### Setup
 ```bash
-# Ensure MCP server is configured in .claude/settings.json
-# Bridge server should be running on 192.168.50.73:8080
+# The bridge's host and port come from the environment, and both sides must
+# agree. Defaults are localhost:25153 (see tests/config/resolve-bridge-port.ts).
+export BLE_MCP_WS_HOST=mssb.local   # omit for a bridge on this machine
+export BLE_MCP_WS_PORT=25153
+
+# The MCP tools reach the bridge over its control socket, not the WebSocket,
+# and are configured in .mcp.json rather than .claude/settings.json.
 ```
 
 ### Real-time Monitoring
