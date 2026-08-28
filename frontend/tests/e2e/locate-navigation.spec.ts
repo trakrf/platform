@@ -161,15 +161,26 @@ test.describe('Locate Navigation Tests @hardware', () => {
     const locateButton = page.locator('[data-testid="locate-button"]:visible');
     await expect(locateButton).toHaveCount(1);
 
-    // The row itself still shows the operator the trimmed form.
+    // The row the OPERATOR can see still shows the trimmed form.
     //
-    // Scoped to the tag row rather than the page. The trimmed value now renders
-    // in two places, so a bare getByText is a strict-mode violation — Playwright
-    // refuses an ambiguous match rather than silently taking the first. The
-    // assertion's own intent is "the ROW shows the trimmed form", so the row is
-    // what it should look in; the unscoped version passed only while the second
-    // element did not exist yet.
-    await expect(page.getByTestId(`tag-${EPC_128}`).getByText('533034313633')).toBeVisible();
+    // Two corrections live here, and the second undid the first.
+    //
+    // 1. A bare `getByText('533034313633')` is a strict-mode violation: the
+    //    value renders twice, once in the desktop table row and once in the
+    //    mobile card, and Playwright refuses an ambiguous match rather than
+    //    silently taking the first.
+    //
+    // 2. Scoping to `getByTestId(\`tag-${EPC_128}\`)` fixed the ambiguity and
+    //    introduced a permanent failure, because that testid exists ONLY on
+    //    `InventoryMobileCard` — which is CSS-hidden at the desktop viewport
+    //    these tests run in. The assertion then read `Received: hidden`, which
+    //    looks like a broken deep link and is really "you scoped to the copy
+    //    nobody can see".
+    //
+    // So: filter by visibility, not by which component happens to carry a
+    // testid. That states the actual intent — the operator sees the trimmed
+    // form — and stays correct if the responsive breakpoint or the testids move.
+    await expect(page.getByText('533034313633').filter({ visible: true })).toBeVisible();
 
     await locateButton.click();
     await page.waitForSelector('h2:text("Configuring Reader")', { state: 'detached', timeout: 10000 }).catch(() => {});
