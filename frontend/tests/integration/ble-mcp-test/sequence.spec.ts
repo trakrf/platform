@@ -13,15 +13,15 @@
  * - Inventory starts with filtered EPC
  */
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
-import { RfidReaderTestClient } from './rfid-reader-test-client';
+import { TransportCommandClient } from './transport-command-client';
 import { cs108TestCommand } from '../../config/ble-bridge.config';
 
 describe('CS108 LOCATE mode sequence test', () => {
-  let client: RfidReaderTestClient;
+  let client: TransportCommandClient;
 
   beforeEach(async () => {
     console.log('\n🧪 Setting up bridge server connection test...');
-    client = new RfidReaderTestClient();
+    client = new TransportCommandClient();
   });
 
   afterEach(async () => {
@@ -160,7 +160,7 @@ RX.858: A7 B3 0A C2 82 37 00 00 80 02 70 01         05 09 00 00 00 00
       console.log(`  TX: ${cmd.data.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}`);
 
       try {
-        const response = await client.smokeTestCommand(cmdBytes, 2000);
+        const response = await client.sendCommand(cmdBytes, 2000);
         const responseHex = Array.from(response).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
         console.log(`  RX: ${responseHex}`);
 
@@ -210,7 +210,7 @@ RX.858: A7 B3 0A C2 82 37 00 00 80 02 70 01         05 09 00 00 00 00
     console.log('\n📤 Sending ABORT command to stop inventory...');
     const abortCmd = new Uint8Array([0xa7, 0xb3, 0x0a, 0xc2, 0x82, 0x37, 0x00, 0x00, 0x80, 0x02, 0x70, 0x01,    0x00, 0xf0, 0x00, 0x00, 0x00, 0x00]);
     try {
-      await client.smokeTestCommand(abortCmd, 2000);
+      await client.sendCommand(abortCmd, 2000);
       console.log('✅ Inventory stopped');
     } catch (error) {
       console.log('⚠️  Failed to stop inventory:', error);
@@ -238,7 +238,7 @@ RX.858: A7 B3 0A C2 82 37 00 00 80 02 70 01         05 09 00 00 00 00
 
     const powerOffCmd = new Uint8Array([0xa7, 0xb3, 0x02, 0xc2, 0x82, 0x37, 0x00, 0x00, 0x80, 0x01]);
     try {
-      await client.smokeTestCommand(powerOffCmd, 200);
+      await client.sendCommand(powerOffCmd, 200);
       console.log('✅ RFID Powered off');
     } catch (error) {
       console.log('⚠️  Failed to power off RFID:', error);

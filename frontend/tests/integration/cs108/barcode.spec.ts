@@ -20,7 +20,7 @@ describe('CS108 Barcode Integration', () => {
   beforeAll(async () => {
     console.log('\n🔧 Connecting to CS108 hardware for barcode tests...');
     harness = new CS108WorkerTestHarness();
-    await harness.initialize(true); // Connect ONCE for all barcode tests
+    await harness.initialize(); // Connect ONCE for all barcode tests
 
     // Call connect() on the worker and verify state transitions
     console.log('📡 Calling worker connect()...');

@@ -49,7 +49,7 @@ describe('CS108 Baseline Connectivity', () => {
   beforeAll(async () => {
     console.log('🔧 Connecting to CS108 hardware...');
     harness = new CS108WorkerTestHarness();
-    await harness.initialize(true); // Connect to real hardware ONCE
+    await harness.initialize(); // Connect to real hardware ONCE
 
     // Call connect() on the worker - connection completes immediately now
     console.log('📡 Calling worker connect()...');

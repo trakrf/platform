@@ -65,7 +65,7 @@
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/ui": "^1.0.0",
     "autoprefixer": "^10.4.21",
-    "ble-mcp-test": "^0.7.3",
+    "ble-mcp-test": "^0.8.0",
     "concurrently": "^8.2.2",
     "dotenv": "^17.2.0",
     "esbuild": "^0.25.9",
