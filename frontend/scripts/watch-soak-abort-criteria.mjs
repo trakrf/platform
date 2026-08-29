@@ -32,9 +32,11 @@
  */
 
 import net from 'net';
+import os from 'os';
 import path from 'path';
 import { appendFileSync, existsSync, readFileSync } from 'fs';
 import { spawnSync } from 'child_process';
+import dotenv from 'dotenv';
 import { captureCanaryCount } from './suite-run-signals.mjs';
 
 /**
@@ -72,20 +74,95 @@ export function hasRestarted({ uptimeStart, wallStart, uptimeNow, wallNow, toler
 }
 
 /**
- * Is anything already holding or watching the command path?
+ * The session id the soak's own driver will connect under.
+ *
+ * DERIVED, not declared, and that is the point (TRA-1209). `--session` exists as
+ * an override, but a flag alone would have been the same mistake in a new place:
+ * a check whose subject is chosen by configuration the check does not read. The
+ * operator would have to keep it in step with `BLE_SESSION_ID` by hand, and a
+ * stale flag reads as contention exactly like the bug this fixes.
+ *
+ * So it is computed the way `tests/config/ble-bridge.config.ts` computes it —
+ * including loading `.env.local`, because that is where `BLE_SESSION_ID` lives
+ * when it is set at all and the config loads it the same way. The suite's value
+ * would otherwise differ from ours for a reason invisible on both sides.
+ *
+ * This is a THIRD COPY of that derivation, which is the very shape that keeps
+ * going wrong here. The others are `tests/config/ble-bridge.config.ts` and
+ * `tests/config/vite-bridge.config.ts` — and the vite one is the load-bearing
+ * one for e2e, because it is what gets injected into the browser and therefore
+ * what the bridge reports back in `get_connection_state.session`.
+ *
+ * All three are asserted equal by
+ * `tests/config/soak-watchdog-recognises-its-own-driver.test.ts`. Guarding this
+ * against the integration config alone would have been the same
+ * two-legs-scoped-differently defect the gate below is fixing.
+ *
+ * The copies exist because those modules are TypeScript and import the transport
+ * for its UUID constants; this is a plain .mjs that must run under bare node
+ * with no loader.
+ *
+ * `trakrf-handheld-dev-` is a legacy prefix — it names the predecessor project
+ * platform was built from, not anything current. It is kept because the value
+ * only has to MATCH across the four places that derive or observe it; renaming
+ * it changes the identity the bridge sees and is its own change.
+ */
+export function expectedSessionId() {
+  dotenv.config({ path: '.env.local' });
+  return process.env.BLE_SESSION_ID || `trakrf-handheld-dev-${os.hostname()}`;
+}
+
+/**
+ * Is anything OTHER THAN OUR OWN DRIVER holding or watching the command path?
  *
  * `observer_count > 0` is the hazard that appears in no process listing and no
  * log — most often a leftover mock-injected browser tab. On 2026-08-26
  * contention of exactly this kind invalidated two hardware runs inside ten
  * minutes, and neither was visible until the data came out wrong.
  *
- * A reply that does not carry both fields is not evidence of a clear field.
+ * ## Why the question has "other than our own" in it (TRA-1209)
+ *
+ * This used to ask only "is anything holding it", and aborted on the driver's
+ * own rep 1. The documented usage takes `--driver-pid <pid>`, so the driver
+ * necessarily starts first, and the gate necessarily races its first connect —
+ * a couple of seconds on the vitest path, the browser launch on e2e. Arming
+ * inside that window works, but it makes correctness depend on operator timing
+ * in exactly the unattended overnight case where nobody is there to get it
+ * right. The abort also misdirected, naming a leftover browser tab as the usual
+ * cause and sending the operator after a tab that did not exist.
+ *
+ * The holder's identity was in the reply the whole time.
+ *
+ * ## The fail-open trap this avoids
+ *
+ * `state.session === ownSession` is TRUE when both are undefined — a reply that
+ * omits `session`, checked by a watchdog given no expected session, would read a
+ * held field as clear. That converts a fail-safe gate into a fail-open one,
+ * which is worse than the bug being fixed. Hence the explicit non-empty-string
+ * requirement on both sides.
+ *
+ * An observer is contention whoever holds the command path, so `observer_count`
+ * must be 0 either way. A reply that does not carry both fields is not evidence
+ * of a clear field.
  */
-export function fieldIsClear(state) {
+export function fieldIsClear(state, ownSession) {
   if (!state || typeof state !== 'object') return false;
   if (typeof state.held !== 'boolean') return false;
   if (typeof state.observer_count !== 'number') return false;
-  return state.held === false && state.observer_count === 0;
+  if (state.observer_count !== 0) return false;
+  if (state.held === false) return true;
+  return heldByUs(state, ownSession);
+}
+
+/** Held, and held by the session our own driver connects under. Both sides must
+ * be non-empty strings — see the fail-open note above. */
+export function heldByUs(state, ownSession) {
+  return (
+    typeof ownSession === 'string' &&
+    ownSession !== '' &&
+    typeof state?.session === 'string' &&
+    state.session === ownSession
+  );
 }
 
 /**
@@ -236,6 +313,11 @@ usage: watch-soak-abort-criteria.mjs --driver-pid <pid> --runs <runs.jsonl> [opt
   --poll <seconds>     default 600.
   --tolerance <secs>   uptime/wall sample skew allowance, default 10.
   --port <port>        bridge port, default $BLE_MCP_WS_PORT or 25153.
+  --session <id>       the session id the driver connects under. Defaults to the
+                       same value tests/config/ble-bridge.config.ts derives, so a
+                       hold by our own rep 1 is not mistaken for contention.
+                       Override only if the driver runs with a BLE_SESSION_ID this
+                       process cannot see.
 `);
   process.exit(64);
 }
@@ -248,6 +330,7 @@ function parseArgs(argv) {
     pollSeconds: 600,
     toleranceSeconds: 10,
     port: process.env.BLE_MCP_WS_PORT || '25153',
+    session: null,
   };
   for (let i = 0; i < argv.length; i += 2) {
     const value = argv[i + 1];
@@ -258,9 +341,13 @@ function parseArgs(argv) {
       case '--poll': opts.pollSeconds = Number(value); break;
       case '--tolerance': opts.toleranceSeconds = Number(value); break;
       case '--port': opts.port = value; break;
+      case '--session': opts.session = value; break;
       default: usage(`unrecognised argument: ${argv[i]}`);
     }
   }
+  // Derived rather than required, so the ordinary invocation is unchanged and
+  // still correct. See expectedSessionId().
+  if (!opts.session) opts.session = expectedSessionId();
   if (!Number.isInteger(opts.driverPid)) usage('--driver-pid is required.');
   if (!opts.runs) usage('--runs is required.');
   return opts;
@@ -292,10 +379,25 @@ async function main() {
     say('Check it is up:  systemctl --user status ble-bridge');
     process.exit(2);
   }
-  if (!fieldIsClear(state)) {
+  if (!fieldIsClear(state, opts.session)) {
     say(`ABORT before start: the field is not clear — ${JSON.stringify(state)}`);
-    say('Something already holds or observes the command path. A leftover');
-    say('mock-injected browser tab is the usual cause and appears in no process list.');
+    // Name the actual subject. The old message asserted a leftover browser tab
+    // unconditionally, which was wrong in the one case that fires most often and
+    // sent the operator hunting for something that did not exist (TRA-1209).
+    if (state.observer_count > 0 && heldByUs(state, opts.session)) {
+      say(`Your own driver holds it (session ${opts.session}), but ${state.observer_count}`);
+      say('observer(s) are attached. An observer is contention whoever holds the');
+      say('command path — a leftover mock-injected browser tab is the usual cause');
+      say('and appears in no process list.');
+    } else if (state.held && typeof state.session === 'string') {
+      say(`Held by session ${state.session}; this run expects ${opts.session}.`);
+      say('If those should match, the driver is running with a BLE_SESSION_ID this');
+      say('process cannot see — pass --session, or check .env.local. Otherwise');
+      say('another client owns the command path.');
+    } else {
+      say('Something already holds or observes the command path. A leftover');
+      say('mock-injected browser tab is the usual cause and appears in no process list.');
+    }
     process.exit(5);
   }
 
@@ -317,6 +419,7 @@ async function main() {
     `bridge uptime start   ${uptimeStart.toFixed(3)}s`,
     `bridge transport      ${status.esphome_configured ? status.esphome_proxy : 'NOT CONFIGURED'}`,
     `bridge device         ${status.device_mac ?? 'none'}`,
+    `driver session        ${opts.session}`,
     `field at start        held=${state.held} observer_count=${state.observer_count}`,
   ].join('\n');
   say(`pre-flight clear.\n${identity}`);

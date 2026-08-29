@@ -9,6 +9,7 @@
 import type { Page } from '@playwright/test';
 import type { WindowWithStores } from '../types';
 import { getE2EConfig } from '../e2e.config';
+import { shouldForwardConsoleLine } from './console-forwarding';
 
 const config = getE2EConfig();
 
@@ -137,15 +138,20 @@ async function connectToDeviceOnce(page: Page): Promise<void> {
       
       console.log('[Connection] Connect button found, clicking...');
       
-      // Set up console monitoring before clicking
+      // Set up console monitoring before clicking.
+      //
+      // The predicate lives in ./console-forwarding so it can be unit-tested. As
+      // an inline `if` it silently dropped every `[ble-timing]` line for weeks —
+      // case-sensitively, against lines the ack-latency instrument counts — and
+      // nothing short of a hardware run could have caught it (TRA-1209).
+      //
+      // Note the two limbs are now ONE call, not two `if`s. The old pair could
+      // both match and log the same line twice, which double-counts any needle
+      // matching both halves.
       page.on('console', msg => {
         const type = msg.type();
         const text = msg.text();
-        if (type === 'error' || text.includes('Error') || text.includes('Failed')) {
-          console.log(`[Console ${type}]`, text);
-        }
-        if (text.includes('BLE') || text.includes('Connect') || text.includes('WebSocket') || 
-            text.includes('force') || text.includes('cleanup') || text.includes('disconnect')) {
+        if (shouldForwardConsoleLine(text, type)) {
           console.log(`[Console ${type}]`, text);
         }
       });

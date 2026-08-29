@@ -314,15 +314,19 @@ describe('playwright report parsing', () => {
   });
 });
 
-describe('signals are per-runner, and absence is not zero', () => {
-  const VITEST_ONLY = [
-    'harnessLines',
-    'triggerTimeout',
-    'ackSamples',
-    'linkCloses',
-    'connectSamples',
-  ];
+/**
+ * Needles no Playwright rep can EVER produce, because the emitter is a file no
+ * browser loads: `tests/integration/cs108/CS108WorkerTestHarness.ts`.
+ *
+ * The three `[ble-timing]` needles used to be in this list and are not any more.
+ * They were absent for an incidental reason — a case-sensitive console forwarder
+ * — not a structural one, and TRA-1209 fixed the forwarder. That distinction is
+ * exactly why they were recorded as `null` rather than `0`: a zero would have
+ * read as "the transport did nothing" and nobody would have gone looking.
+ */
+const VITEST_ONLY = ['harnessLines', 'triggerTimeout'];
 
+describe('signals are per-runner, and absence is not zero', () => {
   it('the e2e needle table omits every vitest-only needle', () => {
     for (const name of VITEST_ONLY) {
       expect(E2E_SIGNALS[name], `${name} cannot be produced by a Playwright rep`).toBeUndefined();
@@ -330,14 +334,18 @@ describe('signals are per-runner, and absence is not zero', () => {
   });
 
   it('keeps the needles a Playwright rep genuinely can produce', () => {
-    // These four are path-independent: the scan failures are logged by
-    // src/worker/cs108/reader.ts and forwarded by the e2e console bridge, and
-    // both transport needles were already documented as e2e-capable.
+    // Aliased from SIGNALS rather than re-typed — two spellings of "the same"
+    // signal is how a count silently means different things per runner. The
+    // `[ble-timing]` three are here since TRA-1209 fixed the console forwarder
+    // that was dropping them.
     for (const name of [
       'startScanFailed',
       'stopScanFailed',
       'transportRefused',
       'transportUnreachable',
+      'ackSamples',
+      'linkCloses',
+      'connectSamples',
     ]) {
       expect(E2E_SIGNALS[name]).toBe(SIGNALS[name]);
     }
@@ -453,15 +461,7 @@ describe('resolveSignals is runner-aware', () => {
     // into a 0, which is the exact conflation this ticket exists to prevent.
     const stored = { logMissing: false };
     for (const name of Object.keys(E2E_SIGNALS)) stored[name] = 0;
-    for (const name of [
-      'harnessLines',
-      'triggerTimeout',
-      'ackSamples',
-      'linkCloses',
-      'connectSamples',
-    ]) {
-      stored[name] = null;
-    }
+    for (const name of VITEST_ONLY) stored[name] = null;
     const { signals, source } = resolveSignals({ runner: 'e2e', signals: stored, outputLog: null });
     expect(source).toBe('record');
     expect(signals.harnessLines).toBeNull();
