@@ -91,21 +91,18 @@ export const SIGNALS = {
  *                    ever loads it.
  *   triggerTimeout   Same file — it is CS108WorkerTestHarness that rejects with
  *                    `Timeout waiting for event: ...`.
- *   ackSamples       All three `[ble-timing]` lines are `console.info` from
- *   linkCloses       src/lib/device/transport/cs108-ble-transport.ts, which
- *   connectSamples   under e2e runs INSIDE THE BROWSER. They reach the browser
- *                    console every time and are then dropped by the console
- *                    forwarder in tests/e2e/helpers/connection.ts, whose filter
- *                    matches `BLE`/`Connect` case-sensitively against a
- *                    lowercase `[ble-timing] connect`. Two independent causes
- *                    stacked; either alone would explain the silence.
  *
- * The `[ble-timing]` group is the one to revisit. Its absence is incidental —
- * one case-sensitive filter — rather than structural, and fixing that filter is
- * what would give `ack-latency-report.mjs` anything to say about an e2e soak.
- * Deliberately NOT done here: the forwarder is part of the suite under test, and
- * this driver's standing invariant is that the suite cannot observe that it is
- * being characterised.
+ * Both are STRUCTURAL: the emitter is a file no browser loads, so no change to
+ * the e2e path can make them fire. Do not "fix" them.
+ *
+ * The three `[ble-timing]` needles used to be listed here too, and they were the
+ * other kind — absent for an INCIDENTAL reason. They are `console.info` from
+ * src/lib/device/transport/cs108-ble-transport.ts, which under e2e runs inside
+ * the browser, and the console forwarder's filter matched `BLE`/`Connect`
+ * case-sensitively against a lowercase `[ble-timing] connect`. TRA-1209 fixed
+ * the forwarder, so they are counted again. The distinction is the reason the
+ * original null was recorded rather than a zero: a zero would have been read as
+ * "the transport did nothing" and the question would never have been asked.
  */
 export const E2E_SIGNALS = {
   // CANARY, and the e2e counterpart to `harnessLines` — see `CAPTURE_CANARY`.
@@ -131,7 +128,72 @@ export const E2E_SIGNALS = {
   // allowlist, and it is capitalised the same way there).
   transportRefused: SIGNALS.transportRefused,
   transportUnreachable: SIGNALS.transportUnreachable,
+  // Restored by TRA-1209. `console.info` from cs108-ble-transport.ts, which runs
+  // in the browser under e2e; they reach the captured log only because
+  // `shouldForwardConsoleLine` now matches the `[ble-timing]` prefix explicitly.
+  // Without that limb these count 0 on every rep however healthy the link is —
+  // which is why they are named in E2E_BROWSER_NEEDLES below.
+  //
+  // Measured on hardware after the fix: connect 1, write-ack 28, link-close 0.
+  //
+  // THAT ZERO IS GENUINE, and worth writing down because it looks like the bug
+  // that was just fixed. `link-close` is emitted only by `handleDisconnect()`,
+  // which is the `gattserverdisconnected` listener — and
+  // `CS108BLETransport.disconnect()` REMOVES that listener before tearing the
+  // link down. So a deliberate disconnect never emits one. The needle fires on
+  // an UNEXPECTED drop, which is the condition it exists to catch ("a link close
+  // while a write is outstanding").
+  //
+  // This is not our local quirk — it is the peer's published contract, and
+  // citing it beats re-deriving it, so a future change is found where the rule
+  // lives rather than inferred from a zero somebody distrusts:
+  //
+  //   ble-mcp-test docs/design/2026-08-27-client-contract.md:204
+  //     `gattserverdisconnected` fires on a TRANSPORT-LEVEL DROP only, never on
+  //     an explicit gatt.disconnect().
+  //
+  // ⚠ That contract line is an assertion about what real Chrome does, and it is
+  // not flagged as a deliberate divergence. So a clean rep scoring 0 confirms
+  // THE MOCK MATCHES ITS CONTRACT; it does not confirm the contract matches
+  // Chrome. Nothing either repo runs tests the second claim — checking live
+  // `navigator.bluetooth` needs the gesture-bound interactive arm TRA-1187
+  // deferred to a human at a keyboard. A green e2e run is never evidence of
+  // mock fidelity.
+  ackSamples: SIGNALS.ackSamples,
+  linkCloses: SIGNALS.linkCloses,
+  connectSamples: SIGNALS.connectSamples,
 };
+
+/**
+ * Which e2e needles have a producer that runs IN THE BROWSER.
+ *
+ * Those lines reach a Playwright rep's captured log only by way of the console
+ * forwarder in `tests/e2e/helpers/console-forwarding.ts`. A needle here that the
+ * forwarder drops does not read as "dropped" — it reads as a confident `0`,
+ * indistinguishable from "the reader never did that". That is exactly how the
+ * three `[ble-timing]` needles were lost (TRA-1209).
+ *
+ * Declaring the coupling is what makes it checkable:
+ * `tests/config/e2e-console-forwarding.test.ts` asserts the forwarder passes
+ * every needle named here. Adding a browser-emitted needle without teaching the
+ * forwarder is now a failing test rather than a silent zero.
+ *
+ * Two deliberate omissions, so neither reads as an oversight:
+ *   e2eConnectLines   `[Connection]` is logged by the Playwright process itself,
+ *                     not by the page, so it never touches the forwarder.
+ *   transportRefused  `ECONNREFUSED` is a Node errno. A browser has no errno to
+ *                     report — it produces the bare `WebSocket error` shape,
+ *                     which is what `transportUnreachable` covers. Any
+ *                     ECONNREFUSED in an e2e log came from a Node-side caller.
+ */
+export const E2E_BROWSER_NEEDLES = [
+  'startScanFailed',
+  'stopScanFailed',
+  'transportUnreachable',
+  'ackSamples',
+  'linkCloses',
+  'connectSamples',
+];
 
 /**
  * The needle that answers "did this rep produce ANY observable output", per runner.
