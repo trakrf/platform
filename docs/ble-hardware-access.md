@@ -124,11 +124,18 @@ sticky: it needs `systemctl --user reset-failed` before it will start again.
 A start failure is always a configuration failure, so a restart storm is never
 transient.
 
-**Do not use `status.version` to tell whether the daemon is current.** It reports
-the Python package version, which has read `0.1.0` unchanged through the entire
-replatform — a confident wrong answer. Code currency is answered by
-ble-mcp-test's own staleness guard in its `pretest`, which compares the running
-daemon against the checkout it was started from.
+**Do not use `status.version` to tell whether the daemon is running current
+code.** A release number cannot answer that question even when it is accurate:
+two daemons at the same released version can be serving different code, because
+a version moves on release and code moves on merge. For most of the replatform
+it could not answer it at all — it sat frozen at `0.1.0` while everything
+underneath it changed, so it was a confident wrong answer rather than a stale
+one. It is being synced to the released version, which stops the frozen value
+being a lie without making it a currency check.
+
+Code currency is answered by ble-mcp-test's own staleness guard in its
+`pretest`, which compares the running daemon against the checkout it was
+started from.
 
 ## Bind address
 
