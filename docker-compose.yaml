@@ -35,7 +35,20 @@ services:
     environment:
       BACKEND_PORT: ${BACKEND_PORT:-8080}
       BACKEND_LOG_LEVEL: ${BACKEND_LOG_LEVEL:-info}
-      PG_URL: ${PG_URL}
+      # Composed from parts, the same way helm/trakrf-backend builds it from
+      # $(PGUSER)/$(PGPASSWORD) and a host/port/database (TRA-1190). Nothing
+      # here stores a DSN, so nothing here can hold a stale one.
+      #
+      # `:-` and not `:?` on purpose: these carry the well-known local defaults
+      # that `just database init` bootstraps, so a fresh clone with no .env.local
+      # comes up on the canonical database rather than on nothing. The defaults
+      # are the same values database/justfile uses — `just test-env-drift`
+      # checks that claim rather than trusting it.
+      #
+      # The app role, never the migrate role and never postgres: a superuser or
+      # an owner bypasses row-level security, so connecting as one means no
+      # policy is ever evaluated locally (TRA-1075).
+      PG_URL: postgresql://${PG_APP_USER:-trakrf-app}:${PG_APP_PASSWORD:-trakrf-app}@${PG_HOST:-timescaledb}:${PG_PORT:-5432}/${PG_DATABASE:-trakrf}?sslmode=${PG_SSLMODE:-disable}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-3600}
     volumes:

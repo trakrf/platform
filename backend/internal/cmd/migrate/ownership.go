@@ -130,6 +130,27 @@ func ownershipDriftError(drifts []ownershipDrift, role string) error {
 // pg_class entries create implicitly (those follow their relation's ownership and
 // would double-report). The schema itself is included — an unowned schema blocks
 // CREATE just as surely as an unowned table blocks REPLACE.
+//
+// Objects belonging to an EXTENSION are excluded (pg_depend deptype 'e'),
+// TRA-1190. They are not drift, and no repair can make them stop looking like
+// it: pgcrypto is a trusted extension, so `CREATE EXTENSION pgcrypto` succeeds
+// for a non-superuser and Postgres nevertheless assigns every resulting object
+// to the bootstrap superuser. Migration 000001 creates it inside the trakrf
+// schema, so every database migrated by trakrf-migrate carries 36 permanently
+// postgres-owned functions there, by design and beyond the role's reach.
+//
+// Including them made this preflight fire on every local database forever:
+// `just backend migrate` worked once on a fresh database and refused every run
+// afterwards — including as a no-op, since the preflight precedes golang-migrate
+// deciding there is nothing to do. `just dev` migrates each time, so the second
+// `just dev` failed. That was invisible only because PG_URL_MIGRATE_LOCAL was
+// itself unset, so the command had never run at all.
+//
+// The exclusion gives up nothing this guard protects. A migration never
+// CREATE OR REPLACEs an extension member — the extension owns its definitions —
+// so such an object cannot produce the half-applied migration and dirty ledger
+// the preflight exists to prevent. Genuine drift on a non-extension object is
+// still caught, which the integration suite asserts alongside this.
 func findOwnershipDrift(ctx context.Context, pool *pgxpool.Pool) ([]ownershipDrift, error) {
 	const q = `
 SELECT kind, name, owner FROM (
@@ -148,6 +169,11 @@ SELECT kind, name, owner FROM (
       JOIN pg_namespace n ON n.oid = c.relnamespace
      WHERE n.nspname = $1
        AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
+       AND NOT EXISTS (
+             SELECT 1 FROM pg_depend d
+              WHERE d.classid = 'pg_class'::regclass
+                AND d.objid = c.oid
+                AND d.deptype = 'e')
 
     UNION ALL
 
@@ -168,6 +194,11 @@ SELECT kind, name, owner FROM (
       FROM pg_proc p
       JOIN pg_namespace n ON n.oid = p.pronamespace
      WHERE n.nspname = $1
+       AND NOT EXISTS (
+             SELECT 1 FROM pg_depend d
+              WHERE d.classid = 'pg_proc'::regclass
+                AND d.objid = p.oid
+                AND d.deptype = 'e')
 
     UNION ALL
 
@@ -179,6 +210,11 @@ SELECT kind, name, owner FROM (
       JOIN pg_namespace n ON n.oid = t.typnamespace
      WHERE n.nspname = $1
        AND t.typtype IN ('e', 'd', 'c')
+       AND NOT EXISTS (
+             SELECT 1 FROM pg_depend d
+              WHERE d.classid = 'pg_type'::regclass
+                AND d.objid = t.oid
+                AND d.deptype = 'e')
        AND NOT EXISTS (
              SELECT 1 FROM pg_class c
               WHERE c.reltype = t.oid

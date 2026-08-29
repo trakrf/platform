@@ -112,6 +112,72 @@ require_tool swag "Install it: go install github.com/swaggo/swag/cmd/swag@v1.16.
 echo "🧰 Bootstrapping $(basename "$repo_root")"
 
 # ---------------------------------------------------------------------------
+# 0. Local environment files (TRA-1190)
+# ---------------------------------------------------------------------------
+# Two consumers, one file. docker compose reads `.env`; direnv reads
+# `.env.local`. Keeping them as two real files means compose and the host-side
+# tooling can disagree about which database is the database — and because the
+# shell environment silently outranks `.env`, the disagreement does not even
+# present the same way twice.
+#
+# A symlink makes them the same bytes by construction. That was already the
+# arrangement on the one machine where it worked, created by hand in October
+# 2025, documented nowhere and reproduced by nothing — so every other checkout
+# had the split this ticket is about. Creating it here is the whole fix;
+# `just test-env-drift` is what keeps it.
+#
+# Never overwrites a real file: if someone has a populated `.env`, that is
+# content this script has not read and must not destroy. Say so and let them
+# resolve it.
+if [ -L "$repo_root/.env" ]; then
+    target=$(readlink "$repo_root/.env")
+    if [ "$target" = ".env.local" ]; then
+        echo "✅ .env -> .env.local"
+    else
+        die "env" \
+            ".env is a symlink to '$target', not to .env.local." \
+            "Two env files can name two different databases (TRA-1190)." \
+            "Fix: ln -sfn .env.local .env"
+    fi
+elif [ -e "$repo_root/.env" ]; then
+    die "env" \
+        ".env exists as a regular file." \
+        "It must be a symlink to .env.local, so compose and direnv cannot" \
+        "disagree about which database is the database (TRA-1190)." \
+        "Merge anything it holds into .env.local, then:" \
+        "  rm .env && ln -s .env.local .env" \
+        "Left in place deliberately — this script will not delete a file whose" \
+        "contents it has not read."
+else
+    echo "🔗 .env -> .env.local"
+    ln -s .env.local "$repo_root/.env" || die "env" "could not create the .env symlink"
+fi
+
+# A worktree gets no .env.local of its own — it is gitignored, so `git worktree
+# add` never brings one across, and direnv in a fresh worktree therefore finds
+# nothing. Point it at the main worktree's copy so credentials are edited in one
+# place and a worktree cannot drift from the checkout it was cut from.
+#
+# The main worktree is resolved from git rather than from `..`, for the reason
+# the `ops` recipe in the root justfile gives: worktrees live in
+# .claude/worktrees/<branch>/, where a relative guess lands somewhere else
+# entirely.
+if [ ! -e "$repo_root/.env.local" ]; then
+    main_dir=$(git worktree list --porcelain 2>/dev/null \
+        | awk '/^worktree /{path=$2} /^branch refs\/heads\/main$/{print path; exit}')
+    if [ -n "$main_dir" ] && [ "$main_dir" != "$repo_root" ] && [ -f "$main_dir/.env.local" ]; then
+        echo "🔗 .env.local -> $main_dir/.env.local"
+        ln -s "$main_dir/.env.local" "$repo_root/.env.local" \
+            || die "env" "could not link .env.local to the main worktree's copy"
+    else
+        # Not fatal: every value has a working local default, so the stack comes
+        # up on the canonical database regardless. Only the things with no
+        # sensible default — MQTT credentials, a Resend key — actually need it.
+        echo "ℹ️  no .env.local (defaults apply; cp .env.local.example .env.local to override)"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # 1. Workspace dependencies
 # ---------------------------------------------------------------------------
 # Unconditional: a warm `pnpm install --frozen-lockfile` is sub-second, and pnpm

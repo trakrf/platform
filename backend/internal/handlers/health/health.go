@@ -29,20 +29,31 @@ type Response struct {
 	// mirrors BuildTime — the distinct json name is the contract BB
 	// tooling watches for deploy-lag detection.
 	SpecRefreshedAt string `json:"spec_refreshed_at"`
+	// Schema compares the migration version the database has applied against
+	// the set embedded in this binary (TRA-1190). Omitted when there is no
+	// pool or the ledger cannot be read — "unknown" is not "behind".
+	Schema *SchemaInfo `json:"schema,omitempty"`
 }
 
 type Handler struct {
 	db        *pgxpool.Pool
 	info      buildinfo.Info
 	startTime time.Time
+	// readSchema reads the applied migration version. nil disables the check,
+	// which is the no-pool unit-test path.
+	readSchema SchemaReader
 }
 
 func NewHandler(db *pgxpool.Pool, info buildinfo.Info, startTime time.Time) *Handler {
-	return &Handler{
+	h := &Handler{
 		db:        db,
 		info:      info,
 		startTime: startTime,
 	}
+	if db != nil {
+		h.readSchema = poolSchemaReader(db)
+	}
+	return h
 }
 
 // Healthz is the liveness probe endpoint. Stays plaintext "ok" — K8s probes
@@ -105,8 +116,17 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// A schema older than this binary's embedded migration set means the stack
+	// is not usable even though every other signal here is green — the state
+	// that produced 89 identical e2e failures before anything reported it
+	// (TRA-1190). /healthz and /readyz deliberately do not follow this: killing
+	// or de-registering the pod cannot fix a schema, and would stop it serving
+	// while the migration that does fix it runs.
+	schema, status, healthy := h.schemaState(r.Context())
+
 	resp := Response{
-		Status:          "ok",
+		Status:          status,
+		Schema:          schema,
 		Version:         h.info.Version,
 		Commit:          h.info.Commit,
 		Tag:             h.info.Tag,
@@ -119,7 +139,11 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
+	if !healthy {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
 	json.NewEncoder(w).Encode(resp)
 }
 

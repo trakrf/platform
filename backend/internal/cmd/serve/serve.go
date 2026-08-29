@@ -94,6 +94,17 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	defer store.Close()
 	log.Info().Msg("Storage initialized")
 
+	// Say it at boot as well as on /health (TRA-1190). The endpoint is what a
+	// test suite can check; this line is what a developer actually sees, and
+	// `just dev` completing against a schema two migrations behind is the root
+	// of both invalid characterisation runs this came from.
+	//
+	// A warning, not a refusal. The repair is to run migrations, and a process
+	// that exited cannot serve while that happens — nor should a rolling deploy,
+	// where an old replica legitimately runs behind for a moment, be turned into
+	// an outage by its own startup check.
+	logSchemaDrift(ctx, log, store)
+
 	// TRA-900: in-backend MQTT subscriber (replaces the RC ingester + the
 	// process_tag_scans trigger). Disabled when MQTT_URL is unset, so local
 	// dev / tests / pre-cutover prod stay inert.

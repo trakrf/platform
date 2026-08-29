@@ -61,22 +61,29 @@ backgrounding at the start of a session rather than waiting on it.
 
 **1. Configure environment**
 ```bash
-# Create .env file (required for Docker Compose)
-cat > .env << EOF
-POSTGRES_PASSWORD=postgres
-POSTGRES_DB=postgres
-PG_URL=postgres://trakrf-app:trakrf-app@timescaledb:5432/trakrf?sslmode=disable
-BACKEND_PORT=8080
-BACKEND_LOG_LEVEL=info
-EOF
-
-# For additional configuration, use .env.local (optional)
-# cp .env.local.example .env.local
-# Edit .env.local for MQTT credentials, etc.
+# Optional. Every value has a working local default, so the stack comes up on
+# the canonical database with no env file at all — you need this only to set
+# things that have no sensible default (MQTT credentials, a Resend key).
+cp .env.local.example .env.local
 
 # Enable direnv (auto-loads .env.local)
 direnv allow
 ```
+
+**There is one local env file: `.env.local`.** `just bootstrap` symlinks `.env`
+to it, because docker compose reads `.env` while direnv reads `.env.local` — as
+two real files they can name two different databases, and the shell environment
+silently outranks `.env`, so the disagreement does not even present the same way
+twice. That is not hypothetical: it is what TRA-1190 was filed for.
+
+It holds **parts, not connection URLs** — `PG_DATABASE`, `PG_APP_USER`,
+`PG_MIGRATE_USER` and their passwords — and docker-compose and the justfiles
+assemble the DSNs from them. This mirrors what the cluster has done since the
+move to GKE/CNPG, where `helm/trakrf-backend` interpolates
+`postgresql://$(PGUSER):$(PGPASSWORD)@host:port/db` from a role name and a
+Secret rather than storing a URL. Nothing stores a DSN, so nothing can hold a
+stale one. `just test-env-drift` checks these against `database/justfile`, which
+is what actually declares the database and role names.
 
 **Database roles.** The local stack mirrors what preview and prod run on: a
 `trakrf` database owned by `trakrf-migrate` (DDL), served by `trakrf-app`
@@ -85,7 +92,7 @@ creates both. This is deliberate: a superuser bypasses row-level security, so
 connecting as `postgres` means no policy is ever evaluated locally and a missing
 `WithOrgTx` looks healthy until it reaches a deployed environment. If you hit a
 permission error, that is the signal working — don't put `postgres` back in
-`PG_URL_LOCAL`. See `database/sql/` and ADR 0003.
+`PG_APP_USER`. See `database/sql/` and ADR 0003.
 
 **2. Start full stack**
 ```bash

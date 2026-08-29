@@ -2,16 +2,92 @@
 # Uses fallback to inherit shared recipes from root justfile
 set fallback := true
 
-# Get database URLs from environment (loaded by direnv from .env.local)
+# Database connection parts, composed into DSNs below (TRA-1190).
 #
-# Two roles, matching CNPG and the local bootstrap (TRA-1075): pg_url_local is
-# `trakrf-app`, which has CRUD and nothing else so RLS is evaluated against it;
-# pg_url_migrate_local is `trakrf-migrate`, which owns the schema and is the
-# only one of the two that can run DDL.
-pg_url_local := env("PG_URL_LOCAL", "")
-pg_url_migrate := env("PG_URL_MIGRATE", "")
-pg_url_migrate_local := env("PG_URL_MIGRATE_LOCAL", "")
+# The cluster does exactly this: helm/trakrf-backend/templates/migrate-job.yaml
+# interpolates `postgresql://$(PGUSER):$(PGPASSWORD)@host:port/db?sslmode=...`
+# from a role name and a Secret rather than storing a URL. That shape arrived
+# with the GKE/CNPG migration and was never ported back here — local dev kept
+# four hand-written DSNs, each able to drift on its own, and one of them
+# (PG_URL_MIGRATE_LOCAL) reached no developer's .env.local at all, which is what
+# made `just backend migrate` impossible to run and a stale schema impossible to
+# notice.
+#
+# Defaults are the well-known local values that `just database init` bootstraps,
+# so a fresh clone with no .env.local still gets a working stack against the
+# canonical database. They are the same values database/justfile declares;
+# `just test-env-drift` checks that rather than trusting it.
+#
+# A bare env("X") is deliberately NOT used here even though it would name a
+# missing variable for free: just evaluates every variable in the file eagerly,
+# so one unset value would break `just backend test`, `lint` and `build` too —
+# including in CI, which has no .env.local at all. The guard is per-recipe
+# instead, in _require-pg-parts below.
+pg_host := env("PG_HOST", "timescaledb")
+pg_host_local := env("PG_HOST_LOCAL", "localhost")
+pg_port := env("PG_PORT", "5432")
+pg_database := env("PG_DATABASE", "trakrf")
+pg_sslmode := env("PG_SSLMODE", "disable")
+
+# Two roles, matching CNPG and the local bootstrap (TRA-1075): the app role has
+# CRUD and nothing else, so RLS is evaluated against it; the migrate role owns
+# the schema and is the only one of the two that can run DDL.
+pg_app_user := env("PG_APP_USER", "trakrf-app")
+pg_app_password := env("PG_APP_PASSWORD", "trakrf-app")
+pg_migrate_user := env("PG_MIGRATE_USER", "trakrf-migrate")
+pg_migrate_password := env("PG_MIGRATE_PASSWORD", "trakrf-migrate")
+
+# `_local` is host→published-port (`just backend dev`); the bare form is
+# container→container, for anything running inside compose.
+pg_url_local := "postgresql://" + pg_app_user + ":" + pg_app_password + "@" + pg_host_local + ":" + pg_port + "/" + pg_database + "?sslmode=" + pg_sslmode
+pg_url_migrate := "postgresql://" + pg_migrate_user + ":" + pg_migrate_password + "@" + pg_host + ":" + pg_port + "/" + pg_database + "?sslmode=" + pg_sslmode
+pg_url_migrate_local := "postgresql://" + pg_migrate_user + ":" + pg_migrate_password + "@" + pg_host_local + ":" + pg_port + "/" + pg_database + "?sslmode=" + pg_sslmode
+
+# Cloud stays a whole DSN: it shares no parts with the local stack, and its
+# host, credentials and sslmode all come from somewhere else entirely.
 pg_url_cloud := env("PG_URL_CLOUD", "")
+
+# Refuses to run when a connection part is explicitly empty, or when a retired
+# PG_URL* variable is still exported (TRA-1190).
+#
+# Both failures used to be silent in the same way. An empty part produced an
+# empty PG_URL and died two layers later as "PG_URL environment variable not
+# set" — a message about the environment in general rather than about the one
+# variable at fault. And a .env.local written before this change still exports
+# PG_URL_LOCAL / PG_URL_MIGRATE_LOCAL, which nothing reads any more: whatever
+# was customised in them would stop applying without a word, which is precisely
+# how this ticket's stale database went unnoticed for months.
+_require-pg-parts:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    missing=()
+    for pair in "PG_HOST={{pg_host}}" "PG_HOST_LOCAL={{pg_host_local}}" \
+                "PG_PORT={{pg_port}}" "PG_DATABASE={{pg_database}}" \
+                "PG_APP_USER={{pg_app_user}}" "PG_APP_PASSWORD={{pg_app_password}}" \
+                "PG_MIGRATE_USER={{pg_migrate_user}}" "PG_MIGRATE_PASSWORD={{pg_migrate_password}}"; do
+        [ -n "${pair#*=}" ] || missing+=("${pair%%=*}")
+    done
+    if [ "${#missing[@]}" -gt 0 ]; then
+        echo "❌ empty database connection part(s): ${missing[*]}" >&2
+        echo "   Each is set to an empty value in your environment or .env.local." >&2
+        echo "   Remove the empty assignment to fall back to the local default," >&2
+        echo "   or give it a value. See .env.local.example." >&2
+        exit 1
+    fi
+    retired=()
+    for name in PG_URL_LOCAL PG_URL_MIGRATE PG_URL_MIGRATE_LOCAL; do
+        [ -z "${!name:-}" ] || retired+=("$name")
+    done
+    if [ "${#retired[@]}" -gt 0 ]; then
+        echo "❌ retired variable(s) still set: ${retired[*]}" >&2
+        echo "   These are no longer read — connection URLs are composed from" >&2
+        echo "   PG_HOST/PG_PORT/PG_DATABASE/PG_APP_USER/PG_MIGRATE_USER and the" >&2
+        echo "   matching passwords (TRA-1190), mirroring the cluster." >&2
+        echo "   Leaving them set means a value you customised is being ignored." >&2
+        echo "   Fix: delete them from .env.local, then re-check with" >&2
+        echo "        just test-env-drift" >&2
+        exit 1
+    fi
 
 # List all available recipes
 default:
@@ -77,8 +153,8 @@ test-contract:
     REPO_ROOT="$(git rev-parse --show-toplevel)"
     SCHEMA_DB="trakrf_schemathesis"
     PG_PASSWORD="${POSTGRES_PASSWORD:-postgres}"
-    APP_ROLE="trakrf-app"
-    MIGRATE_ROLE="trakrf-migrate"
+    APP_ROLE="${PG_APP_USER:-trakrf-app}"
+    MIGRATE_ROLE="${PG_MIGRATE_USER:-trakrf-migrate}"
     APP_PASSWORD="${PG_APP_PASSWORD:-trakrf-app}"
     MIGRATE_PASSWORD="${PG_MIGRATE_PASSWORD:-trakrf-migrate}"
     OBFUSCATION_KEY="${OBFUSCATION_KEY:-6f626675736361746f72746573746b657920303132333435363738396162636465}"
@@ -91,7 +167,17 @@ test-contract:
     # Superuser on the contract DB — used for seeding and for the bootstrap SQL.
     PG_URL_ADMIN_DB="postgres://postgres:${PG_PASSWORD_ENC}@localhost:5432/${SCHEMA_DB}?sslmode=disable"
     PG_URL_APP="postgres://${APP_ROLE}:${APP_PASSWORD_ENC}@localhost:5432/${SCHEMA_DB}?sslmode=disable"
-    export PG_URL_MIGRATE_LOCAL="postgres://${MIGRATE_ROLE}:${MIGRATE_PASSWORD_ENC}@localhost:5432/${SCHEMA_DB}?sslmode=disable"
+    # Point `just migrate` (below) at the contract database by overriding the
+    # PARTS it composes from, not by handing it a URL — the same knobs the
+    # cluster turns, and the reason nothing here has to know the DSN's shape
+    # (TRA-1190). The password goes in URL-encoded because the justfile
+    # interpolates it into a URL verbatim.
+    export PG_HOST_LOCAL="localhost"
+    export PG_PORT="5432"
+    export PG_SSLMODE="disable"
+    export PG_DATABASE="${SCHEMA_DB}"
+    export PG_MIGRATE_USER="${MIGRATE_ROLE}"
+    export PG_MIGRATE_PASSWORD="${MIGRATE_PASSWORD_ENC}"
 
     cleanup() {
         if [ -n "${BACKEND_PID:-}" ]; then
@@ -483,8 +569,8 @@ shell:
 #
 # Runs as trakrf-migrate, not trakrf-app: the app role has no CREATE anywhere,
 # which is exactly what makes RLS meaningful for it (TRA-1075).
-migrate:
-    @echo "🔄 Running database migrations..."
+migrate: _require-pg-parts
+    @echo "🔄 Running migrations on {{pg_database}} at {{pg_host_local}}:{{pg_port}} as {{pg_migrate_user}}..."
     @env PG_URL="{{pg_url_migrate_local}}" go run . migrate
     @echo "✅ Migrations complete"
 
@@ -506,6 +592,15 @@ migrate-status:
 migrate-create name:
     @echo "📝 Creating new migration: {{name}}"
     docker compose exec backend sh -c 'migrate create -ext sql -dir /app/migrations -seq {{name}}'
+
+# Run the id-source guard (TRA-886) against the local migrated schema.
+# Composes PG_URL here so the script never has to know the DSN's shape.
+test-id-source-guard: _require-pg-parts
+    @env PG_URL="{{pg_url_local}}" ./database/test/run_id_source_guard.sh
+
+# Run the Feistel parity vectors (TRA-720) against the local migrated schema.
+test-feistel-parity: _require-pg-parts
+    @env PG_URL="{{pg_url_local}}" ./database/test/run_feistel_parity.sh
 
 # Record the current migration files in migrations/checksums.txt (TRA-1077)
 #

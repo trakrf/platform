@@ -8,7 +8,7 @@
 # when it could have been found on a laptop.
 #
 # The failure this file exists to catch is quiet: someone meets a permission
-# error locally, puts `postgres` back in PG_URL_LOCAL, and the stack goes green
+# error locally, puts `postgres` back in PG_APP_USER, and the stack goes green
 # again with RLS coverage silently gone. Nothing else in the suite would notice.
 #
 # These are text assertions over the bootstrap SQL and the env templates. They
@@ -166,17 +166,38 @@ done
 echo ".env.local.example — local dev connects as the app role"
 # ---------------------------------------------------------------------------
 
-has "PG_URL uses the app role"        "$env_example" "^PG_URL=postgres://trakrf-app:"
-has "PG_URL targets the trakrf DB"    "$env_example" "^PG_URL=postgres://[^@]+@timescaledb:5432/trakrf\?"
-has "PG_URL_LOCAL uses the app role"  "$env_example" "^PG_URL_LOCAL=postgres://trakrf-app:"
-has "PG_URL_LOCAL targets the trakrf DB" "$env_example" "^PG_URL_LOCAL=postgres://[^@]+@localhost:5432/trakrf\?"
-has "PG_URL_MIGRATE uses the migrate role"       "$env_example" "^PG_URL_MIGRATE=postgres://trakrf-migrate:"
-has "PG_URL_MIGRATE_LOCAL uses the migrate role" "$env_example" "^PG_URL_MIGRATE_LOCAL=postgres://trakrf-migrate:"
+# Parts, not DSNs, since TRA-1190 — the shape the cluster has used since the
+# GKE/CNPG migration, where migrate-job.yaml interpolates a role name and a
+# Secret into the URL rather than storing one.
+#
+# What this file guards is unchanged and is the only thing that matters here:
+# the application connects as a role that RLS is actually evaluated against. The
+# assertions moved from four URLs to two names, and the compose/justfile
+# interpolation that turns those names into URLs is checked by
+# `just test-env-drift`, which also pins them to database/justfile.
+has "app role is the non-superuser app role"   "$env_example" "^PG_APP_USER=trakrf-app$"
+has "migrate role is the DDL role"             "$env_example" "^PG_MIGRATE_USER=trakrf-migrate$"
+has "the application database is trakrf"       "$env_example" "^PG_DATABASE=trakrf$"
+
+# The failure this whole file exists to catch, stated directly now that there is
+# a single place to state it: putting `postgres` back after meeting a permission
+# error. That silently retires every policy in the schema, and nothing else in
+# the suite would notice.
+lacks "app role is never the superuser"     "$env_example" "^PG_APP_USER=postgres$"
+lacks "migrate role is never the superuser" "$env_example" "^PG_MIGRATE_USER=postgres$"
+lacks "the app database is never the maintenance database" "$env_example" "^PG_DATABASE=postgres$"
 
 # The migration runner sets its own search_path on every connection it opens
 # (ADR 0003) and the database carries one for everybody else, so the parameter
-# on the URL is not merely duplicated — it has no remaining job.
-lacks "no search_path parameter on any app/migrate URL" "$env_example" "^PG_URL(_LOCAL|_MIGRATE|_MIGRATE_LOCAL)?=.*search_path"
+# has no remaining job. With the DSNs gone there is no URL left to carry it, so
+# this now guards the parts against growing one back.
+#
+# Scoped to the LOCAL parts by name. PG_URL_CLOUD and PG_URL_PREVIEW are
+# Timescale Cloud DSNs that legitimately carry `options=-c search_path=...`,
+# because those databases have no ALTER DATABASE default set on them — the same
+# reason the deployed Helm chart puts it on the URL.
+lacks "no search_path parameter among the local connection parts" "$env_example" \
+    "^PG_(HOST|HOST_LOCAL|PORT|DATABASE|SSLMODE|APP_USER|APP_PASSWORD|MIGRATE_USER|MIGRATE_PASSWORD)=.*search_path"
 
 # The integration harness needs CREATE DATABASE, which the app role must not
 # have. It reads this variable rather than deriving an admin URL from PG_URL.
