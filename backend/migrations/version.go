@@ -51,9 +51,12 @@ func all() ([]migration, error) {
 		if !found {
 			return nil, fmt.Errorf("migration %q is not <version>_<name>%s", name, upSuffix)
 		}
-		v, err := strconv.ParseUint(digits, 10, 64)
+		// Parsed at 32 bits, not 64: the version is carried as a uint the whole
+		// way, including into golang-migrate. A value that would not survive
+		// the conversion is a malformed filename, not a number to truncate.
+		v, err := strconv.ParseUint(digits, 10, 32)
 		if err != nil {
-			return nil, fmt.Errorf("migration %q has a non-numeric version %q: %w", name, digits, err)
+			return nil, fmt.Errorf("migration %q has an unusable version %q: %w", name, digits, err)
 		}
 		// A duplicate version is worse than a gap: golang-migrate applies one of
 		// them and records a version that then describes two different schemas
