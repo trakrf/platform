@@ -88,13 +88,28 @@ all — and it stopped being blocked on the unit's final shape, which is why par
 of TRA-1203 could be written before TRA-1202 landed.
 
 **This costs something, and the cost is the honest part.** A contract-level
-check can only ask what the contract exposes. `status` carries no process
-identity today, so restart detection is arithmetic over `uptime_seconds` rather
-than a direct comparison — correct, but indirect, and it required a test for the
-case where uptime re-grows past its starting value. The right fix is to ask the
-peer to publish the missing primitive (an `instance_id` minted at process start;
-raised as TRA-1204) rather than to reach around the contract for it. **Reaching
-around a missing field is how all three defects above were introduced.**
+check can only ask what the contract exposes. When this was written `status`
+exposed no process identity, so restart detection is arithmetic over
+`uptime_seconds` rather than a direct comparison — correct, but indirect, and it
+required a test for the case where uptime re-grows past its starting value.
+
+**The rule for a missing field is to ask the peer to publish it, not to reach
+around the contract for it** — raised as TRA-1204, and reaching around a missing
+field is how all three defects above were introduced.
+
+That request was taken up, and what came back is worth recording because the
+obvious reading of it is wrong. A process identifier does **not** retire the
+arithmetic, and the reason is not version skew across hosts — it is that the two
+answer different questions. An identifier answers *is this a different process*.
+The arithmetic answers *has this process been running for the whole interval I
+measured*. A restart fires both; a **host suspend** fires only the second, since
+`CLOCK_MONOTONIC` does not advance across it — same process, same identifier, and
+an hour of wall clock the run did not experience. What the identifier removes is
+the tolerance-sizing problem, which is the part that actually bit.
+
+So the general form: **when a peer adds a field, check whether it answers your
+question or a neighbouring one before deleting what you had.** A narrower
+property wearing the contract's claim is the same defect this ADR opens with.
 
 Where the contract is genuinely insufficient and the peer cannot extend it, say
 so explicitly at the call site and treat it as a known coupling with a ticket —
