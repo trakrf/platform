@@ -68,6 +68,8 @@
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
+import { cohortWarning } from './suite-run-signals.mjs';
+
 const RECORD_PATH = path.resolve(process.cwd(), '.suite-runs', 'runs.jsonl');
 
 /** Overrun windows from CS108BLETransport's WRITE_BUDGET_MS comment. */
@@ -207,6 +209,13 @@ function main() {
   }
 
   console.log('# Ack-latency report\n');
+  // Same pooling hazard as the summariser, and the same remedy: this file
+  // accumulates across invocations, so a latency distribution can silently span
+  // two campaigns. Warn before the numbers, never after them.
+  const mixed = cohortWarning(
+    readFileSync(RECORD_PATH, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+  );
+  if (mixed) console.log(`${mixed}\n`);
   console.log(`sources          ${sources.length} (${unreadable} unreadable — log gone, NOT counted as zero)`);
   console.log(`write attempts   ${writes.length}`);
   console.log(`link closes      ${closes.length}`);

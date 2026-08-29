@@ -19,6 +19,7 @@ import {
   captureCanaryCount,
   resolveReadCycles,
   READ_CYCLE_FIELDS,
+  cohortWarning,
 } from './suite-run-signals.mjs';
 
 const RECORD_PATH = path.resolve(process.cwd(), '.suite-runs', 'runs.jsonl');
@@ -359,9 +360,79 @@ export function densityTable(records) {
   return lines.join('\n');
 }
 
+/**
+ * TRA-1150's two wedge modes, scored separately.
+ *
+ * The ticket asked for this in as many words — *"those 33 are two distinct
+ * failure modes scored as one number; if the driver can separate them, do"* —
+ * and it could not be done until read-cycle values were recorded, because both
+ * modes are defined by read COUNTS rather than by any log needle:
+ *
+ *   mode 1  first == 0             the scan path is dead    31/407 = 7.62%
+ *   mode 2  first == second, > 0   frozen accumulation       2/407 = 0.49%
+ *
+ * Mode 1 is 94% of the reference's wedges, which means the aggregate everyone
+ * quoted was substantially a measurement of mode 1 alone. Splitting them is what
+ * makes that visible instead of implied.
+ *
+ * ⚠ `> 0` on mode 2 is load-bearing. A dead rep satisfies `first === second`
+ * numerically at 0 === 0, so without it every mode 1 would be double-counted
+ * into mode 2 as well, and the rarest failure in the campaign would appear to
+ * be as common as the commonest.
+ *
+ * ⚠ Unscoreable reps are excluded and counted, never scored as mode 1. A rep
+ * with 0 reads and a rep whose reads were never observed are different claims,
+ * and conflating them manufactures the dominant wedge signature out of a missing
+ * log. This is the same rule the null-vs-zero convention enforces upstream.
+ */
+const WEDGE_REFERENCE = {
+  dead: '31/407 = 7.62%',
+  frozen: '2/407 = 0.49%',
+};
+
+export function wedgeModeTable(records) {
+  const cycles = records.map((r) => resolveReadCycles(r).readCycles);
+  const scoreable = cycles.filter(
+    (c) => typeof c.firstReads === 'number' && typeof c.secondReads === 'number'
+  );
+  const unscoreable = cycles.length - scoreable.length;
+
+  if (scoreable.length === 0) {
+    return '_No rep carried both read cycles — nothing is scoreable for wedge mode._';
+  }
+
+  const dead = scoreable.filter((c) => c.firstReads === 0).length;
+  const frozen = scoreable.filter(
+    (c) => c.firstReads > 0 && c.firstReads === c.secondReads
+  ).length;
+  const n = scoreable.length;
+  const pct = (k) => `${((k / n) * 100).toFixed(2)}%`;
+
+  const lines = [
+    '| mode | this run | reference (knuckles, 2026-08-23) |',
+    '| -- | -- | -- |',
+    `| 1 — \`first == 0\`, the scan path is dead | ${dead}/${n} = ${pct(dead)} | ${WEDGE_REFERENCE.dead} |`,
+    `| 2 — frozen accumulation (\`first == second\`, > 0) | ${frozen}/${n} = ${pct(frozen)} | ${WEDGE_REFERENCE.frozen} |`,
+    `| combined | ${dead + frozen}/${n} = ${pct(dead + frozen)} | 33/407 = 8.11% |`,
+  ];
+  if (unscoreable > 0) {
+    lines.push(
+      '',
+      `_${unscoreable} rep(s) excluded as unscoreable — one or both read cycles were not ` +
+        'observed. Not counted as mode 1: a rep with 0 reads and a rep whose reads were ' +
+        'never seen are different claims._'
+    );
+  }
+  return lines.join('\n');
+}
+
 function main() {
   const records = loadRecords();
   console.log(`# Integration suite — run-shape record\n`);
+  // Before any number it would qualify. A caveat printed after the rate it
+  // undercuts is one the reader has already acted on.
+  const mixed = cohortWarning(records);
+  if (mixed) console.log(`${mixed}\n`);
   console.log(`${records.length} repetitions recorded.\n`);
   console.log(`## Per-run failures\n`);
   console.log(perRunTable(records));
@@ -373,6 +444,8 @@ function main() {
   console.log(predecessorTable(records));
   console.log(`\n## Failure vs. scan-start signature\n`);
   console.log(signalPairingTable(records));
+  console.log(`\n## Wedge mode — TRA-1150's two failure modes, scored separately\n`);
+  console.log(wedgeModeTable(records));
   console.log(`\n## Field density\n`);
   console.log(densityTable(records));
   console.log(`\n## Record integrity\n`);

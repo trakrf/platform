@@ -196,6 +196,69 @@ export const E2E_BROWSER_NEEDLES = [
 ];
 
 /**
+ * Which distinct campaigns does this record file contain?
+ *
+ * Both analysis scripts read `.suite-runs/runs.jsonl` wholesale — no argument,
+ * no filter — and that file ACCUMULATES across invocations while repetition
+ * numbers restart at 1 each time. So the natural state of a working bench is a
+ * file holding several unrelated arms.
+ *
+ * On 2026-08-29 it held TRA-1193's 200 vitest rows while a 150-rep e2e arm was
+ * about to be summarised. They were moved aside by hand. Nothing in the tooling
+ * would have objected otherwise, and the resulting summary would have pooled two
+ * runners into one failure rate and one density distribution — confidently
+ * wrong, and indistinguishable on sight from a correct one.
+ *
+ * ⚠ This WARNS rather than filtering or aborting, and the distinction is the
+ * point. Pooling is sometimes exactly what is wanted: comparing two arms is a
+ * real thing to do. The defect was never that rows were mixed, it was that
+ * mixing was SILENT. Filtering here would replace one silent behaviour with
+ * another, and a reader who did not know rows had been dropped would be no
+ * better off than one who did not know they had been pooled.
+ *
+ * Grouped by runner AND note, because two arms of the same runner are still two
+ * arms — an instrument-validation pass and the measurement it validates share a
+ * runner and must not share a denominator.
+ */
+export function describeCohorts(records) {
+  const groups = new Map();
+  for (const r of records ?? []) {
+    // runnerOf, not r.runner: pre-TRA-1206 records carry no runner and ARE
+    // vitest, so reading the raw field would flag every historical archive as
+    // mixed against its own successors.
+    const key = `${runnerOf(r)} ${r?.note ?? ''}`;
+    const existing = groups.get(key);
+    if (existing) existing.count += 1;
+    else groups.set(key, { runner: runnerOf(r), note: r?.note ?? null, count: 1 });
+  }
+  const list = [...groups.values()];
+  return { homogeneous: list.length <= 1, groups: list };
+}
+
+/**
+ * The banner to print above a report drawn from a mixed record, or '' when there
+ * is nothing to say.
+ *
+ * Empty on the common case by design: a warning that fires on every clean run is
+ * one nobody reads by the time it matters.
+ */
+export function cohortWarning(records) {
+  const { homogeneous, groups } = describeCohorts(records);
+  if (homogeneous) return '';
+  const rows = groups
+    .map((g) => `  ${String(g.count).padStart(4)}  runner=${g.runner}  note=${g.note ?? '(none)'}`)
+    .join('\n');
+  return (
+    `⚠️  This record mixes more than one campaign. Every rate and distribution below\n` +
+    `pools all of them into one denominator, which is almost certainly not what you\n` +
+    `want — reps from different runners do not measure the same thing.\n\n` +
+    `${rows}\n\n` +
+    `Move the rows you are not analysing out of .suite-runs/runs.jsonl first; they\n` +
+    `are already archived under ~/soak-archives/ if they were worth keeping.`
+  );
+}
+
+/**
  * Read-cycle VALUES, as distinct from every needle above.
  *
  * Everything in `SIGNALS` counts occurrences of a string. These are numbers
