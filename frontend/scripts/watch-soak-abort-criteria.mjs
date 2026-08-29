@@ -512,11 +512,27 @@ async function main() {
       typeof now?.mock_version_mismatches === 'number' ? now.mock_version_mismatches : null
     );
     if (mockBreach.breached) {
+      // The versions live on get_connection_state, NOT on status — status
+      // carries only the counter. Reading them off `now` printed
+      // "expected unknown, got unknown" on the very abort that needed them,
+      // which the unit tests could not see and the hardware break test did.
+      //
+      // Even from the right surface they can be null: the field is scoped to
+      // the current command-path holder, and the offending client may already
+      // have disconnected by the time this poll fires. `mock_version_expected`
+      // is the bridge's own package version and is answerable regardless, so a
+      // null `got` still narrows it. The journal has the per-connection record
+      // either way, which is why it is named here rather than implied.
+      const versions = await callControl('get_connection_state');
       say('ABORT: a client connected with a mock version the bridge did not expect.');
       say(`  ${mockBreach.reason}`);
-      say(`  expected ${now?.mock_version_expected ?? 'unknown'}, got ${now?.mock_version ?? 'unknown'}`);
+      say(
+        `  bridge expects ${versions?.mock_version_expected ?? 'unknown'}, ` +
+          `holder now reports ${versions?.mock_version ?? 'nothing attached'}`
+      );
       say('Reps from here on measured a different mock than the run started with.');
       say('A clean tree and a correct lockfile do not rule this out — see TRA-1200.');
+      say('Forensics: journalctl --user -u ble-bridge --since <run start> | grep "mock version"');
       process.exit(6);
     }
 
