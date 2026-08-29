@@ -11,9 +11,15 @@
  * leak is the mistake this whole tool exists to prevent.
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, realpathSync } from 'node:fs';
 import path from 'node:path';
-import { resolveSignals, captureCanaryCount } from './suite-run-signals.mjs';
+import { fileURLToPath } from 'node:url';
+import {
+  resolveSignals,
+  captureCanaryCount,
+  resolveReadCycles,
+  READ_CYCLE_FIELDS,
+} from './suite-run-signals.mjs';
 
 const RECORD_PATH = path.resolve(process.cwd(), '.suite-runs', 'runs.jsonl');
 
@@ -283,6 +289,76 @@ function signalPairingTable(records) {
   return lines.join('\n');
 }
 
+/**
+ * Field density, printed beside the reference baseline.
+ *
+ * The comparison is the whole point. TRA-1200's arm ran ~17% short on unique
+ * tags — the reader had been pulled back from the stack to gun a barcode — and a
+ * bare distribution would not have shown that to anyone. It became visible only
+ * when put next to the 2026-08-23 numbers, after the run was over. Printing the
+ * baseline is what turns a statistic into a check.
+ *
+ * ⚠ Judge density on UNIQUE, never on reads. Read volume is confounded with the
+ * variable a CPU-swap arm measures: a faster host issues stop-scanning sooner
+ * and accumulates fewer reads inside the fixed 2s window, so two hosts facing an
+ * identical pile can disagree by 40%. Reads is reported because it is evidence
+ * about the run; it is not evidence about the field.
+ */
+const REFERENCE_DENSITY = {
+  firstReads: 'mean 153, median 115',
+  firstUnique: 'mean 83, median 81',
+  secondReads: 'mean 321, median 243',
+  secondUnique: 'mean 125, median 127',
+};
+
+export function densityTable(records) {
+  const resolved = records.map((r) => resolveReadCycles(r));
+  const measured = resolved.filter(({ readCycles }) =>
+    READ_CYCLE_FIELDS.some((k) => typeof readCycles[k] === 'number')
+  );
+
+  if (measured.length === 0) {
+    return '_No rep recorded read cycles — a vitest run, or logs no longer retained._';
+  }
+
+  const stat = (key) => {
+    const xs = measured
+      .map(({ readCycles }) => readCycles[key])
+      .filter((v) => typeof v === 'number')
+      .sort((a, b) => a - b);
+    if (xs.length === 0) return { n: 0, text: '—' };
+    const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
+    const median = xs[Math.floor(xs.length / 2)];
+    return {
+      n: xs.length,
+      text: `mean ${mean.toFixed(0)}, median ${median}, min ${xs[0]}, max ${xs[xs.length - 1]}`,
+    };
+  };
+
+  const lines = [
+    '⚠ Unique-tag count is the field proxy; read volume is NOT. Reads are',
+    'confounded with host speed — a faster host stops scanning sooner and',
+    'accumulates fewer inside the fixed 2s window — so judge whether the field',
+    'matched on unique alone.',
+    '',
+    '| measure | this run | reference (knuckles, 2026-08-23, n=407) |',
+    '| -- | -- | -- |',
+  ];
+  for (const key of READ_CYCLE_FIELDS) {
+    const { n, text } = stat(key);
+    lines.push(`| \`${key}\` (n=${n}) | ${text} | ${REFERENCE_DENSITY[key]} |`);
+  }
+
+  const rebuilt = resolved.filter(({ source }) => source === 'recomputed').length;
+  if (rebuilt > 0) {
+    lines.push(
+      '',
+      `_${rebuilt} row(s) reconstructed from retained logs — recorded before this instrument existed._`
+    );
+  }
+  return lines.join('\n');
+}
+
 function main() {
   const records = loadRecords();
   console.log(`# Integration suite — run-shape record\n`);
@@ -297,8 +373,15 @@ function main() {
   console.log(predecessorTable(records));
   console.log(`\n## Failure vs. scan-start signature\n`);
   console.log(signalPairingTable(records));
+  console.log(`\n## Field density\n`);
+  console.log(densityTable(records));
   console.log(`\n## Record integrity\n`);
   console.log(contaminationNote(records));
 }
 
-main();
+// Run the report only when invoked directly. Importing this module — which its
+// tests must do to exercise the table builders — would otherwise execute main(),
+// load records that are not there, and process.exit(1) before a single test ran.
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}
