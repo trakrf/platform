@@ -2,7 +2,7 @@
 
 Date: 2026-07-30, amended 2026-08-05
 Status: Accepted
-Tracking: TRA-1069 (shipped), TRA-1075 (local + edge non-superuser roles), TRA-1077 (migration checksum guard), TRA-1104 (ownership asserted — amendment), TRA-1105 (closing the drift generator, infra)
+Tracking: TRA-1069 (shipped), TRA-1075 (local + edge non-superuser roles), TRA-1077 (migration checksum guard), TRA-1104 (ownership asserted — amendment), TRA-1105 (closing the drift generator, infra), TRA-1190 (extension members scoped out — amendment)
 
 > **2026-08-05 amendment — an extension, not a reversal.** Everything decided on
 > 2026-07-30 stands unchanged. This record already made the migrating role the
@@ -216,6 +216,30 @@ load-bearing for it: the role decides which objects the runner can replace, and 
 superuser session is precisely what quietly creates objects it cannot. That is the
 same shape as the RLS argument — a superuser hides a constraint a deployed
 environment will later enforce.
+
+**"Every object" excludes an extension's own objects (2026-08-29, TRA-1190).**
+The title's scope is otherwise read wider than the guard implements, which is the
+worse kind of stale record — right conclusion, reason that has quietly expired.
+
+`pgcrypto` is a *trusted* extension, so `CREATE EXTENSION pgcrypto` succeeds for a
+non-superuser; Postgres nonetheless assigns every resulting object to the
+bootstrap superuser, whoever ran the statement. Migration `000001` creates it
+inside `trakrf`, so every database migrated by `trakrf-migrate` permanently holds
+36 `postgres`-owned functions there. The migrating role cannot own them, and the
+repair statement this record's amendment prints cannot make it so.
+
+Left in scope, the preflight fired on every local database forever:
+`just backend migrate` worked once on a fresh database and refused every run after
+— including as a no-op, since the preflight precedes golang-migrate deciding there
+is nothing to do — so the *second* `just dev` failed. It went unseen only because
+`PG_URL_MIGRATE_LOCAL` was unset and the command had never run at all.
+
+The exclusion concedes nothing the guard protects. A migration never
+`CREATE OR REPLACE`s an extension member — the extension owns its definitions — so
+such an object cannot produce the half-applied migration and dirty ledger the
+check exists to prevent. The boundary is ownership the migrating role could
+*plausibly hold*, not ownership it holds. Objects it could hold and does not are
+still drift, asserted in the same test as the exclusion.
 
 Ownership is not privileges. This record governs who owns objects in `trakrf`;
 `GRANT`s drift independently and by a different mechanism (infra#118), and
