@@ -188,14 +188,44 @@ function buildVitestArgs(shape, rep, target) {
   const filter = target ?? SUITE_ROOT;
   // Same flags package.json's test:integration uses, plus JSON reporting.
   //
-  // `--hookTimeout` must stay in step with that script. These hooks do a real
-  // BLE connect plus RFID power-on and mode configuration; measured file
-  // duration is 16.5-20.7s against vitest's 10s default, so the default made a
-  // passing hook a coin flip. That is what the 2026-08-27 soak was actually
-  // measuring: 79 of 90 position-1 failures carried `Hook timed out in 10000ms`
-  // and 0 of 127 position-1 passes did. Raising it took locate.spec.ts from
-  // 30-83% failure to 0/24 across two arms.
-  const args = ['vitest', 'run', filter, '--no-file-parallelism', '--hookTimeout=30000'];
+  // `--hookTimeout` must stay in step with that script. THREE copies of this
+  // number exist (both package.json scripts and here); a single owner is
+  // TRA-1189 follow-up work, not done. If you change one, change all three.
+  //
+  // These hooks do a real BLE connect plus RFID power-on and mode
+  // configuration; measured file duration is 16.5-20.7s against vitest's 10s
+  // default, so the default made a passing hook a coin flip. That is what the
+  // 2026-08-27 soak was actually measuring: 79 of 90 position-1 failures
+  // carried `Hook timed out in 10000ms` and 0 of 127 position-1 passes did.
+  // Raising it took locate.spec.ts from 30-83% failure to 0/24 across two arms.
+  //
+  // 30000 -> 90000 on 2026-08-29. NOT a response to any observed failure: the
+  // 111-rep baseline recorded ZERO `Hook timed out`, so at 30s this bound never
+  // fired. It is a PREREQUISITE for adopting ble-mcp-test's connect-backstop
+  // change, and the ordering is load-bearing:
+  //
+  //   Today the mock's hardcoded 10s connect bound is the only thing keeping a
+  //   connect inside the hook budget. Once that becomes a 60s backstop, a
+  //   worst-case connect is the bridge's own budget --
+  //     ALLOCATION_REPORT 2s + ADVERTISEMENT 30s + CONNECT 20s = 52s
+  //   -- which exceeds 30s and would turn a busy reader into a hook timeout
+  //   that kills the whole file and cascades. Raise this BEFORE bumping
+  //   ble-mcp-test, never after.
+  //
+  // 90000 rather than 60000: worst-case beforeAll is that connect plus the
+  // hook's non-connect work. That second term is NOT directly measurable here
+  // (vitest reports file totals, not hook durations), so it was bounded from
+  // above at ~22.9s from the worst observed single-test file. 52 + 22.9 = 74.9s,
+  // leaving 15.1s at 90s and only 149ms at 60s. A derivation is only as measured
+  // as its weakest term, so the unmeasured one is resolved toward safety: being
+  // too patient costs wall-clock on a run that fails anyway, being too impatient
+  // destroys the diagnosis the backstop change exists to deliver.
+  //
+  // Deliberately NOT unified with HARDWARE_TEST_TIMEOUT_MS in tests/e2e/
+  // e2e.config.ts even though it is also 90000 -- that is a Playwright per-test
+  // budget for the e2e suite, a different quantity over a different scope. They
+  // are equal by coincidence and must be free to diverge.
+  const args = ['vitest', 'run', filter, '--no-file-parallelism', '--hookTimeout=90000'];
   let seed = null;
   if (shape === 'shuffle') {
     // Derived from rep so the order is reproducible from the record alone.
