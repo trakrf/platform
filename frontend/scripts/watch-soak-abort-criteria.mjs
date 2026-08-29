@@ -103,14 +103,19 @@ export function hasRestarted({ uptimeStart, wallStart, uptimeNow, wallNow, toler
  * for its UUID constants; this is a plain .mjs that must run under bare node
  * with no loader.
  *
- * `trakrf-handheld-dev-` is a legacy prefix — it names the predecessor project
- * platform was built from, not anything current. It is kept because the value
- * only has to MATCH across the four places that derive or observe it; renaming
- * it changes the identity the bridge sees and is its own change.
+ * `trakrf-platform-dev-` names this project. It replaced `trakrf-handheld-dev-`
+ * on 2026-08-29 (TRA-1200) — a prefix inherited from the predecessor project
+ * platform was built from, kept until then only because the value has to MATCH
+ * across the places that derive or observe it rather than mean anything.
+ *
+ * Renaming it changes the identity the bridge reports in
+ * `get_connection_state.session`, so it is a second variable moving. It was done
+ * deliberately in a window with nothing measuring, rather than between two arms
+ * of a comparison — the campaign's own rule, applied to the campaign's tooling.
  */
 export function expectedSessionId() {
   dotenv.config({ path: '.env.local' });
-  return process.env.BLE_SESSION_ID || `trakrf-handheld-dev-${os.hostname()}`;
+  return process.env.BLE_SESSION_ID || `trakrf-platform-dev-${os.hostname()}`;
 }
 
 /**

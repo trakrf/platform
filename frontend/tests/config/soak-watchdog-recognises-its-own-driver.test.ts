@@ -12,7 +12,7 @@ import { getViteBridgeConfig } from './vite-bridge.config';
  * Arming the watchdog against a running soak driver aborted immediately:
  *
  *     ABORT before start: the field is not clear —
- *       {"held":true,"session":"trakrf-handheld-dev-mssb","observer_count":0,…}
+ *       {"held":true,"session":"trakrf-platform-dev-mssb","observer_count":0,…}
  *     exit 5
  *
  * Nothing was contending. That session is the DRIVER'S OWN rep 1, which had
@@ -48,7 +48,7 @@ describe('a field held by nobody', () => {
 });
 
 describe('a field held by our own driver', () => {
-  const OURS = 'trakrf-handheld-dev-mssb';
+  const OURS = 'trakrf-platform-dev-mssb';
 
   it('is clear once the gate knows whose session it is', () => {
     expect(fieldIsClear({ held: true, session: OURS, observer_count: 0 }, OURS)).toBe(true);
@@ -155,7 +155,7 @@ describe('the expected session is DERIVED, not declared', () => {
     const prev = process.env.BLE_SESSION_ID;
     delete process.env.BLE_SESSION_ID;
     try {
-      expect(expectedSessionId()).toBe(`trakrf-handheld-dev-${os.hostname()}`);
+      expect(expectedSessionId()).toBe(`trakrf-platform-dev-${os.hostname()}`);
     } finally {
       if (prev !== undefined) process.env.BLE_SESSION_ID = prev;
     }
