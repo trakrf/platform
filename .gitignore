@@ -214,3 +214,11 @@ docs/investigations/
 # directory in the same change that renames the pattern.
 .suite-runs/
 .tra-1167/
+
+# Soak working data — driver logs, run-identity records, daemon log captures.
+# Untracked AND unignored is the dangerous combination: csw:work commits with
+# `git add -A`, so an unrelated ticket worked from this checkout would sweep
+# hundreds of MB of soak output into its PR. Nothing here is committed; the
+# conclusions go on the ticket and the reusable tooling lives in
+# frontend/scripts/ under a behaviour name.
+scratchpad/
