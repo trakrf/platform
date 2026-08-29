@@ -75,6 +75,90 @@ export function hasRestarted({ uptimeStart, wallStart, uptimeNow, wallNow, toler
 }
 
 /**
+ * Pull the identity fields out of a `status` reply, tolerating everything else.
+ *
+ * Deliberately schema-less: it reads the keys it knows and ignores the rest.
+ * That property is load-bearing rather than incidental — it is the only reason
+ * this automated consumer was unaffected when the peer added fields on
+ * 2026-08-29, while the interactive path broke on the same change. Nothing
+ * asserted it until TRA-1205, so it held by luck rather than by test.
+ *
+ * Absent is `null`, never a guess and never `undefined`. An empty-string
+ * `instance_id` counts as absent: treating it as a value would make two daemons
+ * that both failed to report compare EQUAL, which reads as "no restart" —
+ * the fail-open direction.
+ */
+export function readIdentity(status) {
+  const s = status && typeof status === 'object' ? status : {};
+  const str = (v) => (typeof v === 'string' && v !== '' ? v : null);
+  return {
+    instanceId: str(s.instance_id),
+    codeFingerprint: str(s.code_fingerprint),
+    codeSourceRoot: str(s.code_source_root),
+    uptimeSeconds: typeof s.uptime_seconds === 'number' ? s.uptime_seconds : null,
+  };
+}
+
+/**
+ * Did the bridge stop being the process this run started with?
+ *
+ * BOTH detectors always run and each is reported by name. They answer different
+ * questions and neither subsumes the other:
+ *
+ *   instance_id   is this a DIFFERENT PROCESS — an equality test, with no
+ *                 tolerance window for a real restart to hide in
+ *   the uptime    has this process run for the WHOLE INTERVAL I measured — a
+ *   arithmetic    host SUSPEND fires this and leaves instance_id untouched,
+ *                 because CLOCK_MONOTONIC does not advance across suspend. That
+ *                 run is void and instance_id cannot see it.
+ *
+ * TRA-1204's acceptance originally said adopting instance_id let consumers drop
+ * the arithmetic. That was wrong and was corrected on the ticket; this function
+ * is where the correction lives. Deleting the arithmetic silently accepts a
+ * suspended run.
+ *
+ * ⚠ systemd's `NRestarts` is deliberately NOT consulted. Measured on mssb
+ * 2026-08-29, a manual `systemctl --user restart ble-bridge` changed
+ * instance_id, reset uptime 2051s -> 24s, and left NRestarts at 0 — it counts
+ * restarts made by the `Restart=` policy, not by an operator, which is the most
+ * likely way a bridge is actually restarted mid-soak.
+ */
+export function restartVerdict({
+  startId,
+  nowId,
+  uptimeStart,
+  wallStart,
+  uptimeNow,
+  wallNow,
+  toleranceSeconds,
+}) {
+  const by = [];
+  const notes = [];
+
+  if (startId && nowId && startId !== nowId) {
+    by.push('instance_id');
+    notes.push(`instance_id changed ${startId} -> ${nowId}`);
+  } else if (startId && !nowId && typeof uptimeNow === 'number') {
+    // Still answering, but no longer identifying itself: a different process, or
+    // one downgraded under the run. Either way continuity is unprovable. The
+    // reverse (an id APPEARING mid-run) is an upgrade and is not an id change.
+    by.push('instance_id');
+    notes.push(`the daemon stopped reporting instance_id (was ${startId})`);
+  }
+
+  if (hasRestarted({ uptimeStart, wallStart, uptimeNow, wallNow, toleranceSeconds })) {
+    by.push('uptime');
+    notes.push(
+      `uptime ${uptimeStart.toFixed(3)}s -> ` +
+        `${typeof uptimeNow === 'number' ? `${uptimeNow.toFixed(3)}s` : 'UNREACHABLE'}` +
+        ` over ${(wallNow - wallStart).toFixed(3)}s of wall clock`
+    );
+  }
+
+  return { restarted: by.length > 0, by, reason: notes.join('; ') };
+}
+
+/**
  * The session id the soak's own driver will connect under.
  *
  * DERIVED, not declared, and that is the point (TRA-1209). `--session` exists as
@@ -453,6 +537,7 @@ async function main() {
     process.exit(2);
   }
 
+  const startIdentity = readIdentity(status);
   const uptimeStart = status.uptime_seconds;
   const wallStart = Date.now() / 1000;
   // null means the bridge predates TRA-1211's field. Recorded as such rather
@@ -467,6 +552,10 @@ async function main() {
     `watchdog started      ${new Date().toISOString()}`,
     `driver pid            ${opts.driverPid}`,
     `bridge uptime start   ${uptimeStart.toFixed(3)}s`,
+    `bridge instance       ${startIdentity.instanceId ?? 'NOT REPORTED (daemon predates 0.13.0)'}`,
+    `bridge code           ${startIdentity.codeFingerprint ?? 'not reported'} @ ${
+      startIdentity.codeSourceRoot ?? 'root not reported'
+    }`,
     `bridge transport      ${status.esphome_configured ? status.esphome_proxy : 'NOT CONFIGURED'}`,
     `bridge device         ${status.device_mac ?? 'none'}`,
     `driver session        ${opts.session}`,
@@ -491,13 +580,27 @@ async function main() {
     const wallNow = Date.now() / 1000;
     const uptimeNow = now && typeof now.uptime_seconds === 'number' ? now.uptime_seconds : null;
 
-    if (hasRestarted({ uptimeStart, wallStart, uptimeNow, wallNow, toleranceSeconds: opts.toleranceSeconds })) {
+    const nowIdentity = readIdentity(now);
+    const verdict = restartVerdict({
+      startId: startIdentity.instanceId,
+      nowId: nowIdentity.instanceId,
+      uptimeStart,
+      wallStart,
+      uptimeNow,
+      wallNow,
+      toleranceSeconds: opts.toleranceSeconds,
+    });
+
+    if (verdict.restarted) {
       say('ABORT: the bridge is not the process this run started with.');
-      say(`  uptime at start ${uptimeStart.toFixed(3)}s, now ${uptimeNow === null ? 'UNREACHABLE' : `${uptimeNow.toFixed(3)}s`}`);
-      say(`  wall elapsed    ${(wallNow - wallStart).toFixed(3)}s`);
+      say(`  detected by     ${verdict.by.join(' + ')}`);
+      say(`  ${verdict.reason}`);
       say('Rows from here on would span two daemons with no marker in the data.');
       say('Forensics: journalctl --user -u ble-bridge --since <run start>. The');
       say("daemon's own log ring is per-process and cannot explain a restart it did not survive.");
+      say('Do NOT reach for systemd NRestarts to corroborate this: it counts only');
+      say('restarts made by the Restart= policy, so a manual `systemctl restart`');
+      say('leaves it at zero (measured 2026-08-29, TRA-1205).');
       process.exit(2);
     }
 
