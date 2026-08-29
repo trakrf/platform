@@ -78,7 +78,7 @@
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, appendFileSync, rmSync, existsSync, openSync, closeSync } from 'node:fs';
 import path from 'node:path';
-import { readSignals } from './suite-run-signals.mjs';
+import { readSignals, readReadCycles } from './suite-run-signals.mjs';
 
 // 2 adds `signals` + `outputLog`; schema-1 records carry neither.
 // 3 adds `runner`, and `appPreflight` on e2e records only (TRA-1206).
@@ -138,6 +138,25 @@ export function suiteRootFor(runner) {
  * order. That already happened once here, on the vitest path, for a different
  * reason (see readVitestReport's note on startTime).
  */
+/**
+ * Field density for a rep, or `undefined` where the runner has none.
+ *
+ * `undefined` rather than an all-null object, because the caller assigns
+ * conditionally and that is what keeps the key OFF a vitest record instead of
+ * present-and-null. Same asymmetry as `appPreflight`, and it is not cosmetic:
+ * a vitest rep runs no application and reads no tags, so a null density field
+ * would be a measurement of a subject that does not exist — and any new key on a
+ * vitest record breaks comparability with TRA-1189's 528 reps and TRA-1193's
+ * 200, which are the baseline this milestone is measured against.
+ *
+ * An e2e rep whose log is gone still gets the full null-filled shape: the runner
+ * HAS read cycles, they just were not observed, and those are different claims.
+ */
+export function densityFor(logPath, runner) {
+  if (runner !== 'e2e') return undefined;
+  return readReadCycles(logPath, runner);
+}
+
 export function assertShapeSupported(runner, shape) {
   suiteRootFor(runner);
   if (runner === 'e2e' && shape === 'shuffle') {
@@ -669,6 +688,12 @@ function runOnce({ runner, shape, rep, target, note, appPreflight }) {
   // conflation the explicit-null signals convention exists to prevent, one level
   // up. Present-and-null and absent mean different things here and both are used.
   if (appPreflight) record.appPreflight = appPreflight;
+
+  // e2e only, same rule as appPreflight directly above — see densityFor().
+  // TRA-1200: this is the run condition whose absence let an arm be compared
+  // against a reference field it did not match.
+  const readCycles = densityFor(logPath, runner);
+  if (readCycles) record.readCycles = readCycles;
 
   appendFileSync(RECORD_PATH, `${JSON.stringify(record)}\n`);
   return record;
