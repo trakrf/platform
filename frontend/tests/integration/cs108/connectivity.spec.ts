@@ -104,12 +104,6 @@ describe('CS108 Baseline Connectivity', () => {
     harness.clearEvents();
   });
 
-  afterEach(async () => {
-    console.log('[Cleanup] Adding 5s delay for bridge recovery...');
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    console.log('[Cleanup] Bridge recovery delay complete');
-  });
-
   it('should prove core connectivity works', async () => {
     console.log('\n🧪 Testing baseline connectivity...');
 
