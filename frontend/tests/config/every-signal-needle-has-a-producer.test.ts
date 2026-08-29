@@ -38,7 +38,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { SIGNALS } from '../../scripts/suite-run-signals.mjs';
+import { SIGNALS, E2E_SIGNALS } from '../../scripts/suite-run-signals.mjs';
 
 const FRONTEND_ROOT = path.resolve(__dirname, '../..');
 
@@ -188,6 +188,41 @@ describe('SIGNALS needles', () => {
     expect(nowLocal, `declared external but now emitted locally: ${nowLocal.join(', ')}`).toEqual(
       []
     );
+  });
+
+  /**
+   * The e2e table (TRA-1206) gets the same treatment, and it needs it MORE.
+   *
+   * Its whole reason for existing is that most of SIGNALS cannot fire on a
+   * Playwright rep. A needle in this table that nothing emits would be the
+   * identical defect one layer in: a confident 0 on the runner the table was
+   * built to describe honestly — and it would be harder to spot, because the
+   * table's own docstring is full of prose about needles that legitimately
+   * cannot fire.
+   */
+  for (const [name, needle] of Object.entries(E2E_SIGNALS as Record<string, string>)) {
+    it(`e2e needle \`${name}\` matches something this repo can emit`, () => {
+      if (name in EXTERNALLY_PRODUCED) {
+        expect(EXTERNALLY_PRODUCED[name].length).toBeGreaterThan(0);
+        return;
+      }
+      expect(
+        HAYSTACK.includes(needle),
+        `No source under ${SEARCH_DIRS.join('/, ')}/ contains ${JSON.stringify(needle)}.`
+      ).toBe(true);
+    });
+  }
+
+  it('every e2e needle it shares with SIGNALS is the SAME string', () => {
+    // Two tables holding two spellings of "the same" signal is how a count
+    // silently means different things on different runners — and the summariser
+    // pools them into one table. Aliasing rather than re-typing is the fix; this
+    // asserts nobody re-typed one later.
+    for (const [name, needle] of Object.entries(E2E_SIGNALS as Record<string, string>)) {
+      if (name in SIGNALS) {
+        expect((SIGNALS as Record<string, string>)[name]).toBe(needle);
+      }
+    }
   });
 
   it('declares nothing that is not a needle', () => {
