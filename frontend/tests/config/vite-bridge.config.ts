@@ -35,7 +35,7 @@ export function getViteBridgeConfig() {
   const notify = CS108_BLE_NOTIFY_UUID;
   
   // Session ID
-  const sessionId = process.env.BLE_SESSION_ID || `trakrf-handheld-dev-${systemHostname}`;
+  const sessionId = process.env.BLE_SESSION_ID || `trakrf-platform-dev-${systemHostname}`;
   
   // Build WebSocket URL
   const serverUrl = `ws://${host}:${wsPort}`;

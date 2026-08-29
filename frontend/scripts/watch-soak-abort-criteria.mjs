@@ -28,6 +28,7 @@
  *   3  five or more consecutive reps with transport failures
  *   4  the newest rep is a void capture
  *   5  the field was not clear at start (pre-flight gate)
+ *   6  a client connected with a mock version the bridge did not expect
  *  64  usage error
  */
 
@@ -102,14 +103,19 @@ export function hasRestarted({ uptimeStart, wallStart, uptimeNow, wallNow, toler
  * for its UUID constants; this is a plain .mjs that must run under bare node
  * with no loader.
  *
- * `trakrf-handheld-dev-` is a legacy prefix — it names the predecessor project
- * platform was built from, not anything current. It is kept because the value
- * only has to MATCH across the four places that derive or observe it; renaming
- * it changes the identity the bridge sees and is its own change.
+ * `trakrf-platform-dev-` names this project. It replaced `trakrf-handheld-dev-`
+ * on 2026-08-29 (TRA-1200) — a prefix inherited from the predecessor project
+ * platform was built from, kept until then only because the value has to MATCH
+ * across the places that derive or observe it rather than mean anything.
+ *
+ * Renaming it changes the identity the bridge reports in
+ * `get_connection_state.session`, so it is a second variable moving. It was done
+ * deliberately in a window with nothing measuring, rather than between two arms
+ * of a comparison — the campaign's own rule, applied to the campaign's tooling.
  */
 export function expectedSessionId() {
   dotenv.config({ path: '.env.local' });
-  return process.env.BLE_SESSION_ID || `trakrf-handheld-dev-${os.hostname()}`;
+  return process.env.BLE_SESSION_ID || `trakrf-platform-dev-${os.hostname()}`;
 }
 
 /**
@@ -152,6 +158,46 @@ export function fieldIsClear(state, ownSession) {
   if (state.observer_count !== 0) return false;
   if (state.held === false) return true;
   return heldByUs(state, ownSession);
+}
+
+/**
+ * Did a mock-version mismatch appear during the run?
+ *
+ * Keyed on `status.mock_version_mismatches`, a monotonic counter, rather than on
+ * `get_connection_state.mock_version_match`. The reason is poll timing: between
+ * reps the connection state reads held:false with no client attached, and with
+ * ~27s reps against a 300s poll most samples land in that gap. A point-in-time
+ * field is unmissable only if you happen to sample mid-rep; a counter cannot be
+ * missed. Same reasoning as the restart check above, where "is a daemon alive"
+ * was replaced by "did THIS one restart".
+ *
+ * WHY IT EXISTS. TRA-1200's 150-rep arm ran browser mock 0.12.0 against bridge
+ * 0.13.0 start to finish. The bridge noticed every single time and warned into
+ * its journal; nothing here read it, so the run completed and was analysed
+ * before anyone knew.
+ *
+ * ⚠ ABSENT IS NOT CLEAN, AND IS ALSO NOT AN ABORT.
+ * ble-mcp-test publishes this field from 0.14.0 (TRA-1211). Against an older
+ * bridge the honest answer is "cannot check", reported as such rather than
+ * silently passing — but aborting on it would refuse to run against the bridge
+ * that is actually deployed, which makes the instrument unusable. The
+ * client-side detector in tests/config/resolve-mock-bundle.ts is the cover for
+ * that window, and it observes a different thing (what was loaded from disk,
+ * versus what arrived over the wire), so neither replaces the other.
+ */
+export function mockVersionBreach(baseline, now) {
+  if (typeof baseline !== 'number' || typeof now !== 'number') {
+    return {
+      breached: false,
+      reason:
+        'bridge does not publish mock_version_mismatches — cannot check ' +
+        '(needs ble-mcp-test >= 0.14.0, TRA-1211)',
+    };
+  }
+  if (now > baseline) {
+    return { breached: true, reason: `mock_version_mismatches rose ${baseline} -> ${now}` };
+  }
+  return { breached: false, reason: 'no mismatch observed' };
 }
 
 /** Held, and held by the session our own driver connects under. Both sides must
@@ -409,6 +455,10 @@ async function main() {
 
   const uptimeStart = status.uptime_seconds;
   const wallStart = Date.now() / 1000;
+  // null means the bridge predates TRA-1211's field. Recorded as such rather
+  // than defaulted to 0, so "cannot check" never reads as "checked and clean".
+  const mockMismatchBaseline =
+    typeof status.mock_version_mismatches === 'number' ? status.mock_version_mismatches : null;
 
   // The run-identity record. "The field was clear at start" is evidence only if
   // it was written down at the time; reconstructed afterwards it is an
@@ -421,6 +471,11 @@ async function main() {
     `bridge device         ${status.device_mac ?? 'none'}`,
     `driver session        ${opts.session}`,
     `field at start        held=${state.held} observer_count=${state.observer_count}`,
+    `mock version          ${
+      mockMismatchBaseline === null
+        ? 'NOT PUBLISHED by this bridge — client-side check only (TRA-1211)'
+        : `mismatches at start ${mockMismatchBaseline}`
+    }`,
   ].join('\n');
   say(`pre-flight clear.\n${identity}`);
   if (opts.identity) appendFileSync(opts.identity, `${identity}\n`);
@@ -449,6 +504,36 @@ async function main() {
     if (!portIsServed(opts.port)) {
       say(`ABORT: nothing is serving the bridge port ${opts.port}.`);
       process.exit(2);
+    }
+
+    // ---- is the browser running the mock we think it is? -----------------
+    const mockBreach = mockVersionBreach(
+      mockMismatchBaseline,
+      typeof now?.mock_version_mismatches === 'number' ? now.mock_version_mismatches : null
+    );
+    if (mockBreach.breached) {
+      // The versions live on get_connection_state, NOT on status — status
+      // carries only the counter. Reading them off `now` printed
+      // "expected unknown, got unknown" on the very abort that needed them,
+      // which the unit tests could not see and the hardware break test did.
+      //
+      // Even from the right surface they can be null: the field is scoped to
+      // the current command-path holder, and the offending client may already
+      // have disconnected by the time this poll fires. `mock_version_expected`
+      // is the bridge's own package version and is answerable regardless, so a
+      // null `got` still narrows it. The journal has the per-connection record
+      // either way, which is why it is named here rather than implied.
+      const versions = await callControl('get_connection_state');
+      say('ABORT: a client connected with a mock version the bridge did not expect.');
+      say(`  ${mockBreach.reason}`);
+      say(
+        `  bridge expects ${versions?.mock_version_expected ?? 'unknown'}, ` +
+          `holder now reports ${versions?.mock_version ?? 'nothing attached'}`
+      );
+      say('Reps from here on measured a different mock than the run started with.');
+      say('A clean tree and a correct lockfile do not rule this out — see TRA-1200.');
+      say('Forensics: journalctl --user -u ble-bridge --since <run start> | grep "mock version"');
+      process.exit(6);
     }
 
     // ---- is the run still producing usable rows? -------------------------

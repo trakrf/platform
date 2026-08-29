@@ -5,7 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { getViteBridgeConfig } from './tests/config/vite-bridge.config';
-import { resolveMockBundlePath } from './tests/config/resolve-mock-bundle';
+import { resolveMockBundlePath, assertMockBundleCurrent } from './tests/config/resolve-mock-bundle';
 
 // Define __dirname for ES modules
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -57,6 +57,14 @@ function injectBleBridgePlugin(env: Record<string, string>) {
       // a dead reader rather than a packaging error, and injection only runs
       // under VITE_BLE_BRIDGE_ENABLED (i.e. `pnpm dev:bridge`), where a missing
       // mock makes the whole run worthless anyway.
+      // A SECOND failure the guard below cannot see: the bundle is present and
+      // readable, and is the wrong one. `require.resolve` caches to a
+      // version-pinned pnpm store path, pnpm keeps old versions on disk, so a
+      // long-lived dev server serves a stale mock indefinitely with no error —
+      // for all 150 reps of TRA-1200's measurement, as it turned out. This runs
+      // per page load and holds no process state, which is what lets it notice.
+      assertMockBundleCurrent();
+
       let bundleCode = '';
       try {
         bundleCode = fs.readFileSync(resolveMockBundlePath(), 'utf-8');

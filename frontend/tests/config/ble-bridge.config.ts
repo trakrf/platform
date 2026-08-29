@@ -74,7 +74,7 @@ export function getBleBridgeConfig(): BleBridgeConfig {
   const notify = CS108_BLE_NOTIFY_UUID;
   
   // Session ID - always the same for connection pool reuse
-  const sessionId = process.env.BLE_SESSION_ID || `trakrf-handheld-dev-${systemHostname}`;
+  const sessionId = process.env.BLE_SESSION_ID || `trakrf-platform-dev-${systemHostname}`;
   
   // Build URLs from components (no more VITE_BLE_BRIDGE_URL duplication!)
   const wsUrl = `ws://${host}:${wsPort}`;

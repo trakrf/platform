@@ -11,9 +11,16 @@
  * leak is the mistake this whole tool exists to prevent.
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, realpathSync } from 'node:fs';
 import path from 'node:path';
-import { resolveSignals, captureCanaryCount } from './suite-run-signals.mjs';
+import { fileURLToPath } from 'node:url';
+import {
+  resolveSignals,
+  captureCanaryCount,
+  resolveReadCycles,
+  READ_CYCLE_FIELDS,
+  cohortWarning,
+} from './suite-run-signals.mjs';
 
 const RECORD_PATH = path.resolve(process.cwd(), '.suite-runs', 'runs.jsonl');
 
@@ -283,9 +290,149 @@ function signalPairingTable(records) {
   return lines.join('\n');
 }
 
+/**
+ * Field density, printed beside the reference baseline.
+ *
+ * The comparison is the whole point. TRA-1200's arm ran ~17% short on unique
+ * tags — the reader had been pulled back from the stack to gun a barcode — and a
+ * bare distribution would not have shown that to anyone. It became visible only
+ * when put next to the 2026-08-23 numbers, after the run was over. Printing the
+ * baseline is what turns a statistic into a check.
+ *
+ * ⚠ Judge density on UNIQUE, never on reads. Read volume is confounded with the
+ * variable a CPU-swap arm measures: a faster host issues stop-scanning sooner
+ * and accumulates fewer reads inside the fixed 2s window, so two hosts facing an
+ * identical pile can disagree by 40%. Reads is reported because it is evidence
+ * about the run; it is not evidence about the field.
+ */
+const REFERENCE_DENSITY = {
+  firstReads: 'mean 153, median 115',
+  firstUnique: 'mean 83, median 81',
+  secondReads: 'mean 321, median 243',
+  secondUnique: 'mean 125, median 127',
+};
+
+export function densityTable(records) {
+  const resolved = records.map((r) => resolveReadCycles(r));
+  const measured = resolved.filter(({ readCycles }) =>
+    READ_CYCLE_FIELDS.some((k) => typeof readCycles[k] === 'number')
+  );
+
+  if (measured.length === 0) {
+    return '_No rep recorded read cycles — a vitest run, or logs no longer retained._';
+  }
+
+  const stat = (key) => {
+    const xs = measured
+      .map(({ readCycles }) => readCycles[key])
+      .filter((v) => typeof v === 'number')
+      .sort((a, b) => a - b);
+    if (xs.length === 0) return { n: 0, text: '—' };
+    const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
+    const median = xs[Math.floor(xs.length / 2)];
+    return {
+      n: xs.length,
+      text: `mean ${mean.toFixed(0)}, median ${median}, min ${xs[0]}, max ${xs[xs.length - 1]}`,
+    };
+  };
+
+  const lines = [
+    '⚠ Unique-tag count is the field proxy; read volume is NOT. Reads are',
+    'confounded with host speed — a faster host stops scanning sooner and',
+    'accumulates fewer inside the fixed 2s window — so judge whether the field',
+    'matched on unique alone.',
+    '',
+    '| measure | this run | reference (knuckles, 2026-08-23, n=407) |',
+    '| -- | -- | -- |',
+  ];
+  for (const key of READ_CYCLE_FIELDS) {
+    const { n, text } = stat(key);
+    lines.push(`| \`${key}\` (n=${n}) | ${text} | ${REFERENCE_DENSITY[key]} |`);
+  }
+
+  const rebuilt = resolved.filter(({ source }) => source === 'recomputed').length;
+  if (rebuilt > 0) {
+    lines.push(
+      '',
+      `_${rebuilt} row(s) reconstructed from retained logs — recorded before this instrument existed._`
+    );
+  }
+  return lines.join('\n');
+}
+
+/**
+ * TRA-1150's two wedge modes, scored separately.
+ *
+ * The ticket asked for this in as many words — *"those 33 are two distinct
+ * failure modes scored as one number; if the driver can separate them, do"* —
+ * and it could not be done until read-cycle values were recorded, because both
+ * modes are defined by read COUNTS rather than by any log needle:
+ *
+ *   mode 1  first == 0             the scan path is dead    31/407 = 7.62%
+ *   mode 2  first == second, > 0   frozen accumulation       2/407 = 0.49%
+ *
+ * Mode 1 is 94% of the reference's wedges, which means the aggregate everyone
+ * quoted was substantially a measurement of mode 1 alone. Splitting them is what
+ * makes that visible instead of implied.
+ *
+ * ⚠ `> 0` on mode 2 is load-bearing. A dead rep satisfies `first === second`
+ * numerically at 0 === 0, so without it every mode 1 would be double-counted
+ * into mode 2 as well, and the rarest failure in the campaign would appear to
+ * be as common as the commonest.
+ *
+ * ⚠ Unscoreable reps are excluded and counted, never scored as mode 1. A rep
+ * with 0 reads and a rep whose reads were never observed are different claims,
+ * and conflating them manufactures the dominant wedge signature out of a missing
+ * log. This is the same rule the null-vs-zero convention enforces upstream.
+ */
+const WEDGE_REFERENCE = {
+  dead: '31/407 = 7.62%',
+  frozen: '2/407 = 0.49%',
+};
+
+export function wedgeModeTable(records) {
+  const cycles = records.map((r) => resolveReadCycles(r).readCycles);
+  const scoreable = cycles.filter(
+    (c) => typeof c.firstReads === 'number' && typeof c.secondReads === 'number'
+  );
+  const unscoreable = cycles.length - scoreable.length;
+
+  if (scoreable.length === 0) {
+    return '_No rep carried both read cycles — nothing is scoreable for wedge mode._';
+  }
+
+  const dead = scoreable.filter((c) => c.firstReads === 0).length;
+  const frozen = scoreable.filter(
+    (c) => c.firstReads > 0 && c.firstReads === c.secondReads
+  ).length;
+  const n = scoreable.length;
+  const pct = (k) => `${((k / n) * 100).toFixed(2)}%`;
+
+  const lines = [
+    '| mode | this run | reference (knuckles, 2026-08-23) |',
+    '| -- | -- | -- |',
+    `| 1 — \`first == 0\`, the scan path is dead | ${dead}/${n} = ${pct(dead)} | ${WEDGE_REFERENCE.dead} |`,
+    `| 2 — frozen accumulation (\`first == second\`, > 0) | ${frozen}/${n} = ${pct(frozen)} | ${WEDGE_REFERENCE.frozen} |`,
+    `| combined | ${dead + frozen}/${n} = ${pct(dead + frozen)} | 33/407 = 8.11% |`,
+  ];
+  if (unscoreable > 0) {
+    lines.push(
+      '',
+      `_${unscoreable} rep(s) excluded as unscoreable — one or both read cycles were not ` +
+        'observed. Not counted as mode 1: a rep with 0 reads and a rep whose reads were ' +
+        'never seen are different claims._'
+    );
+  }
+  return lines.join('\n');
+}
+
 function main() {
   const records = loadRecords();
   console.log(`# Integration suite — run-shape record\n`);
+  // Before any number it would qualify. A caveat printed after the rate it
+  // undercuts is one the reader has already acted on.
+  const mixed = cohortWarning(records);
+  if (mixed) console.log(`${mixed}\n`);
   console.log(`${records.length} repetitions recorded.\n`);
   console.log(`## Per-run failures\n`);
   console.log(perRunTable(records));
@@ -297,8 +444,17 @@ function main() {
   console.log(predecessorTable(records));
   console.log(`\n## Failure vs. scan-start signature\n`);
   console.log(signalPairingTable(records));
+  console.log(`\n## Wedge mode — TRA-1150's two failure modes, scored separately\n`);
+  console.log(wedgeModeTable(records));
+  console.log(`\n## Field density\n`);
+  console.log(densityTable(records));
   console.log(`\n## Record integrity\n`);
   console.log(contaminationNote(records));
 }
 
-main();
+// Run the report only when invoked directly. Importing this module — which its
+// tests must do to exercise the table builders — would otherwise execute main(),
+// load records that are not there, and process.exit(1) before a single test ran.
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}

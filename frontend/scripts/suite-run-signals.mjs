@@ -196,6 +196,164 @@ export const E2E_BROWSER_NEEDLES = [
 ];
 
 /**
+ * Which distinct campaigns does this record file contain?
+ *
+ * Both analysis scripts read `.suite-runs/runs.jsonl` wholesale — no argument,
+ * no filter — and that file ACCUMULATES across invocations while repetition
+ * numbers restart at 1 each time. So the natural state of a working bench is a
+ * file holding several unrelated arms.
+ *
+ * On 2026-08-29 it held TRA-1193's 200 vitest rows while a 150-rep e2e arm was
+ * about to be summarised. They were moved aside by hand. Nothing in the tooling
+ * would have objected otherwise, and the resulting summary would have pooled two
+ * runners into one failure rate and one density distribution — confidently
+ * wrong, and indistinguishable on sight from a correct one.
+ *
+ * ⚠ This WARNS rather than filtering or aborting, and the distinction is the
+ * point. Pooling is sometimes exactly what is wanted: comparing two arms is a
+ * real thing to do. The defect was never that rows were mixed, it was that
+ * mixing was SILENT. Filtering here would replace one silent behaviour with
+ * another, and a reader who did not know rows had been dropped would be no
+ * better off than one who did not know they had been pooled.
+ *
+ * Grouped by runner AND note, because two arms of the same runner are still two
+ * arms — an instrument-validation pass and the measurement it validates share a
+ * runner and must not share a denominator.
+ */
+export function describeCohorts(records) {
+  const groups = new Map();
+  for (const r of records ?? []) {
+    // runnerOf, not r.runner: pre-TRA-1206 records carry no runner and ARE
+    // vitest, so reading the raw field would flag every historical archive as
+    // mixed against its own successors.
+    const key = `${runnerOf(r)} ${r?.note ?? ''}`;
+    const existing = groups.get(key);
+    if (existing) existing.count += 1;
+    else groups.set(key, { runner: runnerOf(r), note: r?.note ?? null, count: 1 });
+  }
+  const list = [...groups.values()];
+  return { homogeneous: list.length <= 1, groups: list };
+}
+
+/**
+ * The banner to print above a report drawn from a mixed record, or '' when there
+ * is nothing to say.
+ *
+ * Empty on the common case by design: a warning that fires on every clean run is
+ * one nobody reads by the time it matters.
+ */
+export function cohortWarning(records) {
+  const { homogeneous, groups } = describeCohorts(records);
+  if (homogeneous) return '';
+  const rows = groups
+    .map((g) => `  ${String(g.count).padStart(4)}  runner=${g.runner}  note=${g.note ?? '(none)'}`)
+    .join('\n');
+  return (
+    `⚠️  This record mixes more than one campaign. Every rate and distribution below\n` +
+    `pools all of them into one denominator, which is almost certainly not what you\n` +
+    `want — reps from different runners do not measure the same thing.\n\n` +
+    `${rows}\n\n` +
+    `Move the rows you are not analysing out of .suite-runs/runs.jsonl first; they\n` +
+    `are already archived under ~/soak-archives/ if they were worth keeping.`
+  );
+}
+
+/**
+ * Read-cycle VALUES, as distinct from every needle above.
+ *
+ * Everything in `SIGNALS` counts occurrences of a string. These are numbers
+ * pulled out of one, and the difference matters for exactly one reason: a count
+ * of zero means "the thing never happened", but a VALUE of zero is a
+ * measurement — and here it is the most important one there is. `first == 0` is
+ * TRA-1150's dominant wedge signature, 31 of its 33 wedges, a scan path that is
+ * dead rather than thin. A missing value defaulted to 0 fabricates the exact
+ * failure this instrument exists to detect.
+ *
+ * WHY THIS EXISTS. TRA-1200's arm ran against a field ~17% sparser than the
+ * reference it was compared to, because the reader had been pulled back from the
+ * tag stack to gun a barcode. Nothing recorded that, so it surfaced only by
+ * parsing 150 logs and untarring the reference archive after the run was over.
+ * The same shortfall halted Cell A on 2026-08-23 and was found the same way,
+ * after the fact. Twice is a missing instrument, not bad luck.
+ *
+ * ⚠ UNIQUE IS THE FIELD PROXY. READS IS NOT.
+ * Read volume is confounded with the variable a CPU-swap arm measures: a faster
+ * host issues stop-scanning sooner, so fewer reads accumulate inside the fixed
+ * `waitForTimeout(2000)` scan window (inventory.spec.ts). Two hosts facing an
+ * identical pile can disagree on reads by 40%. Unique-tag count is what survives
+ * that. Both are captured, but any judgement about whether the FIELD matched
+ * keys on unique.
+ *
+ * e2e only, by structure rather than preference: `[Test] First read:` is written
+ * by tests/e2e/inventory.spec.ts, and no vitest rep has an application to read
+ * tags with. Same asymmetry as `appPreflight`.
+ */
+export const READ_CYCLE_PATTERN =
+  /\[Test\] (First|Second) read: (\d+) reads, (\d+) unique tags/g;
+
+/** The keys `readReadCycles` reports, in report order. */
+export const READ_CYCLE_FIELDS = ['firstReads', 'firstUnique', 'secondReads', 'secondUnique'];
+
+const noReadCycles = () => Object.fromEntries(READ_CYCLE_FIELDS.map((k) => [k, null]));
+
+/**
+ * Extract the read-cycle values from a captured e2e run log.
+ *
+ * Returns every field explicitly, each a number or `null`. Never omits a key,
+ * never substitutes 0.
+ *
+ * A rep that died before its second cycle legitimately has `secondReads: null`
+ * while `firstReads` holds a real number. That asymmetry is data — it locates
+ * how far the rep got.
+ */
+export function readReadCycles(logPath, runner = 'vitest') {
+  if (runner !== 'e2e') return noReadCycles();
+  if (!logPath || !existsSync(logPath)) return noReadCycles();
+  let text;
+  try {
+    text = readFileSync(logPath, 'utf8');
+  } catch {
+    return noReadCycles();
+  }
+  const out = noReadCycles();
+  // Fresh regex per call: READ_CYCLE_PATTERN is /g and therefore stateful, so a
+  // shared lastIndex would make the second call in a process skip its first
+  // match. The count-by-split needles above have no such hazard, which is why
+  // this is the only place it needs saying.
+  for (const m of text.matchAll(new RegExp(READ_CYCLE_PATTERN.source, 'g'))) {
+    const prefix = m[1] === 'First' ? 'first' : 'second';
+    out[`${prefix}Reads`] = Number(m[2]);
+    out[`${prefix}Unique`] = Number(m[3]);
+  }
+  return out;
+}
+
+/**
+ * Read-cycle values for a record, recomputed from its retained log when the
+ * record predates this instrument.
+ *
+ * Mirrors `resolveSignals` and for the same reason: every record written before
+ * this change lacks these fields, and "absent" must not read as "measured zero".
+ * Recomputing means archived runs — TRA-1200's own 150 reps included — become
+ * analysable for density without being re-run.
+ *
+ * `source` is part of the answer, not decoration. A caller that cannot tell a
+ * recorded value from a reconstructed one cannot tell which runs had the
+ * instrument at all.
+ */
+export function resolveReadCycles(record) {
+  const stored = record?.readCycles;
+  if (stored && READ_CYCLE_FIELDS.every((k) => stored[k] !== undefined)) {
+    return { readCycles: stored, source: 'record' };
+  }
+  const log = record?.outputLog ?? record?.stdoutLog;
+  if (!log || !existsSync(log)) {
+    return { readCycles: stored ?? noReadCycles(), source: 'unverifiable' };
+  }
+  return { readCycles: readReadCycles(log, runnerOf(record)), source: 'recomputed' };
+}
+
+/**
  * The needle that answers "did this rep produce ANY observable output", per runner.
  *
  * `harnessLines` is named for the STRING. Its two consumers — the watchdog's
