@@ -33,49 +33,119 @@ reader is free.** Someone may be holding it from a browser, and a browser never
 appears as a bridge client. Conversely a page refresh releases the radio
 immediately — browser-side release is implicit and cheap.
 
-## Current implementation — expected to change
+## The daemon holds the port, not the radio
 
-> Today's bridge (`rust-ble-test`) calls `transport.connect()` **once at process
-> start** and holds the BLE link for its whole lifetime. A client disconnecting
-> releases nothing. **Only `SIGTERM` frees the radio.**
->
-> So today, to hand-test preview or prod against hardware you must **stop the
-> bridge process** — closing the tests is not enough.
->
-> `rust-ble-test` **goes away** in the replatform to `bleak`-based Python tooling,
-> where the intent — *not yet a guarantee* — is to release the radio whenever no
-> mock-to-bridge connection is active. If that lands, the rule relaxes from
-> *"the bridge process must not be running"* to *"no test must be connected"*, and
-> leaving the bridge up between runs stops being a problem.
->
-> **Verify that behaviour before relying on it. Everything above this block holds
-> either way.**
+**A running bridge does not block hand-testing. A connected client does.**
 
-### Checking who holds the radio
+The Python bridge builds its transport *inside* the per-connection handler, so
+no device is held until a client connects, and disconnecting releases it. Idle
+expiry (`BLE_MCP_IDLE_TIMEOUT`, 600s) releases the command path too — and ends
+the connection, never the process. Idle release is a lease on the command path,
+not a process lifecycle.
 
-`pgrep -f 'rust-bl[e]-test'` tells you whether the bridge process is up — but note
-that `pgrep -f` can match **its own shell**, because the pattern appears in the
-argv of the pipeline running it. Confirm with `ps -o pid,ppid,lstart,cmd -p <pid>`
-or tie it to the socket with `ss -ltnp | grep 8080`; the listener cannot be faked
-by a name match.
+So leaving the bridge up between runs is fine. To hand-test preview or prod
+against a reader, close whatever is *connected* — you do not need to touch the
+daemon.
 
-Remember that neither check answers "is the reader free" — only "is the bridge
-holding it". A browser session is invisible to both.
+This doc previously said the opposite, and asked to be re-verified after the
+Python replatform. Verified 2026-08-29, three ways:
+
+| check | result |
+| -- | -- |
+| ESPHome proxy slot accounting at release | `used=0 free=4 limit=4 allocated=[]` |
+| live `get_connection_state` | `held:false · session:null · observer_count:0` |
+| daemon log at DEBUG, 100k-line ring | silent 2h12m after the run ended |
+
+**Cite the first one.** That is the proxy — the component that actually owns the
+connection slots — reporting zero held. The other two are the daemon reporting
+on itself, which is a weaker claim: "I sent a disconnect" is not "the slot is
+free".
+
+## Checking who holds the radio
+
+One call, and it beats every process-grepping recipe this section used to carry:
+
+```bash
+# via the MCP tools, or over the control socket directly:
+printf '{"op":"get_connection_state"}\n' | nc -U "${XDG_RUNTIME_DIR}/ble-bridge.sock"
+```
+
+```json
+{"held": false, "session": null, "observer_count": 0, ...}
+```
+
+- **`held`** — someone owns the command path and can write to the device.
+- **`observer_count`** — how many others are attached read-only.
+
+**`observer_count > 0` is the hazard worth naming.** It is most often a leftover
+mock-injected browser tab, which **appears in no process listing and in no log**
+— so every `ps`/`pgrep`/`ss` recipe reports a clear field while a tab quietly
+holds the command path. That is not hypothetical: on 2026-08-26 contention of
+exactly this kind invalidated two hardware runs inside ten minutes.
+
+**Do not identify the daemon by name.** Three name-based checks have been wrong
+here in a row, each silently: one named a Rust binary deleted in the replatform,
+one used the Python *module* name (which never appears in a cmdline — the
+console script spells it with a hyphen), and `pgrep -f` matches *its own shell's
+argv*, which produced a false abort during TRA-1189. If you need the process,
+ask the socket which pid is serving the port — whatever is serving it **is** the
+bridge, whatever it is called.
+
+## Running it — a supervised user unit
+
+The bridge runs as a systemd unit owned by ble-mcp-test (their TRA-1202), so
+start/stop is `systemctl`, not a hand-rolled `nohup`:
+
+```bash
+systemctl --user status ble-bridge          # is it up?
+systemctl --user start|stop ble-bridge      # start / stop
+journalctl --user -u ble-bridge -f          # follow the log
+just bridge-restart                         # after anything under bridge/ changes
+```
+
+`just bridge-restart` is a recipe **in the ble-mcp-test checkout**, not in this
+repo — run it from there.
+
+⚠ **`pkill` is the wrong tool now.** `Restart=always` brings the daemon back
+within 5s, so a kill presents as *"the kill didn't work"* rather than *"wrong
+tool"*. And you almost never want it anyway: the daemon holding the port is not
+what blocks you.
+
+⚠ **`--user` is load-bearing, not a style preference.** The MCP control socket
+lives under `/run/user/<uid>`, which **does not exist for a system unit**. A
+system-scope install therefore comes up looking perfectly healthy with the
+entire MCP surface silently gone — and presents as *"the MCP tools are broken"*,
+never as *"the unit is installed wrong"*. Do not promote it to
+`/etc/systemd/system`.
+
+A **permanent** failure — a bad or missing env file — reaches `failed` after
+five attempts in about 25 seconds rather than looping forever, and `failed` is
+sticky: it needs `systemctl --user reset-failed` before it will start again.
+A start failure is always a configuration failure, so a restart storm is never
+transient.
+
+**Do not use `status.version` to tell whether the daemon is current.** It reports
+the Python package version, which has read `0.1.0` unchanged through the entire
+replatform — a confident wrong answer. Code currency is answered by
+ble-mcp-test's own staleness guard in its `pretest`, which compares the running
+daemon against the checkout it was started from.
 
 ## Bind address
 
-The Rust bridge's **code default is `0.0.0.0`** (`config.rs:69`), i.e. LAN-wide,
-on an endpoint with **no authentication** — no token, no origin check. Our
-deployment narrows it to loopback with an explicit `BLE_MCP_WS_HOST=127.0.0.1`.
-The safe binding here is deliberate configuration, not a safe default: an operator
-who sets nothing gets a LAN-wide bind.
+The bridge binds **`127.0.0.1:25153`** — loopback only, reachable solely from
+the machine it runs on. That is irrelevant to preview and prod, which never use
+the bridge, but it matters for any test runner on another host.
 
-Loopback-only means the bridge is reachable **only from the machine it runs on**.
-That is irrelevant to preview and prod, which never use the bridge, but it matters
-for any test runner on another host.
+The endpoint has **no authentication** — no token, no origin check. Loopback is
+the whole authorization story, which is why the bind address is not a detail to
+relax casually. The MCP control socket alongside it is mode `0600`, owner-only,
+for the same reason.
 
 ## See also
 
-- `reference_ble_bridge_restart` — how to start and stop the bridge
+- `frontend/scripts/watch-soak-abort-criteria.mjs` — the soak watchdog, and why
+  it detects a bridge restart through `status.uptime_seconds` rather than
+  through systemd
+- `docs/bridge-service.md` in the ble-mcp-test checkout — the unit itself
 - `frontend/tests/integration/cs108/INTEGRATION-TEST-PRINCIPLES.md` — how the
   integration harness is allowed to talk to the worker

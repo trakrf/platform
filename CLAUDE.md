@@ -33,7 +33,9 @@
 
 ## Hardware access
 - **`ble-mcp-test` is test tooling only, never the product path** — the app reaches a CS108 solely via browser `navigator.bluetooth`
-- **One connection at a time**: a running bridge blocks preview/prod hand-testing, and an idle bridge port does *not* mean the reader is free — see `docs/ble-hardware-access.md`
+- **One connection at a time**: a *connected client* blocks preview/prod hand-testing — a running bridge daemon does not. It holds the port, not the radio
+- **An idle bridge port does *not* mean the reader is free** — a browser tab holding it appears in no process list. `get_connection_state` answers it in one call; see `docs/ble-hardware-access.md`
+- The bridge is a supervised `systemctl --user` unit, so `pkill` is the wrong tool — it comes back in 5s
 
 ## Preview Deployments
 - Opening/updating a PR auto-deploys to `https://app.preview.trakrf.id`
