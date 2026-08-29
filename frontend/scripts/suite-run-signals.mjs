@@ -196,6 +196,101 @@ export const E2E_BROWSER_NEEDLES = [
 ];
 
 /**
+ * Read-cycle VALUES, as distinct from every needle above.
+ *
+ * Everything in `SIGNALS` counts occurrences of a string. These are numbers
+ * pulled out of one, and the difference matters for exactly one reason: a count
+ * of zero means "the thing never happened", but a VALUE of zero is a
+ * measurement — and here it is the most important one there is. `first == 0` is
+ * TRA-1150's dominant wedge signature, 31 of its 33 wedges, a scan path that is
+ * dead rather than thin. A missing value defaulted to 0 fabricates the exact
+ * failure this instrument exists to detect.
+ *
+ * WHY THIS EXISTS. TRA-1200's arm ran against a field ~17% sparser than the
+ * reference it was compared to, because the reader had been pulled back from the
+ * tag stack to gun a barcode. Nothing recorded that, so it surfaced only by
+ * parsing 150 logs and untarring the reference archive after the run was over.
+ * The same shortfall halted Cell A on 2026-08-23 and was found the same way,
+ * after the fact. Twice is a missing instrument, not bad luck.
+ *
+ * ⚠ UNIQUE IS THE FIELD PROXY. READS IS NOT.
+ * Read volume is confounded with the variable a CPU-swap arm measures: a faster
+ * host issues stop-scanning sooner, so fewer reads accumulate inside the fixed
+ * `waitForTimeout(2000)` scan window (inventory.spec.ts). Two hosts facing an
+ * identical pile can disagree on reads by 40%. Unique-tag count is what survives
+ * that. Both are captured, but any judgement about whether the FIELD matched
+ * keys on unique.
+ *
+ * e2e only, by structure rather than preference: `[Test] First read:` is written
+ * by tests/e2e/inventory.spec.ts, and no vitest rep has an application to read
+ * tags with. Same asymmetry as `appPreflight`.
+ */
+export const READ_CYCLE_PATTERN =
+  /\[Test\] (First|Second) read: (\d+) reads, (\d+) unique tags/g;
+
+/** The keys `readReadCycles` reports, in report order. */
+export const READ_CYCLE_FIELDS = ['firstReads', 'firstUnique', 'secondReads', 'secondUnique'];
+
+const noReadCycles = () => Object.fromEntries(READ_CYCLE_FIELDS.map((k) => [k, null]));
+
+/**
+ * Extract the read-cycle values from a captured e2e run log.
+ *
+ * Returns every field explicitly, each a number or `null`. Never omits a key,
+ * never substitutes 0.
+ *
+ * A rep that died before its second cycle legitimately has `secondReads: null`
+ * while `firstReads` holds a real number. That asymmetry is data — it locates
+ * how far the rep got.
+ */
+export function readReadCycles(logPath, runner = 'vitest') {
+  if (runner !== 'e2e') return noReadCycles();
+  if (!logPath || !existsSync(logPath)) return noReadCycles();
+  let text;
+  try {
+    text = readFileSync(logPath, 'utf8');
+  } catch {
+    return noReadCycles();
+  }
+  const out = noReadCycles();
+  // Fresh regex per call: READ_CYCLE_PATTERN is /g and therefore stateful, so a
+  // shared lastIndex would make the second call in a process skip its first
+  // match. The count-by-split needles above have no such hazard, which is why
+  // this is the only place it needs saying.
+  for (const m of text.matchAll(new RegExp(READ_CYCLE_PATTERN.source, 'g'))) {
+    const prefix = m[1] === 'First' ? 'first' : 'second';
+    out[`${prefix}Reads`] = Number(m[2]);
+    out[`${prefix}Unique`] = Number(m[3]);
+  }
+  return out;
+}
+
+/**
+ * Read-cycle values for a record, recomputed from its retained log when the
+ * record predates this instrument.
+ *
+ * Mirrors `resolveSignals` and for the same reason: every record written before
+ * this change lacks these fields, and "absent" must not read as "measured zero".
+ * Recomputing means archived runs — TRA-1200's own 150 reps included — become
+ * analysable for density without being re-run.
+ *
+ * `source` is part of the answer, not decoration. A caller that cannot tell a
+ * recorded value from a reconstructed one cannot tell which runs had the
+ * instrument at all.
+ */
+export function resolveReadCycles(record) {
+  const stored = record?.readCycles;
+  if (stored && READ_CYCLE_FIELDS.every((k) => stored[k] !== undefined)) {
+    return { readCycles: stored, source: 'record' };
+  }
+  const log = record?.outputLog ?? record?.stdoutLog;
+  if (!log || !existsSync(log)) {
+    return { readCycles: stored ?? noReadCycles(), source: 'unverifiable' };
+  }
+  return { readCycles: readReadCycles(log, runnerOf(record)), source: 'recomputed' };
+}
+
+/**
  * The needle that answers "did this rep produce ANY observable output", per runner.
  *
  * `harnessLines` is named for the STRING. Its two consumers — the watchdog's
