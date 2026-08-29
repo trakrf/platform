@@ -13,7 +13,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
-import { resolveSignals } from './suite-run-signals.mjs';
+import { resolveSignals, captureCanaryCount } from './suite-run-signals.mjs';
 
 const RECORD_PATH = path.resolve(process.cwd(), '.suite-runs', 'runs.jsonl');
 
@@ -213,8 +213,14 @@ function contaminationNote(records) {
  */
 function signalPairingTable(records) {
   const resolved = records.map((r) => ({ r, ...resolveSignals(r) }));
+  // The canary is asked for by ROLE, not by needle name. `harnessLines` is
+  // emitted only by the integration harness, so on a Playwright record it is
+  // null by construction — and `null ?? 0` would exclude every e2e repetition
+  // from the evidence while reporting them as void captures. That is a filter
+  // discarding good data for a reason that reads as a data-quality finding
+  // (TRA-1206). `captureCanaryCount` resolves the right needle per runner.
   const captured = resolved.filter(
-    ({ signals }) => signals && !signals.logMissing && (signals.harnessLines ?? 0) > 0
+    ({ r, signals }) => signals && !signals.logMissing && (captureCanaryCount(r, signals) ?? 0) > 0
   );
   // A repetition that never reached the bridge measured the absence of a
   // transport, not the behaviour of one. Counting it as a failure-without-the-
@@ -234,7 +240,8 @@ function signalPairingTable(records) {
   const recomputed = usable.filter((u) => u.source === 'recomputed').length;
   if (!usable.length) {
     const why = excluded
-      ? ` ${excluded} record(s) excluded: no signals, or the \`[Harness]\` canary is 0, ` +
+      ? ` ${excluded} record(s) excluded: no signals, or the capture canary is 0 ` +
+        '(`[Harness]` for a vitest run, `[Connection]` for an e2e one), ' +
         'which means the capture was void rather than the signatures absent.'
       : '';
     return `_No repetition carries a verified capture._${why}`;

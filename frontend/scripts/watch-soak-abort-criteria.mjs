@@ -35,6 +35,7 @@ import net from 'net';
 import path from 'path';
 import { appendFileSync, existsSync, readFileSync } from 'fs';
 import { spawnSync } from 'child_process';
+import { captureCanaryCount } from './suite-run-signals.mjs';
 
 /**
  * Has the process we started with been replaced?
@@ -166,15 +167,39 @@ export function transportFailureStreak(rows) {
 }
 
 /**
- * A rep that captured no harness output at all.
+ * A rep that captured no output at all.
  *
- * Its other counts are not low, they are uninformative: zero harness lines means
+ * Its other counts are not low, they are uninformative: zero canary lines means
  * nothing was observed, so every other signal in that row is an absence of
  * evidence being read as evidence of absence.
+ *
+ * ## Why this asks for the canary by ROLE and not by name (TRA-1206)
+ *
+ * This used to read `(row.signals?.harnessLines ?? 1) === 0`, which is correct
+ * for a vitest rep and silently wrong for every other kind. `[Harness]` is
+ * emitted by `tests/integration/cs108/CS108WorkerTestHarness.ts` and by nothing
+ * else, so a Playwright rep cannot produce one however healthy it is. The driver
+ * therefore records `harnessLines: null` on an e2e row rather than 0 — and the
+ * old expression would then have gone BOTH ways wrong:
+ *
+ *   with 0    every e2e rep aborts at rep 1, on the absence of the emitter
+ *             rather than on a void capture
+ *   with null `null ?? 1` is 1, so the check never fires again on that path —
+ *             a working abort quietly becoming a no-op, which is worse, because
+ *             nothing looks broken
+ *
+ * `captureCanaryCount` resolves the needle from the row's own runner, so the
+ * question stays "did this rep observe anything" on both paths. A record with no
+ * `runner` field is a vitest record — every row written before TRA-1206 is.
+ *
+ * An UNKNOWN canary is void. A row whose log went missing did not measure a
+ * clean capture, it measured nothing, and the safe reading of nothing is to stop
+ * the run rather than to assume health.
  */
 export function isVoidCapture(row) {
   if (!row) return false;
-  return (row.signals?.harnessLines ?? 1) === 0;
+  const count = captureCanaryCount(row);
+  return count === null || count === 0;
 }
 
 function readRows(file) {
@@ -331,7 +356,9 @@ async function main() {
       process.exit(3);
     }
     if (isVoidCapture(rows[rows.length - 1])) {
-      say('ABORT: newest rep has harnessLines=0 — VOID capture, its other counts are uninformative.');
+      say('ABORT: newest rep captured no output — VOID capture, its other counts are uninformative.');
+      say(`  canary=${JSON.stringify(captureCanaryCount(rows[rows.length - 1]))} ` +
+        `runner=${rows[rows.length - 1]?.runner ?? 'vitest'}`);
       process.exit(4);
     }
 

@@ -23,6 +23,23 @@
  *   cold     same as fixed, but the caller restarted the bridge process first;
  *            this script only records that the claim was made
  *
+ * Runners (TRA-1206):
+ *   vitest   tests/integration/, the default, and the one every historical
+ *            record was measured under
+ *   e2e      tests/e2e/ under Playwright — the suite TRA-1200 measures
+ *
+ * The two backends share the rep loop, the archive conventions and the record
+ * format on purpose. A sibling driver would have duplicated all three and left
+ * summarise-suite-runs.mjs reading two formats.
+ *
+ * They do NOT share a needle table. Most of `SIGNALS` is vitest-shaped —
+ * `[Harness]` comes from an integration-only file — so an e2e record carries
+ * explicit `null` for every signal that path cannot produce. See
+ * suite-run-signals.mjs, where the per-needle reasoning lives. A structurally
+ * absent signal and a genuinely zero one must not look alike; recording 0 for
+ * `harnessLines` would make the watchdog's void-capture abort fire on every
+ * single e2e rep.
+ *
  * NOTE ON "alone" AND "cold" — REVISED 2026-08-27, and the revision reverses it.
  *
  * This used to read: "alone does NOT give a cold reader. The Rust bridge calls
@@ -54,6 +71,8 @@
  *   node scripts/characterise-suite-runs.mjs --shape shuffle --reps 5
  *   node scripts/characterise-suite-runs.mjs --shape alone --reps 3 --target tests/integration/cs108/locate.spec.ts
  *   node scripts/characterise-suite-runs.mjs --shape cold --reps 3
+ *   node scripts/characterise-suite-runs.mjs --runner e2e --shape alone --reps 40 \
+ *     --target tests/e2e/inventory.spec.ts
  */
 
 import { spawnSync } from 'node:child_process';
@@ -62,7 +81,18 @@ import path from 'node:path';
 import { readSignals } from './suite-run-signals.mjs';
 
 // 2 adds `signals` + `outputLog`; schema-1 records carry neither.
-const RECORD_SCHEMA = 2;
+// 3 adds `runner`, and `appPreflight` on e2e records only (TRA-1206).
+//
+// `appPreflight` is deliberately absent rather than null on a vitest record: a
+// vitest rep has no application to reach, so a field about its reachability
+// would be a measurement of a subject that does not exist. Same asymmetry as
+// the signals — see readSignals().
+//
+// Everything schema 2 carried is unchanged in name, type and derivation. That
+// is load-bearing: TRA-1189's 528 reps and TRA-1193's 200-rep verification are
+// the comparison baseline for this milestone, and they are only comparable if
+// the vitest path still measures what it measured then.
+const RECORD_SCHEMA = 3;
 
 /**
  * Per-invocation stamp, so a later invocation cannot overwrite an earlier one's
@@ -77,15 +107,55 @@ const RECORD_SCHEMA = 2;
 const RUN_ID = new Date().toISOString().replace(/[:.]/g, '-');
 const ARTIFACT_DIR = path.resolve(process.cwd(), '.suite-runs');
 const RECORD_PATH = path.join(ARTIFACT_DIR, 'runs.jsonl');
-const SUITE_ROOT = 'tests/integration/';
+const SUITE_ROOTS = {
+  vitest: 'tests/integration/',
+  e2e: 'tests/e2e/',
+};
+const VALID_RUNNERS = Object.keys(SUITE_ROOTS);
 const VALID_SHAPES = ['fixed', 'shuffle', 'alone', 'cold'];
 
+/** The suite a runner drives when no --target narrows it. */
+export function suiteRootFor(runner) {
+  const root = SUITE_ROOTS[runner];
+  if (!root) {
+    throw new Error(`--runner must be one of ${VALID_RUNNERS.join('|')}, got: ${runner}`);
+  }
+  return root;
+}
+
+/**
+ * Refuse a shape the runner cannot actually produce.
+ *
+ * `shuffle` has no Playwright analogue. Playwright can shard and can repeat, but
+ * it has no seeded file-order shuffle, and there is no flag combination that
+ * reproduces one from the record. Accepting the flag and running the default
+ * order would write a record claiming a shape the run never had — an instrument
+ * reporting a confident, well-formed, wrong answer, which is the failure this
+ * whole script exists to avoid.
+ *
+ * Rejecting loudly is the only honest option: the alternative is a soak whose
+ * order-dependence conclusion is drawn from repetitions that all ran in the same
+ * order. That already happened once here, on the vitest path, for a different
+ * reason (see readVitestReport's note on startTime).
+ */
+export function assertShapeSupported(runner, shape) {
+  suiteRootFor(runner);
+  if (runner === 'e2e' && shape === 'shuffle') {
+    throw new Error(
+      '--shape shuffle is not available for --runner e2e: Playwright has no seeded ' +
+        'file-order shuffle, so the shape could not be reproduced from the record. ' +
+        'Use --shape alone with --target to vary what runs first.'
+    );
+  }
+}
+
 function parseArgs(argv) {
-  const args = { shape: null, reps: 1, target: null, note: null };
+  const args = { runner: 'vitest', shape: null, reps: 1, target: null, note: null };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     const value = argv[i + 1];
     switch (flag) {
+      case '--runner': args.runner = value; i += 1; break;
       case '--shape': args.shape = value; i += 1; break;
       case '--reps': args.reps = Number(value); i += 1; break;
       case '--target': args.target = value; i += 1; break;
@@ -93,6 +163,9 @@ function parseArgs(argv) {
       default:
         throw new Error(`Unknown argument: ${flag}`);
     }
+  }
+  if (!VALID_RUNNERS.includes(args.runner)) {
+    throw new Error(`--runner must be one of ${VALID_RUNNERS.join('|')}, got: ${args.runner}`);
   }
   if (!VALID_SHAPES.includes(args.shape)) {
     throw new Error(`--shape must be one of ${VALID_SHAPES.join('|')}, got: ${args.shape}`);
@@ -103,6 +176,7 @@ function parseArgs(argv) {
   if (args.shape === 'alone' && !args.target) {
     throw new Error('--shape alone requires --target <spec path>');
   }
+  assertShapeSupported(args.runner, args.shape);
   return args;
 }
 
@@ -185,7 +259,7 @@ function buildVitestArgs(shape, rep, target) {
   // A target narrows any shape, not just `alone`. `cold` in particular needs it:
   // the useful cold measurement is one file run against a freshly restarted
   // bridge, directly comparable against the same file run warm.
-  const filter = target ?? SUITE_ROOT;
+  const filter = target ?? suiteRootFor('vitest');
   // Same flags package.json's test:integration uses, plus JSON reporting.
   //
   // `--hookTimeout` must stay in step with that script. THREE copies of this
@@ -236,13 +310,108 @@ function buildVitestArgs(shape, rep, target) {
 }
 
 /**
+ * Worst-case wall clock for one Playwright repetition, in ms.
+ *
+ * THE `hookTimeout` QUESTION, ANSWERED FOR THE OTHER RUNNER — and the answer is
+ * that the direct analogue is already set, by the suite, and the driver must not
+ * touch it. Playwright applies one timeout to both tests and hooks, and
+ * `inventory.spec.ts` self-configures it:
+ *
+ *     test.describe.configure({ timeout: HARDWARE_TEST_TIMEOUT_MS })   // 90000
+ *
+ * A describe-level timeout BEATS the CLI `--timeout` flag, so passing --timeout
+ * here would change nothing on the very spec the soak runs while reading, in the
+ * argv and in the record, as though a bound had been set. A flag that cannot
+ * take effect is worse than no flag: it answers the question in the reader's
+ * head without answering it in the process.
+ *
+ * What genuinely has no analogue is the REP-LEVEL bound. vitest's hook timeout
+ * bounds a wedged connect and therefore bounds the invocation. Playwright's
+ * per-test timeout bounds each test but nothing bounds the run: a browser that
+ * never launches, a webServer probe that hangs, a reporter that never closes,
+ * and spawnSync waits forever. Overnight that is worse than a failure — the
+ * driver stops appending rows, the watchdog sees a live driver and a healthy
+ * bridge, and the night silently produces nothing after 22:15.
+ *
+ * So the bound the driver owns is --global-timeout, derived from the spec:
+ *
+ *     beforeAll                          90s   (shared connection + mode change)
+ *     5 tests x 90s                     450s   (2 active, 3 skipped — bounded
+ *                                               for all five, because TRA-1200
+ *                                               owns that spec and may enable
+ *                                               them; a bound that breaks when
+ *                                               a skip is lifted is a trap)
+ *     ------------------------------------------
+ *     suite worst case                  540s
+ *     browser launch, webServer probe,
+ *     teardown, reporter flush          ~120s  (bounded from above; not
+ *                                               separately measured)
+ *     ------------------------------------------
+ *     total                             660s
+ *
+ * Resolved toward patience for the same reason the 90s hookTimeout was: being
+ * too patient costs wall-clock on a rep that fails anyway, being too impatient
+ * kills healthy reps and the soak measures the driver instead of the suite.
+ *
+ * Deliberately NOT equal to any vitest number here. It bounds a whole
+ * invocation; --hookTimeout bounds one hook. They are different quantities over
+ * different scopes and must be free to diverge.
+ */
+const PLAYWRIGHT_GLOBAL_TIMEOUT_MS = 660000;
+
+function buildPlaywrightArgs(shape, rep, target) {
+  // Same rule as the vitest path: a target narrows any shape, not just `alone`.
+  const filter = target ?? suiteRootFor('e2e');
+
+  // What is NOT here matters as much as what is:
+  //
+  //   --workers      playwright.config.ts pins workers:1 because 11 specs reach
+  //                  ONE physical CS108 through one bridge. Restating it here
+  //                  would mean the driver silently keeps working after someone
+  //                  fixes the config, and silently overrides them if they ever
+  //                  split the non-hardware specs into a parallel project.
+  //   --retries      the config sets 0 outside CI. A soak measures a rate; a
+  //                  retry turns a failure into a pass and destroys the rate.
+  //   --timeout      inert against this spec — see the note above.
+  //
+  // The driver's standing invariant: it produces every shape from CLI flags and
+  // process lifecycle only, and never restates or overrides the suite's own
+  // settings. The moment it changes the subject, its measurements stop
+  // describing the suite anyone else runs.
+  const args = [
+    'playwright',
+    'test',
+    filter,
+    `--global-timeout=${PLAYWRIGHT_GLOBAL_TIMEOUT_MS}`,
+  ];
+
+  // No seed: Playwright has no seeded file-order shuffle, and `shuffle` is
+  // rejected for this runner rather than silently degraded. assertShapeSupported
+  // is the gate; this null is what the record then carries, meaning "this shape
+  // had no seed" rather than "the seed was lost".
+  void shape;
+  void rep;
+  return { args, seed: null };
+}
+
+/** Runner-dispatching argv builder. The vitest branch is byte-for-byte what it
+ * always was — frozen by test, because TRA-1189's and TRA-1193's reps are only
+ * comparable against a path that has not moved. */
+export function buildRunnerArgs(runner, shape, rep, target) {
+  suiteRootFor(runner);
+  return runner === 'e2e'
+    ? buildPlaywrightArgs(shape, rep, target)
+    : buildVitestArgs(shape, rep, target);
+}
+
+/**
  * Turn vitest's JSON report into the per-file record.
  *
  * The JSON report is the source of truth for pass/fail — never stdout scraping.
  * A missing or unparseable report is recorded as such, so a broken run can
  * never read as an empty pass.
  */
-function readReport(reportPath) {
+export function readVitestReport(reportPath) {
   if (!existsSync(reportPath)) {
     return { files: [], reportMissing: true };
   }
@@ -282,10 +451,136 @@ function readReport(reportPath) {
   return { files, reportMissing: false };
 }
 
-function runOnce({ shape, rep, target, note }) {
-  const { args, seed } = buildVitestArgs(shape, rep, target);
-  const reportPath = path.join(ARTIFACT_DIR, `report-${shape}-${rep}.json`);
-  const logPath = path.join(ARTIFACT_DIR, `output-${RUN_ID}-${shape}-${rep}.log`);
+/**
+ * Turn Playwright's JSON report into the SAME per-file record shape.
+ *
+ * Same rule as the vitest reader: the JSON report is the source of truth for
+ * pass/fail, never stdout scraping, and a missing or unparseable report is
+ * recorded as such so a broken run can never read as an empty pass.
+ *
+ * Three things differ from vitest's report and each is a place to get it wrong:
+ *
+ *   1. SPECS NEST. Playwright's top-level `suites` are files; every real spec
+ *      lives inside a child suite, because every real spec is inside a
+ *      `describe`. A reader that only walks `suites[].specs` finds nothing in
+ *      inventory.spec.ts and reports a file with zero failures — a confident,
+ *      well-formed, wrong answer.
+ *   2. startTime IS AN ISO STRING, not epoch ms. Downstream reads `files` as
+ *      EXECUTION ORDER and the summariser's predecessor table calls element i-1
+ *      the predecessor of element i, so this must sort by real time and emit the
+ *      same numeric type the vitest path does. String-sorting ISO stamps happens
+ *      to work; mixing types downstream does not.
+ *   3. A LOAD ERROR PRODUCES NO SPECS AT ALL. A spec that fails to compile, or a
+ *      global-setup failure, yields `errors[]` and an empty `suites[]`. Emitting
+ *      `files: []` there is indistinguishable from "the run passed and nothing
+ *      failed" — so each error becomes a failed row, named for its file where it
+ *      has one and for the run where it does not.
+ */
+export function readPlaywrightReport(reportPath) {
+  if (!existsSync(reportPath)) {
+    return { files: [], reportMissing: true };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(reportPath, 'utf8'));
+  } catch {
+    return { files: [], reportMissing: true };
+  }
+
+  // Walk the describe nesting, carrying the title path so a failure names the
+  // same thing a reader sees in the reporter output.
+  const collect = (suite, titlePath, out) => {
+    for (const spec of suite.specs || []) {
+      const results = (spec.tests || []).flatMap((t) => t.results || []);
+      const startTimes = results.map((r) => Date.parse(r.startTime)).filter((n) => Number.isFinite(n));
+      out.push({
+        ok: spec.ok !== false,
+        // `ok` is true for a SKIPPED spec as well as a passing one, so it cannot
+        // answer "did anything actually run". Playwright reports the status on
+        // the test rather than the spec.
+        ran: (spec.tests || []).some((t) => t.status !== 'skipped'),
+        fullName: [...titlePath, spec.title].filter(Boolean).join(' > '),
+        startTime: startTimes.length ? Math.min(...startTimes) : null,
+      });
+    }
+    for (const child of suite.suites || []) {
+      collect(child, [...titlePath, child.title], out);
+    }
+  };
+
+  // `suite.file` is relative to Playwright's rootDir, and rootDir is the
+  // testDir — `.../frontend/tests/e2e` — so a bare `file` is
+  // `inventory.spec.ts` where the vitest path records
+  // `tests/integration/cs108/locate.spec.ts`.
+  //
+  // Left unresolved, the two runners write differently-rooted strings into the
+  // SAME `files[].name` field: anything joining on that name across runners
+  // silently matches nothing, and the recorded name does not even match the
+  // `--target tests/e2e/inventory.spec.ts` the operator typed. Resolving against
+  // rootDir the way Playwright itself does puts both runners in one namespace.
+  const rootDir = parsed.config?.rootDir;
+  const nameOf = (fileSuite) => {
+    const file = fileSuite.file ?? fileSuite.title;
+    if (!file || !rootDir) return file;
+    return path.relative(process.cwd(), path.resolve(rootDir, file));
+  };
+
+  const files = [];
+  for (const fileSuite of parsed.suites || []) {
+    const specs = [];
+    collect(fileSuite, [], specs);
+    const times = specs.map((s) => s.startTime).filter((n) => n !== null);
+    files.push({
+      name: nameOf(fileSuite),
+      // Three values, not two. A file whose specs ALL skipped is not a pass: no
+      // assertion ran, so the row carries no evidence either way. A soak
+      // measuring a failure rate would otherwise score a night of
+      // nothing-executed reps as forty clean passes — the empty-pass hazard the
+      // reportMissing flag exists for, arriving through a different door.
+      // `status === 'failed'` consumers are unaffected.
+      status: specs.some((s) => !s.ok)
+        ? 'failed'
+        : specs.length && !specs.some((s) => s.ran)
+          ? 'skipped'
+          : 'passed',
+      startTime: times.length ? Math.min(...times) : null,
+      failed: specs.filter((s) => !s.ok).map((s) => s.fullName),
+    });
+  }
+
+  for (const error of parsed.errors || []) {
+    const name = error?.location?.file ?? '(run-level error)';
+    const existing = files.find((f) => f.name === name);
+    const label = error?.message ?? 'unknown error';
+    if (existing) {
+      existing.status = 'failed';
+      existing.failed.push(label);
+    } else {
+      files.push({ name, status: 'failed', startTime: null, failed: [label] });
+    }
+  }
+
+  // Same sort, same reason as the vitest reader — see its note. A file with no
+  // timed spec (a load error) sorts last rather than claiming to have run first.
+  files.sort((a, b) => (a.startTime ?? Number.MAX_SAFE_INTEGER) - (b.startTime ?? Number.MAX_SAFE_INTEGER));
+  return { files, reportMissing: false };
+}
+
+function readReportFor(runner, reportPath) {
+  return runner === 'e2e' ? readPlaywrightReport(reportPath) : readVitestReport(reportPath);
+}
+
+function runOnce({ runner, shape, rep, target, note, appPreflight }) {
+  const { args, seed } = buildRunnerArgs(runner, shape, rep, target);
+  // The vitest artifact names are FROZEN — no `vitest-` infix — so a fresh
+  // vitest record is comparable field-for-field against a known-good one from
+  // TRA-1189 or TRA-1193 without a path difference to explain away. The infix
+  // exists to stop an e2e rep and a vitest rep of the same shape+rep from
+  // overwriting each other's report, which `report-<shape>-<rep>.json` alone
+  // does not prevent.
+  const tag = runner === 'vitest' ? `${shape}` : `${runner}-${shape}`;
+  const reportPath = path.join(ARTIFACT_DIR, `report-${tag}-${rep}.json`);
+  const logPath = path.join(ARTIFACT_DIR, `output-${RUN_ID}-${tag}-${rep}.log`);
   rmSync(reportPath, { force: true });
   rmSync(logPath, { force: true });
 
@@ -318,20 +613,39 @@ function runOnce({ shape, rep, target, note }) {
     // still writes the machine-readable verdict. With more than one reporter,
     // vitest 1.x requires the per-reporter `--outputFile.json=` form; plain
     // `--outputFile` is silently ignored and the report never appears.
-    res = spawnSync('npx', [...args, '--reporter=json', '--reporter=default', `--outputFile.json=${reportPath}`], {
-      encoding: 'utf8',
-      stdio: ['ignore', logFd, logFd],
-    });
+    res =
+      runner === 'e2e'
+        ? // Playwright's equivalent of the two-reporter trick, and it exists for
+          // exactly the same reason: `json` alone would take stdout and the
+          // captured log would hold a machine-readable verdict and none of the
+          // console lines the signal needles grep for.
+          //
+          // Where vitest takes `--outputFile.json=`, Playwright's json reporter
+          // has no CLI form for its destination at all — it writes to stdout
+          // unless PLAYWRIGHT_JSON_OUTPUT_NAME is set in the environment. Miss
+          // that and the report interleaves with the console output in the log,
+          // `readPlaywrightReport` finds no file, and the rep records
+          // `reportMissing` on a run that worked perfectly.
+          spawnSync('npx', [...args, '--reporter=json,list'], {
+            encoding: 'utf8',
+            stdio: ['ignore', logFd, logFd],
+            env: { ...process.env, PLAYWRIGHT_JSON_OUTPUT_NAME: reportPath },
+          })
+        : spawnSync('npx', [...args, '--reporter=json', '--reporter=default', `--outputFile.json=${reportPath}`], {
+            encoding: 'utf8',
+            stdio: ['ignore', logFd, logFd],
+          });
   } finally {
     closeSync(logFd);
   }
 
   const endedAt = new Date();
-  const { files, reportMissing } = readReport(reportPath);
-  const signals = readSignals(logPath);
+  const { files, reportMissing } = readReportFor(runner, reportPath);
+  const signals = readSignals(logPath, runner);
 
   const record = {
     schema: RECORD_SCHEMA,
+    runner,
     shape,
     rep,
     seed,
@@ -349,6 +663,12 @@ function runOnce({ shape, rep, target, note }) {
     wsClientsAtStart,
     note: note ?? null,
   };
+
+  // e2e only. A vitest rep has no application to reach, so a field about its
+  // reachability would describe a subject that does not exist — the same
+  // conflation the explicit-null signals convention exists to prevent, one level
+  // up. Present-and-null and absent mean different things here and both are used.
+  if (appPreflight) record.appPreflight = appPreflight;
 
   appendFileSync(RECORD_PATH, `${JSON.stringify(record)}\n`);
   return record;
@@ -392,17 +712,86 @@ function preflight() {
   }
 }
 
+/**
+ * Refuse to run an e2e soak against an application that is not there — and
+ * record which question was actually asked.
+ *
+ * ## Read the config the subject comes from
+ *
+ * The target is resolved with the SAME expression `playwright.config.ts` uses,
+ * `process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173'`, and not by
+ * hardcoding 5173. Those look identical until PLAYWRIGHT_BASE_URL is set, at
+ * which point the config also drops its `webServer` block entirely and the run
+ * goes somewhere this check never looked. The general shape, worth recognising
+ * elsewhere: A CHECK WHOSE SUBJECT IS CHOSEN BY CONFIGURATION THE CHECK DOES NOT
+ * READ. It is the same defect as identifying the bridge by a process name — a
+ * check that picks its own subject rather than asking what will actually run.
+ * This driver got that wrong twice before it started asking the socket.
+ *
+ * ## Why the outcome goes in the record
+ *
+ * A remote base URL is not observable with local `ss`, so the honest answer
+ * there is "not checked" rather than a fabricated pass. But an honest skip is
+ * still a skip: if most real runs set PLAYWRIGHT_BASE_URL, this check is
+ * *usually* skipped, and a check that almost never runs does not exist while
+ * still appearing in the source and in the docs — a control that cannot go red,
+ * wearing an honest label.
+ *
+ * Returning the mode and letting `runOnce` store it makes that auditable. A
+ * night of forty reps where the reachability question was never asked is then a
+ * thing you can count in the archive, instead of something you would have to
+ * infer from the absence of an error.
+ */
+function appPreflight() {
+  const baseUrl = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
+  let url;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    console.error(`[suite-runs] FATAL: PLAYWRIGHT_BASE_URL is not a URL: ${baseUrl}`);
+    process.exit(1);
+  }
+
+  if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname)) {
+    console.log(`[suite-runs] app target ${baseUrl} is remote; the listening check was NOT run.`);
+    return { target: baseUrl, mode: 'skipped-remote', listening: null };
+  }
+
+  const port = url.port || (url.protocol === 'https:' ? '443' : '80');
+  const res = spawnSync('ss', ['-ltn', 'sport', `= :${port}`], { encoding: 'utf8' });
+  const listening =
+    res.status === 0 && typeof res.stdout === 'string' && res.stdout.trim().split('\n').length > 1;
+
+  if (!listening) {
+    console.error(
+      `[suite-runs] FATAL: nothing is listening on ${baseUrl}.\n` +
+        '  playwright.config.ts expects the dev server to be up already — its `webServer`\n' +
+        '  command in dev mode is an error message and `exit 1`, so every repetition would\n' +
+        '  die before it reached the reader. Start it with `pnpm dev:bridge`, or set\n' +
+        '  PLAYWRIGHT_BASE_URL to a deployment that is running.'
+    );
+    process.exit(1);
+  }
+  return { target: baseUrl, mode: 'checked', listening: true };
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   mkdirSync(ARTIFACT_DIR, { recursive: true });
   preflight();
+  // e2e only, and passed through to every record — see appPreflight's note on
+  // why an honest skip still has to be visible in the data.
+  const app = args.runner === 'e2e' ? appPreflight() : null;
 
   // Stop an unattended run without killing it mid-repetition, which would leave
   // the reader held and the record's last row a lie. Checked between reps only.
   const stopFile = path.join(ARTIFACT_DIR, 'STOP');
   if (existsSync(stopFile)) rmSync(stopFile);
 
-  console.log(`[suite-runs] shape=${args.shape} reps=${args.reps}${args.target ? ` target=${args.target}` : ''}`);
+  console.log(
+    `[suite-runs] runner=${args.runner} shape=${args.shape} reps=${args.reps}` +
+      `${args.target ? ` target=${args.target}` : ''}`
+  );
   console.log(`[suite-runs] stop cleanly with: touch ${path.relative(process.cwd(), stopFile)}`);
 
   for (let rep = 1; rep <= args.reps; rep += 1) {
@@ -411,7 +800,7 @@ function main() {
       rmSync(stopFile);
       break;
     }
-    const record = runOnce({ ...args, rep });
+    const record = runOnce({ ...args, rep, appPreflight: app });
     const failedFiles = record.files.filter((f) => f.status === 'failed');
     const summary = failedFiles.length
       ? failedFiles.map((f) => `${f.name} (${f.failed.length})`).join(', ')
@@ -429,4 +818,10 @@ function main() {
   console.log(`[suite-runs] record: ${RECORD_PATH}`);
 }
 
-main();
+// Only run the loop when invoked directly; importing must be side-effect free so
+// the argv builders and report readers can be unit-tested. The frozen-argv test
+// is the executable form of "the vitest path did not move" — an intention that
+// is asserted rather than stated, which is what TRA-1206 asked for.
+if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+  main();
+}

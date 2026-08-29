@@ -75,12 +75,125 @@ export const SIGNALS = {
 };
 
 /**
+ * The needles a PLAYWRIGHT repetition can actually produce (TRA-1206).
+ *
+ * The soak driver gained an e2e backend so it could run the suite TRA-1200
+ * measures. The runner is the easy half; this table is the hard half, because
+ * most of `SIGNALS` above is vitest-shaped and a needle that cannot fire on a
+ * path must not be counted as zero on it.
+ *
+ * WHAT IS MISSING FROM HERE, AND WHY — each one is a needle whose emitter cannot
+ * reach a Playwright rep's captured log, not a needle nobody cared about:
+ *
+ *   harnessLines     `[Harness]` is written by
+ *                    tests/integration/cs108/CS108WorkerTestHarness.ts and by
+ *                    nothing else. That file is integration-only; no browser
+ *                    ever loads it.
+ *   triggerTimeout   Same file — it is CS108WorkerTestHarness that rejects with
+ *                    `Timeout waiting for event: ...`.
+ *   ackSamples       All three `[ble-timing]` lines are `console.info` from
+ *   linkCloses       src/lib/device/transport/cs108-ble-transport.ts, which
+ *   connectSamples   under e2e runs INSIDE THE BROWSER. They reach the browser
+ *                    console every time and are then dropped by the console
+ *                    forwarder in tests/e2e/helpers/connection.ts, whose filter
+ *                    matches `BLE`/`Connect` case-sensitively against a
+ *                    lowercase `[ble-timing] connect`. Two independent causes
+ *                    stacked; either alone would explain the silence.
+ *
+ * The `[ble-timing]` group is the one to revisit. Its absence is incidental —
+ * one case-sensitive filter — rather than structural, and fixing that filter is
+ * what would give `ack-latency-report.mjs` anything to say about an e2e soak.
+ * Deliberately NOT done here: the forwarder is part of the suite under test, and
+ * this driver's standing invariant is that the suite cannot observe that it is
+ * being characterised.
+ */
+export const E2E_SIGNALS = {
+  // CANARY, and the e2e counterpart to `harnessLines` — see `CAPTURE_CANARY`.
+  // `[Connection]` is logged by tests/e2e/helpers/connection.ts on the Node
+  // side, so it reaches the captured log directly rather than through the
+  // browser console. Every hardware e2e spec connects through that helper.
+  //
+  // A rep with zero of these never reached the connect helper at all: the dev
+  // server was down, the browser failed to launch, the file failed to load.
+  // That is a void capture in the same sense `[Harness]` means it — nothing was
+  // observed, so every other count in the row is uninformative rather than low.
+  e2eConnectLines: '[Connection]',
+  // Logged by src/worker/cs108/reader.ts, which runs in the browser under e2e.
+  // These DO survive the forwarder: its first limb passes any text containing
+  // `Failed`, and both needles do. Reliable for the shared page every hardware
+  // spec connects through, because the listener is registered inside
+  // connectToDevice() and lives as long as the page.
+  startScanFailed: SIGNALS.startScanFailed,
+  stopScanFailed: SIGNALS.stopScanFailed,
+  // Already documented above as e2e-capable: "Keep both: e2e and any Node-side
+  // caller can still produce the errno form." The browser reports the bare
+  // `WebSocket error` shape and the forwarder passes it (`WebSocket` is in its
+  // allowlist, and it is capitalised the same way there).
+  transportRefused: SIGNALS.transportRefused,
+  transportUnreachable: SIGNALS.transportUnreachable,
+};
+
+/**
+ * The needle that answers "did this rep produce ANY observable output", per runner.
+ *
+ * `harnessLines` is named for the STRING. Its two consumers — the watchdog's
+ * void-capture abort and the summariser's usable-record filter — want the ROLE,
+ * and the string filling that role differs per runner. Reading the vitest needle
+ * on an e2e record is how a working check becomes a silent no-op: `harnessLines`
+ * is null there, `null ?? 1` is 1, and the abort never fires again.
+ */
+const CAPTURE_CANARY = {
+  vitest: 'harnessLines',
+  e2e: 'e2eConnectLines',
+};
+
+const SIGNAL_TABLES = { vitest: SIGNALS, e2e: E2E_SIGNALS };
+
+/** The needle table for a runner. Throws rather than defaulting, because a
+ * typo'd runner silently measured against the wrong table is the whole failure
+ * class this module exists inside. */
+export function signalsFor(runner) {
+  const table = SIGNAL_TABLES[runner];
+  if (!table) {
+    throw new Error(
+      `Unknown runner: ${runner}. Expected one of ${Object.keys(SIGNAL_TABLES).join('|')}.`
+    );
+  }
+  return table;
+}
+
+/**
+ * Which runner produced a record.
+ *
+ * Absent means vitest, and that is a fact about the archive rather than a
+ * convenience: every record written before TRA-1206 was a vitest run, so there
+ * is no historical row the default can be wrong about. Reading an old record as
+ * anything else would recompute its signals against a table it was never
+ * measured under.
+ */
+export function runnerOf(record) {
+  return record?.runner ?? 'vitest';
+}
+
+/**
  * Count each signature in a captured run log.
  *
  * Returns `{ logMissing: true }` when the log is gone — distinct from a log
  * that exists and contains nothing, which is what the canary catches.
+ *
+ * `runner` defaults to vitest so every pre-TRA-1206 call site is unchanged, and
+ * the vitest result is byte-identical to what it always was — no e2e key is
+ * added to it. The asymmetry is deliberate: a vitest record must stay comparable
+ * against TRA-1189's 528 reps and TRA-1193's 200, and an e2e-only field on it
+ * would be an absence dressed as data in the other direction.
+ *
+ * An e2e result DOES carry the vitest-only needles, explicitly `null`. A
+ * consumer reading `signals.harnessLines` on an e2e record has to deal with
+ * "unavailable"; it must never be handed a `0` that reads as "measured, and it
+ * never happened".
  */
-export function readSignals(logPath) {
+export function readSignals(logPath, runner = 'vitest') {
+  const table = signalsFor(runner);
   if (!logPath || !existsSync(logPath)) return { logMissing: true };
   let text;
   try {
@@ -89,10 +202,27 @@ export function readSignals(logPath) {
     return { logMissing: true };
   }
   const counts = { logMissing: false };
-  for (const [name, needle] of Object.entries(SIGNALS)) {
+  for (const [name, needle] of Object.entries(table)) {
     counts[name] = text.split(needle).length - 1;
   }
+  // Structurally absent, stated. Only ever widens a NON-vitest runner's record.
+  for (const name of Object.keys(SIGNALS)) {
+    if (!(name in counts)) counts[name] = null;
+  }
   return counts;
+}
+
+/**
+ * How many capture-canary lines a record saw — or null when that is unknowable.
+ *
+ * null means "no answer", and every caller must treat it as such rather than as
+ * a zero or as health. A record whose log went missing did not measure a clean
+ * capture; it measured nothing, and the honest reading of nothing is null.
+ */
+export function captureCanaryCount(record, signals = record?.signals) {
+  if (!signals || signals.logMissing) return null;
+  const value = signals[CAPTURE_CANARY[runnerOf(record)]];
+  return typeof value === 'number' ? value : null;
 }
 
 /**
