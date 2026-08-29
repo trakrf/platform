@@ -110,12 +110,13 @@ interface MockTestingApi {
   }): Promise<void>;
 }
 
-/**
- * Minimum gap between one harness disconnecting and the next connecting.
+/*
+ * REMOVED 2026-08-29: `CONNECTION_COOLDOWN_MS = 250` and its `lastDisconnectAt`
+ * companion. The measurement that justified them is kept here because it is the
+ * evidence for the removal, not against it (TRA-1193).
  *
- * MEASURED 2026-08-28, not guessed. The bridge session probed reconnect
- * directly -- disconnect, then reattempt with no client pacing -- producing a
- * curve rather than a number:
+ * MEASURED 2026-08-28 by the bridge session, probing reconnect directly --
+ * disconnect, then reattempt with no client pacing:
  *
  *   0ms    ->  25% connect   (15/20 refused "Device is busy")
  *   100ms  ->  95%           (1/20 refused)
@@ -123,28 +124,39 @@ interface MockTestingApi {
  *   500ms  -> 100%
  *   1000ms -> 100%
  *
- * 250 is the lowest rung with a clean 100%, so that is the value.
+ * That curve is real, and it is a curve about a caller that did not await its
+ * own teardown. `installWebBluetoothMock`'s uninstall discarded the mock's
+ * `teardown()` promise, so `cleanup()` resolved with socket closes in flight and
+ * the next connect raced them -- which is exactly what a 0ms gap reproduces.
+ * This constant was the compensation for that, and it worked.
  *
- * It was 1000, inherited from the deleted `RfidReaderTestClient` and measured by
- * nobody. That cost more than the wasted second: platform tried to derive the
- * bridge's recovery time from soak logs and got min 791ms / median 3083ms, which
- * looked like recovery data and was not -- the client never ATTEMPTED sooner
- * than 791ms BECAUSE THIS CONSTANT FORBADE IT. The instrument was measuring its
- * own pacing. The probe tested at 0, which is why it found a floor an order of
- * magnitude lower.
+ * The uninstall now awaits teardown, and teardown awaits `gatt.disconnect()`
+ * for every device it minted, which closes the socket and then waits the mock's
+ * own `postDisconnectDelay`. That value is 250ms, measured independently over
+ * 997 real cycles (socket close -> device released: median 16ms, p99 21ms, max
+ * 30ms; 250 keeps ~8x margin). Two independent measurements landing on the same
+ * number is corroboration, not coincidence.
  *
- * The general lesson: platform and the mock had each independently invented a
- * number for the same physical quantity, and neither had measured it.
+ * So the wait still happens -- it happens inside the path we now await, once,
+ * owned by the side that measured it. Keeping a second copy here would pay it
+ * twice and reintroduce the drift the mock's own history warns about: its
+ * browser bundle once carried 1100 by esbuild `define` while the source read
+ * 250, "one contract, two behaviours, selected by packaging".
+ *
+ * It also could not have fired where it was needed. `lastDisconnectAt` was
+ * module-level, and vitest's per-file isolation reset it to 0 for every spec
+ * file -- so the guard's `lastDisconnectAt > 0` test skipped it on the first
+ * `initialize()` of each file, which is precisely the file boundary its own
+ * doc comment said it existed for.
+ *
+ * Do not reintroduce a cooldown here without first showing that awaiting the
+ * teardown is insufficient. See TRA-1193 and TRA-1189.
  */
-const CONNECTION_COOLDOWN_MS = 250;
-
-/** Shared across harness instances, because the reader is shared across them. */
-let lastDisconnectAt = 0;
 
 export class CS108WorkerTestHarness {
   private worker!: CS108Reader;
   private transport: CS108BLETransport | null = null;
-  private uninstallMock: (() => void) | null = null;
+  private uninstallMock: (() => Promise<void>) | null = null;
   private domainEvents: NotificationEvent[] = [];
   private eventWaiters: Map<string, (event: NotificationEvent) => void> = new Map();
 
@@ -158,11 +170,9 @@ export class CS108WorkerTestHarness {
    * accident rather than by measurement.
    */
   async initialize(): Promise<void> {
-    const sinceDisconnect = Date.now() - lastDisconnectAt;
-    if (lastDisconnectAt > 0 && sinceDisconnect < CONNECTION_COOLDOWN_MS) {
-      await new Promise((resolve) => setTimeout(resolve, CONNECTION_COOLDOWN_MS - sinceDisconnect));
-    }
-
+    // No cooldown here any more: `cleanup()` awaits the mock's teardown, which
+    // does not resolve until the socket has closed and the mock's own measured
+    // post-disconnect wait has elapsed. See the note above the class.
     this.uninstallMock = installWebBluetoothMock();
 
     // Before the worker exists: it can emit during construction.
@@ -426,10 +436,12 @@ export class CS108WorkerTestHarness {
     } catch {
       // Teardown must complete; the transport reports its own errors.
     }
-    lastDisconnectAt = Date.now();
     this.transport = null;
 
-    this.uninstallMock?.();
+    // AWAIT it. This is what collects the mock's post-disconnect wait, and what
+    // stops the next spec file's connect racing this file's socket closes and
+    // being refused as busy by our own previous session (TRA-1193).
+    await this.uninstallMock?.();
     this.uninstallMock = null;
 
     this.domainEvents = [];

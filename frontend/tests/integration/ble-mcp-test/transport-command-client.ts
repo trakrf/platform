@@ -55,7 +55,7 @@ interface BLEPortMessage {
 export class TransportCommandClient {
   private transport: CS108BLETransport | null = null;
   private port: MessagePort | null = null;
-  private uninstallMock: (() => void) | null = null;
+  private uninstallMock: (() => Promise<void>) | null = null;
 
   /**
    * Waiters queued by `sendCommand`, oldest first.
@@ -147,7 +147,10 @@ export class TransportCommandClient {
       this.transport = null;
       this.port = null;
       this.waiters = [];
-      this.uninstallMock?.();
+      // AWAIT it — the mock's teardown closes the socket and waits its measured
+      // post-disconnect delay. Discarding the promise let the next connect race
+      // the release and be refused as busy by this same session (TRA-1193).
+      await this.uninstallMock?.();
       this.uninstallMock = null;
     }
   }
