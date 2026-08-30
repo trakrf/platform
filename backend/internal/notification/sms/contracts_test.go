@@ -1,94 +1,73 @@
-package sms
+package sms_test
 
 import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/trakrf/platform/backend/internal/notification/sms"
 )
 
-type contractSender struct {
-	command Command
+type contractSender struct{}
+
+func (contractSender) SendSMS(context.Context, sms.Command) (sms.Submission, error) {
+	return sms.Submission{}, nil
 }
 
-func (s *contractSender) SendSMS(_ context.Context, command Command) (Submission, error) {
-	s.command = command
-	return Submission{
-		ProviderMessageID: "SM123",
-		Status:            "queued",
-	}, nil
-}
+type contractCallbackConsumer struct{}
 
-type contractCallbackConsumer struct {
-	status  ProviderStatus
-	keyword InboundKeyword
-}
-
-func (c *contractCallbackConsumer) HandleStatus(_ context.Context, status ProviderStatus) error {
-	c.status = status
+func (contractCallbackConsumer) HandleStatus(context.Context, sms.ProviderStatus) error {
 	return nil
 }
 
-func (c *contractCallbackConsumer) HandleKeyword(_ context.Context, keyword InboundKeyword) error {
-	c.keyword = keyword
+func (contractCallbackConsumer) HandleKeyword(context.Context, sms.InboundKeyword) error {
 	return nil
 }
 
-var _ Sender = (*contractSender)(nil)
-var _ CallbackConsumer = (*contractCallbackConsumer)(nil)
+var _ sms.Sender = contractSender{}
+var _ sms.CallbackConsumer = contractCallbackConsumer{}
 
-func TestProviderNeutralSMSContracts(t *testing.T) {
-	command := Command{
+func TestPublicSMSContracts(t *testing.T) {
+	_ = sms.Command{
 		DeliveryID: "delivery-123",
 		ToE164:     "+15551234567",
 		Body:       "Your tracker is ready.",
 	}
-	sender := &contractSender{}
-
-	submission, err := sender.SendSMS(context.Background(), command)
-	if err != nil {
-		t.Fatalf("SendSMS() error = %v", err)
+	_ = sms.Submission{
+		ProviderMessageID: "SM123",
+		Status:            "queued",
 	}
-	if sender.command != command {
-		t.Errorf("SendSMS() command = %#v, want %#v", sender.command, command)
+	_ = sms.ProviderError{
+		Kind:       sms.ErrorTransient,
+		Code:       "429",
+		HTTPStatus: 429,
 	}
-	if submission != (Submission{ProviderMessageID: "SM123", Status: "queued"}) {
-		t.Errorf("SendSMS() submission = %#v", submission)
-	}
-
-	now := time.Date(2026, time.August, 30, 12, 0, 0, 0, time.UTC)
-	consumer := &contractCallbackConsumer{}
-	status := ProviderStatus{
+	_ = sms.ProviderStatus{
 		ProviderMessageID: "SM123",
 		Status:            "delivered",
 		ErrorCode:         "",
-		OccurredAt:        now,
+		OccurredAt:        time.Date(2026, time.August, 30, 12, 0, 0, 0, time.UTC),
 	}
-	keyword := InboundKeyword{
+	_ = sms.InboundKeyword{
 		ProviderMessageID: "SM124",
 		FromE164:          "+15551234567",
 		ToE164:            "+15557654321",
 		Keyword:           "STOP",
-		ReceivedAt:        now,
+		ReceivedAt:        time.Date(2026, time.August, 30, 12, 0, 0, 0, time.UTC),
 	}
 
-	if err := consumer.HandleStatus(context.Background(), status); err != nil {
-		t.Fatalf("HandleStatus() error = %v", err)
+	const (
+		wantTransient sms.ErrorKind = "transient"
+		wantPermanent sms.ErrorKind = "permanent"
+		wantRejected  sms.ErrorKind = "rejected"
+	)
+	if sms.ErrorTransient != wantTransient {
+		t.Errorf("ErrorTransient = %q, want %q", sms.ErrorTransient, wantTransient)
 	}
-	if err := consumer.HandleKeyword(context.Background(), keyword); err != nil {
-		t.Fatalf("HandleKeyword() error = %v", err)
+	if sms.ErrorPermanent != wantPermanent {
+		t.Errorf("ErrorPermanent = %q, want %q", sms.ErrorPermanent, wantPermanent)
 	}
-	if consumer.status != status {
-		t.Errorf("HandleStatus() status = %#v, want %#v", consumer.status, status)
-	}
-	if consumer.keyword != keyword {
-		t.Errorf("HandleKeyword() keyword = %#v, want %#v", consumer.keyword, keyword)
-	}
-
-	providerError := ProviderError{Kind: ErrorTransient, Code: "429", HTTPStatus: 429}
-	if providerError.Kind != ErrorTransient {
-		t.Errorf("ProviderError.Kind = %q, want %q", providerError.Kind, ErrorTransient)
-	}
-	if ErrorPermanent != "permanent" || ErrorRejected != "rejected" {
-		t.Errorf("provider error kinds = %q, %q", ErrorPermanent, ErrorRejected)
+	if sms.ErrorRejected != wantRejected {
+		t.Errorf("ErrorRejected = %q, want %q", sms.ErrorRejected, wantRejected)
 	}
 }
