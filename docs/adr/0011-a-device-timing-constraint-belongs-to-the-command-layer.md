@@ -182,6 +182,45 @@ precisely the case being argued about. The literal reading is therefore an
 extrapolation to a case the document does not cover. That is a reason for
 humility about the decision, not a reason to override it.
 
+## ⚠ The vendor's own application does not honour this note
+
+Found 2026-08-30, after the decision above was recorded, in CSL's reference app
+(`CS108-Mobile-CSharp-DotNetStd-App-v4`, `Library/CSLibrary/RFIDReader/`):
+
+```csharp
+public void StopOperation() {
+    byte[] cmd = { 0x40, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+    _deviceHandler.SendAsync(0, 0, DOWNLINKCMD.RFIDCMD, cmd, ...);
+}                                          // returns immediately
+
+public Result StartOperation(Operation opertion) {
+    MacReadRegister(MACREGISTER.HST_INV_CFG, ref Value);      // no delay
+    MacWriteRegister(MACREGISTER.INV_CYCLE_DELAY, 0);
+```
+
+`StopOperation()` sends the ABORT and returns. `StartOperation()` issues register
+reads and writes immediately. There is no sleep, no delay and no state gate in
+the library or in any of its ~20 call sites across the app.
+
+**So the sentence in Appendix C is not a rule the vendor's own software follows.**
+Taken with the placement (worked examples, where the ABORT ends the flow and no
+restart is ever shown) and with 0xA004 — whose default makes the host's ABORT
+arrive inside the firmware abort's own window — the weight of evidence is that
+"another command" is guidance for those examples rather than a bus-level
+prohibition.
+
+**The decision is narrowed rather than reversed.** The window is kept for
+commands that power or reconfigure the module, and a same-mode inventory restart
+is exempted (`SequenceCommand.ignoresQuietPeriod`, declared on
+`RFID_START_SEQUENCE`). That leaves us strictly more conservative than the
+vendor while removing the ~2 s per-cycle cost that was actively harmful.
+
+Deleting the window outright is defensible on this evidence and is one constant
+away. It is not done here because the correctness half of TRA-1185 — "the code
+waits half of what the vendor requires" — was one of the three defects this pass
+set out to close, and discarding it wants a bench measurement rather than a
+reading of someone else's source.
+
 **What would reopen either:** operators reporting the mode transition, or trigger
 cycling, as slow — or a bench measurement of `POST_ABORT_QUIET_MS` at 0 / 1000 /
 2000 under hard trigger cycling showing no misbehaviour at the shorter values.
