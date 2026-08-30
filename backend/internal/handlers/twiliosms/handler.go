@@ -4,6 +4,7 @@ package twiliosms
 import (
 	"errors"
 	"net/url"
+	"time"
 
 	"github.com/trakrf/platform/backend/internal/notification/sms"
 	"github.com/trakrf/platform/backend/internal/notification/twilio"
@@ -15,6 +16,7 @@ type Handler struct {
 	consumer      sms.CallbackConsumer
 	publicBaseURL string
 	validator     client.RequestValidator
+	now           func() time.Time
 }
 
 // NewHandler builds a Twilio callback handler only from a complete Twilio
@@ -31,6 +33,7 @@ func NewHandler(config twilio.Config, consumer sms.CallbackConsumer) (*Handler, 
 		consumer:      consumer,
 		publicBaseURL: config.PublicBaseURL,
 		validator:     client.NewRequestValidator(config.AuthToken),
+		now:           time.Now,
 	}, nil
 }
 
