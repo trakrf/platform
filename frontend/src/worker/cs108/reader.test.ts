@@ -1008,6 +1008,18 @@ describe('CS108Reader', () => {
    * "somebody called startScanning".
    */
   describe('trigger convergence after a start completes', () => {
+    /**
+     * Let the backstop run, and let whatever it starts finish.
+     *
+     * Convergence is scheduled on a macrotask so it lands after anything
+     * already in flight; the scan it then starts takes another tick of its own
+     * to reach its final state. One tick observes the reader mid-start and
+     * reads BUSY, which looks like the defect rather than the fix.
+     */
+    const settleConvergence = async () => {
+      for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0));
+    };
+
     beforeEach(async () => {
       await reader.connect();
       await reader.setMode(ReaderMode.INVENTORY);
@@ -1067,6 +1079,34 @@ describe('CS108Reader', () => {
 
       // Ends held, so it ends scanning.
       expect(reader.getState()).toBe(ReaderState.SCANNING);
+    });
+
+    it('reconciles a press dropped during a settings push — the hardware repro', async () => {
+      // Found on hardware 2026-08-30, within seconds: cycle the trigger while
+      // moving between tabs and the reader ends up with the trigger DOWN and
+      // nothing scanning. Tab navigation pushes settings; a press landing
+      // during that push is dropped because the reader is BUSY, the push
+      // completes and publishes CONNECTED, and before consolidation nothing
+      // re-read the trigger level. No further edge is coming — the finger is
+      // already down — so it stayed stranded until the operator let go.
+      //
+      // applySettings() was one of two paths with no reconciliation of its own.
+      // The battery poll is the other, and it is worse because it fires at an
+      // unpredictable 60s point (TRA-1212).
+      (reader as any).triggerState = true;
+
+      await reader.setSettings({ rfid: { transmitPower: 25 } });
+      await settleConvergence();
+
+      expect(reader.getState()).toBe(ReaderState.SCANNING);
+    });
+
+    it('leaves a settings push alone when the trigger is not held', async () => {
+      // The other half: convergence must not invent a scan nobody asked for.
+      await reader.setSettings({ rfid: { transmitPower: 25 } });
+      await settleConvergence();
+
+      expect(reader.getState()).toBe(ReaderState.CONNECTED);
     });
 
     it('issues exactly one start sequence no matter how hard the trigger is cycled', async () => {

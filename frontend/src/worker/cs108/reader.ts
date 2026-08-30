@@ -64,6 +64,8 @@ class CS108Reader extends BaseReader {
   private lastBatteryPercentage = -1;
   private scanningRequested = false; // Track if scanning was explicitly requested (button/trigger)
   private lastAppliedTargetEPC?: string; // The LOCATE tag mask actually written to hardware
+  private scanStartedByTrigger = false;  // Whether the running scan is the trigger's to stop
+  private converging = false;            // Re-entrancy guard for convergeToTriggerState()
 
   constructor() {
     super();
@@ -87,7 +89,23 @@ class CS108Reader extends BaseReader {
     // Create state context for CommandManager
     const stateContext: StateContext = {
       getReaderState: () => this.readerState,
-      setReaderState: (state) => this.setReaderState(state)
+      setReaderState: (state) => {
+        this.setReaderState(state);
+        // THE choke point. Every sequence that finishes publishes its final
+        // state through here, so this is the one place that reliably observes
+        // "the reader has stopped being BUSY" — whichever path made it busy.
+        // Trigger edges are dropped while BUSY on purpose; this is where the
+        // LEVEL gets reconciled afterwards, so a dropped press cannot strand
+        // the reader. Deferred, because converging re-enters start/stop.
+        if (state === ReaderState.CONNECTED) {
+          // setTimeout, NOT queueMicrotask. Convergence is a BACKSTOP: it must
+          // run after everything already in flight, and callers mid-operation
+          // resume on microtasks. Scheduling it as a microtask makes it race
+          // the very caller that just finished a stop and is about to start
+          // again — two startScanning() calls, one of them throwing.
+          setTimeout(() => { void this.convergeToTriggerState(); }, 0);
+        }
+      }
     };
 
     // Initialize command manager with transport callback, notification handler, and state context
@@ -456,12 +474,11 @@ class CS108Reader extends BaseReader {
       // start scanning immediately. This handles the case where the trigger
       // press triggered the mode switch (e.g., useScanToInput) and the reader
       // missed the original trigger notification because it was in IDLE mode.
-      if (this.triggerState &&
-          this.readerState === ReaderState.CONNECTED &&
-          (mode === ReaderMode.BARCODE || mode === ReaderMode.INVENTORY || mode === ReaderMode.LOCATE)) {
-        logger.debug('[setMode] Trigger held after mode change - auto-starting scan');
-        await this.startScanning();
-      }
+      // The mode sequence published CONNECTED on its way out, which schedules
+      // convergeToTriggerState(); a trigger still held is picked up there.
+      // Awaited here as well so setMode() does not resolve before the scan it
+      // implies has been started — callers and tests both rely on that.
+      await this.convergeToTriggerState();
 
     } catch (error) {
       logger.error(`[setMode] Failed to set ${mode} mode:`, error);
@@ -753,6 +770,70 @@ class CS108Reader extends BaseReader {
     logger.debug('[Reader] Settings processing complete');
   }
   
+  /**
+   * Reconcile what the reader is DOING against where the trigger actually IS.
+   *
+   * The rule, and it is one rule rather than a set of special cases: trigger
+   * edges that arrive while the reader is BUSY are dropped, and when the reader
+   * settles the LEVEL is reconciled. Dropping edges is right — the alternative
+   * is queueing work for edges the operator has already moved past — but it is
+   * only safe if the level is honoured afterwards, because a dropped press is
+   * followed by no further edge. The finger is already down.
+   *
+   * This replaces three hand-placed reconciliations that had grown apart:
+   * one at the tail of stopScanning(), one at the tail of setMode(), one at the
+   * tail of startScanning(). Between them they left two paths uncovered —
+   * applySettings() and the battery poll both complete a sequence, publish
+   * CONNECTED and never looked at the trigger — so a press dropped during a
+   * settings push or a battery check stranded the reader with the trigger held
+   * and nothing scanning. Found on hardware within seconds of trying, by
+   * cycling the trigger while moving between tabs.
+   *
+   * Consolidating is the fix rather than adding a fourth site: N sites means N
+   * places to forget, and the two that were forgotten are exactly the two that
+   * fire unpredictably.
+   */
+  private async convergeToTriggerState(): Promise<void> {
+    if (this.converging) return;
+
+    // Only meaningful once the reader has settled. BUSY means work is still in
+    // flight and its own completion will bring us back here.
+    if (this.readerState !== ReaderState.CONNECTED && this.readerState !== ReaderState.SCANNING) {
+      return;
+    }
+    if (this.readerMode !== ReaderMode.INVENTORY &&
+        this.readerMode !== ReaderMode.LOCATE &&
+        this.readerMode !== ReaderMode.BARCODE) {
+      return;
+    }
+
+    const wantsScanning = this.triggerState;
+    const isScanning = this.readerState === ReaderState.SCANNING;
+    if (wantsScanning === isScanning) return;
+
+    // Do not tear down a scan the BUTTON started just because no trigger is
+    // held — that scan is not the trigger's to stop.
+    if (isScanning && !this.scanStartedByTrigger) return;
+
+    this.converging = true;
+    try {
+      if (wantsScanning) {
+        logger.debug('[Reader] Converging to trigger held - starting scan');
+        await this.startScanning();
+      } else {
+        logger.debug('[Reader] Converging to trigger released - stopping scan');
+        await this.stopScanning();
+      }
+    } catch (error) {
+      // Convergence is best-effort reconciliation, not a user-initiated
+      // command. Rethrowing here would surface as an unhandled rejection from
+      // a microtask with no caller to receive it.
+      logger.error('[Reader] Trigger convergence failed:', error);
+    } finally {
+      this.converging = false;
+    }
+  }
+
   async startScanning(): Promise<void> {
     logger.debug(`[Reader] Starting scan in ${this.readerMode} mode, state=${this.readerState}`);
 
@@ -764,6 +845,7 @@ class CS108Reader extends BaseReader {
     // end: only a scan the TRIGGER started should be undone by the trigger
     // coming up. A button-started scan is not the trigger's to stop.
     const startedWithTriggerHeld = this.triggerState;
+    this.scanStartedByTrigger = startedWithTriggerHeld;
 
     // Validate we're in a ready state
     if (this.readerState !== ReaderState.CONNECTED) {
@@ -847,6 +929,8 @@ class CS108Reader extends BaseReader {
         logger.debug('[Reader] Trigger released during start, converging by stopping');
         await this.stopScanning();
       }
+      // Anything else the trigger did while this was BUSY is reconciled by
+      // convergeToTriggerState() when the sequence's final state is published.
     } catch (error) {
       logger.error('[Reader] Failed to start scanning:', error);
       // CommandManager already set state to ERROR
@@ -916,18 +1000,12 @@ class CS108Reader extends BaseReader {
       // CommandManager already set state to READY
       logger.debug('[Reader] Scan stopped successfully');
 
-      // Reconciliation: Check if trigger was pressed while we were stopping
-      // Only reconcile if we're in a scanning mode (not IDLE)
-      if (this.triggerState &&
-          (this.readerMode === ReaderMode.INVENTORY ||
-           this.readerMode === ReaderMode.LOCATE ||
-           this.readerMode === ReaderMode.BARCODE)) {
-        logger.debug('[Reader] Trigger pressed during stop, reconciling by starting');
-        // Reset the flag before recursing
-        this.isStoppingScanning = false;
-        await this.startScanning();
-        return; // Exit early to avoid clearing flag twice
-      }
+      // A trigger pressed while we were stopping used to be reconciled by a
+      // bespoke restart here. It is now convergeToTriggerState()'s job, fired
+      // when this stop publishes CONNECTED — same outcome, one implementation.
+      // The flag has to be cleared first either way, or the restart it triggers
+      // sees a stop still in progress.
+      this.isStoppingScanning = false;
     } catch (error) {
       logger.error('[Reader] Failed to stop scanning:', error);
       // CommandManager already set state to ERROR
