@@ -1,14 +1,22 @@
 /**
  * CS108 Command Manager
- * 
- * Manages serial command execution for CS108 hardware:
- * - Strict serial execution (one command at a time)
- * - Command timeouts with configurable values
- * - Response matching via event codes
- * - Queue clearing on errors or mode switches
- * 
- * CS108 requires serial command execution with 2-3 second timeouts.
- * Commands are queued and executed one at a time, waiting for responses.
+ *
+ * The single owner of the wire to the reader. It guarantees three things, and
+ * each of them replaces something that used to be asserted rather than enforced:
+ *
+ * - **Serial execution by QUEUEING.** A second caller waits; it is not thrown
+ *   at. The throw used to be the mechanism, which made every caller responsible
+ *   for a race it could not see — and the losing call was simply dropped, so a
+ *   mode change nobody reapplied left the reader doing what it was doing before
+ *   (TRA-1143).
+ * - **Responses matched to the command that was sent**, by op code. Any
+ *   command-class packet used to settle whatever was pending (TRA-1154).
+ * - **Inter-command quiet windows**, declared by the sequence and paid by the
+ *   NEXT dispatch rather than by the caller that armed them (TRA-1185).
+ *
+ * The queue is why the other two can be simple. Because exactly one operation
+ * holds the wire at a time, `activeCommand` is a single slot rather than a map,
+ * and the quiet window is a single deadline rather than a per-command schedule.
  */
 
 import type { CS108Event, CS108Packet } from './type.js';
@@ -29,20 +37,18 @@ export class SequenceAbortedError extends Error {
 }
 
 /**
- * Thrown when a second command is issued while one is still in flight.
+ * An INVARIANT VIOLATION: a command was dispatched while one was in flight.
  *
- * Typed rather than a bare `Error` because it has a real consumer: `reader.ts`
- * treats it as benign on the settings path — a concurrent `setMode()` leaves the
- * mutex held, and the settings are already stored, so the mode change applies
- * what the losing call could not (TRA-1091).
+ * This used to be a routine outcome — the mutex rejecting a concurrent caller —
+ * and `reader.ts` carried two branches treating it as benign, because on the
+ * settings path it genuinely was (TRA-1091). Both are gone. Since the queue
+ * landed, no reachable path can produce this: `dispatchCommand` runs only from
+ * inside `runExclusive`, and `runExclusive` admits one operation at a time.
  *
- * That consumer used to identify it by `message.includes('Command already
- * active')`, which is an OVER-SATISFIABLE match: any error whose message
- * happened to contain that text took the benign branch. A benign branch that
- * matches too widely does not fail loudly — it SWALLOWS the real error and
- * records a success, which is the one failure mode an unattended soak cannot
- * recover from afterwards. The message stays identical for the log; the class is
- * what decides.
+ * It is kept, and kept loud, because "cannot happen" and "is not checked" are
+ * different claims. If it ever fires, the queue has been bypassed and the wire
+ * has two owners — which is not a condition any caller should absorb as benign.
+ * A benign branch for an impossible error is the shape that swallows a real one.
  */
 /**
  * Marks an error as having already been through the sequence retry.
@@ -92,6 +98,22 @@ export class CommandInFlightError extends Error {
   }
 }
 
+/**
+ * The command-issuing surface handed to a `runExclusive()` body.
+ *
+ * A caller that needs several commands to reach the hardware with nothing
+ * interleaved between them takes the wire once and drives it through this,
+ * rather than making N separate public calls that the queue is free to
+ * interleave. Handing out a scoped runner — rather than letting the public
+ * methods detect re-entrancy from a flag — is what keeps that correct: while an
+ * exclusive body awaits, unrelated code (a notification handler, say) really can
+ * run, and a flag cannot tell that call apart from the body's own.
+ */
+export interface CommandRunner {
+  command(event: CS108Event, payload?: Uint8Array): Promise<unknown>;
+  sequence(sequence: CommandSequence): Promise<void>;
+}
+
 export class CommandManager {
   private packetHandler: PacketHandler;
   private currentCommandResolve: ((result: unknown) => void) | null = null;
@@ -99,6 +121,27 @@ export class CommandManager {
   private currentCommandPromise: Promise<unknown> | null = null;
   private currentTimeout: NodeJS.Timeout | null = null;
   private isAborted = false;
+
+  /**
+   * The command awaiting a response, or null. The identity TRA-1154 found
+   * missing: without it `handleCommandResponse()` had nothing to compare an
+   * arriving packet against, so it compared nothing.
+   */
+  private inFlight: CS108Event | null = null;
+
+  /**
+   * FIFO tail. Chained through `.then(fn, fn)` so a rejection cannot strand
+   * everything queued behind it — a poisoned chain would be worse than the race
+   * it replaces, because one failure would mute the reader for the rest of the
+   * session.
+   */
+  private tail: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Wall-clock deadline before which no command may be SENT, from
+   * `SequenceCommand.quietPeriodAfter`. 0 means the wire is free.
+   */
+  private quietUntil = 0;
 
   // Configuration
   private readonly DEFAULT_TIMEOUT = 2500; // 2.5 seconds
@@ -124,22 +167,68 @@ export class CommandManager {
   }
   
   /**
-   * Execute a single command and wait for response
-   * No queue - commands executed serially via await in sequences
+   * The command in flight, for callers that need to reason about correlation.
+   */
+  get activeCommand(): CS108Event | null {
+    return this.inFlight;
+  }
+
+  /**
+   * Take the wire for the duration of `body`, which may issue any number of
+   * commands and sequences through the runner it is given without anything
+   * interleaving between them.
+   *
+   * Waiting rather than throwing is the whole of TRA-1143. Ordering is FIFO;
+   * a body that fails reports to its own caller and releases the wire.
+   */
+  async runExclusive<T>(body: (run: CommandRunner) => Promise<T>): Promise<T> {
+    const runner: CommandRunner = {
+      command: (event, payload) => this.dispatchCommand(event, payload),
+      sequence: (sequence) => this.runSequence(sequence)
+    };
+    const result = this.tail.then(() => body(runner), () => body(runner));
+    this.tail = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  /**
+   * Execute a single command and wait for its response.
+   *
+   * Queues behind whatever holds the wire. Use `runExclusive()` instead when
+   * several commands must reach the hardware as one unit.
    */
   async executeCommand(event: CS108Event, payload?: Uint8Array): Promise<unknown> {
+    return this.runExclusive(run => run.command(event, payload));
+  }
+
+  /**
+   * Put one command on the wire. Callers reach this only through
+   * `runExclusive()`, which is what makes the single-slot state below safe.
+   */
+  private async dispatchCommand(
+    event: CS108Event,
+    payload?: Uint8Array,
+    quietPeriodAfter?: number
+  ): Promise<unknown> {
     // Check if sequence was aborted
     if (this.isAborted) {
       throw new SequenceAbortedError('Command execution aborted');
     }
 
-    // Check if another command is already active
-    if (this.currentCommandResolve) {
+    // Honour any quiet window the previous command declared. Re-check the abort
+    // flag afterwards: an abort landing during the wait must still take effect,
+    // and the wait can be seconds long.
+    await this.awaitQuietWindow();
+    if (this.isAborted) {
+      throw new SequenceAbortedError('Command execution aborted');
+    }
+
+    if (this.inFlight) {
       throw new CommandInFlightError();
     }
 
     // Create and track the promise
-    this.currentCommandPromise = new Promise((resolve, reject) => {
+    const commandPromise = new Promise((resolve, reject) => {
       // Build packet FIRST (before setting up handlers to avoid race)
       const packet = this.packetHandler.buildCommand(event, payload);
 
@@ -151,18 +240,51 @@ export class CommandManager {
       }, timeout);
 
       // NOW set up current command tracking (right before send)
+      this.inFlight = event;
       this.currentCommandResolve = resolve;
       this.currentCommandReject = reject;
+
+      // Arm the quiet window at SEND, not at ack. The vendor requirement is
+      // worded "after the ABORT command", so the ack round trip is time the
+      // reader has already spent clearing its buffer and counts toward it.
+      if (quietPeriodAfter) {
+        this.quietUntil = Date.now() + quietPeriodAfter;
+      }
 
       // Log and send
       logger.debug(`[CommandManager] Sending command: ${event.name} (0x${event.eventCode.toString(16)})`);
       this.sendToTransport(packet);
     });
 
-    return this.currentCommandPromise;
+    this.currentCommandPromise = commandPromise;
+    return commandPromise;
   }
-  
-  
+
+  /**
+   * Sleep out whatever remains of the current quiet window.
+   */
+  private async awaitQuietWindow(): Promise<void> {
+    const remaining = this.quietUntil - Date.now();
+    if (remaining <= 0) return;
+
+    logger.debug(`[CommandManager] Holding ${remaining}ms for the device's quiet window`);
+    await new Promise(resolve => setTimeout(resolve, remaining));
+  }
+
+  /**
+   * Forget the command in flight and its timeout, whatever settled it.
+   */
+  private clearInFlight(): void {
+    if (this.currentTimeout) {
+      clearTimeout(this.currentTimeout);
+      this.currentTimeout = null;
+    }
+    this.inFlight = null;
+    this.currentCommandResolve = null;
+    this.currentCommandReject = null;
+  }
+
+
   /**
    * Handle command response packet
    * Called by Reader after routing parsed packet
@@ -177,8 +299,8 @@ export class CommandManager {
     }
 
     // Check if this is an autonomous notification (no command waiting)
-    const isAutonomous = !this.currentCommandResolve;
-    if (isAutonomous) {
+    const inFlight = this.inFlight;
+    if (!inFlight) {
       logger.debug(`[CommandManager] Received autonomous notification ${packet.event.name} (0x${packet.eventCode.toString(16)}) - no command waiting, will be handled by notification router`);
       // Autonomous notifications will be handled by the notification router
       return;
@@ -200,14 +322,26 @@ export class CommandManager {
       }
     }
     
-    logger.debug(`[CommandManager] Response received: ${packet.event.name}`);
-    
-    // Clear timeout
-    if (this.currentTimeout) {
-      clearTimeout(this.currentTimeout);
-      this.currentTimeout = null;
+    // Does this packet actually answer the command in flight? Until TRA-1197
+    // nothing asked: any command-class packet settled whatever was pending, so
+    // a battery reading could resolve a STOP_INVENTORY.
+    //
+    // ERROR_NOTIFICATION is the one deliberate exception, and it is an exception
+    // by protocol rather than by convenience: a rejection is reported under
+    // 0xA101 and never under the op code it is rejecting, so op-code equality
+    // cannot be the whole rule. Written down here because an exception nobody
+    // wrote down is rediscovered as a bug.
+    const isErrorResponse = packet.event.name === 'ERROR_NOTIFICATION';
+    if (!isErrorResponse && packet.eventCode !== inFlight.eventCode) {
+      logger.debug(
+        `[CommandManager] ${packet.event.name} (0x${packet.eventCode.toString(16)}) does not answer ` +
+        `${inFlight.name} (0x${inFlight.eventCode.toString(16)}) - left for the notification router`
+      );
+      return;
     }
-    
+
+    logger.debug(`[CommandManager] Response received: ${packet.event.name}`);
+
     // Use parsed payload if available, otherwise raw payload
     const result = packet.payload ?? packet.rawPayload;
     
@@ -226,10 +360,9 @@ export class CommandManager {
     const reject = this.currentCommandReject;
 
     // Clear current command
-    this.currentCommandResolve = null;
-    this.currentCommandReject = null;
+    this.clearInFlight();
     this.currentCommandPromise = null;
-    
+
     if (success) {
       // Apply settling delay if specified
       if (packet.event.settlingDelay) {
@@ -274,9 +407,7 @@ export class CommandManager {
     const reject = this.currentCommandReject;
 
     // Clear current command
-    this.currentCommandResolve = null;
-    this.currentCommandReject = null;
-    this.currentTimeout = null;
+    this.clearInFlight();
 
     // Reject with timeout error
     reject(new Error('Command timeout'));
@@ -298,12 +429,7 @@ export class CommandManager {
 
     const reject = this.currentCommandReject;
 
-    if (this.currentTimeout) {
-      clearTimeout(this.currentTimeout);
-    }
-    this.currentCommandResolve = null;
-    this.currentCommandReject = null;
-    this.currentTimeout = null;
+    this.clearInFlight();
 
     logger.warn(`[CommandManager] Command failed before send: ${reason}`);
     reject(new Error(reason));
@@ -343,16 +469,20 @@ export class CommandManager {
    * Check if manager is idle
    */
   isIdle(): boolean {
-    return !this.currentCommandResolve;
+    return this.inFlight === null;
   }
 
   /**
-   * Check if we're waiting for a response
-   * Used by Reader to determine if packet should be routed as command response
+   * Is THIS packet the response the manager is waiting for?
+   *
+   * The parameter used to be `_packet` — literally ignored — so the caller in
+   * reader.ts read as per-packet matching and meant "is anything pending".
+   * It now answers the question its name asks.
    */
-  isWaitingForResponse(_packet: CS108Packet): boolean {
-    // If no command is active, we're not waiting for anything
-    return this.currentCommandResolve !== null;
+  isWaitingForResponse(packet: CS108Packet): boolean {
+    if (!this.inFlight) return false;
+    if (packet.event.name === 'ERROR_NOTIFICATION') return true;
+    return packet.eventCode === this.inFlight.eventCode;
   }
 
   /**
@@ -363,9 +493,20 @@ export class CommandManager {
   }
   
   /**
-   * Execute a sequence of commands in order
+   * Execute a sequence of commands in order.
+   *
+   * Queues behind whatever holds the wire, and holds it for the whole sequence:
+   * two sequences issued at once run one after the other rather than having
+   * their steps shuffled together.
    */
   async executeSequence(sequence: CommandSequence): Promise<void> {
+    return this.runExclusive(run => run.sequence(sequence));
+  }
+
+  /**
+   * The body of a sequence. Reached only from inside `runExclusive()`.
+   */
+  private async runSequence(sequence: CommandSequence): Promise<void> {
     logger.debug(`[CommandManager] Executing sequence of ${sequence.length} commands`);
 
     // Reset abort flag for new sequence
@@ -386,8 +527,8 @@ export class CommandManager {
       logger.debug(`[CommandManager] Sequence step ${i + 1}/${sequence.length}: ${cmd.event.name} (0x${cmd.event.eventCode.toString(16)})`)
 
       try {
-        // executeCommand will throw SequenceAbortedError if aborted
-        await this.executeCommand(cmd.event, cmd.payload);
+        // dispatchCommand will throw SequenceAbortedError if aborted
+        await this.dispatchCommand(cmd.event, cmd.payload, cmd.quietPeriodAfter);
         logger.debug(`[CommandManager] Sequence step ${i + 1}/${sequence.length} completed: ${cmd.event.name}`);
       } catch (error: unknown) {
         // Set ERROR state on failure (if we have state context)
@@ -408,7 +549,7 @@ export class CommandManager {
           logger.debug(`[CommandManager] Retrying ${cmd.event.name} per sequence configuration`);
           await new Promise(resolve => setTimeout(resolve, 100)); // Brief delay
           try {
-            await this.executeCommand(cmd.event, cmd.payload);
+            await this.dispatchCommand(cmd.event, cmd.payload, cmd.quietPeriodAfter);
           } catch (retryError: unknown) {
             // Mark to prevent infinite retry, WITHOUT rebuilding the error —
             // see ALREADY_RETRIED. Rebuilding is what lost the class.

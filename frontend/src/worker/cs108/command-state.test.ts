@@ -195,6 +195,9 @@ describe('CommandManager transport write failure', () => {
     try {
       const manager = new CommandManager(vi.fn());
       const pending = manager.executeCommand(GET_BATTERY_VOLTAGE);
+      // The command reaches the transport a microtask later now that dispatch
+      // goes through the queue; failing it before then would fail nothing.
+      await vi.advanceTimersByTimeAsync(0);
 
       manager.failCurrentCommand('Command queue full, write dropped');
 

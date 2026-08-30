@@ -44,7 +44,16 @@ vi.mock('./command.js', async (importOriginal) => ({
       executeCommand: vi.fn(),
       handleCommandResponse: vi.fn(),
       isWaitingForResponse: vi.fn().mockReturnValue(false),
-      isIdle: vi.fn().mockReturnValue(true)
+      isIdle: vi.fn().mockReturnValue(true),
+      // Delegates to the same spies rather than being its own, so a caller that
+      // takes the wire once and issues N commands through the runner is still
+      // observable through `executeSequence`/`executeCommand`. A mock that
+      // recorded runExclusive separately would make every existing assertion
+      // about mode sequences silently stop seeing the settings path.
+      runExclusive: vi.fn(async (body: (run: unknown) => Promise<unknown>) => body({
+        command: (...args: unknown[]) => mockManager.executeCommand(...args),
+        sequence: (...args: unknown[]) => mockManager.executeSequence(...args)
+      }))
     };
     return mockManager;
   }),
@@ -505,6 +514,7 @@ describe('CS108Reader', () => {
    */
   describe('LOCATE tag mask sourcing (TRA-1091)', () => {
     const TARGET_EPC = 'E280689400000000001018DD';
+    const SECOND_TARGET_EPC = 'E280689400000000001018EE';
 
     // Last N commands of a mode sequence — buildModeSequences() appends the
     // mask sequence last.
@@ -570,25 +580,40 @@ describe('CS108Reader', () => {
       ).resolves.toBeUndefined();
     });
 
-    it('treats the mutex collision as benign and still builds the mask', async () => {
-      // Reproduce the reported interleaving: the settings push loses the race
-      // and rejects with the mutex error, which is not a SequenceAbortedError,
-      // so it used to miss setSettings' graceful branch and surface as ERROR on
-      // the primary Locate path. It is now swallowed like an abort, because
-      // the mode change applies the mask this call could not.
+    it('surfaces a mutex collision rather than swallowing it', async () => {
+      // This test used to assert the OPPOSITE, and it was right to: a settings
+      // push that lost the race rejected with CommandInFlightError, and
+      // swallowing it was correct because the mode change would apply the mask
+      // this call could not (TRA-1091).
+      //
+      // TRA-1197 removed the race instead of the symptom. A concurrent caller
+      // queues, so a settings push no longer loses — it waits and applies. That
+      // makes CommandInFlightError an invariant violation: the queue was
+      // bypassed and two callers hold the wire. Continuing to treat it as
+      // benign would mean a benign branch for an impossible error, which is the
+      // shape that swallows a real one. It must be loud.
       const mutexError = new CommandInFlightError();
       (commandManagerMock.executeSequence as Mock).mockRejectedValueOnce(mutexError);
 
       await expect(
         reader.setSettings({ rfid: { transmitPower: 25, targetEPC: TARGET_EPC } })
-      ).resolves.toBeUndefined();
+      ).rejects.toThrow(CommandInFlightError);
+    });
 
+    it('applies the mask on the settings path now that it no longer loses the race', async () => {
+      // The positive half of what the old benign branch was protecting: with
+      // the wire taken once for the whole block, the tag mask actually reaches
+      // the hardware from setSettings rather than being deferred to whatever
+      // mode change happened to follow.
+      await reader.setMode(ReaderMode.LOCATE, { rfid: { targetEPC: TARGET_EPC } });
       (commandManagerMock.executeSequence as Mock).mockClear();
 
-      await reader.setMode(ReaderMode.LOCATE, { rfid: { targetEPC: TARGET_EPC } });
+      await reader.setSettings({ rfid: { transmitPower: 25, targetEPC: SECOND_TARGET_EPC } });
 
-      const expected = locateSettingsSequence(TARGET_EPC);
-      expect(maskTail(lastModeSequence(), expected.length)).toEqual(expected);
+      // The mask sequence is the LAST thing the settings block writes, so it is
+      // the last call — and it carries the NEW target, not the one setMode put
+      // there.
+      expect(lastModeSequence()).toEqual(locateSettingsSequence(SECOND_TARGET_EPC));
     });
 
     it('still re-throws genuine hardware failures', async () => {

@@ -12,6 +12,18 @@ vi.mock('./packet.js', () => ({
   }))
 }));
 
+/**
+ * Let the queue hand the wire over.
+ *
+ * Commands are dispatched from a FIFO now, so `executeCommand()` reaches the
+ * transport a microtask after it is called rather than inside the call. Every
+ * assertion about the send, and every simulated response, has to come after
+ * this — otherwise it is made against a manager that has not sent anything yet.
+ */
+async function wireHandedOver(): Promise<void> {
+  await vi.advanceTimersByTimeAsync(0);
+}
+
 describe('CommandManager', () => {
   let commandManager: CommandManager;
   let sendToTransportSpy: Mock;
@@ -44,6 +56,7 @@ describe('CommandManager', () => {
   describe('executeCommand()', () => {
     it('should send command to transport', async () => {
       const promise = commandManager.executeCommand(testEvent);
+      await wireHandedOver();
 
       expect(sendToTransportSpy).toHaveBeenCalledOnce();
       expect(packetHandlerMock.buildCommand).toHaveBeenCalledWith(testEvent, undefined);
@@ -64,6 +77,7 @@ describe('CommandManager', () => {
     it('should handle command with payload', async () => {
       const payload = new Uint8Array([0x01, 0x02]);
       const promise = commandManager.executeCommand(testEvent, payload);
+      await wireHandedOver();
 
       expect(packetHandlerMock.buildCommand).toHaveBeenCalledWith(testEvent, payload);
 
@@ -80,25 +94,10 @@ describe('CommandManager', () => {
       await expect(promise).resolves.toEqual(new Uint8Array([0x00]));
     });
 
-    it('should throw error if command already active', async () => {
-      // Start first command
-      const promise1 = commandManager.executeCommand(testEvent);
-
-      // Try to start second command
-      await expect(commandManager.executeCommand(testEvent))
-        .rejects.toThrow('Command already active - executeCommand called concurrently');
-
-      // Clean up first command
-      const response: CS108Packet = {
-        header: { prefix: 0xB3A7, messageLength: 1, flags: 0, reserved: 0, crc: 0 },
-        eventCode: 0x0001,
-        event: { ...testEvent },
-        rawPayload: new Uint8Array([0x00]),
-        payload: undefined
-      };
-      commandManager.handleCommandResponse(response);
-      await promise1;
-    });
+    // A test asserting that a concurrent command REJECTS used to sit here. The
+    // behaviour it pinned is gone: a second caller now queues. Its replacement
+    // is `command-contract.test.ts` > 'serialised execution', which asserts the
+    // ordering as well as the absence of the throw. TRA-1143.
 
     it('should throw SequenceAbortedError if aborted', async () => {
       commandManager.abortSequence('Test abort');
@@ -115,6 +114,8 @@ describe('CommandManager', () => {
 
       const promise = commandManager.executeCommand(timeoutEvent);
 
+      await wireHandedOver();
+
       // Advance timers to trigger timeout and wait for rejection
       vi.advanceTimersByTime(1000);
 
@@ -126,6 +127,7 @@ describe('CommandManager', () => {
 
     it('should use default timeout if not specified', async () => {
       const promise = commandManager.executeCommand(testEvent);
+      await wireHandedOver();
 
       // Advance timers to trigger default timeout (2500ms)
       vi.advanceTimersByTime(2500);
@@ -137,6 +139,7 @@ describe('CommandManager', () => {
   describe('handleCommandResponse()', () => {
     it('should resolve command on successful response', async () => {
       const promise = commandManager.executeCommand(testEvent);
+      await wireHandedOver();
 
       const response: CS108Packet = {
         header: { prefix: 0xB3A7, messageLength: 1, flags: 0, reserved: 0, crc: 0 },
@@ -154,6 +157,7 @@ describe('CommandManager', () => {
 
     it('should reject command on error response', async () => {
       const promise = commandManager.executeCommand(testEvent);
+      await wireHandedOver();
 
       const response: CS108Packet = {
         header: { prefix: 0xB3A7, messageLength: 1, flags: 0, reserved: 0, crc: 0 },
@@ -177,6 +181,7 @@ describe('CommandManager', () => {
 
     it('should reject if success byte does not match', async () => {
       const promise = commandManager.executeCommand(testEvent);
+      await wireHandedOver();
 
       const response: CS108Packet = {
         header: { prefix: 0xB3A7, messageLength: 1, flags: 0, reserved: 0, crc: 0 },
@@ -198,6 +203,8 @@ describe('CommandManager', () => {
       };
 
       const promise = commandManager.executeCommand(eventWithDelay);
+
+      await wireHandedOver();
 
       const response: CS108Packet = {
         header: { prefix: 0xB3A7, messageLength: 1, flags: 0, reserved: 0, crc: 0 },
@@ -221,9 +228,10 @@ describe('CommandManager', () => {
       expect(resolved).toBe(true);
     });
 
-    it('should forward specific responses to notification handler', () => {
+    it('should forward specific responses to notification handler', async () => {
       // Start a command
       commandManager.executeCommand(testEvent);
+      await wireHandedOver();
 
       const response: CS108Packet = {
         header: { prefix: 0xB3A7, messageLength: 1, flags: 0, reserved: 0, crc: 0 },
@@ -300,6 +308,7 @@ describe('CommandManager', () => {
 
       // Start sequence execution
       const promise = commandManager.executeSequence(sequence);
+      await wireHandedOver();
 
       // Process each command in order
       for (let i = 0; i < sequence.length; i++) {
@@ -329,6 +338,8 @@ describe('CommandManager', () => {
       ];
 
       const promise = commandManager.executeSequence(sequence);
+
+      await wireHandedOver();
 
       // First attempt fails
       const errorResponse: CS108Packet = {
@@ -377,6 +388,7 @@ describe('CommandManager', () => {
 
     it('should wait for current command to complete', async () => {
       const promise = commandManager.executeCommand(testEvent);
+      await wireHandedOver();
 
       // Start abort but it should wait for current command
       const abortPromise = commandManager.abortSequence('Test abort');
@@ -419,6 +431,7 @@ describe('CommandManager', () => {
 
       // Should work now
       const promise = commandManager.executeCommand(testEvent);
+      await wireHandedOver();
 
       const response: CS108Packet = {
         header: { prefix: 0xB3A7, messageLength: 1, flags: 0, reserved: 0, crc: 0 },

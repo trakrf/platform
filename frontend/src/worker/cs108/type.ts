@@ -93,6 +93,23 @@ export interface SequenceCommand {
   delay?: number;      // Optional delay after this command (ms)
   retryOnError?: boolean; // Whether to retry this command once if it fails (default: false)
   finalState?: ReaderStateType;  // State to transition to after successful sequence completion
+
+  /**
+   * How long the device cannot accept ANOTHER command after this one is sent
+   * (ms). Held by CommandManager, measured from the send.
+   *
+   * Not `delay`. `delay` blocks the sequence, and therefore its caller, which
+   * is the wrong shape for a constraint that is about the DEVICE's readiness
+   * rather than about anyone waiting: the caller is told the command landed and
+   * gets on with its life, while the next dispatch — from any caller, in any
+   * sequence — is the one that pays.
+   *
+   * It lives on the sequence entry rather than on CS108Event because the
+   * constraint belongs to a PAYLOAD: the RFID ABORT is one of many things sent
+   * under RFID_FIRMWARE_COMMAND (0x8002), and the alternative is CommandManager
+   * reaching into payload bytes to recognise it. See TRA-1185.
+   */
+  quietPeriodAfter?: number;
 }
 
 /**
