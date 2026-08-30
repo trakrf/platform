@@ -42,12 +42,16 @@ cd ../frontend && pnpm test
 
 ### 1. Create a Branch
 ```bash
-# Branch naming:
-# - feature/add-xyz    (new features)
+# Branch naming: <type>/<slug>
+# - feat/add-xyz       (new features)
 # - fix/broken-xyz     (bug fixes)
 # - docs/update-xyz    (documentation)
+# - chore/tidy-xyz     (everything else)
+#
+# Maintainers working a tracked issue use <type>/<ticket>-<slug>,
+# e.g. feat/tra-1065-kitting-capability.
 
-git checkout -b feature/add-asset-history
+git checkout -b feat/add-asset-history
 ```
 
 ### 2. Write Your Code
@@ -144,7 +148,7 @@ cd tests/api && pnpm test
 
 1. **Push to your fork:**
    ```bash
-   git push origin feature/add-asset-history
+   git push origin feat/add-asset-history
    ```
 
 2. **Open a Pull Request:**
@@ -159,6 +163,10 @@ cd tests/api && pnpm test
     - [ ] Database migrations included if needed
     - [ ] API documentation updated
     - [ ] Commit messages use conventional format
+
+4. **How changes land:**
+    - Every change goes through a PR. Nothing is pushed directly to `main`.
+    - PRs are merged with `gh pr merge --merge` — never squash, never rebase.
 
 ## Common Tasks
 
@@ -243,8 +251,8 @@ release. Do not couple them.
 
 ### Conventional Commits
 
-Optional. The git-log readability convention (`feat:`, `fix:`, `chore:`,
-`docs:`) is encouraged but no tool depends on it — bumps are manual.
+Required. Use `feat:`, `fix:`, `docs:` or `chore:`. No tool enforces it and
+version bumps are manual, but the convention is not optional.
 
 ## Getting Help
 
