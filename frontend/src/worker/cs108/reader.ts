@@ -28,7 +28,7 @@ import {
   type ReaderSettings
 } from '../types/reader.js';
 import { postWorkerEvent, WorkerEventType, type WorkerEvent } from '../types/events.js';
-import { CommandManager, SequenceAbortedError } from './command.js';
+import { CommandManager, SequenceAbortedError, CommandInFlightError } from './command.js';
 import type { StateContext } from './state-context.js';
 import { PacketHandler, type LinkProfile, type FragmentMetrics } from './packet.js';
 import { NotificationManager } from './notification/manager.js';
@@ -708,14 +708,34 @@ class CS108Reader extends BaseReader {
           // Settings are already stored, will be used next time
           return;
         }
-        // A CommandInFlightError branch used to sit here, treating a concurrent
-        // setMode() as benign because the settings were stored and the mode
-        // change would apply what this call could not (TRA-1091). It is gone
-        // with the condition that produced it: this call now WAITS for the mode
-        // change rather than losing to it, so the settings are applied rather
-        // than skipped. Were the error to appear anyway it would mean the queue
-        // had been bypassed, which is not benign — so it falls through here and
-        // is reported.
+        // TRA-1091's guard, KEPT — but no longer silent.
+        //
+        // It should now be unreachable: a concurrent setMode() makes this call
+        // queue rather than lose the mutex, so the settings get applied instead
+        // of skipped. The temptation was to delete it as dead. That is the
+        // wrong trade. If it fires anyway, the queue has been bypassed and the
+        // wire has two owners — and the two outcomes are not symmetric:
+        //
+        //   swallow it   → a settings write deferred to the mode change, which
+        //                  reads the tag mask back out of readerSettings and
+        //                  applies it. Harmless, and the behaviour TRA-1091
+        //                  shipped after finding this ON HARDWARE.
+        //   propagate it → ERROR on the primary Locate path. That is the defect
+        //                  TRA-1091 exists to prevent.
+        //
+        // So keep the defensive behaviour and remove only the silence: log it
+        // at error level so it is countable and cannot hide, then take the
+        // branch that does not break Locate. A guard crafted against a sharp
+        // edge is not dead just because the edge is currently sheathed.
+        if (error instanceof CommandInFlightError) {
+          logger.error(
+            '[Reader] CommandInFlightError on the settings path — this should be ' +
+            'unreachable since the command queue landed. Treating it as benign ' +
+            'so Locate survives, but the queue was bypassed and that is a bug:',
+            error
+          );
+          return;
+        }
         logger.error('[Reader] Failed to apply hardware settings:', error);
         throw error;
       }
@@ -738,6 +758,12 @@ class CS108Reader extends BaseReader {
 
     // Mark that scanning was explicitly requested
     this.scanningRequested = true;
+
+    // Was the trigger down when this start was requested? Captured BEFORE the
+    // first await, because it is the premise of the convergence check at the
+    // end: only a scan the TRIGGER started should be undone by the trigger
+    // coming up. A button-started scan is not the trigger's to stop.
+    const startedWithTriggerHeld = this.triggerState;
 
     // Validate we're in a ready state
     if (this.readerState !== ReaderState.CONNECTED) {
@@ -800,10 +826,25 @@ class CS108Reader extends BaseReader {
       // CommandManager already set state to SCANNING
       logger.debug('[Reader] Scan started successfully');
 
-      // Reconciliation: Check if trigger was released while we were starting
-      // Only stop if BOTH trigger is released AND button is not active
-      if (!this.triggerState && !this.scanningRequested) {
-        logger.debug('[Reader] Trigger released during start, reconciling by stopping');
+      // CONVERGE ON THE TRIGGER'S CURRENT LEVEL, not on the edge that got here.
+      //
+      // Trigger events that arrive while the reader is BUSY are dropped on
+      // purpose — the handler acts only from CONNECTED (press) or SCANNING
+      // (release), and a start holds BUSY throughout. Dropping them is right:
+      // the alternative is queueing work for edges the operator has already
+      // moved past. But dropping an edge is only safe if the LEVEL is
+      // reconciled once the work completes, or the reader ends up scanning
+      // with the operator's finger off the trigger — which feels unresponsive,
+      // and an unresponsive trigger is cycled harder, which drops more edges.
+      //
+      // This check used to read `!this.triggerState && !this.scanningRequested`
+      // and could never fire: startScanning() sets `scanningRequested = true`
+      // as its first statement and nothing clears it before here, so the second
+      // term was always false. It conflated "the on-screen button is holding
+      // this scan" with "somebody called startScanning", and only the first
+      // meaning makes the guard correct. Another control that could not go red.
+      if (startedWithTriggerHeld && !this.triggerState) {
+        logger.debug('[Reader] Trigger released during start, converging by stopping');
         await this.stopScanning();
       }
     } catch (error) {
