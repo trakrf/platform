@@ -122,15 +122,26 @@ they are not re-opened without the thing that would change the answer.
 RFID module's quiet window.** The CS108 addresses distinct modules (RFID `0xC2`,
 barcode `0x6A`), the ABORT goes to the RFID module, and the buffer being cleared
 is plausibly the R2000's rather than anything shared — so the narrowing is
-defensible on the hardware's architecture. It was rejected on two grounds.
-First, it buys nothing: `buildModeSequences()` prefixes `IDLE_SEQUENCE` to every
-mode including BARCODE, and `IDLE_SEQUENCE` opens with `RFID_POWER_OFF`, so the
-first command after an ABORT is an RFID command whatever mode is being entered.
-A barcode command is never the one waiting. Second, the spec says "another
-command" unqualified, and "the reader" is ambiguous between the R2000 and the
-CS108 host MCU; if what drains is the host's uplink buffer, it is shared across
-modules and the narrowing is wrong. Neither reading can be settled from the
-text, and this is not worth an arm to measure.
+defensible on the hardware's architecture. It was rejected because the spec says
+"another command" unqualified, and "the reader" is ambiguous between the R2000
+and the CS108 host MCU; if what drains is the host's uplink buffer, it is shared
+across modules and the narrowing is wrong. That cannot be settled from the text.
+
+⚠ **A second reason was given here originally and it was WRONG — corrected
+2026-08-30, same day.** It read: *"it buys nothing, because `buildModeSequences()`
+prefixes `IDLE_SEQUENCE` to every mode and `IDLE_SEQUENCE` opens with
+`RFID_POWER_OFF`, so the first command after an ABORT is an RFID command whatever
+mode is being entered."* That is true of the **mode-change** path and was
+generalised from it without checking the others. On a **trigger cycle within one
+mode** — press, release, press — no mode change happens, nothing is powered off,
+and the command waiting on the window is a plain `START_INVENTORY`. Mike caught
+it by asking the obvious question the analysis had not: *"is it really 2s per
+trigger cycle? should not be. as long as we stay in RFID mode the radio stays
+on."*
+
+Recorded rather than quietly deleted, because the failure was reasoning from one
+code path to "always" — and this document is partly about controls that cannot
+go red. An argument checked against a single path is the same shape.
 
 **A quiet window between `RFID_POWER_OFF` and `RFID_POWER_ON`, for the
 mode → barcode → mode round trip.** Rejected for lack of any basis and against
@@ -144,7 +155,36 @@ separated only by that 200 ms and three command round trips. If a power cycle
 needed seconds, every mode change would be broken, including the hundreds
 exercised per soak arm. They are not.
 
-**What would reopen either:** operators reporting the mode transition as slow.
+## The cost of honouring it literally, accepted with eyes open
+
+The window gates **every** next command, so a trigger cycle in a scanning mode
+costs ~2 s before the reader restarts. That is not hypothetical: cycling the
+trigger on hardware produces a steady ~2.0 s cadence, two writes per cycle,
+visible directly in the `[ble-timing] write-ack` timestamps.
+
+⚠ **This is slower than what it replaced.** The old stop path slept 1000 ms in
+the caller, so a cycle was already gated — at half this. Moving the wait off the
+caller made the *stop* feel immediate, which was the reported symptom, and made
+the *restart* twice as slow. Stops better, cycling worse.
+
+It is honoured anyway, because the note is explicit and unqualified and we do not
+have evidence to narrow it. What makes that safe rather than merely obedient is
+that the reader now **converges to the trigger level** when it settles: edges
+lost while it catches up are reconciled rather than stranded, so falling behind
+the operator degrades responsiveness without losing state.
+
+Worth knowing where the sentence sits, since it bears on how far it should be
+stretched: both copies are in **Appendix C, "RFID Reader Firmware Command
+Sequence Examples"** — C.2 *Stop Inventory* and C.5 *Stop Searching* — not in the
+normative command reference. In both examples the ABORT ends the flow. **The
+specification never illustrates an ABORT → START_INVENTORY restart**, which is
+precisely the case being argued about. The literal reading is therefore an
+extrapolation to a case the document does not cover. That is a reason for
+humility about the decision, not a reason to override it.
+
+**What would reopen either:** operators reporting the mode transition, or trigger
+cycling, as slow — or a bench measurement of `POST_ABORT_QUIET_MS` at 0 / 1000 /
+2000 under hard trigger cycling showing no misbehaviour at the shorter values.
 Until then the added latency is covered by the transition spinner, and the
 simpler rule — one constraint, on the command the vendor attaches it to — is
 the one to keep. Guessing at extra windows costs responsiveness on every mode
