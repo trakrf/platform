@@ -24,7 +24,7 @@ import type { CommandSequence } from './type.js';
 import type { StateContext } from './state-context.js';
 import { PacketHandler } from './packet.js';
 import { logger } from '../utils/logger.js';
-import { ReaderState } from '../types/reader.js';
+import { ReaderState, type ReaderStateType } from '../types/reader.js';
 
 /**
  * Error thrown when a command sequence is aborted due to mode change
@@ -142,6 +142,17 @@ export class CommandManager {
    * `SequenceCommand.quietPeriodAfter`. 0 means the wire is free.
    */
   private quietUntil = 0;
+
+  /**
+   * Whether BUSY has been published and not yet superseded by a terminal state.
+   *
+   * Tracked here rather than read back through `stateContext.getReaderState()`
+   * because the reader publishes many states this class does not author, and
+   * because what needs suppressing is a DUPLICATE announcement, not a state.
+   * Queueing a second sequence behind a first must not re-emit BUSY — the
+   * reader is already busy, and a caller gating on that reads it correctly.
+   */
+  private busyAnnounced = false;
 
   // Configuration
   private readonly DEFAULT_TIMEOUT = 2500; // 2.5 seconds
@@ -269,6 +280,24 @@ export class CommandManager {
 
     logger.debug(`[CommandManager] Holding ${remaining}ms for the device's quiet window`);
     await new Promise(resolve => setTimeout(resolve, remaining));
+  }
+
+  /**
+   * Publish BUSY once, until something publishes a terminal state over it.
+   */
+  private announceBusy(): void {
+    if (!this.stateContext || this.busyAnnounced) return;
+    this.busyAnnounced = true;
+    this.stateContext.setReaderState(ReaderState.BUSY);
+  }
+
+  /**
+   * Publish a state that ends the current unit of work, re-arming `announceBusy`.
+   */
+  private announceSettled(state: ReaderStateType): void {
+    if (!this.stateContext) return;
+    this.busyAnnounced = false;
+    this.stateContext.setReaderState(state);
   }
 
   /**
@@ -498,8 +527,34 @@ export class CommandManager {
    * Queues behind whatever holds the wire, and holds it for the whole sequence:
    * two sequences issued at once run one after the other rather than having
    * their steps shuffled together.
+   *
+   * ⚠ BUSY is published HERE, synchronously, before anything is queued — and
+   * that is load-bearing rather than cosmetic.
+   *
+   * Callers gate on reader state to decide whether to issue work at all. The
+   * trigger path in reader.ts is the one that matters:
+   *
+   *     if (this.readerState === ReaderState.CONNECTED) await this.startScanning();
+   *     else logger.debug('Trigger pressed ignored - reader state is ...');
+   *
+   * Before this class queued, `executeSequence` set BUSY synchronously before
+   * its first await, so that guard saw BUSY the instant work was requested and
+   * dropped every further press. **That transition — not the throw — is what
+   * kept trigger events from stacking.** Publishing it from inside the queued
+   * body instead would leave the reader reading CONNECTED for as long as
+   * anything sat ahead in the queue, and each press past the 100ms debounce
+   * would enqueue another start, to be drained long after the operator let go.
+   *
+   * It is the same shape as a guard evaluated at schedule time protecting work
+   * that begins later. The queue exists to stop CONCURRENT callers colliding
+   * (TRA-1143); it must not become somewhere repeated requests accumulate.
+   * Caught in review of #621 by Mike, who removed the original queue for
+   * exactly this reason.
    */
   async executeSequence(sequence: CommandSequence): Promise<void> {
+    // Announce before enqueueing, so a caller checking state cannot see an idle
+    // reader with work already pending.
+    this.announceBusy();
     return this.runExclusive(run => run.sequence(sequence));
   }
 
@@ -516,11 +571,11 @@ export class CommandManager {
     const lastCommand = sequence[sequence.length - 1];
     const finalState = lastCommand?.finalState || ReaderState.CONNECTED;
 
-    // Set BUSY state before starting sequence (if we have state context)
-    if (this.stateContext) {
-      logger.debug(`[CommandManager] Setting BUSY state before sequence execution`);
-      this.stateContext.setReaderState(ReaderState.BUSY);
-    }
+    // Set BUSY state before starting sequence. Usually already published at
+    // enqueue by executeSequence(); this covers a sequence driven straight
+    // through runExclusive(), and is a no-op otherwise.
+    logger.debug(`[CommandManager] Setting BUSY state before sequence execution`);
+    this.announceBusy();
 
     for (let i = 0; i < sequence.length; i++) {
       const cmd = sequence[i];
@@ -532,10 +587,8 @@ export class CommandManager {
         logger.debug(`[CommandManager] Sequence step ${i + 1}/${sequence.length} completed: ${cmd.event.name}`);
       } catch (error: unknown) {
         // Set ERROR state on failure (if we have state context)
-        if (this.stateContext) {
-          logger.debug(`[CommandManager] Setting ERROR state due to command failure`);
-          this.stateContext.setReaderState(ReaderState.ERROR);
-        }
+        logger.debug(`[CommandManager] Setting ERROR state due to command failure`);
+        this.announceSettled(ReaderState.ERROR);
 
         // Don't retry on sequence aborts
         if (error instanceof SequenceAbortedError) {
@@ -568,10 +621,8 @@ export class CommandManager {
     }
 
     // Set final state on successful sequence completion
-    if (this.stateContext) {
-      logger.debug(`[CommandManager] Setting final state: ${finalState}`);
-      this.stateContext.setReaderState(finalState);
-    }
+    logger.debug(`[CommandManager] Setting final state: ${finalState}`);
+    this.announceSettled(finalState);
 
     logger.debug(`[CommandManager] Sequence completed successfully - all ${sequence.length} commands executed`);
   }

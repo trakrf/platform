@@ -71,12 +71,23 @@ describe('CommandManager contract', () => {
   let commandManager: CommandManager;
   let sendToTransport: Mock;
   let notificationHandler: Mock;
+  let stateTransitions: string[];
+  /** What a caller gating on reader state would actually read. */
+  let readerState: string;
 
   beforeEach(() => {
     vi.useFakeTimers();
     sendToTransport = vi.fn();
     notificationHandler = vi.fn();
-    commandManager = new CommandManager(sendToTransport, notificationHandler);
+    stateTransitions = [];
+    readerState = 'Connected';
+    commandManager = new CommandManager(sendToTransport, notificationHandler, {
+      getReaderState: () => readerState,
+      // The context has to REFLECT what it is told. A stub returning a constant
+      // makes every "what would the caller see?" assertion vacuous, which is
+      // exactly the question these tests exist to ask.
+      setReaderState: (state: string) => { readerState = state; stateTransitions.push(state); }
+    } as never);
   });
 
   afterEach(() => {
@@ -152,6 +163,63 @@ describe('CommandManager contract', () => {
 
       commandManager.handleCommandResponse(responseFor(SECOND));
       await expect(next).resolves.toEqual(new Uint8Array([0x00]));
+    });
+  });
+
+  // ==========================================================================
+  // The state transition callers gate on must happen when work is REQUESTED.
+  // ==========================================================================
+  describe('BUSY is published at enqueue, not at dequeue', () => {
+    // Review catch (Mike, 2026-08-30): "i actually did away with command
+    // queueing to avoid stacking responses to trigger events... we want to be
+    // careful about blindly stacking commands on a queue."
+    //
+    // The thing that used to prevent that stacking was NOT the throw. It was
+    // that executeSequence() set BUSY synchronously, before its first await, so
+    // reader.ts's trigger guard —
+    //
+    //     if (this.readerState === ReaderState.CONNECTED) await this.startScanning();
+    //     else logger.debug('Trigger pressed ignored - reader state is ...');
+    //
+    // — saw BUSY the instant work was requested and dropped every further press.
+    // Moving the BUSY transition behind the queue left the reader reading
+    // CONNECTED for as long as anything was ahead in the queue, so each press
+    // past the 100ms debounce enqueued another start. Same failure shape as a
+    // guard evaluated at schedule time protecting work that begins later.
+    //
+    // These assertions are deliberately SYNCHRONOUS. Awaiting anything here
+    // would hide the defect, because the transition does eventually happen —
+    // "eventually" is the bug.
+    it('publishes BUSY synchronously when a sequence is requested', () => {
+      commandManager.executeSequence([{ event: FIRST }]);
+
+      expect(readerState).toBe('Busy');
+      expect(stateTransitions).toEqual(['Busy']);
+    });
+
+    it('still reads BUSY when a second request queues behind the first', () => {
+      // The case that actually bites: something is ahead in the queue, so the
+      // second request will not run for a while. A caller gating on reader
+      // state must read BUSY the whole time, or it will keep enqueueing.
+      commandManager.executeSequence([{ event: FIRST }]);
+      stateTransitions.length = 0;
+
+      commandManager.executeSequence([{ event: SECOND }]);
+
+      expect(readerState).toBe('Busy');
+      // ...and it does NOT re-announce. The reader was already busy; a second
+      // identical event is noise, and the guard reads state, not events.
+      expect(stateTransitions).toEqual([]);
+    });
+
+    it('still reports the final state once the sequence completes', async () => {
+      // The enqueue-time signal must not replace the dequeue-time one.
+      const done = commandManager.executeSequence([{ event: FIRST }]);
+      await wireHandedOver();
+      commandManager.handleCommandResponse(responseFor(FIRST));
+      await done;
+
+      expect(stateTransitions[stateTransitions.length - 1]).toBe('Connected');
     });
   });
 
