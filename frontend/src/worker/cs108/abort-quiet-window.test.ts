@@ -14,12 +14,17 @@
  * control command, and fails if one of them does not carry the window. A new
  * sequence that aborts and forgets is caught here rather than on a reader.
  *
- * ⚠ The scope is deliberately "another command", NOT "another inventory". The
- * reader cycles the radio on every mode change and on tab navigation —
- * IDLE_SEQUENCE opens with RFID_POWER_OFF, and buildModeSequences() prefixes it
- * to every mode — so on the common path the command landing inside the window
- * is a POWER OFF, not a start. Reading the constraint as being about restarts
- * would leave exactly the case that actually happens unprotected.
+ * ⚠ The default scope is "another command", not "another inventory". The reader
+ * cycles the radio on every mode change and on tab navigation — IDLE_SEQUENCE
+ * opens with RFID_POWER_OFF, and buildModeSequences() prefixes it to every mode
+ * — so on that path the command landing inside the window is a POWER OFF. That
+ * case is the one the vendor's examples illustrate and it stays gated.
+ *
+ * ONE command opts out: RFID_START_SEQUENCE, for a same-mode trigger restart,
+ * where nothing is powered or reconfigured. Measured on hardware, gating it
+ * cost ~2s per trigger cycle and that stall is what provoked the trigger
+ * cycling that lost an edge. Exemptions are enumerated below so the flag cannot
+ * spread by copy-paste.
  *
  * Refs: TRA-1197, TRA-1185, ADR 0011.
  */
@@ -87,6 +92,22 @@ describe('post-ABORT quiet window', () => {
       expect(cmd.quietPeriodAfter).toBe(POST_ABORT_QUIET_MS);
     }
   );
+
+  it('names every command exempted from the window, and no others', () => {
+    // The exemption is a claim about the DEVICE — that this command is safe to
+    // issue inside a post-ABORT window. The vendor note says "another command"
+    // unqualified, so each exemption is an extrapolation and belongs in a list
+    // somebody has to edit deliberately. Without this, the flag spreads by
+    // copy-paste and the window quietly stops meaning anything.
+    const exempt = ALL_SEQUENCES.flatMap(([name, sequence]) =>
+      sequence
+        .map((cmd, index) => ({ label: `${name}[${index}]`, cmd }))
+        .filter(({ cmd }) => cmd.ignoresQuietPeriod)
+        .map(({ label }) => label)
+    );
+
+    expect(exempt.sort()).toEqual(['RFID_START_SEQUENCE[0]']);
+  });
 
   it('holds the vendor figure, not a rounded-down one', () => {
     // The defect this replaced cited 2000 in a comment and slept 1000. The

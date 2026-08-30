@@ -373,6 +373,50 @@ describe('CommandManager contract', () => {
       await next;
     });
 
+    it('lets an exempted command through a window that has not expired', async () => {
+      // A same-mode inventory restart. The window is armed and unexpired; the
+      // command declares itself safe inside it and must not wait.
+      const stop = commandManager.executeSequence([
+        { event: ABORT, quietPeriodAfter: 2000 }
+      ]);
+      await wireHandedOver();
+      commandManager.handleCommandResponse(responseFor(ABORT));
+      await stop;
+
+      const restart = commandManager.executeSequence([
+        { event: FIRST, ignoresQuietPeriod: true }
+      ]);
+      await wireHandedOver();
+
+      // No timers advanced: it went out immediately.
+      expect(opCodesSent(sendToTransport)).toEqual([0x8002, 0x0001]);
+
+      commandManager.handleCommandResponse(responseFor(FIRST));
+      await restart;
+    });
+
+    it('still holds a NON-exempt command queued behind an exempt one', async () => {
+      // The exemption is per-command, not a general disarm. Anything that has
+      // not made the claim still waits out the original deadline.
+      const stop = commandManager.executeSequence([
+        { event: ABORT, quietPeriodAfter: 2000 }
+      ]);
+      await wireHandedOver();
+      commandManager.handleCommandResponse(responseFor(ABORT));
+      await stop;
+
+      const restart = commandManager.executeCommand(FIRST);
+      await wireHandedOver();
+      // FIRST is not exempt here, so it waits.
+      expect(opCodesSent(sendToTransport)).toEqual([0x8002]);
+
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(opCodesSent(sendToTransport)).toEqual([0x8002, 0x0001]);
+
+      commandManager.handleCommandResponse(responseFor(FIRST));
+      await restart;
+    });
+
     it('leaves commands that declare no window undelayed', async () => {
       const first = commandManager.executeCommand(FIRST);
       await vi.advanceTimersByTimeAsync(0);

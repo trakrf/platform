@@ -110,6 +110,27 @@ export interface SequenceCommand {
    * reaching into payload bytes to recognise it. See TRA-1185.
    */
   quietPeriodAfter?: number;
+
+  /**
+   * Dispatch this command even if a quiet window declared by an earlier command
+   * has not expired.
+   *
+   * A per-command claim that THIS command is safe to issue inside THAT window —
+   * not a general opt-out. The window's deadline is left intact for anything
+   * else queued behind it.
+   *
+   * The case it exists for: a trigger cycle within one scanning mode sends
+   * ABORT then START_INVENTORY, with no power cycling and no reconfiguration in
+   * between. Gating the restart on the post-ABORT window costs ~2 s per cycle,
+   * measured on hardware, and that stall is what makes an operator cycle the
+   * trigger harder — which is how trigger edges get lost. See TRA-1197 and
+   * ADR 0011.
+   *
+   * ⚠ Adding this to a command is a claim about the DEVICE, and the vendor note
+   * says "another command" without qualification. Do not spread it to a command
+   * whose behaviour inside the window has not been observed on a reader.
+   */
+  ignoresQuietPeriod?: boolean;
 }
 
 /**

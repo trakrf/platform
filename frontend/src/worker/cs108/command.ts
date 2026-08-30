@@ -219,17 +219,21 @@ export class CommandManager {
   private async dispatchCommand(
     event: CS108Event,
     payload?: Uint8Array,
-    quietPeriodAfter?: number
+    quietPeriodAfter?: number,
+    ignoresQuietPeriod?: boolean
   ): Promise<unknown> {
     // Check if sequence was aborted
     if (this.isAborted) {
       throw new SequenceAbortedError('Command execution aborted');
     }
 
-    // Honour any quiet window the previous command declared. Re-check the abort
-    // flag afterwards: an abort landing during the wait must still take effect,
-    // and the wait can be seconds long.
-    await this.awaitQuietWindow();
+    // Honour any quiet window the previous command declared, unless this command
+    // declares itself safe to issue inside one. Re-check the abort flag
+    // afterwards: an abort landing during the wait must still take effect, and
+    // the wait can be seconds long.
+    if (!ignoresQuietPeriod) {
+      await this.awaitQuietWindow();
+    }
     if (this.isAborted) {
       throw new SequenceAbortedError('Command execution aborted');
     }
@@ -583,7 +587,7 @@ export class CommandManager {
 
       try {
         // dispatchCommand will throw SequenceAbortedError if aborted
-        await this.dispatchCommand(cmd.event, cmd.payload, cmd.quietPeriodAfter);
+        await this.dispatchCommand(cmd.event, cmd.payload, cmd.quietPeriodAfter, cmd.ignoresQuietPeriod);
         logger.debug(`[CommandManager] Sequence step ${i + 1}/${sequence.length} completed: ${cmd.event.name}`);
       } catch (error: unknown) {
         // Set ERROR state on failure (if we have state context)
@@ -602,7 +606,7 @@ export class CommandManager {
           logger.debug(`[CommandManager] Retrying ${cmd.event.name} per sequence configuration`);
           await new Promise(resolve => setTimeout(resolve, 100)); // Brief delay
           try {
-            await this.dispatchCommand(cmd.event, cmd.payload, cmd.quietPeriodAfter);
+            await this.dispatchCommand(cmd.event, cmd.payload, cmd.quietPeriodAfter, cmd.ignoresQuietPeriod);
           } catch (retryError: unknown) {
             // Mark to prevent infinite retry, WITHOUT rebuilding the error —
             // see ALREADY_RETRIED. Rebuilding is what lost the class.

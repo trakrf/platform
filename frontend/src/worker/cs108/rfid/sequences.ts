@@ -33,7 +33,29 @@ export function transmitPowerSequence(power?: number): CommandSequence {
 export const RFID_START_SEQUENCE: CommandSequence = [{
   event: RFID_FIRMWARE_COMMAND,
   payload: createFirmwareCommand(CommandType.START_INVENTORY),
-  finalState: ReaderState.SCANNING  // Transition to Scanning state on success
+  finalState: ReaderState.SCANNING,  // Transition to Scanning state on success
+
+  // Restarting inventory does NOT wait out the post-ABORT quiet window.
+  //
+  // A trigger cycle within one scanning mode is ABORT then START_INVENTORY: no
+  // power cycling, no reconfiguration, the radio never leaves the mode. Gating
+  // the restart on the window costs ~2s per cycle, measured on hardware —
+  // "[CommandManager] Holding 1775ms for the device's quiet window" sitting
+  // between an operator's press and anything happening.
+  //
+  // That stall is not merely slow, it is the thing that starts the failure: an
+  // operator who feels nothing happen cycles the trigger harder, the extra
+  // edges arrive while the reader is BUSY and are dropped, and on hardware one
+  // of them came back as two TRIGGER_RELEASED with no press between — a lost
+  // edge. The reader then converged, correctly, onto a stale level and stopped
+  // with the trigger held.
+  //
+  // The window still applies to everything else, including RFID_POWER_OFF on
+  // the mode-change path, which is the case the vendor's examples actually
+  // illustrate. See ADR 0011 for why the note's placement (Appendix C worked
+  // examples, where the ABORT ends the flow and no restart is ever shown) makes
+  // the unqualified reading an extrapolation rather than a certainty.
+  ignoresQuietPeriod: true
 }];
 
 /**
