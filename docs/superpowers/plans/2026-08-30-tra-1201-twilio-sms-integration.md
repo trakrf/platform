@@ -38,11 +38,11 @@ This section is the durable handoff record across fresh implementation contexts.
 |---|---|---|
 | 2026-08-30 | Planning | TRA-1201 moved to In Progress. Linear records the implementation scope, meaningful outcome-focused testing, and explicit exclusions for frontend and geofencing. |
 | 2026-08-30 | Workspace setup | Created isolated feature worktree and branch `nicholusmuwonge/tra-1201-twilio-sms-integration` from current `origin/main`. Implementation has not started. |
-| 2026-08-30 | Task 1 implementation | Defined the provider-neutral SMS contracts in `internal/notification/sms` using TDD. The contract test was observed RED for missing types, then GREEN with no Twilio or storage imports. No commit was made per implementer instruction. |
+| 2026-08-30 | Task 1 implementation and review | Defined provider-neutral SMS contracts using TDD. Review rejected fake-bookkeeping assertions; a fresh fix context replaced them with external-package public API contract checks. Re-review approved; targeted, race, vet, and diff checks pass. |
 
 ### Current handoff
 
-- Next task: independent review of Task 1, provider-neutral SMS contracts.
+- Next task: Task 2, Twilio SDK and configuration.
 - Implementation rule: use a fresh subagent context for every task, followed by an independent review context.
 - Not implementable in this ticket: frontend and geofence-event generation/integration.
 
