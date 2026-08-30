@@ -44,11 +44,11 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-30 | Task 4 implementation and review | Classified legacy and V1 Twilio REST errors plus wrapped network failures using TDD. The structured result is redacted and does not retain raw provider chains. Task 4 legitimately imports and pins SDK v1.30.9. Independent review approved with all targeted, race, vet, module, regression, and diff checks passing. |
 | 2026-08-30 | Task 5 implementation and review | Implemented the sender. Review rejected discarded cancellation, SDK-internal/fake-bookkeeping tests, and an untidy checksum set. A fresh fix added pre-submit cancellation and real SDK HTTP-contract tests for auth, account path, exact forms/no `From`, callbacks, response/error outcomes, and concurrency. Re-review approved; all targeted/race/vet/module/regression/diff checks pass. |
 | 2026-08-30 | Task 6 implementation and review | Added bounded, signature-verified form parsing. Review found unsigned duplicate values and unsafe handler construction; a fresh fix rejects duplicate keys and makes construction fail closed for disabled/invalid config. Re-review approved; external URL/proxy/body-bound and all targeted checks pass. |
-| 2026-08-30 | Task 7 implementation | Added a thin status callback receiver using TDD. It emits normalized UTC `ProviderStatus` events for the five supported Twilio delivery states, rejects signed malformed input and invalid signatures before handoff, and leaves repeated-callback idempotency to the injected downstream consumer. |
+| 2026-08-30 | Task 7 implementation and review | Added a thin status callback receiver using TDD. It emits normalized UTC events for five supported states, rejects invalid/malformed input before handoff, returns explicit consumer failures, and leaves repeated-callback idempotency downstream. Independent review approved all targeted checks and the private clock exception. |
 
 ### Current handoff
 
-- Next task: independent review of Task 7, delivery-status callback parsing.
+- Next task: Task 8, inbound consent keyword parsing.
 - Implementation rule: use a fresh subagent context for every task, followed by an independent review context.
 - Not implementable in this ticket: frontend and geofence-event generation/integration.
 - Atomic Task 7 exception: `handler.go` gains a private clock dependency initialized by the existing constructor, so status events have a deterministic, injectable UTC occurrence time. The public constructor signature is unchanged.
