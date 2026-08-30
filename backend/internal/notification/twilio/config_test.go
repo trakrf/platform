@@ -102,3 +102,29 @@ func TestConfigFromEnv_RejectsNonHTTPSPublicBaseURL(t *testing.T) {
 	require.False(t, config.Enabled())
 	require.False(t, strings.Contains(err.Error(), "http://api.example.com"))
 }
+
+// This fails if a callback base URL can include anything other than a canonical HTTPS origin.
+func TestConfigFromEnv_RejectsPublicBaseURLsThatAreNotOrigins(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		publicBaseURL string
+	}{
+		{name: "userinfo", publicBaseURL: "https://user:password@api.example.com"},
+		{name: "trailing slash", publicBaseURL: "https://api.example.com/"},
+		{name: "non-root path", publicBaseURL: "https://api.example.com/prefix"},
+		{name: "query", publicBaseURL: "https://api.example.com?canary=1"},
+		{name: "fragment", publicBaseURL: "https://api.example.com#fragment"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			setCompleteConfig(t)
+			t.Setenv("TWILIO_PUBLIC_BASE_URL", test.publicBaseURL)
+
+			config, err := twilio.ConfigFromEnv()
+
+			require.Error(t, err)
+			require.Equal(t, twilio.Config{}, config)
+			require.False(t, config.Enabled())
+			require.NotContains(t, err.Error(), test.publicBaseURL)
+		})
+	}
+}

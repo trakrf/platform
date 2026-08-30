@@ -19,7 +19,6 @@ require (
 	github.com/rs/zerolog v1.33.0
 	github.com/stretchr/testify v1.11.1
 	github.com/swaggo/http-swagger v1.3.4
-	github.com/twilio/twilio-go v1.30.9
 	golang.org/x/crypto v0.46.0
 	golang.org/x/text v0.33.0
 	golang.org/x/time v0.15.0

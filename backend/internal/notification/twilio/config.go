@@ -7,7 +7,8 @@ import (
 	"os"
 )
 
-// Config contains the credentials and public callback origin for Twilio SMS.
+// Config contains the credentials and canonical public callback origin for Twilio SMS.
+// PublicBaseURL must not include a trailing slash, path, query, fragment, or userinfo.
 type Config struct {
 	AccountSID          string
 	APIKeySID           string
@@ -36,7 +37,7 @@ func ConfigFromEnv() (Config, error) {
 		return Config{}, errors.New("Twilio configuration is incomplete")
 	}
 	if !validPublicBaseURL(config.PublicBaseURL) {
-		return Config{}, errors.New("Twilio public base URL must use HTTPS")
+		return Config{}, errors.New("Twilio public base URL must be a canonical HTTPS origin")
 	}
 
 	return config, nil
@@ -54,5 +55,14 @@ func (c Config) Enabled() bool {
 
 func validPublicBaseURL(raw string) bool {
 	parsed, err := url.ParseRequestURI(raw)
-	return err == nil && parsed.Scheme == "https" && parsed.Host != ""
+	return err == nil &&
+		parsed.Scheme == "https" &&
+		parsed.Host != "" &&
+		parsed.User == nil &&
+		parsed.Path == "" &&
+		parsed.RawPath == "" &&
+		parsed.RawQuery == "" &&
+		parsed.Fragment == "" &&
+		!parsed.ForceQuery &&
+		parsed.Opaque == ""
 }

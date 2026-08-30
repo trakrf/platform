@@ -39,7 +39,8 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-30 | Planning | TRA-1201 moved to In Progress. Linear records the implementation scope, meaningful outcome-focused testing, and explicit exclusions for frontend and geofencing. |
 | 2026-08-30 | Workspace setup | Created isolated feature worktree and branch `nicholusmuwonge/tra-1201-twilio-sms-integration` from current `origin/main`. Implementation has not started. |
 | 2026-08-30 | Task 1 implementation and review | Defined provider-neutral SMS contracts using TDD. Review rejected fake-bookkeeping assertions; a fresh fix context replaced them with external-package public API contract checks. Re-review approved; targeted, race, vet, and diff checks pass. |
-| 2026-08-30 | Task 2 implementation | Added fail-closed Twilio configuration using TDD: all-empty configuration disables the boundary, complete configuration preserves exact values and enables it, every partial configuration returns a redacted error and disabled config, and non-HTTPS callback origins are rejected. Pinned `github.com/twilio/twilio-go` at v1.30.9. |
+| 2026-08-30 | Task 2 implementation | Added fail-closed Twilio configuration using TDD: all-empty configuration disables the boundary, complete configuration preserves exact values and enables it, every partial configuration returns a redacted error and disabled config, and non-HTTPS callback origins are rejected. |
+| 2026-08-30 | Task 2 review fix | Public callback bases must be canonical HTTPS origins: no userinfo, path (including a trailing slash), query, or fragment. The Twilio SDK remains absent until Task 5 first imports it, keeping Task 2 tidy. |
 
 ### Current handoff
 
@@ -129,15 +130,13 @@ git commit -m "feat(TRA-1201): define SMS provider contracts"
 
 ---
 
-### Task 2: Add Twilio SDK and configuration
+### Task 2: Add Twilio configuration
 
-**MR file count:** 4
+**MR file count:** 2
 
 **Files:**
 - Create: `backend/internal/notification/twilio/config.go`
 - Create: `backend/internal/notification/twilio/config_test.go`
-- Modify: `backend/go.mod`
-- Modify: `backend/go.sum`
 
 **Consumes:** environment variables.
 
@@ -156,7 +155,7 @@ type Config struct {
 }
 ```
 
-Test all-empty disabled, complete enabled, partial rejected, secrets absent from errors, and non-HTTPS public URL rejected outside tests.
+Test all-empty disabled, complete enabled, partial rejected, secrets absent from errors, and public URLs that are not canonical HTTPS origins rejected outside tests. A trailing slash is rejected so Task 5 can append its callback path without producing a double slash.
 
 - [x] **Step 2: Verify failure**
 
@@ -164,22 +163,18 @@ Run: `cd backend && go test ./internal/notification/twilio -run TestConfigFromEn
 
 Expected: FAIL because the package does not exist.
 
-- [x] **Step 3: Pin the SDK**
-
-Run: `cd backend && go get github.com/twilio/twilio-go@v1.30.9`
-
-- [x] **Step 4: Implement the loader**
+- [x] **Step 3: Implement the loader**
 
 Read `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID`, and `TWILIO_PUBLIC_BASE_URL`. Do not read a sender-number variable.
 
-- [x] **Step 5: Verify**
+- [x] **Step 4: Verify**
 
-Run: `cd backend && go test ./internal/notification/twilio -run TestConfigFromEnv -count=1 && go mod tidy && git diff --check`
+Run: `cd backend && go test ./internal/notification/twilio -run TestConfigFromEnv -count=1 && go mod tidy -diff && git diff --check`
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/internal/notification/twilio/config.go backend/internal/notification/twilio/config_test.go backend/go.mod backend/go.sum
+git add backend/internal/notification/twilio/config.go backend/internal/notification/twilio/config_test.go
 git commit -m "feat(TRA-1201): configure Twilio client"
 ```
 
@@ -271,11 +266,13 @@ git commit -m "feat(TRA-1201): classify Twilio failures"
 
 ### Task 5: Implement outbound SMS sending
 
-**MR file count:** 2
+**MR file count:** 4
 
 **Files:**
 - Create: `backend/internal/notification/twilio/sender.go`
 - Create: `backend/internal/notification/twilio/sender_test.go`
+- Modify: `backend/go.mod`
+- Modify: `backend/go.sum`
 
 **Consumes:** `sms.Command`, `sms.Submission`, `sms.Sender`, `twilio.Config`, and Task 4 classification.
 
@@ -291,16 +288,20 @@ Run: `cd backend && go test ./internal/notification/twilio -run 'TestSender|Test
 
 Expected: FAIL because `Sender` is undefined.
 
-- [ ] **Step 3: Implement sending**
+- [ ] **Step 3: Add the Twilio SDK when sender first imports it**
+
+Run: `cd backend && go get github.com/twilio/twilio-go@v1.30.9`
+
+- [ ] **Step 4: Implement sending**
 
 Construct the official Twilio client with API Key SID, API Key Secret, and Account SID. Set `To`, `Body`, `MessagingServiceSid`, and `${PublicBaseURL}/api/v1/notifications/twilio/status` only.
 
-- [ ] **Step 4: Verify and commit**
+- [ ] **Step 5: Verify and commit**
 
-Run: `cd backend && go test -race ./internal/notification/twilio -run 'TestSender|TestSendSMS' -count=1`
+Run: `cd backend && go test -race ./internal/notification/twilio -run 'TestSender|TestSendSMS' -count=1 && go mod tidy -diff`
 
 ```bash
-git add backend/internal/notification/twilio/sender.go backend/internal/notification/twilio/sender_test.go
+git add backend/internal/notification/twilio/sender.go backend/internal/notification/twilio/sender_test.go backend/go.mod backend/go.sum
 git commit -m "feat(TRA-1201): send SMS through Twilio"
 ```
 
