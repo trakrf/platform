@@ -40,10 +40,11 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-30 | Workspace setup | Created isolated feature worktree and branch `nicholusmuwonge/tra-1201-twilio-sms-integration` from current `origin/main`. Implementation has not started. |
 | 2026-08-30 | Task 1 implementation and review | Defined provider-neutral SMS contracts using TDD. Review rejected fake-bookkeeping assertions; a fresh fix context replaced them with external-package public API contract checks. Re-review approved; targeted, race, vet, and diff checks pass. |
 | 2026-08-30 | Task 2 implementation and review | Added fail-closed configuration using TDD. Review required canonical HTTPS origins and tidy dependency state; a fresh fix rejected userinfo/path/query/fragment forms and moved the SDK pin to Task 5, where it is first imported. Re-review approved; targeted, race, vet, module, notification-regression, and diff checks pass. |
+| 2026-08-30 | Task 3 implementation | Documented the six Twilio environment settings, fail-closed states, authentication roles, Messaging Service sender boundary, callback paths, exclusions, and operational ownership. Per ADR 0010, `.env.example` remains absent; `.env.local.example` is the single canonical template. Verification presence/absence checks and `git diff --check` pass; no commit or activation was performed. |
 
 ### Current handoff
 
-- Next task: Task 3, application environment documentation.
+- Next task: Task 4, Twilio provider error classification.
 - Implementation rule: use a fresh subagent context for every task, followed by an independent review context.
 - Not implementable in this ticket: frontend and geofence-event generation/integration.
 
@@ -181,10 +182,9 @@ git commit -m "feat(TRA-1201): configure Twilio client"
 
 ### Task 3: Document application environment settings
 
-**MR file count:** 3
+**MR file count:** 2 (the repository intentionally has no `.env.example`; see ADR 0010)
 
 **Files:**
-- Modify: `.env.example`
 - Modify: `.env.local.example`
 - Create: `docs/operations/twilio-application-integration.md`
 
@@ -192,7 +192,11 @@ git commit -m "feat(TRA-1201): configure Twilio client"
 
 **Produces:** developer-facing configuration documentation only.
 
-- [ ] **Step 1: Add empty environment examples**
+- [x] **Step 1: Add empty environment examples**
+
+The six settings are present in the canonical `.env.local.example`. The
+planned `.env.example` copy is deliberately not created because ADR 0010
+requires one local environment template.
 
 ```dotenv
 TWILIO_ACCOUNT_SID=
@@ -203,11 +207,14 @@ TWILIO_MESSAGING_SERVICE_SID=
 TWILIO_PUBLIC_BASE_URL=https://api.example.com
 ```
 
-- [ ] **Step 2: Document boundaries**
+- [x] **Step 2: Document boundaries**
 
 Explain API-key authentication, Auth Token signature validation, Messaging Service sending, disabled/partial behavior, callback paths, and the deliberate absence of `TWILIO_FROM_NUMBER`. Exclude number purchase, compliance registration, staging, and production rollout.
 
 - [ ] **Step 3: Verify and commit**
+
+The verification portion passed. No commit was created because this context
+was instructed to leave integration to the parent agent.
 
 Run: `git diff --check`
 
