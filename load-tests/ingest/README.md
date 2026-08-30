@@ -8,8 +8,7 @@ stack to characterize the ingestion path and tune the reader dedup window.
 The **reader's MQTT publish path is the bottleneck**, not the backend. At
 `dedup=0` a CS463 wedges its own publish in ~4 min (publish-buffer exhaustion);
 the single-replica backend consumer handled everything one reader could emit
-(~270 reads/s) with zero drops. See
-`docs/superpowers/specs/2026-06-16-cs463-ingest-load-and-dedup-design.md`.
+(~270 reads/s) with zero drops.
 
 ## Golden config (validated, live on cs463-212 → preview)
 
