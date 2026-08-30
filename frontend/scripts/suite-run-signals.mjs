@@ -226,7 +226,7 @@ export function describeCohorts(records) {
     // runnerOf, not r.runner: pre-TRA-1206 records carry no runner and ARE
     // vitest, so reading the raw field would flag every historical archive as
     // mixed against its own successors.
-    const key = `${runnerOf(r)} ${r?.note ?? ''}`;
+    const key = `${runnerOf(r)}\x00${r?.note ?? ''}`;
     const existing = groups.get(key);
     if (existing) existing.count += 1;
     else groups.set(key, { runner: runnerOf(r), note: r?.note ?? null, count: 1 });
