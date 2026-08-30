@@ -112,3 +112,40 @@ that the abort took effect; it is not a replacement for the interval.
   window expires rather than immediately. The wait is a hardware constraint and
   is not skippable, so the alternative would be reporting an abort the hardware
   has not yet honoured.
+
+## Alternatives considered and rejected
+
+Both were raised in review of PR #621 and rejected deliberately. Recorded so
+they are not re-opened without the thing that would change the answer.
+
+**Scoping the window per module, so a barcode command could be issued inside an
+RFID module's quiet window.** The CS108 addresses distinct modules (RFID `0xC2`,
+barcode `0x6A`), the ABORT goes to the RFID module, and the buffer being cleared
+is plausibly the R2000's rather than anything shared — so the narrowing is
+defensible on the hardware's architecture. It was rejected on two grounds.
+First, it buys nothing: `buildModeSequences()` prefixes `IDLE_SEQUENCE` to every
+mode including BARCODE, and `IDLE_SEQUENCE` opens with `RFID_POWER_OFF`, so the
+first command after an ABORT is an RFID command whatever mode is being entered.
+A barcode command is never the one waiting. Second, the spec says "another
+command" unqualified, and "the reader" is ambiguous between the R2000 and the
+CS108 host MCU; if what drains is the host's uplink buffer, it is shared across
+modules and the narrowing is wrong. Neither reading can be settled from the
+text, and this is not worth an arm to measure.
+
+**A quiet window between `RFID_POWER_OFF` and `RFID_POWER_ON`, for the
+mode → barcode → mode round trip.** Rejected for lack of any basis and against
+direct evidence. The ABORT note is the *only* inter-command timing requirement
+in the entire byte-stream API specification — one sentence, printed twice; the
+200 ms and 500 ms `settlingDelay` values on the power events are empirical and
+uncited. More conclusively, that off→on gap already occurs inside **every** mode
+entry: `INVENTORY_CONFIG_SEQUENCE` and `LOCATE_CONFIG_SEQUENCE` each open with
+`RFID_POWER_ON`, appended straight after `IDLE_SEQUENCE`'s `RFID_POWER_OFF` and
+separated only by that 200 ms and three command round trips. If a power cycle
+needed seconds, every mode change would be broken, including the hundreds
+exercised per soak arm. They are not.
+
+**What would reopen either:** operators reporting the mode transition as slow.
+Until then the added latency is covered by the transition spinner, and the
+simpler rule — one constraint, on the command the vendor attaches it to — is
+the one to keep. Guessing at extra windows costs responsiveness on every mode
+change to buy protection against a requirement no document states.
