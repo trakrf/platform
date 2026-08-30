@@ -39,8 +39,7 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-30 | Planning | TRA-1201 moved to In Progress. Linear records the implementation scope, meaningful outcome-focused testing, and explicit exclusions for frontend and geofencing. |
 | 2026-08-30 | Workspace setup | Created isolated feature worktree and branch `nicholusmuwonge/tra-1201-twilio-sms-integration` from current `origin/main`. Implementation has not started. |
 | 2026-08-30 | Task 1 implementation and review | Defined provider-neutral SMS contracts using TDD. Review rejected fake-bookkeeping assertions; a fresh fix context replaced them with external-package public API contract checks. Re-review approved; targeted, race, vet, and diff checks pass. |
-| 2026-08-30 | Task 2 implementation | Added fail-closed Twilio configuration using TDD: all-empty configuration disables the boundary, complete configuration preserves exact values and enables it, every partial configuration returns a redacted error and disabled config, and non-HTTPS callback origins are rejected. |
-| 2026-08-30 | Task 2 review fix | Public callback bases must be canonical HTTPS origins: no userinfo, path (including a trailing slash), query, or fragment. The Twilio SDK remains absent until Task 5 first imports it, keeping Task 2 tidy. |
+| 2026-08-30 | Task 2 implementation and review | Added fail-closed configuration using TDD. Review required canonical HTTPS origins and tidy dependency state; a fresh fix rejected userinfo/path/query/fragment forms and moved the SDK pin to Task 5, where it is first imported. Re-review approved; targeted, race, vet, module, notification-regression, and diff checks pass. |
 
 ### Current handoff
 
@@ -171,7 +170,7 @@ Read `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILI
 
 Run: `cd backend && go test ./internal/notification/twilio -run TestConfigFromEnv -count=1 && go mod tidy -diff && git diff --check`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/internal/notification/twilio/config.go backend/internal/notification/twilio/config_test.go
