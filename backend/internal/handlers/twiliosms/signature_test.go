@@ -15,11 +15,22 @@ const (
 	testPublicBaseURL = "https://callbacks.example.com"
 )
 
-func newSignatureTestHandler() *Handler {
-	return NewHandler(twilio.Config{
-		AuthToken:     testAuthToken,
-		PublicBaseURL: testPublicBaseURL,
-	}, nil)
+func newSignatureTestConfig() twilio.Config {
+	return twilio.Config{
+		AccountSID:          "AC123",
+		APIKeySID:           "SK123",
+		APIKeySecret:        "api-key-secret",
+		AuthToken:           testAuthToken,
+		MessagingServiceSID: "MG123",
+		PublicBaseURL:       testPublicBaseURL,
+	}
+}
+
+func newSignatureTestHandler(t *testing.T) *Handler {
+	t.Helper()
+	handler, err := NewHandler(newSignatureTestConfig(), nil)
+	require.NoError(t, err)
+	return handler
 }
 
 // This fails if callback validation uses the proxy-provided authority, loses
@@ -36,7 +47,7 @@ func TestSignature_AcceptsSignedFormAgainstConfiguredPublicURL(t *testing.T) {
 	req.Header.Set("X-Forwarded-Proto", "http")
 	req.Header.Set("X-Twilio-Signature", "p5QOW5MVdWNIHIgvKft7Y9TsP4E=")
 
-	form, err := newSignatureTestHandler().verifiedForm(httptest.NewRecorder(), req)
+	form, err := newSignatureTestHandler(t).verifiedForm(httptest.NewRecorder(), req)
 
 	require.NoError(t, err)
 	require.Equal(t, "SM123", form.Get("MessageSid"))
@@ -53,7 +64,7 @@ func TestSignature_RejectsInvalidSignature(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("X-Twilio-Signature", "not-a-valid-signature")
 
-	form, err := newSignatureTestHandler().verifiedForm(httptest.NewRecorder(), req)
+	form, err := newSignatureTestHandler(t).verifiedForm(httptest.NewRecorder(), req)
 
 	require.Error(t, err)
 	require.Nil(t, form)
@@ -68,10 +79,56 @@ func TestSignature_RejectsMissingSignature(t *testing.T) {
 	)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	form, err := newSignatureTestHandler().verifiedForm(httptest.NewRecorder(), req)
+	form, err := newSignatureTestHandler(t).verifiedForm(httptest.NewRecorder(), req)
 
 	require.Error(t, err)
 	require.Nil(t, form)
+}
+
+// This fails if a signature covering a first form value permits an appended,
+// unsigned value for the same key.
+func TestSignature_RejectsDuplicateFormValuesBeforeValidation(t *testing.T) {
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/notifications/twilio/status",
+		strings.NewReader("MessageSid=SM123&MessageSid=unsigned-duplicate"),
+	)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-Twilio-Signature", "GEeHG+TlwALBCutqb6698wCo8pI=")
+
+	form, err := newSignatureTestHandler(t).verifiedForm(httptest.NewRecorder(), req)
+
+	require.ErrorIs(t, err, errMalformedForm)
+	require.Nil(t, form)
+}
+
+// This fails if disabled, partial, or non-canonical configuration can create
+// a callback boundary that later route wiring could use.
+func TestNewHandler_RejectsConfigurationThatCannotSecureCallbacks(t *testing.T) {
+	completeConfig := newSignatureTestConfig()
+
+	for _, test := range []struct {
+		name   string
+		config twilio.Config
+	}{
+		{name: "disabled", config: twilio.Config{}},
+		{name: "partial", config: twilio.Config{AuthToken: testAuthToken, PublicBaseURL: testPublicBaseURL}},
+		{name: "empty auth token", config: twilio.Config{AccountSID: "AC123", APIKeySID: "SK123", APIKeySecret: "api-key-secret", MessagingServiceSID: "MG123", PublicBaseURL: testPublicBaseURL}},
+		{name: "non-canonical origin", config: func() twilio.Config {
+			c := completeConfig
+			c.PublicBaseURL = "https://callbacks.example.com/"
+			return c
+		}()},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			handler, err := NewHandler(test.config, nil)
+
+			require.Error(t, err)
+			require.Nil(t, handler)
+			require.NotContains(t, err.Error(), testAuthToken)
+			require.NotContains(t, err.Error(), "api-key-secret")
+		})
+	}
 }
 
 // This fails if malformed or oversized form bodies are accepted, or if their
@@ -89,7 +146,7 @@ func TestSignature_RejectsMalformedOrOversizedForm(t *testing.T) {
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			req.Header.Set("X-Twilio-Signature", "not-a-valid-signature")
 
-			form, err := newSignatureTestHandler().verifiedForm(httptest.NewRecorder(), req)
+			form, err := newSignatureTestHandler(t).verifiedForm(httptest.NewRecorder(), req)
 
 			require.Error(t, err)
 			require.Nil(t, form)

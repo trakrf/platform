@@ -29,9 +29,10 @@ func (h *Handler) verifiedForm(w http.ResponseWriter, r *http.Request) (url.Valu
 
 	params := make(map[string]string, len(r.PostForm))
 	for key, values := range r.PostForm {
-		if len(values) > 0 {
-			params[key] = values[0]
+		if len(values) != 1 {
+			return nil, errMalformedForm
 		}
+		params[key] = values[0]
 	}
 
 	signature := r.Header.Get("X-Twilio-Signature")
