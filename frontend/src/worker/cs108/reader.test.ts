@@ -895,10 +895,14 @@ describe('CS108Reader', () => {
       await reader.setSettings({ rfid: { targetEPC: SECOND_EPC } });
       (reader as any).readerState = ReaderState.CONNECTED;
       (commandManagerMock.executeSequence as Mock).mockClear();
+      // Any failed mask write, not specifically the mutex collision: that error
+      // is an invariant violation since TRA-1197 and no longer a thing this
+      // path can meet. Pinning the test to it would make it a test of an
+      // unreachable condition rather than of the behaviour it is named for.
       (commandManagerMock.executeSequence as Mock)
-        .mockRejectedValueOnce(new CommandInFlightError());
+        .mockRejectedValueOnce(new Error('Command timeout'));
 
-      await expect(reader.startScanning()).rejects.toThrow('Command already active');
+      await expect(reader.startScanning()).rejects.toThrow('Command timeout');
 
       // It failed on the mask, and never went on to start a search aimed at
       // the previous tag.
