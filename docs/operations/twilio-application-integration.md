@@ -22,7 +22,7 @@ server; none is a frontend (`VITE_*`) setting.
 The canonical local template is `.env.local.example`; `.env.example` is
 intentionally absent under [ADR 0010](../adr/0010-local-configuration-mirrors-the-deployed-shape.md)
 so two environment templates cannot drift. The template contains this safe
-placeholder shape:
+disabled, copyable shape (all six active assignments are empty):
 
 ```dotenv
 TWILIO_ACCOUNT_SID=
@@ -30,13 +30,18 @@ TWILIO_API_KEY_SID=
 TWILIO_API_KEY_SECRET=
 TWILIO_AUTH_TOKEN=
 TWILIO_MESSAGING_SERVICE_SID=
-TWILIO_PUBLIC_BASE_URL=https://api.example.com
+TWILIO_PUBLIC_BASE_URL=
+# Example only; replace with the externally reachable canonical HTTPS origin.
+# TWILIO_PUBLIC_BASE_URL=https://api.example.com
 ```
+
+To enable Twilio, set all six active assignments together. Do not leave only
+the URL or any other subset configured.
 
 `TWILIO_PUBLIC_BASE_URL` must be an HTTPS origin with a host and no userinfo,
 path (including a trailing slash), query, or fragment. Replace the example
-origin with the externally reachable origin for the application; do not put
-credentials in the URL.
+origin in the commented line with the externally reachable origin when
+enabling the integration; do not put credentials in the URL.
 
 ## Fail-closed behavior
 

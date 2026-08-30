@@ -40,7 +40,7 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-30 | Workspace setup | Created isolated feature worktree and branch `nicholusmuwonge/tra-1201-twilio-sms-integration` from current `origin/main`. Implementation has not started. |
 | 2026-08-30 | Task 1 implementation and review | Defined provider-neutral SMS contracts using TDD. Review rejected fake-bookkeeping assertions; a fresh fix context replaced them with external-package public API contract checks. Re-review approved; targeted, race, vet, and diff checks pass. |
 | 2026-08-30 | Task 2 implementation and review | Added fail-closed configuration using TDD. Review required canonical HTTPS origins and tidy dependency state; a fresh fix rejected userinfo/path/query/fragment forms and moved the SDK pin to Task 5, where it is first imported. Re-review approved; targeted, race, vet, module, notification-regression, and diff checks pass. |
-| 2026-08-30 | Task 3 implementation | Documented the six Twilio environment settings, fail-closed states, authentication roles, Messaging Service sender boundary, callback paths, exclusions, and operational ownership. Per ADR 0010, `.env.example` remains absent; `.env.local.example` is the single canonical template. Verification presence/absence checks and `git diff --check` pass; no commit or activation was performed. |
+| 2026-08-30 | Task 3 implementation and P1 follow-up | Documented the six Twilio environment settings, fail-closed states, authentication roles, Messaging Service sender boundary, callback paths, exclusions, and operational ownership. The follow-up keeps all six active assignments empty in the canonical `.env.local.example` (with only a commented URL example), so copying it preserves disabled startup. Per ADR 0010, `.env.example` remains absent. Static active-assignment, targeted configuration-test, and `git diff --check` verification pass; no commit or activation was performed. |
 
 ### Current handoff
 
@@ -204,7 +204,9 @@ TWILIO_API_KEY_SID=
 TWILIO_API_KEY_SECRET=
 TWILIO_AUTH_TOKEN=
 TWILIO_MESSAGING_SERVICE_SID=
-TWILIO_PUBLIC_BASE_URL=https://api.example.com
+TWILIO_PUBLIC_BASE_URL=
+# Example only; replace with the externally reachable canonical HTTPS origin.
+# TWILIO_PUBLIC_BASE_URL=https://api.example.com
 ```
 
 - [x] **Step 2: Document boundaries**
