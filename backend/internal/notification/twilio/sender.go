@@ -3,9 +3,11 @@ package twilio
 import (
 	"context"
 	"errors"
+	"net/http"
 
 	"github.com/trakrf/platform/backend/internal/notification/sms"
 	twiliogo "github.com/twilio/twilio-go"
+	twilioclient "github.com/twilio/twilio-go/client"
 	"github.com/twilio/twilio-go/rest/api/v2010"
 )
 
@@ -39,15 +41,21 @@ func NewSender(config Config) (*Sender, error) {
 		return nil, errors.New("Twilio sender public base URL must be a canonical HTTPS origin")
 	}
 
-	client := twiliogo.NewRestClientWithParams(twiliogo.ClientParams{
-		Username:   config.APIKeySID,
-		Password:   config.APIKeySecret,
-		AccountSid: config.AccountSID,
-	})
-	return newSender(config, &sdkMessageCreator{client: client}), nil
+	return newSender(config, nil), nil
 }
 
-func newSender(config Config, messages messageCreator) *Sender {
+func newSender(config Config, httpClient *http.Client) *Sender {
+	client := &twilioclient.Client{
+		Credentials: twilioclient.NewCredentials(config.APIKeySID, config.APIKeySecret),
+		HTTPClient:  httpClient,
+	}
+	client.SetAccountSid(config.AccountSID)
+	restClient := twiliogo.NewRestClientWithParams(twiliogo.ClientParams{Client: client})
+
+	return newSenderWithMessages(config, &sdkMessageCreator{client: restClient})
+}
+
+func newSenderWithMessages(config Config, messages messageCreator) *Sender {
 	return &Sender{
 		messages:            messages,
 		messagingServiceSID: config.MessagingServiceSID,
@@ -57,7 +65,11 @@ func newSender(config Config, messages messageCreator) *Sender {
 
 // SendSMS submits a message using the configured Messaging Service and returns
 // the provider's accepted-message identity and initial status.
-func (sender *Sender) SendSMS(_ context.Context, command sms.Command) (sms.Submission, error) {
+func (sender *Sender) SendSMS(ctx context.Context, command sms.Command) (sms.Submission, error) {
+	if cause := context.Cause(ctx); cause != nil {
+		return sms.Submission{}, cause
+	}
+
 	params := &openapi.CreateMessageParams{}
 	params.SetTo(command.ToE164)
 	params.SetBody(command.Body)

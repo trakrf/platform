@@ -42,11 +42,11 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-30 | Task 2 implementation and review | Added fail-closed configuration using TDD. Review required canonical HTTPS origins and tidy dependency state; a fresh fix rejected userinfo/path/query/fragment forms and removed the then-unused SDK pin. Re-review approved; targeted, race, vet, module, notification-regression, and diff checks pass. |
 | 2026-08-30 | Task 3 implementation and review | Documented configuration and ownership boundaries. Review caught a non-empty URL that made a copied template partially configured; a fresh fix made all six active values empty and retained only a commented example. Re-review approved; ADR 0010, static assignment, targeted config, and diff checks pass. |
 | 2026-08-30 | Task 4 implementation and review | Classified legacy and V1 Twilio REST errors plus wrapped network failures using TDD. The structured result is redacted and does not retain raw provider chains. Task 4 legitimately imports and pins SDK v1.30.9. Independent review approved with all targeted, race, vet, module, regression, and diff checks passing. |
-| 2026-08-30 | Task 5 implementation | Implemented the outbound sender with observed RED then GREEN. It uses API Key SID/Secret with Account SID context, a Messaging Service (never raw `From`), and the canonical status callback. Targeted/race/vet/module/regression/diff checks pass; `go mod tidy -diff` reports only an existing missing localtunnel test checksum from the pinned SDK and was left unchanged because Task 5 source scope is limited to sender files. |
+| 2026-08-30 | Task 5 review fix | Replaced SDK/fake-bookkeeping tests with real SDK HTTP-transport tests that assert API-key Basic auth, Account SID path, exact allowed form fields, status callback, response mapping, provider-error redaction, and no outbound call on pre-cancellation. `SendSMS` now returns a caller context cause before submitting. Added the two tidy-required localtunnel checksums. Targeted/race/vet/module/regression/diff checks pass. |
 
 ### Current handoff
 
-- Next task: Task 5 independent review, then Task 6 verified callback form parsing.
+- Next task: Task 5 re-review, then Task 6 verified callback form parsing.
 - Implementation rule: use a fresh subagent context for every task, followed by an independent review context.
 - Not implementable in this ticket: frontend and geofence-event generation/integration.
 
@@ -281,11 +281,12 @@ git commit -m "feat(TRA-1201): classify Twilio failures"
 
 ### Task 5: Implement outbound SMS sending
 
-**MR file count:** 2
+**MR file count:** 3
 
 **Files:**
-- Create: `backend/internal/notification/twilio/sender.go`
-- Create: `backend/internal/notification/twilio/sender_test.go`
+- Modify: `backend/internal/notification/twilio/sender.go`
+- Modify: `backend/internal/notification/twilio/sender_test.go`
+- Modify: `backend/go.sum`
 
 **Consumes:** `sms.Command`, `sms.Submission`, `sms.Sender`, `twilio.Config`, and Task 4 classification.
 
@@ -293,13 +294,17 @@ git commit -m "feat(TRA-1201): classify Twilio failures"
 
 - [x] **Step 1: Write failing sender tests**
 
-Wrap Twilio message creation behind a package-local fakeable interface. Verify destination, body, Messaging Service SID, status callback URL, API-key client construction, returned Message SID/status, concurrent safety, and absence of a raw `From` parameter.
+Exercise the official SDK through a local HTTP transport. Verify the Messages POST
+path, API Key SID/Secret Basic auth (not Auth Token), Account SID context, exact
+form fields (`To`, `Body`, `MessagingServiceSid`, `StatusCallback` only), returned
+SID/status, normalized/redacted HTTP provider errors, nil SDK responses,
+pre-cancelled context behavior, and concurrent safety on the production HTTP path.
 
 - [x] **Step 2: Verify failure**
 
-Run: `cd backend && go test ./internal/notification/twilio -run 'TestSender|TestSendSMS' -count=1`
-
-Expected: FAIL because `Sender` is undefined.
+The cancellation regression was observed RED before the implementation: a
+pre-cancelled call returned a successful submission. The transport-suite rewrite
+was also observed RED before adding the minimal client-construction seam.
 
 - [x] **Step 3: Use the Twilio SDK pinned by Task 4**
 
@@ -309,21 +314,22 @@ Task 4 imports the official SDK's concrete REST error types, so it pins
 
 - [x] **Step 4: Implement sending**
 
-Construct the official Twilio client with API Key SID, API Key Secret, and Account SID. Set `To`, `Body`, `MessagingServiceSid`, and `${PublicBaseURL}/api/v1/notifications/twilio/status` only.
+Construct the official Twilio client with API Key SID, API Key Secret, and Account
+SID. Before submission, return `context.Cause(ctx)` when the caller context is
+already cancelled or expired. Otherwise set `To`, `Body`, `MessagingServiceSid`,
+and `${PublicBaseURL}/api/v1/notifications/twilio/status` only.
 
 - [x] **Step 5: Verify**
 
-Run: `cd backend && go test -race ./internal/notification/twilio -run 'TestSender|TestSendSMS' -count=1 && go mod tidy -diff`
+Run: `cd backend && go test -race ./internal/notification/twilio -run 'TestSender|TestSendSMS' -count=1 && go vet ./internal/notification/twilio && go mod tidy -diff && go mod verify && go test ./internal/notification/... -count=1 && git diff --check`
 
-The targeted race test, `go vet`, module verification, notification regression,
-and diff check passed. `go mod tidy -diff` reported an existing missing
-`github.com/localtunnel/go-localtunnel` checksum from the pinned SDK's test
-dependencies; Task 5 left `go.sum` untouched to keep its source scope to the
-declared sender files. No commit was created because this context must leave
-integration to the parent agent.
+All commands pass. `go mod tidy` added the two required
+`github.com/localtunnel/go-localtunnel` checksums to `backend/go.sum`; `go.mod`
+is unchanged. No commit was created because this context must leave integration
+to the parent agent.
 
 ```bash
-git add backend/internal/notification/twilio/sender.go backend/internal/notification/twilio/sender_test.go
+git add backend/internal/notification/twilio/sender.go backend/internal/notification/twilio/sender_test.go backend/go.sum
 git commit -m "feat(TRA-1201): send SMS through Twilio"
 ```
 
