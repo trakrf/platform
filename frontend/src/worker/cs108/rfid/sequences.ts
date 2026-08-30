@@ -88,5 +88,23 @@ export const POST_ABORT_QUIET_MS = 2000;
 export const RFID_STOP_SEQUENCE: CommandSequence = [{
   event: RFID_FIRMWARE_COMMAND,
   payload: createFirmwareCommand(CommandType.ABORT),
-  quietPeriodAfter: POST_ABORT_QUIET_MS
+  quietPeriodAfter: POST_ABORT_QUIET_MS,
+
+  // An ABORT never waits out another ABORT's window.
+  //
+  // Observed on hardware: press, release, press, release in quick succession
+  // produced "[CommandManager] Holding 1474ms for the device's quiet window"
+  // on the STOP — a second ABORT queued behind the first one's window. The
+  // operator had let go and the radio kept transmitting for another 1.5s.
+  //
+  // That inverts the constraint's purpose. The window exists so the reader can
+  // clear its buffer before being asked to do something new; stopping is not
+  // something new, it is the thing the window is protecting. A stop is also the
+  // safety-critical direction — CSL's own firmware wires an abort to the
+  // physical trigger (0xA004) precisely so a stop cannot be lost, and their
+  // reference app issues StopOperation() with no delay of any kind.
+  //
+  // What still waits: RFID_POWER_OFF and the register writes on the mode-change
+  // path, which is the case the vendor's worked examples actually illustrate.
+  ignoresQuietPeriod: true
 }];

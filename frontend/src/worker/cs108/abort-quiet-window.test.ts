@@ -106,7 +106,11 @@ describe('post-ABORT quiet window', () => {
         .map(({ label }) => label)
     );
 
-    expect(exempt.sort()).toEqual(['RFID_START_SEQUENCE[0]']);
+    // Both RFID trigger-path commands are exempt: a same-mode restart, and a
+    // stop. Neither is "something new" for the reader to clear its buffer for,
+    // and a delayed stop leaves the radio transmitting after the operator let
+    // go — observed on hardware as a 1474ms hold on an ABORT.
+    expect(exempt.sort()).toEqual(['RFID_START_SEQUENCE[0]', 'RFID_STOP_SEQUENCE[0]']);
   });
 
   it('holds the vendor figure, not a rounded-down one', () => {
