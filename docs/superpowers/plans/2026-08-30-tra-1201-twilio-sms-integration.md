@@ -39,13 +39,13 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-30 | Planning | TRA-1201 moved to In Progress. Linear records the implementation scope, meaningful outcome-focused testing, and explicit exclusions for frontend and geofencing. |
 | 2026-08-30 | Workspace setup | Created isolated feature worktree and branch `nicholusmuwonge/tra-1201-twilio-sms-integration` from current `origin/main`. Implementation has not started. |
 | 2026-08-30 | Task 1 implementation and review | Defined provider-neutral SMS contracts using TDD. Review rejected fake-bookkeeping assertions; a fresh fix context replaced them with external-package public API contract checks. Re-review approved; targeted, race, vet, and diff checks pass. |
-| 2026-08-30 | Task 2 implementation and review | Added fail-closed configuration using TDD. Review required canonical HTTPS origins and tidy dependency state; a fresh fix rejected userinfo/path/query/fragment forms and moved the SDK pin to Task 5, where it is first imported. Re-review approved; targeted, race, vet, module, notification-regression, and diff checks pass. |
+| 2026-08-30 | Task 2 implementation and review | Added fail-closed configuration using TDD. Review required canonical HTTPS origins and tidy dependency state; a fresh fix rejected userinfo/path/query/fragment forms and removed the then-unused SDK pin. Re-review approved; targeted, race, vet, module, notification-regression, and diff checks pass. |
 | 2026-08-30 | Task 3 implementation and review | Documented configuration and ownership boundaries. Review caught a non-empty URL that made a copied template partially configured; a fresh fix made all six active values empty and retained only a commented example. Re-review approved; ADR 0010, static assignment, targeted config, and diff checks pass. |
-| 2026-08-30 | Task 4 implementation | Classified legacy and V1 Twilio REST errors plus wrapped timeout and temporary-network failures using TDD. The classifier returns structured, redacted provider errors and does not retain raw provider error chains. Because Task 4 imports the official SDK to consume its concrete errors, `github.com/twilio/twilio-go` v1.30.9 and its module files move here from Task 5. Targeted, race, vet, tidy-diff, module verification, notification regression, and diff checks pass. |
+| 2026-08-30 | Task 4 implementation and review | Classified legacy and V1 Twilio REST errors plus wrapped network failures using TDD. The structured result is redacted and does not retain raw provider chains. Task 4 legitimately imports and pins SDK v1.30.9. Independent review approved with all targeted, race, vet, module, regression, and diff checks passing. |
 
 ### Current handoff
 
-- Next task: independent Task 4 review; then Task 5, outbound SMS sending.
+- Next task: Task 5, outbound SMS sending.
 - Implementation rule: use a fresh subagent context for every task, followed by an independent review context.
 - Not implementable in this ticket: frontend and geofence-event generation/integration.
 
