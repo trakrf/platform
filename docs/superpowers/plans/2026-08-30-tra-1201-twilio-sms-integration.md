@@ -41,10 +41,11 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-30 | Task 1 implementation and review | Defined provider-neutral SMS contracts using TDD. Review rejected fake-bookkeeping assertions; a fresh fix context replaced them with external-package public API contract checks. Re-review approved; targeted, race, vet, and diff checks pass. |
 | 2026-08-30 | Task 2 implementation and review | Added fail-closed configuration using TDD. Review required canonical HTTPS origins and tidy dependency state; a fresh fix rejected userinfo/path/query/fragment forms and moved the SDK pin to Task 5, where it is first imported. Re-review approved; targeted, race, vet, module, notification-regression, and diff checks pass. |
 | 2026-08-30 | Task 3 implementation and review | Documented configuration and ownership boundaries. Review caught a non-empty URL that made a copied template partially configured; a fresh fix made all six active values empty and retained only a commented example. Re-review approved; ADR 0010, static assignment, targeted config, and diff checks pass. |
+| 2026-08-30 | Task 4 implementation | Classified legacy and V1 Twilio REST errors plus wrapped timeout and temporary-network failures using TDD. The classifier returns structured, redacted provider errors and does not retain raw provider error chains. Because Task 4 imports the official SDK to consume its concrete errors, `github.com/twilio/twilio-go` v1.30.9 and its module files move here from Task 5. Targeted, race, vet, tidy-diff, module verification, notification regression, and diff checks pass. |
 
 ### Current handoff
 
-- Next task: Task 4, Twilio provider error classification.
+- Next task: independent Task 4 review; then Task 5, outbound SMS sending.
 - Implementation rule: use a fresh subagent context for every task, followed by an independent review context.
 - Not implementable in this ticket: frontend and geofence-event generation/integration.
 
@@ -229,17 +230,19 @@ git commit -m "docs(TRA-1201): document Twilio application settings"
 
 ### Task 4: Classify Twilio provider errors
 
-**MR file count:** 2
+**MR file count:** 4
 
 **Files:**
 - Create: `backend/internal/notification/twilio/errors.go`
 - Create: `backend/internal/notification/twilio/errors_test.go`
+- Modify: `backend/go.mod`
+- Modify: `backend/go.sum`
 
 **Consumes:** `sms.ProviderError` from Task 1 and Twilio REST errors.
 
 **Produces:** `classifyError(error) error` returning normalized provider errors.
 
-- [ ] **Step 1: Write failing table-driven tests**
+- [x] **Step 1: Write failing table-driven tests**
 
 Assert:
 
@@ -251,22 +254,25 @@ Transient: 429, 5xx, timeout, temporary network failure
 
 Assert normalized errors exclude destination, body, and credentials.
 
-- [ ] **Step 2: Verify failure**
+- [x] **Step 2: Verify failure**
 
 Run: `cd backend && go test ./internal/notification/twilio -run TestClassifyError -count=1`
 
 Expected: FAIL because `classifyError` is undefined.
 
-- [ ] **Step 3: Implement classification**
+- [x] **Step 3: Implement classification**
 
 Use Twilio error code and HTTP status when available. Preserve no raw provider error text that could contain request data.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify**
 
-Run: `cd backend && go test ./internal/notification/twilio -run TestClassifyError -count=1`
+Run: `cd backend && go test -race ./internal/notification/twilio -run TestClassifyError -count=1 && go vet ./internal/notification/twilio && go mod tidy -diff && go mod verify && git diff --check`
+
+The verification portion passed. No commit was created because this context was
+instructed to leave integration to the parent agent.
 
 ```bash
-git add backend/internal/notification/twilio/errors.go backend/internal/notification/twilio/errors_test.go
+git add backend/internal/notification/twilio/errors.go backend/internal/notification/twilio/errors_test.go backend/go.mod backend/go.sum
 git commit -m "feat(TRA-1201): classify Twilio failures"
 ```
 
@@ -274,13 +280,11 @@ git commit -m "feat(TRA-1201): classify Twilio failures"
 
 ### Task 5: Implement outbound SMS sending
 
-**MR file count:** 4
+**MR file count:** 2
 
 **Files:**
 - Create: `backend/internal/notification/twilio/sender.go`
 - Create: `backend/internal/notification/twilio/sender_test.go`
-- Modify: `backend/go.mod`
-- Modify: `backend/go.sum`
 
 **Consumes:** `sms.Command`, `sms.Submission`, `sms.Sender`, `twilio.Config`, and Task 4 classification.
 
@@ -296,9 +300,11 @@ Run: `cd backend && go test ./internal/notification/twilio -run 'TestSender|Test
 
 Expected: FAIL because `Sender` is undefined.
 
-- [ ] **Step 3: Add the Twilio SDK when sender first imports it**
+- [x] **Step 3: Use the Twilio SDK pinned by Task 4**
 
-Run: `cd backend && go get github.com/twilio/twilio-go@v1.30.9`
+Task 4 imports the official SDK's concrete REST error types, so it pins
+`github.com/twilio/twilio-go` v1.30.9 and owns `backend/go.mod` and
+`backend/go.sum`. Task 5 reuses that pin.
 
 - [ ] **Step 4: Implement sending**
 
@@ -309,7 +315,7 @@ Construct the official Twilio client with API Key SID, API Key Secret, and Accou
 Run: `cd backend && go test -race ./internal/notification/twilio -run 'TestSender|TestSendSMS' -count=1 && go mod tidy -diff`
 
 ```bash
-git add backend/internal/notification/twilio/sender.go backend/internal/notification/twilio/sender_test.go backend/go.mod backend/go.sum
+git add backend/internal/notification/twilio/sender.go backend/internal/notification/twilio/sender_test.go
 git commit -m "feat(TRA-1201): send SMS through Twilio"
 ```
 
