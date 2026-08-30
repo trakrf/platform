@@ -32,7 +32,7 @@
 import { describe, it, expect } from 'vitest';
 import type { CommandSequence, SequenceCommand } from './type.js';
 import { POST_ABORT_QUIET_MS, RFID_START_SEQUENCE, RFID_STOP_SEQUENCE, transmitPowerSequence } from './rfid/sequences.js';
-import { BATTERY_VOLTAGE_SEQUENCE, IDLE_SEQUENCE, SHUTDOWN_SEQUENCE } from './system/sequences.js';
+import { BATTERY_VOLTAGE_SEQUENCE, IDLE_SEQUENCE } from './system/sequences.js';
 import { BARCODE_CONFIG_SEQUENCE, BARCODE_START_SEQUENCE, BARCODE_STOP_SEQUENCE } from './barcode/sequences.js';
 import { INVENTORY_CONFIG_SEQUENCE } from './rfid/inventory/sequences.js';
 import { LOCATE_CONFIG_SEQUENCE, locateSettingsSequence } from './rfid/locate/sequences.js';
@@ -52,7 +52,6 @@ const ALL_SEQUENCES: Array<[string, CommandSequence]> = [
   ['transmitPowerSequence(25)', transmitPowerSequence(25)],
   ['BATTERY_VOLTAGE_SEQUENCE', BATTERY_VOLTAGE_SEQUENCE],
   ['IDLE_SEQUENCE', IDLE_SEQUENCE],
-  ['SHUTDOWN_SEQUENCE', SHUTDOWN_SEQUENCE],
   ['BARCODE_CONFIG_SEQUENCE', BARCODE_CONFIG_SEQUENCE],
   ['BARCODE_START_SEQUENCE', BARCODE_START_SEQUENCE],
   ['BARCODE_STOP_SEQUENCE', BARCODE_STOP_SEQUENCE],
@@ -79,11 +78,10 @@ describe('post-ABORT quiet window', () => {
   it('finds the ABORTs it is meant to be checking', () => {
     // CANARY. Without it, a change to the ABORT payload shape or to an import
     // makes `abortEntries` empty and every assertion below passes vacuously —
-    // a green suite asserting nothing about anything. There are two known
-    // ABORTs today; a third is a reason to look, not to edit this number
-    // reflexively.
+    // a green suite asserting nothing about anything. There is ONE ABORT today;
+    // a second is a reason to look, not to edit this list reflexively.
     expect(abortEntries.map(e => `${e.name}[${e.index}]`).sort())
-      .toEqual(['RFID_STOP_SEQUENCE[0]', 'SHUTDOWN_SEQUENCE[0]']);
+      .toEqual(['RFID_STOP_SEQUENCE[0]']);
   });
 
   it.each(abortEntries.map(e => [`${e.name}[${e.index}]`, e.cmd] as const))(

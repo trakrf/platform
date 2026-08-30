@@ -3,14 +3,11 @@
  */
 
 import type { CommandSequence } from '../type.js';
-import { createFirmwareCommand, CommandType } from '../rfid/firmware-command.js';
-import { POST_ABORT_QUIET_MS } from '../rfid/sequences.js';
 import {
   RFID_POWER_OFF,
   BARCODE_POWER_OFF,
   GET_BATTERY_VOLTAGE,
-  GET_TRIGGER_STATE,
-  RFID_FIRMWARE_COMMAND
+  GET_TRIGGER_STATE
 } from '../event.js';
 
 /**
@@ -49,28 +46,3 @@ export const IDLE_SEQUENCE: CommandSequence = [
   // for now we just disable this and rely on the idle GET_BATTERY_VOLTAGE above to display battery level
 ];
 
-/**
- * Shutdown Sequence
- *
- * Clean shutdown of all modules
- *
- * ⚠ CURRENTLY UNREFERENCED — nothing in src or tests executes this. It is kept
- * correct rather than deleted because deciding its fate is a judgement about
- * intent this pass does not have; flagged on TRA-1197 for review. Left as it
- * was, it is worse than dead code: it aborts and then powers the RFID module
- * off in the very next step, so wiring it up would inherit exactly the defect
- * TRA-1185 describes.
- */
-export const SHUTDOWN_SEQUENCE: CommandSequence = [
-  {
-    event: RFID_FIRMWARE_COMMAND,
-    payload: createFirmwareCommand(CommandType.ABORT),
-    quietPeriodAfter: POST_ABORT_QUIET_MS
-  },
-  {
-    event: RFID_POWER_OFF
-  },
-  {
-    event: BARCODE_POWER_OFF
-  }
-];
