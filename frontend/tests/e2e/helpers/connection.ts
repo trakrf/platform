@@ -609,41 +609,75 @@ export async function simulateConnectionLoss(page: Page): Promise<void> {
 }
 
 /**
- * Wait for bridge server to be ready
- * Helps ensure clean connection state
+ * Wait for the page to be able to reach a device.
+ *
+ * The condition checked here is `navigator.bluetooth` existing in the page,
+ * which is true only when the dev server was started in bridge mode — that is
+ * what injects the mock. It says nothing whatsoever about the bridge process.
+ *
+ * That distinction cost an afternoon (TRA-1190). Started as `pnpm vite` instead
+ * of `pnpm dev:bridge`, 13 @hardware specs failed with "Bridge server not ready
+ * within timeout" while the bridge was up, fresh, verified and idle on its port
+ * the entire time. The message named a healthy component, so debugging went to
+ * the bridge, then the reader, then the radio — all fine, none of them the
+ * fault. The unmet precondition was never mentioned by the error describing it.
+ *
+ * So the two faults are reported apart, because they have different fixes:
+ *
+ *   no `navigator.bluetooth`  → the dev server is not in bridge mode. Restart
+ *                               it as `pnpm dev:bridge`. The bridge is not
+ *                               involved and restarting it changes nothing.
+ *   mock present, not usable  → the injection happened but the object is not
+ *                               functional; this one really is about the bridge.
  */
 export async function waitForBridgeReady(page: Page, timeout: number = 5000): Promise<void> {
   const startTime = Date.now();
-  
+  let last = { hasBluetooth: false, hasRequestDevice: false, isMocked: false, hasWebBleMock: false };
+
   while (Date.now() - startTime < timeout) {
     try {
-      // Check if Web Bluetooth mock is ready
-      const result = await page.evaluate(() => {
-        // DO NOT manually inject - the dev:mock server already did this
-        // Just check if it's available
-        
-        return {
-          hasBluetooth: !!navigator.bluetooth,
-          hasRequestDevice: !!(navigator.bluetooth && typeof navigator.bluetooth.requestDevice === 'function'),
-          isMocked: (window as WindowWithStores).__webBluetoothBridged === true,
-          hasWebBleMock: typeof (window as WindowWithStores).WebBleMock !== 'undefined'
-        };
-      });
-      
-      console.log('[Connection] Bridge check:', result);
-      
-      if (result.hasBluetooth && result.hasRequestDevice) {
+      // DO NOT manually inject - the dev:bridge server already did this.
+      // Just check if it's available.
+      last = await page.evaluate(() => ({
+        hasBluetooth: !!navigator.bluetooth,
+        hasRequestDevice: !!(navigator.bluetooth && typeof navigator.bluetooth.requestDevice === 'function'),
+        isMocked: (window as WindowWithStores).__webBluetoothBridged === true,
+        hasWebBleMock: typeof (window as WindowWithStores).WebBleMock !== 'undefined'
+      }));
+
+      console.log('[Connection] Bridge check:', last);
+
+      if (last.hasBluetooth && last.hasRequestDevice) {
         console.log('[Connection] Bridge server ready');
         return;
       }
-      
+
     } catch (error) {
       // Continue waiting
     }
-    
+
     await page.waitForTimeout(100);
   }
-  
-  throw new Error('Bridge server not ready within timeout');
+
+  // Nothing was injected at all: this is the dev server, not the bridge.
+  if (!last.hasBluetooth && !last.hasWebBleMock) {
+    throw new Error(
+      'The dev server is not in bridge mode — `navigator.bluetooth` was never ' +
+      'injected into the page, so no device can be reached.\n' +
+      '  Fix: restart the dev server as `pnpm dev:bridge` (not `pnpm vite`).\n' +
+      '  NOTE: this is NOT a bridge fault. A running, healthy bridge produces ' +
+      'this exact failure when the page has no mock to talk to it with, so ' +
+      'restarting the bridge or power-cycling the reader will not help.'
+    );
+  }
+
+  // The mock is present but not usable — now the bridge is a fair suspect.
+  throw new Error(
+    'Web Bluetooth mock is present but not usable within timeout ' +
+    `(bluetooth=${last.hasBluetooth} requestDevice=${last.hasRequestDevice} ` +
+    `bridged=${last.isMocked} webBleMock=${last.hasWebBleMock}).\n` +
+    '  The dev server IS in bridge mode, so check the bridge itself: that it is ' +
+    'running, and that no other client already holds the connection.'
+  );
 }
 

@@ -27,7 +27,11 @@ From repo root:
     just backend db-pull-nk "$SOURCE_URL" "$TARGET_URL"
 
     # Local-dev-copy use case (non-empty target → must truncate first):
-    just backend db-pull-nk "$PG_URL_PREVIEW" "$PG_URL_MIGRATE_LOCAL" --truncate
+    # The local target URL is composed from parts now (TRA-1190); print the
+    # one this checkout would use with:
+    #   just backend --evaluate pg_url_migrate_local
+    just backend db-pull-nk "$PG_URL_PREVIEW" \
+        "$(just backend --evaluate pg_url_migrate_local)" --truncate
 
 This applies 01..10 in order, then 20_verify.sql, then 99_teardown.sql. Each step
 stops on first error (`-v ON_ERROR_STOP=1`). The optional `00_truncate_target.sql`

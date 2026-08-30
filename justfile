@@ -50,7 +50,7 @@ alias be := backend
 
 lint: (frontend "lint") (backend "lint") (cli "lint")
 
-test: test-ops test-release-guards test-db-init test-bootstrap (frontend "test") (backend "test") (cli "test")
+test: test-ops test-release-guards test-db-init test-env-drift test-bootstrap (frontend "test") (backend "test") (cli "test")
 
 build: (frontend "build") (backend "build") (cli "build")
 
@@ -137,6 +137,14 @@ check-changelog:
 test-db-init:
     @./scripts/test-db-init.sh
 
+# TRA-1190: local env has exactly one declaration and every copy agrees with it
+# — .env.local.example holds parts rather than DSNs (the shape the cluster has
+# used since the GKE/CNPG migration), .env is a symlink to .env.local rather
+# than a second file, and the database and role names come from
+# database/justfile. Text assertions, no database needed.
+test-env-drift:
+    @./scripts/test-env-drift.sh
+
 # TRA-1172: `just bootstrap` fails loudly and is a cheap no-op when warm. Runs
 # the real script against a stub toolchain in a temp dir — no network, no vite.
 test-bootstrap:
@@ -147,15 +155,24 @@ test-bootstrap:
 # ============================================================================
 
 # Docker-based development (database + backend container)
+#
+# Migrations run BEFORE the backend serves, which is the order the cluster uses:
+# helm/trakrf-backend's migrate Job is a `pre-install,pre-upgrade` hook at
+# weight -5, so no pod ever accepts traffic against a schema it is newer than.
+#
+# This recipe used to start the backend first and migrate second. That window is
+# where TRA-1190 lived: the backend came up against a schema two migrations
+# behind, /health returned 200 and signup returned 201 — because neither touched
+# the new column — and only login 500'd. Every cheap check passed, so an e2e run
+# launched into it produced 89 identical failures that read as test rot.
 dev:
     @just database up
     @echo "⏳ Waiting for database to be ready..."
     @sleep 3
+    @echo "🔄 Running migrations (before the backend serves)..."
+    @just backend migrate
     @echo "🚀 Starting backend..."
     @docker compose up -d backend
-    @sleep 2
-    @echo "🔄 Running migrations..."
-    @just backend migrate
     @echo "✅ Development environment ready"
 
 # Local development (parallel frontend + backend)

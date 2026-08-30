@@ -396,3 +396,78 @@ func TestFindOwnershipDrift_SuperuserIsExempt(t *testing.T) {
 		t.Fatalf("superuser should see no drift, got %+v", drifts)
 	}
 }
+
+// An extension's own objects are not drift, even though the migrating role does
+// not own them (TRA-1190).
+//
+// pgcrypto is a TRUSTED extension, so `CREATE EXTENSION pgcrypto` succeeds for a
+// non-superuser — and Postgres then assigns every one of its objects to the
+// bootstrap superuser regardless of who ran the statement. Migration 000001
+// creates it inside the trakrf schema, so a database migrated by trakrf-migrate
+// ends up with 36 postgres-owned functions there, permanently and by design.
+// The migrating role cannot own them and no repair statement can change that.
+//
+// Before this exclusion the preflight flagged all 36, which meant `just backend
+// migrate` succeeded exactly once on a fresh database and refused every run
+// afterwards — including as a no-op, because the preflight runs before
+// golang-migrate decides there is nothing to do. `just dev` migrates on every
+// invocation, so the second `just dev` failed.
+//
+// Excluding them costs nothing the guard was protecting: a migration never
+// CREATE OR REPLACEs an extension member — the extension owns its own
+// definitions — so such an object cannot produce the half-applied migration and
+// dirty ledger this preflight exists to prevent.
+func TestFindOwnershipDrift_IgnoresExtensionMembers(t *testing.T) {
+	ctx := context.Background()
+	pool := provisionOwnershipDB(ctx, t)
+
+	// Install as the superuser and place it in trakrf, reproducing what
+	// migration 000001 leaves behind on a real database.
+	admin := poolAs(ctx, t, ownershipAdminURL(t), ownershipTestDB, "", "")
+	if _, err := admin.Exec(ctx, "CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA trakrf"); err != nil {
+		t.Skipf("pgcrypto unavailable in this image: %v", err)
+	}
+
+	// Guard the guard: if the extension put nothing in trakrf, the assertion
+	// below would pass while testing nothing at all.
+	var members int
+	if err := admin.QueryRow(ctx, `
+		SELECT count(*)
+		  FROM pg_depend d
+		  JOIN pg_extension e ON e.oid = d.refobjid
+		  JOIN pg_proc p      ON p.oid = d.objid
+		  JOIN pg_namespace n ON n.oid = p.pronamespace
+		 WHERE d.deptype = 'e' AND e.extname = 'pgcrypto' AND n.nspname = 'trakrf'`).
+		Scan(&members); err != nil {
+		t.Fatalf("counting extension members: %v", err)
+	}
+	if members == 0 {
+		t.Fatal("pgcrypto placed no functions in trakrf — this test would prove nothing")
+	}
+	t.Logf("pgcrypto contributed %d functions to trakrf", members)
+
+	drifts, err := findOwnershipDrift(ctx, pool)
+	if err != nil {
+		t.Fatalf("audit failed: %v", err)
+	}
+
+	for _, d := range drifts {
+		if strings.Contains(d.name, "pgp_") || strings.Contains(d.name, "gen_salt") ||
+			strings.Contains(d.name, "crypt") || strings.Contains(d.name, "digest") ||
+			strings.Contains(d.name, "hmac") || strings.Contains(d.name, "armor") {
+			t.Errorf("reported an extension member as drift: %+v", d)
+		}
+	}
+
+	// The genuine drift planted by provisionOwnershipDB must still be caught —
+	// this exclusion must not have widened into "ignore anything unowned".
+	var sawRealDrift bool
+	for _, d := range drifts {
+		if strings.Contains(d.name, "drifted_probe") {
+			sawRealDrift = true
+		}
+	}
+	if !sawRealDrift {
+		t.Error("the extension exclusion also suppressed real ownership drift")
+	}
+}

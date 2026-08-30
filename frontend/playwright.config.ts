@@ -10,6 +10,22 @@ const isRemote = !!process.env.PLAYWRIGHT_BASE_URL;
 export default defineConfig({
   testDir: './tests/e2e',
 
+  /*
+   * Refuse to start a run whose environment cannot pass it (TRA-1190).
+   *
+   * Checks that the backend is reachable and that its schema is not behind the
+   * migrations it was built with, and fails the whole run naming whichever is
+   * unmet. Both states have already produced large, confident failure counts
+   * that were triaged as test rot — 89 specs failing identically at 11.3s
+   * because login 500'd on an unapplied column, and an earlier run against no
+   * backend at all whose mislabelled verdict was then quoted in a commit
+   * message as fact.
+   *
+   * The cost this avoids is not a wasted run. It is a wrong conclusion, which
+   * outlives the run and is indistinguishable from a real finding afterwards.
+   */
+  globalSetup: './tests/e2e/assert-preconditions.ts',
+
   // IMPORTANT: 30 second timeout per test - fail fast instead of hanging!
   // If a test needs more time, it should be split into smaller tests
   timeout: 30 * 1000,

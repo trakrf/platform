@@ -24,7 +24,9 @@ a documented customer knob (geofence → 500ms; storage-room-at-rest → larger)
 docker compose -f docker-compose.yaml -f load-tests/ingest/docker-compose.loadtest.yaml up -d
 # 2. Migrate + seed (org + cs463 device + scan_points + ~145 tags from real EPCs):
 just backend migrate
-psql "$PG_URL_LOCAL" -f load-tests/ingest/seed.sql
+# Connection URLs are composed from parts (TRA-1190) — ask just for the one
+# this checkout uses rather than reading a retired PG_URL_LOCAL.
+psql "$(just backend --evaluate pg_url_local)" -f load-tests/ingest/seed.sql
 # 3. Point the reader at this host's broker (plaintext 1883) via the /API, then:
 READER_API_PASS=... ./load-tests/ingest/sweep.sh 0 250 500 1000   # dedup cliff sweep
 ./load-tests/ingest/measure.sh 120 2                              # per-hop rate instrument
