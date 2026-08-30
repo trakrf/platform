@@ -43,10 +43,11 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-30 | Task 3 implementation and review | Documented configuration and ownership boundaries. Review caught a non-empty URL that made a copied template partially configured; a fresh fix made all six active values empty and retained only a commented example. Re-review approved; ADR 0010, static assignment, targeted config, and diff checks pass. |
 | 2026-08-30 | Task 4 implementation and review | Classified legacy and V1 Twilio REST errors plus wrapped network failures using TDD. The structured result is redacted and does not retain raw provider chains. Task 4 legitimately imports and pins SDK v1.30.9. Independent review approved with all targeted, race, vet, module, regression, and diff checks passing. |
 | 2026-08-30 | Task 5 implementation and review | Implemented the sender. Review rejected discarded cancellation, SDK-internal/fake-bookkeeping tests, and an untidy checksum set. A fresh fix added pre-submit cancellation and real SDK HTTP-contract tests for auth, account path, exact forms/no `From`, callbacks, response/error outcomes, and concurrency. Re-review approved; all targeted/race/vet/module/regression/diff checks pass. |
+| 2026-08-30 | Task 6 implementation | Added bounded, signature-verified form parsing with TDD. Callback URLs are reconstructed only from the configured public HTTPS origin, escaped request path, and raw query, never proxy authority. No callback consumer is invoked yet. Targeted/race/vet/notification-regression/diff checks pass; independent review is next. |
 
 ### Current handoff
 
-- Next task: Task 6, verified callback form parsing.
+- Next task: independent Task 6 review, then Task 7 delivery-status parsing.
 - Implementation rule: use a fresh subagent context for every task, followed by an independent review context.
 - Not implementable in this ticket: frontend and geofence-event generation/integration.
 
@@ -348,21 +349,21 @@ git commit -m "feat(TRA-1201): send SMS through Twilio"
 
 **Produces:** `twiliosms.Handler` and verified form parsing shared by both callback types.
 
-- [ ] **Step 1: Write failing signature tests**
+- [x] **Step 1: Write failing signature tests**
 
 Cover valid form signatures, invalid signatures, missing signatures, path/query inclusion, and canonical public URL reconstruction behind a proxy.
 
-- [ ] **Step 2: Verify failure**
+- [x] **Step 2: Verify failure**
 
 Run: `cd backend && go test ./internal/handlers/twiliosms -run TestSignature -count=1`
 
 Expected: FAIL because the handler package does not exist.
 
-- [ ] **Step 3: Implement validation**
+- [x] **Step 3: Implement validation**
 
 Use `client.NewRequestValidator`. Validate `X-Twilio-Signature` against configured public origin plus request path and raw query before producing callback events.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run: `cd backend && go test ./internal/handlers/twiliosms -run TestSignature -count=1`
 
