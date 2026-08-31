@@ -147,6 +147,35 @@ class CS108Reader extends BaseReader {
         this.triggerState = payload?.pressed ?? false;
         logger.debug(`Trigger state updated: ${this.triggerState}`);
 
+        // Tell the UI NOW, not after the scan call completes (TRA-1171).
+        //
+        // This post used to sit at the end of the case, behind an awaited
+        // startScanning()/stopScanning(). The store could not learn the
+        // operator had let go until the ABORT round-trip finished, so the
+        // Locate screen correctly rendered every read that arrived in the
+        // meantime — gauge moving and alarm sounding after the release.
+        //
+        // Posting first also fixes the worse limb: when the awaited call
+        // REJECTS, the event was never emitted at all (TRA-1168).
+        //
+        // Press-side ordering audit, required by TRA-1171's acceptance and
+        // done before this line was written. Subscribers now see pressed=true
+        // BEFORE the reader reports SCANNING. Every consumer of
+        // deviceStore.triggerState was checked:
+        //   - DebugPanel, Header  — render an indicator only.
+        //   - LocateScreen status — requires triggerState AND isScanning to
+        //     agree, so it passes through one extra render with neither
+        //     branch true and settles on the same message.
+        //   - device-manager's button-restart guard — only reachable on
+        //     SCANNING -> CONNECTED, which a press cannot produce.
+        //   - useScanToInput (armed at AssetSearchSort, AssetForm,
+        //     LocationForm) issues setMode(BARCODE) on the edge. Post-TRA-1197
+        //     CommandManager queues instead of throwing, so it waits its turn
+        //     behind the worker's own startScanning() rather than colliding —
+        //     same order as before, without the "Command already active"
+        //     throw that used to be the risk here.
+        postWorkerEvent(event);
+
         // Check if we're in a scanning mode
         if (this.readerMode === ReaderMode.BARCODE ||
             this.readerMode === ReaderMode.INVENTORY ||
@@ -156,8 +185,10 @@ class CS108Reader extends BaseReader {
           const now = Date.now();
           if (now - this.lastTriggerTime < this.triggerDebounceMs) {
             logger.debug('Trigger event debounced, but state tracked for reconciliation');
-            // Still emit for UI feedback even if debounced
-            break;
+            // The UI feedback this used to `break` for has already been posted
+            // above. Breaking now would fall into the post at the end of the
+            // switch and emit the edge twice.
+            return;
           }
           this.lastTriggerTime = now;
 
@@ -181,9 +212,7 @@ class CS108Reader extends BaseReader {
         } else {
           logger.debug(`Trigger event ignored - mode is ${this.readerMode}`);
         }
-        // Post event to DeviceManager for UI sync
-        postWorkerEvent(event);
-        return; // Don't fall through to postWorkerEvent at end
+        return; // already posted above, ahead of the awaits
       }
 
       case 'BARCODE_AUTO_STOP_REQUEST':
