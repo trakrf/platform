@@ -3,13 +3,11 @@
  */
 
 import type { CommandSequence } from '../type.js';
-import { createFirmwareCommand, CommandType } from '../rfid/firmware-command.js';
 import {
   RFID_POWER_OFF,
   BARCODE_POWER_OFF,
   GET_BATTERY_VOLTAGE,
-  GET_TRIGGER_STATE,
-  RFID_FIRMWARE_COMMAND
+  GET_TRIGGER_STATE
 } from '../event.js';
 
 /**
@@ -32,11 +30,11 @@ export const BATTERY_VOLTAGE_SEQUENCE: CommandSequence = [
 export const IDLE_SEQUENCE: CommandSequence = [
   {
     event: RFID_POWER_OFF,
-    retryOnError: true  // Power commands may fail initially
+    retryDelays: [100]  // Power commands may fail initially
   },
   {
     event: BARCODE_POWER_OFF,
-    retryOnError: true  // Barcode module may need retry
+    retryDelays: [100]  // Barcode module may need retry
   },
   {
     event: GET_TRIGGER_STATE  // Check if trigger is already pressed on connect
@@ -48,20 +46,3 @@ export const IDLE_SEQUENCE: CommandSequence = [
   // for now we just disable this and rely on the idle GET_BATTERY_VOLTAGE above to display battery level
 ];
 
-/**
- * Shutdown Sequence
- *
- * Clean shutdown of all modules
- */
-export const SHUTDOWN_SEQUENCE: CommandSequence = [
-  {
-    event: RFID_FIRMWARE_COMMAND,
-    payload: createFirmwareCommand(CommandType.ABORT)
-  },
-  {
-    event: RFID_POWER_OFF
-  },
-  {
-    event: BARCODE_POWER_OFF
-  }
-];

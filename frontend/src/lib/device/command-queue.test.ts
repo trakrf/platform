@@ -2,8 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { CommandQueue } from './command-queue';
 
 /**
- * The worker's CommandManager is not re-entrant: a second executeCommand while
- * one is in flight throws "Command already active". DeviceManager has four
+ * The worker's CommandManager USED to be non-re-entrant: a second executeCommand
+ * while one is in flight threw "Command already active". TRA-1197 made it queue,
+ * so that is no longer why this exists — see command-queue.ts for what still is.
+ * The behaviour asserted below (FIFO order, no poisoned chain) is unchanged
+ * either way. DeviceManager has four
  * independent store subscribers (uiStore, kitStore, settingsStore, scanButton)
  * that all issue worker commands, and nothing sequenced them — so navigating to
  * Locate and typing a target a moment later put setMode(Barcode) and

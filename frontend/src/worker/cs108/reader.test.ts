@@ -9,6 +9,7 @@ import { INVENTORY_CONFIG_SEQUENCE } from './rfid/inventory/sequences.js';
 import { BARCODE_CONFIG_SEQUENCE } from './barcode/sequences.js';
 import { LOCATE_CONFIG_SEQUENCE, locateSettingsSequence } from './rfid/locate/sequences.js';
 import { RFID_REGISTERS } from './rfid/constant.js';
+import { RFID_START_SEQUENCE } from './rfid/sequences.js';
 import { removeLeadingZeros } from '../../utils/reconciliationUtils';
 import type { CS108Packet } from './type.js';
 
@@ -44,7 +45,16 @@ vi.mock('./command.js', async (importOriginal) => ({
       executeCommand: vi.fn(),
       handleCommandResponse: vi.fn(),
       isWaitingForResponse: vi.fn().mockReturnValue(false),
-      isIdle: vi.fn().mockReturnValue(true)
+      isIdle: vi.fn().mockReturnValue(true),
+      // Delegates to the same spies rather than being its own, so a caller that
+      // takes the wire once and issues N commands through the runner is still
+      // observable through `executeSequence`/`executeCommand`. A mock that
+      // recorded runExclusive separately would make every existing assertion
+      // about mode sequences silently stop seeing the settings path.
+      runExclusive: vi.fn(async (body: (run: unknown) => Promise<unknown>) => body({
+        command: (...args: unknown[]) => mockManager.executeCommand(...args),
+        sequence: (...args: unknown[]) => mockManager.executeSequence(...args)
+      }))
     };
     return mockManager;
   }),
@@ -505,6 +515,7 @@ describe('CS108Reader', () => {
    */
   describe('LOCATE tag mask sourcing (TRA-1091)', () => {
     const TARGET_EPC = 'E280689400000000001018DD';
+    const SECOND_TARGET_EPC = 'E280689400000000001018EE';
 
     // Last N commands of a mode sequence — buildModeSequences() appends the
     // mask sequence last.
@@ -570,25 +581,45 @@ describe('CS108Reader', () => {
       ).resolves.toBeUndefined();
     });
 
-    it('treats the mutex collision as benign and still builds the mask', async () => {
-      // Reproduce the reported interleaving: the settings push loses the race
-      // and rejects with the mutex error, which is not a SequenceAbortedError,
-      // so it used to miss setSettings' graceful branch and surface as ERROR on
-      // the primary Locate path. It is now swallowed like an abort, because
-      // the mode change applies the mask this call could not.
-      const mutexError = new CommandInFlightError();
-      (commandManagerMock.executeSequence as Mock).mockRejectedValueOnce(mutexError);
+    it('still treats a mutex collision as benign, but reports it loudly', async () => {
+      // TRA-1197 should make this unreachable — a settings push queues rather
+      // than losing the mutex. The guard stays anyway, because the outcomes are
+      // asymmetric: swallowing costs a deferred settings write that the mode
+      // change reapplies, while propagating puts the primary Locate path into
+      // ERROR, which is the hardware-found defect TRA-1091 shipped to fix.
+      //
+      // What DID change is the silence. It is logged at error level so a
+      // bypassed queue is countable rather than invisible.
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      (commandManagerMock.executeSequence as Mock)
+        .mockRejectedValueOnce(new CommandInFlightError());
 
       await expect(
         reader.setSettings({ rfid: { transmitPower: 25, targetEPC: TARGET_EPC } })
       ).resolves.toBeUndefined();
 
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[Worker] ERROR:',
+        expect.stringContaining('should be unreachable'),
+        expect.anything()
+      );
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('applies the mask on the settings path now that it no longer loses the race', async () => {
+      // The positive half of what the old benign branch was protecting: with
+      // the wire taken once for the whole block, the tag mask actually reaches
+      // the hardware from setSettings rather than being deferred to whatever
+      // mode change happened to follow.
+      await reader.setMode(ReaderMode.LOCATE, { rfid: { targetEPC: TARGET_EPC } });
       (commandManagerMock.executeSequence as Mock).mockClear();
 
-      await reader.setMode(ReaderMode.LOCATE, { rfid: { targetEPC: TARGET_EPC } });
+      await reader.setSettings({ rfid: { transmitPower: 25, targetEPC: SECOND_TARGET_EPC } });
 
-      const expected = locateSettingsSequence(TARGET_EPC);
-      expect(maskTail(lastModeSequence(), expected.length)).toEqual(expected);
+      // The mask sequence is the LAST thing the settings block writes, so it is
+      // the last call — and it carries the NEW target, not the one setMode put
+      // there.
+      expect(lastModeSequence()).toEqual(locateSettingsSequence(SECOND_TARGET_EPC));
     });
 
     it('still re-throws genuine hardware failures', async () => {
@@ -870,10 +901,14 @@ describe('CS108Reader', () => {
       await reader.setSettings({ rfid: { targetEPC: SECOND_EPC } });
       (reader as any).readerState = ReaderState.CONNECTED;
       (commandManagerMock.executeSequence as Mock).mockClear();
+      // Any failed mask write, not specifically the mutex collision: that error
+      // is an invariant violation since TRA-1197 and no longer a thing this
+      // path can meet. Pinning the test to it would make it a test of an
+      // unreachable condition rather than of the behaviour it is named for.
       (commandManagerMock.executeSequence as Mock)
-        .mockRejectedValueOnce(new CommandInFlightError());
+        .mockRejectedValueOnce(new Error('Command timeout'));
 
-      await expect(reader.startScanning()).rejects.toThrow('Command already active');
+      await expect(reader.startScanning()).rejects.toThrow('Command timeout');
 
       // It failed on the mask, and never went on to start a search aimed at
       // the previous tag.
@@ -949,6 +984,147 @@ describe('CS108Reader', () => {
 
       expect(executedSequences()).not.toContainEqual(locateSettingsSequence(FIRST_EPC));
       expect(reader.getState()).toBe(ReaderState.SCANNING);
+    });
+  });
+
+  /**
+   * Trigger convergence — the escalation loop this closes (Mike, 2026-08-30):
+   *
+   *   "the trigger is the toughest use case because the user has their hands on
+   *    that and will inevitably cycle it if it feels unresponsive to them, which
+   *    will escalate and exacerbate any stacking behavior"
+   *
+   * The design, in Mike's words: trigger events that arrive during BUSY are
+   * **dropped**, and on command completion the reader **converges to the current
+   * trigger state**. Drop the edges, reconcile the level. That is only sound
+   * because `triggerState` is maintained unconditionally at the top of the
+   * notification handler — "we maintain reported trigger state regardless of
+   * command state" — so the level is always current even when no edge acted.
+   *
+   * The convergence check existed but could never fire: it read
+   * `!this.triggerState && !this.scanningRequested`, and startScanning() sets
+   * `scanningRequested = true` as its first statement with nothing clearing it
+   * before the check. It conflated "the button is holding this scan" with
+   * "somebody called startScanning".
+   */
+  describe('trigger convergence after a start completes', () => {
+    /**
+     * Let the backstop run, and let whatever it starts finish.
+     *
+     * Convergence is scheduled on a macrotask so it lands after anything
+     * already in flight; the scan it then starts takes another tick of its own
+     * to reach its final state. One tick observes the reader mid-start and
+     * reads BUSY, which looks like the defect rather than the fix.
+     */
+    const settleConvergence = async () => {
+      for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0));
+    };
+
+    beforeEach(async () => {
+      await reader.connect();
+      await reader.setMode(ReaderMode.INVENTORY);
+      postMessageSpy.mockClear();
+    });
+
+    it('converges to stopped when the trigger is released mid-start', async () => {
+      // The defect this replaces: the reader finished the start and sat there
+      // SCANNING with the operator's finger already off the trigger.
+      (reader as any).triggerState = true;
+      const starting = reader.startScanning();
+
+      // Release lands while BUSY. The edge is dropped by the handler; only the
+      // level survives, and the level is what convergence reads.
+      (reader as any).triggerState = false;
+
+      await starting;
+
+      expect(reader.getState()).toBe(ReaderState.CONNECTED);
+    });
+
+    it('stays scanning when the trigger is still held', async () => {
+      // The other half — asserting only the negative would pass on a
+      // convergence that stops unconditionally.
+      (reader as any).triggerState = true;
+
+      await reader.startScanning();
+
+      expect(reader.getState()).toBe(ReaderState.SCANNING);
+    });
+
+    it('does not stop a button-started scan just because no trigger is held', async () => {
+      // Convergence is the TRIGGER's to apply to a scan the trigger started.
+      // A button-started scan has triggerState false from beginning to end, and
+      // must not be torn down by that.
+      (reader as any).triggerState = false;
+
+      await reader.startScanning();
+
+      expect(reader.getState()).toBe(ReaderState.SCANNING);
+    });
+
+    it('converges on the FINAL level after the trigger is cycled during BUSY', async () => {
+      // The escalation case: an operator who thinks it is unresponsive cycles
+      // the trigger repeatedly while the start is in flight. Every one of those
+      // edges is dropped, and none of them enqueues work. What decides the
+      // outcome is where the trigger ends up.
+      (reader as any).triggerState = true;
+      const starting = reader.startScanning();
+
+      (reader as any).triggerState = false;
+      (reader as any).triggerState = true;
+      (reader as any).triggerState = false;
+      (reader as any).triggerState = true;
+
+      await starting;
+
+      // Ends held, so it ends scanning.
+      expect(reader.getState()).toBe(ReaderState.SCANNING);
+    });
+
+    it('reconciles a press dropped during a settings push — the hardware repro', async () => {
+      // Found on hardware 2026-08-30, within seconds: cycle the trigger while
+      // moving between tabs and the reader ends up with the trigger DOWN and
+      // nothing scanning. Tab navigation pushes settings; a press landing
+      // during that push is dropped because the reader is BUSY, the push
+      // completes and publishes CONNECTED, and before consolidation nothing
+      // re-read the trigger level. No further edge is coming — the finger is
+      // already down — so it stayed stranded until the operator let go.
+      //
+      // applySettings() was one of two paths with no reconciliation of its own.
+      // The battery poll is the other, and it is worse because it fires at an
+      // unpredictable 60s point (TRA-1212).
+      (reader as any).triggerState = true;
+
+      await reader.setSettings({ rfid: { transmitPower: 25 } });
+      await settleConvergence();
+
+      expect(reader.getState()).toBe(ReaderState.SCANNING);
+    });
+
+    it('leaves a settings push alone when the trigger is not held', async () => {
+      // The other half: convergence must not invent a scan nobody asked for.
+      await reader.setSettings({ rfid: { transmitPower: 25 } });
+      await settleConvergence();
+
+      expect(reader.getState()).toBe(ReaderState.CONNECTED);
+    });
+
+    it('issues exactly one start sequence no matter how hard the trigger is cycled', async () => {
+      // The stacking half of the same concern: cycling must not multiply
+      // commands. The reader's guards act only from CONNECTED or SCANNING, and
+      // a start holds BUSY throughout, so the extra edges reach nothing.
+      (reader as any).triggerState = true;
+      (commandManagerMock.executeSequence as Mock).mockClear();
+
+      const starting = reader.startScanning();
+      for (let i = 0; i < 6; i++) {
+        (reader as any).triggerState = i % 2 === 0;
+      }
+      await starting;
+
+      const starts = (commandManagerMock.executeSequence as Mock).mock.calls
+        .filter(call => call[0] === RFID_START_SEQUENCE);
+      expect(starts).toHaveLength(1);
     });
   });
 

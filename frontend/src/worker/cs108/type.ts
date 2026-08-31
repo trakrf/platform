@@ -91,8 +91,65 @@ export interface SequenceCommand {
   event: CS108Event;
   payload?: Uint8Array;
   delay?: number;      // Optional delay after this command (ms)
-  retryOnError?: boolean; // Whether to retry this command once if it fails (default: false)
+  /**
+   * Backoff schedule for re-sending this command when it fails (ms per retry).
+   *
+   * Absent or empty means one attempt and no retry. `[100, 200, 500, 1000]` is
+   * five attempts: the original, then four retries spaced by those gaps.
+   *
+   * The gap is IN ADDITION to the command's own timeout, which has already
+   * elapsed in silence — so `[100]` against a 200ms timeout re-sends 300ms after
+   * the original send, not 100ms.
+   *
+   * That first gap is not politeness. It is a quarantine window: a response that
+   * arrives late, after we gave up, lands while nothing is in flight and is
+   * discarded, rather than arriving mid-retry and settling a command it does not
+   * belong to. Every RFID firmware command shares op code 0x8002, so a
+   * mis-settled response is a one-behind offset that persists (TRA-1154).
+   *
+   * A `SequenceAbortedError` is never retried through — an abort is a decision,
+   * not a fault.
+   */
+  retryDelays?: number[];
   finalState?: ReaderStateType;  // State to transition to after successful sequence completion
+
+  /**
+   * How long the device cannot accept ANOTHER command after this one is sent
+   * (ms). Held by CommandManager, measured from the send.
+   *
+   * Not `delay`. `delay` blocks the sequence, and therefore its caller, which
+   * is the wrong shape for a constraint that is about the DEVICE's readiness
+   * rather than about anyone waiting: the caller is told the command landed and
+   * gets on with its life, while the next dispatch — from any caller, in any
+   * sequence — is the one that pays.
+   *
+   * It lives on the sequence entry rather than on CS108Event because the
+   * constraint belongs to a PAYLOAD: the RFID ABORT is one of many things sent
+   * under RFID_FIRMWARE_COMMAND (0x8002), and the alternative is CommandManager
+   * reaching into payload bytes to recognise it. See TRA-1185.
+   */
+  quietPeriodAfter?: number;
+
+  /**
+   * Dispatch this command even if a quiet window declared by an earlier command
+   * has not expired.
+   *
+   * A per-command claim that THIS command is safe to issue inside THAT window —
+   * not a general opt-out. The window's deadline is left intact for anything
+   * else queued behind it.
+   *
+   * The case it exists for: a trigger cycle within one scanning mode sends
+   * ABORT then START_INVENTORY, with no power cycling and no reconfiguration in
+   * between. Gating the restart on the post-ABORT window costs ~2 s per cycle,
+   * measured on hardware, and that stall is what makes an operator cycle the
+   * trigger harder — which is how trigger edges get lost. See TRA-1197 and
+   * ADR 0011.
+   *
+   * ⚠ Adding this to a command is a claim about the DEVICE, and the vendor note
+   * says "another command" without qualification. Do not spread it to a command
+   * whose behaviour inside the window has not been observed on a reader.
+   */
+  ignoresQuietPeriod?: boolean;
 }
 
 /**

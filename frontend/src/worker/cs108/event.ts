@@ -272,7 +272,28 @@ export const RFID_FIRMWARE_COMMAND: CS108Event = {
   responseLength: 1,   // Status byte: 0x00 = success, 0xFF = failure
   successByte: 0x00,
   parser: parseUint8,
-  timeout: 5000,       // May need adjustment based on command type
+  // 200ms, from measurement rather than caution.
+  //
+  // 4,879 firmware-command responses captured on hardware 2026-08-30:
+  //   p50 30.7   p90 34.6   p95 42.4   p99 47.3   p99.9 59.8   max 67.8 ms
+  //
+  // The distribution is BIMODAL — a primary population at 20-35ms, a distinct
+  // second at 40-49ms (6.5% of commands, one ~15ms increment), a 0.33% tail to
+  // 68ms, and then nothing. The 6 commands that were never answered were still
+  // unanswered at 5000ms. So the timeout's job is to detect "never", not to
+  // catch a slow tail, and any value clear of the increment stacking does that
+  // equally well.
+  //
+  // 200ms is ~3x the observed max and leaves room for the ~15ms increment to
+  // land several more times than it ever did — margin against a slower host,
+  // which this project has an open question about (TRA-1150). The old 5000ms
+  // was 74x the max: it never caught anything 200ms would miss, and it made
+  // every retry 25x slower to start, which is how a teardown got inside the
+  // retry window and cancelled a stop.
+  //
+  // ⚠ Keyed to the STATUS response (0x8002). The 0x8100 abort CONFIRMATION runs
+  // to 1940ms — if we ever gate on that instead, this value is wrong.
+  timeout: 200,
   settlingDelay: 100,
   description: 'RFID firmware command data (register ops, inventory control, etc.)'
 };

@@ -510,12 +510,18 @@ export class DeviceManager {
       async (state) => {
         // The Locate target lives in these settings, and gaining or losing one
         // flips the tab between acquiring (BARCODE) and searching (LOCATE)
-        // (TRA-1121). Decided here, and applied *after* the settings push,
-        // because both are commands into a non-re-entrant CommandManager: two
-        // subscribers issuing them back to back means the second loses the
-        // mutex with "Command already active". Losing setSettings is benign —
-        // reader.ts:652 says why — but a lost setMode is never reapplied, and
-        // the reader silently stays in the mode it was already in.
+        // (TRA-1121). Decided here, and applied *after* the settings push, so
+        // the mode change sees the settings it depends on.
+        //
+        // The ORIGINAL reason was different and has expired: CommandManager was
+        // not re-entrant, so two subscribers issuing back to back meant the
+        // second lost the mutex with "Command already active" and a lost
+        // setMode was never reapplied. TRA-1197 made CommandManager queue, so
+        // nothing is dropped now. Keeping the right conclusion attached to a
+        // reason that has stopped being true is worse than being plainly stale:
+        // the next person checks the reason, finds it false, and deletes the
+        // conclusion with it. The ordering is still load-bearing; the mutex is
+        // not the thing enforcing it.
         const nextHasTarget = hasLocateTarget(state.rfid);
         const modeNeedsReapplying = shouldReapplyModeForTarget(
           this.previousHasTarget,
