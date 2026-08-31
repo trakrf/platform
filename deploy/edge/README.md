@@ -2,8 +2,7 @@
 
 Rootless Podman quadlets for the offline demo box (`trakrf-demo`). Hosts the
 backend + Timescale + Mosquitto + a Traefik TLS edge, all systemd-managed.
-Design specs: `docs/superpowers/specs/2026-06-07-deploy-edge-design.md`,
-`docs/superpowers/specs/2026-06-13-srv-trakrf-runtime-layout-design.md` (TRA-988).
+Design context: TRA-988.
 
 Tim drives the demo from his laptop at **`https://app.demo.trakrf.id`** over the
 Slate WiFi. Break-glass = a shell over the tailnet (`systemctl --user`,
