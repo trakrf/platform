@@ -45,10 +45,11 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-30 | Task 5 implementation and review | Implemented the sender. Review rejected discarded cancellation, SDK-internal/fake-bookkeeping tests, and an untidy checksum set. A fresh fix added pre-submit cancellation and real SDK HTTP-contract tests for auth, account path, exact forms/no `From`, callbacks, response/error outcomes, and concurrency. Re-review approved; all targeted/race/vet/module/regression/diff checks pass. |
 | 2026-08-30 | Task 6 implementation and review | Added bounded, signature-verified form parsing. Review found unsigned duplicate values and unsafe handler construction; a fresh fix rejects duplicate keys and makes construction fail closed for disabled/invalid config. Re-review approved; external URL/proxy/body-bound and all targeted checks pass. |
 | 2026-08-30 | Task 7 implementation and review | Added a thin status callback receiver using TDD. It emits normalized UTC events for five supported states, rejects invalid/malformed input before handoff, returns explicit consumer failures, and leaves repeated-callback idempotency downstream. Independent review approved all targeted checks and the private clock exception. |
+| 2026-08-31 | Task 8 fresh completion | Resumed from an interrupted context with untracked inbound receiver/test files. Audited and completed the signed inbound keyword boundary, including malformed-callback response coverage; original RED evidence was unavailable and is not claimed. |
 
 ### Current handoff
 
-- Next task: Task 8, inbound consent keyword parsing.
+- Task 8 is complete; next task is Task 8 independent review.
 - Implementation rule: use a fresh subagent context for every task, followed by an independent review context.
 - Not implementable in this ticket: frontend and geofence-event generation/integration.
 - Atomic Task 7 exception: `handler.go` gains a private clock dependency initialized by the existing constructor, so status events have a deterministic, injectable UTC occurrence time. The public constructor signature is unchanged.
@@ -425,21 +426,27 @@ git commit -m "feat(TRA-1201): parse Twilio delivery callbacks"
 
 **Produces:** `Handler.Inbound(http.ResponseWriter, *http.Request)`.
 
-- [ ] **Step 1: Write failing handler tests**
+- [ ] **Step 1: Write failing handler tests (not independently evidenced after interruption)**
 
 Cover case-insensitive, trimmed `STOP`, `START`, `CANCEL`, `UNSUBSCRIBE`, `END`, and `QUIT`; invalid signatures; repeated Message SID; consumer failure; and unrelated text.
 
-- [ ] **Step 2: Verify failure**
+- [ ] **Step 2: Verify failure (original RED output unavailable after interruption)**
 
 Run: `cd backend && go test ./internal/handlers/twiliosms -run TestInbound -count=1`
 
 Expected: FAIL because `Inbound` is undefined.
 
-- [ ] **Step 3: Implement keyword handoff**
+- [x] **Step 3: Implement keyword handoff**
 
 Normalize opt-out synonyms to `STOP`, retain `START`, and emit `sms.InboundKeyword`. Acknowledge unrelated text without storing its body. Do not implement suppression scope.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify**
+
+No commit was created, per the task instruction.
+
+The receiver and its test suite were already untracked when fresh completion
+resumed. The Task 8 report records the missing original TDD evidence rather
+than marking those two historical steps complete without proof.
 
 Run: `cd backend && go test ./internal/handlers/twiliosms -run TestInbound -count=1`
 
