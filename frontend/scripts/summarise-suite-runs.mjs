@@ -313,6 +313,94 @@ const REFERENCE_DENSITY = {
 };
 
 /**
+ * EVERY op code the device stopped answering — including ones nobody predicted.
+ *
+ * ⚠ THE SECTION ABOVE REPORTS ONE OP CODE, AND THAT WAS ONCE THE WHOLE PICTURE.
+ * It is not. On the 2026-08-31 arm the device also stopped answering
+ * `GET_TRIGGER_STATE` (0xA001) — 12-13 times per rep, in the same reps as the
+ * power-offs — and nothing said so, because no needle counted it. Meanwhile
+ * TRA-1223 asserted the reader ignored "exactly one op code" while its own
+ * first-occurrence packet table carried 0xA001 at 76 TX / 14 RX. The data
+ * contradicted the summary in the same document, and no instrument objected.
+ *
+ * So this table is deliberately NOT a list of known op codes. It prints whatever
+ * `countCommandTimeouts` parsed out of the logs, which means **the next op code
+ * to go silent shows up here without anyone having predicted it.** A fixed list
+ * can only ever report the silences somebody already knew about.
+ *
+ * Read it alongside the window table, not instead of it: this one says WHAT went
+ * unanswered, that one says whether the tolerance held.
+ */
+export function commandTimeoutsByOpTable(records) {
+  // RESOLVED, not read raw. Every archived arm predates this field, and its logs
+  // are usually still on disk — reading `r.signals` directly would report the
+  // whole back catalogue as unobservable while the answer sat next to it. That
+  // is how TRA-1226's own numbers were obtained: by hand-grepping the logs of an
+  // arm that had already finished.
+  const usable = records
+    .map((r) => resolveSignals(r).signals)
+    .filter((signals) => signals && !signals.logMissing);
+  if (usable.length === 0) {
+    return '_No repetition carried a verified capture — command timeouts are unobservable in this run._';
+  }
+
+  // null means the runner cannot see these lines at all (e2e drops
+  // `[CommandManager]` warns at the console forwarder). Different claim from an
+  // empty map, and summing the two together would turn "could not look" into
+  // "looked and found nothing".
+  const observable = usable.filter((signals) => signals.commandTimeouts != null);
+  if (observable.length === 0) {
+    return (
+      '_`[CommandManager]` lines are vitest-only; no repetition in this run could produce them. ' +
+      'Command timeouts are unobservable here, which is not the same as absent._'
+    );
+  }
+
+  const totals = new Map();
+  const repsWith = new Map();
+  for (const signals of observable) {
+    for (const [op, count] of Object.entries(signals.commandTimeouts)) {
+      if (!count) continue;
+      totals.set(op, (totals.get(op) ?? 0) + count);
+      repsWith.set(op, (repsWith.get(op) ?? 0) + 1);
+    }
+  }
+
+  const n = observable.length;
+  if (totals.size === 0) {
+    return (
+      '**No command went unanswered in this run, which says NOTHING about the device.** ' +
+      'Zero here is the absence of the condition, not evidence the reader is answering ' +
+      'reliably — the silent window appeared twice in ~400 reps and cannot be summoned. ' +
+      'Report it as "did not occur", never as a clean bill of health.'
+    );
+  }
+
+  const rows = [...totals.entries()].sort((a, b) => b[1] - a[1]);
+  const lines = [
+    '| op code | timeouts | reps affected |',
+    '| -- | -- | -- |',
+    ...rows.map(([op, total]) => `| \`${op}\` | ${total} | ${repsWith.get(op)}/${n} |`),
+    '',
+  ];
+
+  // The reason the table exists: name what is NOT already tracked by a needle,
+  // so a new silence is read as a finding rather than scrolled past.
+  const untracked = rows.filter(([op]) => op !== 'RFID_POWER_OFF').map(([op]) => op);
+  if (untracked.length > 0) {
+    lines.push(
+      `⚠ **${untracked.length} op code(s) beyond \`RFID_POWER_OFF\` went unanswered: ` +
+        `${untracked.map((op) => `\`${op}\``).join(', ')}.** The window is not confined to one ` +
+        'op code. Check the bridge packet capture for TX-vs-RX on each before concluding the ' +
+        'device was silent — an app-side timeout alone cannot distinguish "no answer sent" ' +
+        'from "answer sent and we did not match it". Refs TRA-1223.'
+    );
+  }
+
+  return lines.join('\n');
+}
+
+/**
  * Did the CS108's silent window happen, and did TRA-1217 absorb it?
  *
  * ⚠ THIS SECTION EXISTS BECAUSE THE FIX REMOVED ITS OWN SYMPTOM. Before
@@ -528,6 +616,8 @@ function main() {
   console.log(wedgeModeTable(records));
   console.log(`\n## The CS108's silent window — did it happen, and did TRA-1217 absorb it?\n`);
   console.log(powerOffWindowTable(records));
+  console.log(`\n## Every unanswered command, by op code\n`);
+  console.log(commandTimeoutsByOpTable(records));
   console.log(`\n## Field density\n`);
   console.log(densityTable(records));
   console.log(`\n## Record integrity\n`);
