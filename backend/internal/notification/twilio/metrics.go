@@ -105,6 +105,10 @@ func (metrics *Metrics) RecordCallback(callbackType CallbackType, result Callbac
 
 // ObserveRequestDuration records the duration of one Twilio boundary request.
 func (metrics *Metrics) ObserveRequestDuration(duration time.Duration) {
+	if duration < 0 {
+		return
+	}
+
 	metrics.requestDuration.Observe(duration.Seconds())
 }
 

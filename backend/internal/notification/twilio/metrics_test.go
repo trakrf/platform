@@ -3,6 +3,7 @@ package twilio_test
 import (
 	"fmt"
 	"sort"
+	"sync"
 	"testing"
 	"time"
 
@@ -113,6 +114,36 @@ func TestMetrics_NormalizesUnknownInputsToFixedLabels(t *testing.T) {
 	}
 }
 
+// This fails if an impossible negative duration mutates the histogram, or if
+// a valid zero-duration request is discarded.
+func TestMetrics_DoesNotRecordNegativeDuration(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	metrics, err := twilio.NewMetrics(registry)
+	require.NoError(t, err)
+
+	metrics.ObserveRequestDuration(70 * time.Millisecond)
+	metrics.ObserveRequestDuration(-5 * time.Second)
+	metrics.ObserveRequestDuration(0)
+
+	families, err := registry.Gather()
+	require.NoError(t, err)
+	require.Len(t, families, 1)
+
+	for _, family := range families {
+		if family.GetName() != "trakrf_twilio_request_duration_seconds" {
+			continue
+		}
+
+		require.Len(t, family.GetMetric(), 1)
+		histogram := family.GetMetric()[0].GetHistogram()
+		require.Equal(t, uint64(2), histogram.GetSampleCount())
+		require.InEpsilon(t, 0.07, histogram.GetSampleSum(), 0.00001)
+		return
+	}
+
+	t.Fatal("request-duration metric family was not gathered")
+}
+
 // This fails if a duplicate collector registration panics or is silently
 // accepted instead of returning the Prometheus registration error to callers.
 func TestMetrics_DuplicateRegistrationReturnsError(t *testing.T) {
@@ -124,4 +155,83 @@ func TestMetrics_DuplicateRegistrationReturnsError(t *testing.T) {
 
 	require.Nil(t, duplicate)
 	require.Error(t, err)
+}
+
+// This fails if a later collector-registration error leaves collectors from
+// the failed Metrics instance in the caller's registry or removes the
+// conflicting collector that was already there.
+func TestMetrics_RollsBackPartialRegistrationFailure(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	existingCallbacks := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "trakrf_twilio_callbacks_total",
+		Help: "Twilio callback outcomes by bounded type and result.",
+	}, []string{"type", "result"})
+	require.NoError(t, registry.Register(existingCallbacks))
+	existingCallbacks.WithLabelValues("status", "accepted").Inc()
+
+	metrics, err := twilio.NewMetrics(registry)
+	require.Nil(t, metrics)
+	require.Error(t, err)
+
+	families, err := registry.Gather()
+	require.NoError(t, err)
+	require.Len(t, families, 1)
+	require.Equal(t, "trakrf_twilio_callbacks_total", families[0].GetName())
+	require.Len(t, families[0].GetMetric(), 1)
+
+	metric := families[0].GetMetric()[0]
+	require.Equal(t, float64(1), metric.GetCounter().GetValue())
+	labels := map[string]string{}
+	for _, label := range metric.GetLabel() {
+		labels[label.GetName()] = label.GetValue()
+	}
+	require.Equal(t, map[string]string{"type": "status", "result": "accepted"}, labels)
+}
+
+// This fails if concurrent recording loses or corrupts observations instead
+// of exporting the exact aggregate from all recorder goroutines.
+func TestMetrics_RecordsConcurrentOutcomes(t *testing.T) {
+	const (
+		workers              = 24
+		recordsPerWorker     = 50
+		requestDuration      = 5 * time.Millisecond
+		expectedObservations = workers * recordsPerWorker
+	)
+
+	registry := prometheus.NewRegistry()
+	metrics, err := twilio.NewMetrics(registry)
+	require.NoError(t, err)
+
+	var waitGroup sync.WaitGroup
+	for range workers {
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			for range recordsPerWorker {
+				metrics.RecordSubmission(twilio.SubmissionAccepted)
+				metrics.RecordCallback(twilio.CallbackStatus, twilio.CallbackAccepted)
+				metrics.ObserveRequestDuration(requestDuration)
+			}
+		}()
+	}
+	waitGroup.Wait()
+
+	families, err := registry.Gather()
+	require.NoError(t, err)
+	require.Len(t, families, 3)
+
+	for _, family := range families {
+		require.Len(t, family.GetMetric(), 1)
+		metric := family.GetMetric()[0]
+		switch family.GetName() {
+		case "trakrf_twilio_submissions_total", "trakrf_twilio_callbacks_total":
+			require.Equal(t, float64(expectedObservations), metric.GetCounter().GetValue())
+		case "trakrf_twilio_request_duration_seconds":
+			histogram := metric.GetHistogram()
+			require.Equal(t, uint64(expectedObservations), histogram.GetSampleCount())
+			require.InEpsilon(t, float64(expectedObservations)*requestDuration.Seconds(), histogram.GetSampleSum(), 0.00001)
+		default:
+			t.Fatalf("unexpected metric family %q", family.GetName())
+		}
+	}
 }
