@@ -5,6 +5,12 @@ TRA-1201 Twilio SMS integration. It is a developer-facing contract for loading
 settings and constructing callback URLs; it does not activate Twilio traffic or
 provision an account resource.
 
+> **Activation warning:** TRA-1201 defines and tests `Handler.RegisterRoutes`,
+> but `serve.setupRouter` does **not** mount these callbacks. The paths below
+> are not reachable production endpoints today. They are intended future public,
+> signature-protected endpoints. Do not configure or activate Twilio callback
+> URLs until a durable callback consumer and production root-router wiring exist.
+
 ## Configuration
 
 The six settings below are read by the backend. Keep every credential on the
@@ -68,21 +74,33 @@ message body to that service; it does not select a phone number itself. There
 is deliberately no `TWILIO_FROM_NUMBER` setting and no raw `From` number in
 this integration. Sender-pool choice belongs to the Messaging Service.
 
-## Callback endpoints
+## Outbound cancellation boundary
 
-Twilio sends form-encoded POST callbacks to these public paths, appended to the
-configured canonical base URL:
+`SendSMS` honors a context that is already canceled or past its deadline before
+submission: it returns without making an SDK request. Once `CreateMessage` has
+started, Twilio Go v1.30.9 does not propagate cancellation or deadline changes
+through its `CreateMessage` path; the SDK constructs that request from a
+background context. Callers must therefore not assume that a cancellation or
+deadline change interrupts an in-flight Twilio request. A context-aware SDK
+transport or API path is future work if shorter in-flight deadlines become a
+requirement.
+
+## Callback paths (future public endpoints)
+
+When production root wiring and a durable callback consumer are available,
+Twilio will send form-encoded POST callbacks to these intended public paths,
+appended to the configured canonical base URL:
 
 | Callback | Path |
 | --- | --- |
 | Delivery status | `/api/v1/notifications/twilio/status` |
 | Inbound keyword | `/api/v1/notifications/twilio/inbound` |
 
-The callback boundary validates the Twilio signature against the externally
-visible URL (including the path and query, when present) before emitting a
-normalized event to an injected consumer. The endpoints do not require a
-TrakRF user session. Callback consumers are the seam for later application
-integration; this ticket does not store callback events.
+When mounted, the callback boundary validates the Twilio signature against the
+externally visible URL (including the path and query, when present) before
+emitting a normalized event to an injected consumer. The endpoints do not
+require a TrakRF user session. Callback consumers are the seam for later
+application integration; this ticket does not store callback events.
 
 ## Deliberate exclusions
 
@@ -100,9 +118,10 @@ are complete.
 
 - **Backend/platform owners** maintain the six-value application contract,
   inject secrets through the deployment secret mechanism, keep the public base
-  URL canonical, and operate the callback endpoints. Logs and metrics must not
-  contain credentials, message bodies, phone numbers, delivery IDs, or
-  organization IDs.
+  URL canonical, and—after durable consumer and root-router wiring exist—operate
+  the mounted callback endpoints. Logs and metrics must not contain
+  credentials, message bodies, phone numbers, delivery IDs, or organization
+  IDs.
 - **Twilio account owners** create and rotate API keys and the Auth Token and
   own Messaging Service sender-pool and compliance configuration. Those
   resources are not provisioned or changed by this documentation task.
