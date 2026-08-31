@@ -35,7 +35,13 @@ func (creator *sdkMessageCreator) CreateMessage(params *openapi.CreateMessagePar
 }
 
 // NewSender constructs a sender using API-key credentials and Account SID context.
-func NewSender(config Config, metrics ...*Metrics) (*Sender, error) {
+func NewSender(config Config) (*Sender, error) {
+	return NewSenderWithMetrics(config, nil)
+}
+
+// NewSenderWithMetrics constructs a sender with an optional metrics recorder.
+// A nil recorder leaves sender behavior uninstrumented.
+func NewSenderWithMetrics(config Config, metrics *Metrics) (*Sender, error) {
 	if !config.Enabled() {
 		return nil, errors.New("Twilio sender configuration is incomplete")
 	}
@@ -43,10 +49,10 @@ func NewSender(config Config, metrics ...*Metrics) (*Sender, error) {
 		return nil, errors.New("Twilio sender public base URL must be a canonical HTTPS origin")
 	}
 
-	return newSender(config, nil, metrics...), nil
+	return newSender(config, nil, metrics), nil
 }
 
-func newSender(config Config, httpClient *http.Client, metrics ...*Metrics) *Sender {
+func newSender(config Config, httpClient *http.Client, metrics *Metrics) *Sender {
 	client := &twilioclient.Client{
 		Credentials: twilioclient.NewCredentials(config.APIKeySID, config.APIKeySecret),
 		HTTPClient:  httpClient,
@@ -54,15 +60,15 @@ func newSender(config Config, httpClient *http.Client, metrics ...*Metrics) *Sen
 	client.SetAccountSid(config.AccountSID)
 	restClient := twiliogo.NewRestClientWithParams(twiliogo.ClientParams{Client: client})
 
-	return newSenderWithMessages(config, &sdkMessageCreator{client: restClient}, metrics...)
+	return newSenderWithMessages(config, &sdkMessageCreator{client: restClient}, metrics)
 }
 
-func newSenderWithMessages(config Config, messages messageCreator, metrics ...*Metrics) *Sender {
+func newSenderWithMessages(config Config, messages messageCreator, metrics *Metrics) *Sender {
 	return &Sender{
 		messages:            messages,
 		messagingServiceSID: config.MessagingServiceSID,
 		statusCallbackURL:   config.PublicBaseURL + statusCallbackPath,
-		metrics:             optionalMetrics(metrics),
+		metrics:             metrics,
 	}
 }
 
@@ -101,13 +107,6 @@ func (sender *Sender) SendSMS(ctx context.Context, command sms.Command) (sms.Sub
 	}, nil
 }
 
-func optionalMetrics(metrics []*Metrics) *Metrics {
-	if len(metrics) == 0 {
-		return nil
-	}
-	return metrics[0]
-}
-
 func (sender *Sender) recordSubmission(result SubmissionResult) {
 	if sender.metrics != nil {
 		sender.metrics.RecordSubmission(result)
@@ -123,6 +122,9 @@ func (sender *Sender) observeRequestDuration(duration time.Duration) {
 func submissionResult(err error) SubmissionResult {
 	var providerErr *providerError
 	if !errors.As(err, &providerErr) {
+		return metricSubmissionResultUnknown
+	}
+	if providerErr.Code == unknownCode {
 		return metricSubmissionResultUnknown
 	}
 

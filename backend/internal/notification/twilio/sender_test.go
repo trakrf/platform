@@ -19,6 +19,7 @@ import (
 )
 
 var _ sms.Sender = (*Sender)(nil)
+var _ func(Config) (*Sender, error) = NewSender
 
 const (
 	testAccountSID          = "AC1234567890"
@@ -61,6 +62,50 @@ func TestNewSender_RejectsDisabledAndInvalidConfig(t *testing.T) {
 	}
 }
 
+// This fails if the public constructors lose the no-recorder default, accept a
+// nil recorder incorrectly, or fail to retain an explicitly supplied recorder.
+func TestNewSender_MetricsConstruction(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	metrics, err := NewMetrics(registry)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name  string
+		build func() (*Sender, error)
+		want  *Metrics
+	}{
+		{
+			name: "no recorder",
+			build: func() (*Sender, error) {
+				return NewSender(completeSenderConfig())
+			},
+		},
+		{
+			name: "nil recorder",
+			build: func() (*Sender, error) {
+				return NewSenderWithMetrics(completeSenderConfig(), nil)
+			},
+		},
+		{
+			name: "one recorder",
+			build: func() (*Sender, error) {
+				return NewSenderWithMetrics(completeSenderConfig(), metrics)
+			},
+			want: metrics,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			sender, err := test.build()
+
+			require.NoError(t, err)
+			require.NotNil(t, sender)
+			require.Same(t, test.want, sender.metrics)
+		})
+	}
+}
+
 // This fails if the sender emits anything but Twilio's API-key-authenticated
 // Messages request or returns a response SID and status incorrectly.
 func TestSendSMS_SubmitsTwilioMessagesRequest(t *testing.T) {
@@ -86,7 +131,7 @@ func TestSendSMS_SubmitsTwilioMessagesRequest(t *testing.T) {
 		}, form)
 
 		return httpJSONResponse(request, http.StatusCreated, `{"sid":"SM123","status":"queued"}`), nil
-	})})
+	})}, nil)
 
 	submission, err := sender.SendSMS(context.Background(), command)
 
@@ -99,7 +144,7 @@ func TestSendSMS_NormalizesAndRedactsProviderHTTPError(t *testing.T) {
 	command := sms.Command{ToE164: sensitiveDestination, Body: sensitiveBody}
 	sender := newSender(completeSenderConfig(), &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
 		return httpJSONResponse(request, http.StatusBadRequest, fmt.Sprintf(`{"code":21211,"status":400,"message":"destination=%s body=%s secret=%s"}`, command.ToE164, command.Body, sensitiveCredential)), nil
-	})})
+	})}, nil)
 
 	submission, err := sender.SendSMS(context.Background(), command)
 
@@ -114,7 +159,7 @@ func TestSendSMS_NormalizesAndRedactsProviderHTTPError(t *testing.T) {
 
 // This fails if an SDK response without a message is treated as success or exposes provider data.
 func TestSendSMS_NormalizesNilSDKResponse(t *testing.T) {
-	sender := newSenderWithMessages(completeSenderConfig(), nilResponseCreator{})
+	sender := newSenderWithMessages(completeSenderConfig(), nilResponseCreator{}, nil)
 
 	submission, err := sender.SendSMS(context.Background(), sms.Command{ToE164: sensitiveDestination, Body: sensitiveBody})
 
@@ -133,7 +178,7 @@ func TestSendSMS_ReturnsCallerCancellationWithoutOutboundRequest(t *testing.T) {
 	sender := newSender(completeSenderConfig(), &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
 		requests.Add(1)
 		return httpJSONResponse(request, http.StatusCreated, `{"sid":"SM123","status":"queued"}`), nil
-	})})
+	})}, nil)
 	contextCause := errors.New("caller cancelled this submission")
 	ctx, cancel := context.WithCancelCause(context.Background())
 	cancel(contextCause)
@@ -261,6 +306,73 @@ func TestSendSMS_RecordsMetricsAtProviderBoundary(t *testing.T) {
 	require.Equal(t, uint64(4), durationSamples)
 	for _, label := range []string{"+15555550101", "+15555550102", "+15555550103", "+15555550104", "accepted body", "transient body", "permanent body", "rejected body", "cancelled body", "SMaccepted", sensitiveCredential, testAPIKeySecret} {
 		require.NotContains(t, submissions, label)
+	}
+}
+
+// This fails if an attempted send with no SDK message or an unrecognised
+// transport failure is exported as a known provider outcome instead of the
+// bounded unknown metric result.
+func TestSendSMS_RecordsUnknownMetricsForUnexpectedOutcomes(t *testing.T) {
+	tests := []struct {
+		name  string
+		build func(*Metrics) *Sender
+	}{
+		{
+			name: "unrecognised transport failure",
+			build: func(metrics *Metrics) *Sender {
+				return newSender(completeSenderConfig(), &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+					return nil, errors.New("unrecognised transport failure")
+				})}, metrics)
+			},
+		},
+		{
+			name: "nil SDK response",
+			build: func(metrics *Metrics) *Sender {
+				return newSenderWithMessages(completeSenderConfig(), nilResponseCreator{}, metrics)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			registry := prometheus.NewRegistry()
+			metrics, err := NewMetrics(registry)
+			require.NoError(t, err)
+			sender := test.build(metrics)
+
+			submission, err := sender.SendSMS(context.Background(), sms.Command{ToE164: sensitiveDestination, Body: sensitiveBody})
+
+			require.Equal(t, sms.Submission{}, submission)
+			var providerErr *providerError
+			require.ErrorAs(t, err, &providerErr)
+			require.Equal(t, sms.ProviderError{Kind: sms.ErrorPermanent, Code: unknownCode}, providerErr.ProviderError)
+
+			families, err := registry.Gather()
+			require.NoError(t, err)
+			var sawSubmission, sawDuration bool
+			for _, family := range families {
+				switch family.GetName() {
+				case "trakrf_twilio_submissions_total":
+					sawSubmission = true
+					require.Len(t, family.GetMetric(), 1)
+					metric := family.GetMetric()[0]
+					require.Equal(t, float64(1), metric.GetCounter().GetValue())
+					require.Len(t, metric.GetLabel(), 1)
+					require.Equal(t, "result", metric.GetLabel()[0].GetName())
+					require.Equal(t, metricSubmissionResultUnknown, metric.GetLabel()[0].GetValue())
+				case "trakrf_twilio_request_duration_seconds":
+					sawDuration = true
+					require.Len(t, family.GetMetric(), 1)
+					require.Equal(t, uint64(1), family.GetMetric()[0].GetHistogram().GetSampleCount())
+				case "trakrf_twilio_callbacks_total":
+					t.Fatalf("sender submission created callback metric series")
+				default:
+					t.Fatalf("unexpected metric family %q", family.GetName())
+				}
+			}
+			require.True(t, sawSubmission)
+			require.True(t, sawDuration)
+		})
 	}
 }
 
