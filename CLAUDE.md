@@ -22,5 +22,6 @@ Architecture: `README.md`, `docs/architecture-decisions.md`, `docs/adr/`, `docs/
 ## Hardware
 - `ble-mcp-test` is test tooling only; the app reaches a CS108 via browser `navigator.bluetooth`
 - One connection at a time: a connected client blocks hand-testing, a running daemon does not
-- An idle bridge port does not mean the reader is free — `get_connection_state` answers it; see `docs/ble-hardware-access.md`
+- The reader is SHARED with the ble-mcp-test session (cc2cc: `bridge`). It changes hands on an explicit message, never on a `held: false` poll — a free port is equally consistent with the other side being *between* attempts. Announce before connecting, when done, and again before a retry
+- An idle bridge port does not mean the reader is free; `get_connection_state` narrows that question but does not settle it — see `docs/ble-hardware-access.md`
 - The bridge is a supervised `systemctl --user` unit; `pkill` returns in 5s
