@@ -1,6 +1,7 @@
 package twiliosms
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,26 @@ import (
 	"github.com/trakrf/platform/backend/internal/notification/sms"
 	"github.com/trakrf/platform/backend/internal/notification/twilio"
 )
+
+type panickingStatusConsumer struct{}
+
+func (*panickingStatusConsumer) HandleStatus(context.Context, sms.ProviderStatus) error {
+	panic("status consumer panic")
+}
+
+func (*panickingStatusConsumer) HandleKeyword(context.Context, sms.InboundKeyword) error {
+	return nil
+}
+
+type panickingInboundConsumer struct{}
+
+func (*panickingInboundConsumer) HandleStatus(context.Context, sms.ProviderStatus) error {
+	return nil
+}
+
+func (*panickingInboundConsumer) HandleKeyword(context.Context, sms.InboundKeyword) error {
+	panic("inbound consumer panic")
+}
 
 // This fails if a callback outcome is not recorded exactly once with its
 // bounded endpoint/result labels and one callback-boundary duration.
@@ -164,4 +185,69 @@ func TestCallbacks_RecordBoundedMetrics(t *testing.T) {
 		"inbound/malformed":         1,
 		"inbound/consumer_failure":  1,
 	}, callbackCounts)
+}
+
+// This fails if a valid callback whose consumer panics is classified as
+// malformed, or if the deferred boundary observations are skipped during
+// panic unwinding.
+func TestCallbacks_PanickingConsumersRecordConsumerFailure(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		consumer sms.CallbackConsumer
+		invoke   func(*Handler)
+		key      string
+	}{
+		{
+			name:     "status",
+			consumer: &panickingStatusConsumer{},
+			invoke: func(handler *Handler) {
+				handler.Status(httptest.NewRecorder(), signedStatusRequest(t, url.Values{
+					"MessageSid":    {"SM-sensitive-id"},
+					"MessageStatus": {"delivered"},
+				}))
+			},
+			key: "status/consumer_failure",
+		},
+		{
+			name:     "inbound",
+			consumer: &panickingInboundConsumer{},
+			invoke: func(handler *Handler) {
+				handler.Inbound(httptest.NewRecorder(), signedInboundRequest(t, inboundKeywordForm("STOP")))
+			},
+			key: "inbound/consumer_failure",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			registry := prometheus.NewRegistry()
+			metrics, err := twilio.NewMetrics(registry)
+			require.NoError(t, err)
+			handler, err := NewHandlerWithMetrics(newSignatureTestConfig(), test.consumer, metrics)
+			require.NoError(t, err)
+
+			require.Panics(t, func() { test.invoke(handler) }, "consumer panic must propagate")
+
+			families, err := registry.Gather()
+			require.NoError(t, err)
+			callbackCounts := map[string]float64{}
+			var durationSamples uint64
+			for _, family := range families {
+				switch family.GetName() {
+				case "trakrf_twilio_callbacks_total":
+					for _, metric := range family.GetMetric() {
+						labels := map[string]string{}
+						for _, label := range metric.GetLabel() {
+							labels[label.GetName()] = label.GetValue()
+						}
+						callbackCounts[labels["type"]+"/"+labels["result"]] = metric.GetCounter().GetValue()
+					}
+				case "trakrf_twilio_request_duration_seconds":
+					require.Len(t, family.GetMetric(), 1)
+					durationSamples = family.GetMetric()[0].GetHistogram().GetSampleCount()
+				}
+			}
+
+			require.Equal(t, map[string]float64{test.key: 1}, callbackCounts)
+			require.Equal(t, uint64(1), durationSamples)
+		})
+	}
 }

@@ -41,6 +41,7 @@ func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	result = twilio.CallbackConsumerFailure
 	if err := h.consumer.HandleStatus(r.Context(), sms.ProviderStatus{
 		ProviderMessageID: messageID,
 		Status:            status,

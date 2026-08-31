@@ -49,6 +49,7 @@ func (h *Handler) Inbound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	result = twilio.CallbackConsumerFailure
 	if err := h.consumer.HandleKeyword(r.Context(), sms.InboundKeyword{
 		ProviderMessageID: messageID,
 		FromE164:          from,
