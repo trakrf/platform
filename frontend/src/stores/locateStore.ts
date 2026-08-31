@@ -32,6 +32,11 @@ interface LocateState {
   lastUpdateTime: number;       // Timestamp of last RSSI update
   statusMessage: string;        // UI status message
   targetEPC: string;            // The target the buffered readings were read for
+
+  // Is a search running right now? Driven from the reader's state and the
+  // trigger edge by device-manager — see setSearchActive for why it is not
+  // derived from staleness (TRA-1171).
+  searchActive: boolean;
   
   // Statistics (calculated from buffer)
   currentRSSI: number;          // Most recent RSSI value
@@ -43,12 +48,14 @@ interface LocateState {
   addRssiReading: (nb_rssi: number, wb_rssi?: number, phase?: number, workerTimestamp?: number, epc?: string) => void;
   setStatusMessage: (message: string) => void;
   setTarget: (epc: string) => void;
+  setSearchActive: (active: boolean) => void;
   clearBuffer: () => void;
-  
+
   // Getters
   getRecentReadings: (duration?: number) => RssiDataPoint[];  // Get readings from last N ms
   getFilteredRSSI: () => number;  // Get time-weighted filtered RSSI
   getStatistics: () => LocateStatistics;  // Statistics with staleness applied
+  isHearingTag: () => boolean;    // Is the target audible right now?
 }
 
 // The four numbers the Statistics panel renders, as the operator should read
@@ -97,7 +104,8 @@ export const useLocateStore = create<LocateState>()(
     lastUpdateTime: 0,
     statusMessage: 'Ready to locate',
     targetEPC: '',
-    
+    searchActive: false,
+
     // Statistics
     currentRSSI: DEFAULT_RSSI,
     averageRSSI: DEFAULT_RSSI,
@@ -106,6 +114,18 @@ export const useLocateStore = create<LocateState>()(
     
     // Add new RSSI reading to ring buffer
     addRssiReading: (nb_rssi: number, wb_rssi?: number, phase?: number, workerTimestamp?: number, epc?: string) => {
+      // The release gate (TRA-1171).
+      //
+      // Several tag packets per stop keep arriving after the ABORT — measured
+      // on hardware, in every run. They are genuinely fresh, so every
+      // staleness defence below passes them through by design, and they are
+      // what keeps the gauge moving and the alarm sounding after the operator
+      // has let go. Telling the UI about the release sooner shortens that
+      // tail; only refusing to consume the reads ends it.
+      if (!get().searchActive) {
+        return;
+      }
+
       // Reject reads from tags that are not the target.
       //
       // handler.ts has always said "the application layer (locateStore) will
@@ -206,7 +226,25 @@ export const useLocateStore = create<LocateState>()(
       get().clearBuffer();
       set({ targetEPC: epc });
     },
-    
+
+    // A search is running, or it is not. While it is not, reads are refused
+    // and the staleness decay is suspended: the last value the operator saw is
+    // the RESULT of the search they just ran, not a stale reading — they
+    // released the trigger in order to read it.
+    //
+    // Zeroing it instead would be a false negative on the primary function of
+    // this screen. On a tag finder, nothing on the gauge reads as "the item is
+    // not here", which is the failure TRA-1080 and TRA-1123 both exist to
+    // prevent, reached here from the opposite direction.
+    //
+    // This is deliberately NOT derived from staleness. The reads that cause
+    // the defect arrive within milliseconds of the ABORT and are genuinely
+    // fresh, so no staleness rule can tell them from a live search.
+    setSearchActive: (active: boolean) => {
+      set({ searchActive: active });
+    },
+
+
     // Clear buffer
     clearBuffer: () => {
       set({
@@ -240,7 +278,9 @@ export const useLocateStore = create<LocateState>()(
     getStatistics: () => {
       const state = get();
 
-      if (Date.now() - state.lastUpdateTime > STALE_THRESHOLD_MS) {
+      // Decay applies to a RUNNING search only (TRA-1171). Once it has
+      // stopped, these four are the result the operator is reading.
+      if (state.searchActive && Date.now() - state.lastUpdateTime > STALE_THRESHOLD_MS) {
         return {
           currentRSSI: DEFAULT_RSSI,
           averageRSSI: DEFAULT_RSSI,
@@ -262,8 +302,13 @@ export const useLocateStore = create<LocateState>()(
       const state = get();
       const now = Date.now();
 
-      // If no readings in the last 1 second, return default (no signal)
-      if (now - state.lastUpdateTime > STALE_THRESHOLD_MS) {
+      // If no readings in the last 1 second, return default (no signal).
+      //
+      // Only while the search is running (TRA-1171). Once it has stopped, fall
+      // through: the 500ms weighting window below is empty by then, so the
+      // tail of this function returns state.currentRSSI — the held value —
+      // with no special case of its own.
+      if (state.searchActive && now - state.lastUpdateTime > STALE_THRESHOLD_MS) {
         return DEFAULT_RSSI;
       }
 
@@ -288,6 +333,19 @@ export const useLocateStore = create<LocateState>()(
       });
 
       return totalWeight > 0 ? Math.round(weightedSum / totalWeight) : state.currentRSSI;
+    },
+
+    // "Are we hearing the target tag right now?" — a different question from
+    // "what should the gauge show", which may be a held result from a search
+    // that is over.
+    //
+    // These were one signal until TRA-1171, and fusing them was safe only
+    // while the display always decayed on its own. Once it holds, a single
+    // signal keeps the beeper running forever on a number nobody is still
+    // listening to.
+    isHearingTag: () => {
+      const state = get();
+      return state.searchActive && Date.now() - state.lastUpdateTime <= STALE_THRESHOLD_MS;
     }
   }))
 );

@@ -86,6 +86,7 @@ const LocateScreen: React.FC = () => {
     setStatusMessage,
     getFilteredRSSI,
     getStatistics,
+    isHearingTag,
     setTarget,
     // The raw, undecayed peak. Only the "Last search" status line uses it.
     peakRSSI: lastSearchPeak
@@ -200,20 +201,29 @@ const LocateScreen: React.FC = () => {
 
   const isScanning = readerState === ReaderState.SCANNING;
 
-  // What the screen reports must follow the read stream, not the reader's state
-  // machine. getFilteredRSSI() already floors to DEFAULT_RSSI once readings go
-  // stale (>1s), so it is the single source of truth for "are we hearing the
-  // target tag right now" — the same data the Statistics panel renders.
-  //
-  // Gating the gauge and Status on SCANNING instead let the two halves of the
+  // What the screen reports follows the read stream, not the reader's state
+  // machine. Gating the gauge and Status on SCANNING let the two halves of the
   // screen disagree: any non-SCANNING state with reads still arriving (observed
   // live with the reader in ERROR at 14 Hz) printed "No signal" and "Idle" next
   // to a live dBm value. On a tag finder "No signal" means "the item is not
   // here", so that is a false negative on the primary function of the screen
   // (TRA-1080).
+  //
+  // Two questions, deliberately separated (TRA-1171). They were one signal, and
+  // fusing them was safe only while the display always decayed on its own.
+  //
+  //   displayRSSI  — what the gauge shows. Once the search stops this HOLDS the
+  //                  last value, because that value is the result of the search
+  //                  the operator just ran: they released the trigger in order
+  //                  to read it. Zeroing it would be TRA-1080's false negative
+  //                  reached from the opposite direction.
+  //   hearingTag   — whether the target is audible right now. Drives the audio
+  //                  and goes false the moment the search ends, so the alarm
+  //                  cannot keep sounding over a held number.
   const displayRSSI = getFilteredRSSI();
-  const hasLiveSignal = displayRSSI > DEFAULT_RSSI;
-  const isSearching = isScanning || hasLiveSignal;
+  const hasDisplayValue = displayRSSI > DEFAULT_RSSI;
+  const hearingTag = isHearingTag();
+  const isSearching = isScanning || hearingTag;
 
   // Same signal again for the Statistics rows. The raw store fields are only
   // recalculated when a reading arrives, so rendering them directly left the
@@ -256,14 +266,14 @@ const LocateScreen: React.FC = () => {
       return;
     }
 
-    if (hasLiveSignal) {
-      // Have signal - use proximity tone based on RSSI
+    if (hearingTag) {
+      // Hearing the tag right now - use proximity tone based on RSSI
       updateProximity(displayRSSI);
     } else {
       // Scanning but nothing heard yet - play "searching" tick pattern
       startSearching();
     }
-  }, [isSearching, hasLiveSignal, displayRSSI, updateProximity, startSearching, stopBeeping]);
+  }, [isSearching, hearingTag, displayRSSI, updateProximity, startSearching, stopBeeping]);
   
   // Format RSSI for display
   const formatRSSI = (value: number) => {
@@ -513,7 +523,9 @@ const LocateScreen: React.FC = () => {
       </div>
       
       {/* Simple Graph */}
-      {hasLiveSignal && graphData && graphData.length > 0 && (
+      {/* Holds after the search ends, alongside the gauge — the trace is part
+          of the result the operator released the trigger to read. */}
+      {hasDisplayValue && graphData && graphData.length > 0 && (
         <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow p-4">
           <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">Signal History (10s)</h3>
           <div className="h-32 bg-gray-50 dark:bg-gray-700 rounded flex items-center justify-center text-gray-500 dark:text-gray-400">

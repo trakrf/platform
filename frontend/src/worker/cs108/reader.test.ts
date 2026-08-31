@@ -1235,6 +1235,70 @@ describe('CS108Reader', () => {
       expect(reader.getState()).toBe(ReaderState.CONNECTED);
     });
 
+    // TRA-1171: the UI has to learn about the release when the notification
+    // arrives, not when the stop finishes. Posting behind the awaited stop is
+    // what let the Locate gauge and alarm keep running after the operator let
+    // go, and it also meant a REJECTED stop emitted no event at all
+    // (TRA-1168).
+    it('posts TRIGGER_STATE_CHANGED before awaiting the stop (TRA-1171)', async () => {
+      await reader.setMode(ReaderMode.BARCODE);
+      await reader.startScanning();
+      (reader as any).scanningRequested = false;
+      postMessageSpy.mockClear();
+
+      // A stop that never settles on its own. The event can only be observed
+      // here if it was posted BEFORE the await.
+      let releaseStop: () => void = () => {};
+      (commandManagerMock.executeSequence as Mock).mockImplementationOnce(
+        () => new Promise<void>(resolve => { releaseStop = resolve; })
+      );
+
+      const handled = (reader as any).handleNotificationEvent({
+        type: 'TRIGGER_STATE_CHANGED',
+        payload: { pressed: false }
+      });
+
+      await Promise.resolve();
+
+      expect(postMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'TRIGGER_STATE_CHANGED',
+        payload: { pressed: false }
+      }));
+
+      releaseStop();
+      await handled;
+
+      // Exactly once. The hoist has to remove the old post at the end of the
+      // case, or every trigger edge is emitted twice.
+      const triggerPosts = postMessageSpy.mock.calls.filter(
+        (call: unknown[]) => (call[0] as { type?: string })?.type === 'TRIGGER_STATE_CHANGED'
+      );
+      expect(triggerPosts).toHaveLength(1);
+    });
+
+    it('posts a debounced trigger edge exactly once (TRA-1171)', async () => {
+      // The debounced branch used to `break` out of the switch and fall into
+      // the post at the end. With the post hoisted above it, that same `break`
+      // would emit the event twice.
+      await reader.setMode(ReaderMode.BARCODE);
+      await (reader as any).handleNotificationEvent({
+        type: 'TRIGGER_STATE_CHANGED',
+        payload: { pressed: true }
+      });
+      postMessageSpy.mockClear();
+
+      // Immediately again, inside triggerDebounceMs.
+      await (reader as any).handleNotificationEvent({
+        type: 'TRIGGER_STATE_CHANGED',
+        payload: { pressed: false }
+      });
+
+      const triggerPosts = postMessageSpy.mock.calls.filter(
+        (call: unknown[]) => (call[0] as { type?: string })?.type === 'TRIGGER_STATE_CHANGED'
+      );
+      expect(triggerPosts).toHaveLength(1);
+    });
+
     it('should handle barcode auto-stop request', async () => {
       await reader.setMode(ReaderMode.BARCODE);
       await reader.startScanning();

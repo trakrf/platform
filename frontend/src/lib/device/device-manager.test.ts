@@ -4,6 +4,7 @@ import {
   hasLocateTarget,
   shouldReapplyModeForTarget,
   tagReadToStoreTags,
+  closesLocateGate,
 } from './device-manager';
 import { ReaderMode } from '@/worker/types/reader';
 import { useTagStore } from '@/stores/tagStore';
@@ -119,6 +120,26 @@ describe('shouldReapplyModeForTarget (TRA-1121)', () => {
 
   it('stays quiet on any other tab, which does not care about the target', () => {
     expect(shouldReapplyModeForTarget(true, false, 'scan')).toBe(false);
+  });
+});
+
+/**
+ * TRA-1171: the trigger edge closes the locate release gate, and only ever
+ * closes it. The asymmetry is the whole point and is easy to "tidy" away into
+ * `setSearchActive(pressed)`, which would be wrong in both directions.
+ */
+describe('closesLocateGate (TRA-1171)', () => {
+  it('closes the gate on release, without waiting for the reader to leave SCANNING', () => {
+    expect(closesLocateGate(false)).toBe(true);
+  });
+
+  it('does NOT open the gate on a press', () => {
+    // The reader drops a press unless its state is exactly CONNECTED, so a
+    // press is not evidence a scan started. An open gate with no scan behind
+    // it would admit stray reads. READER_STATE_CHANGED -> SCANNING is what
+    // opens it, which also keeps the on-screen scan button working — the
+    // button produces no trigger edge at all.
+    expect(closesLocateGate(true)).toBe(false);
   });
 });
 
