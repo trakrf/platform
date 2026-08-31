@@ -582,12 +582,21 @@ export class CommandManager {
           lastError = undefined;
           break;
         } catch (error: unknown) {
-          logger.debug(`[CommandManager] Setting ERROR state due to command failure`);
-          this.announceSettled(ReaderState.ERROR);
-
-          // An abort is a decision, not a fault — never retry through one.
+          // An abort is a decision, not a fault — never retry through one, and
+          // never tolerate one. Checked BEFORE the state announcement so an
+          // abort does not publish ERROR on its way past: the setMode taking
+          // over owns the state from here.
           if (error instanceof SequenceAbortedError) {
+            this.announceSettled(ReaderState.ERROR);
             throw error;
+          }
+
+          // A tolerated step's failure is not the sequence's failure, so it must
+          // not publish ERROR — that state is what callers read to conclude the
+          // hardware is in an unknown condition, and this one is not.
+          if (!cmd.toleratesFailure) {
+            logger.debug(`[CommandManager] Setting ERROR state due to command failure`);
+            this.announceSettled(ReaderState.ERROR);
           }
 
           lastError = error;
@@ -607,7 +616,19 @@ export class CommandManager {
       // The ORIGINAL error object, never a rebuild — consumers discriminate by
       // class, and rebuilding is what lost it before (TRA-1187).
       if (lastError !== undefined) {
-        throw lastError;
+        if (!cmd.toleratesFailure) {
+          throw lastError;
+        }
+
+        // Loud on purpose. This is the one path where the reader did not do
+        // what it was told and nobody is informed by an exception, so the log
+        // line is the whole record — and it is what a soak report greps for.
+        const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
+        logger.warn(
+          `[CommandManager] ${cmd.event.name} (0x${cmd.event.eventCode.toString(16)}) ` +
+          `went unanswered after ${delays.length + 1} attempt(s): ${errorMessage} — ` +
+          `tolerated, continuing the sequence`
+        );
       }
 
       // Apply delay if specified (and not aborted)

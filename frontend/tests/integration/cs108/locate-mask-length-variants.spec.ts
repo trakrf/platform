@@ -136,8 +136,14 @@ describe('Locate mask length variants — stripped EPC finds its tag at either w
       } catch {
         try { await harness.setMode(ReaderMode.IDLE); } catch { /* best effort */ }
       }
-      await harness.disconnect();
-      await harness.cleanup();
+      // `cleanup()` in `finally`: it is the only thing that releases the link
+      // for the next spec file, and the worker's own disconnect in front of it
+      // can throw. See the note in locate.spec.ts. TRA-1217.
+      try {
+        await harness.disconnect();
+      } finally {
+        await harness.cleanup();
+      }
     }
   }, 60000);
 

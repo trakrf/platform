@@ -53,13 +53,20 @@ describe('CS108 Inventory Integration', () => {
   afterAll(async () => {
     console.log('🔧 Cleaning up...');
     if (harness) {
+      // `cleanup()` in `finally`, because it is the only thing that releases
+      // the link for the next spec file — quiescing the radio and the worker's
+      // own disconnect are best effort in front of it. See the note in
+      // locate.spec.ts for what skipping it cost. TRA-1217.
       try {
         await harness.setMode(ReaderMode.IDLE);
       } catch (error) {
         console.error('Failed to set IDLE mode:', error);
       }
-      await harness.disconnect();
-      await harness.cleanup();
+      try {
+        await harness.disconnect();
+      } finally {
+        await harness.cleanup();
+      }
     }
     console.log('✅ Disconnected');
   });
