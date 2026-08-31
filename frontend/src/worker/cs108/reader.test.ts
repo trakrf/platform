@@ -855,6 +855,18 @@ describe('CS108Reader', () => {
    * reader spends leaving SCANNING is stored in readerSettings and never
    * written, and the search then runs against the previous tag's mask —
    * silently, because nothing failed.
+   *
+   * TRA-1225 CLOSED THE BUSY ROUTE INTO HERE, AND THIS BACKSTOP STILL EARNS ITS
+   * PLACE. A push that lands mid-transition now waits for the reader to settle
+   * and applies itself, so BUSY no longer arrives at startScanning unapplied —
+   * and it must not, because writing the mask here costs ~3.7s INSIDE the
+   * search, which is the whole of TRA-1225.
+   *
+   * What still reaches this backstop is a push the reader could not take at
+   * all: DISCONNECTED, or a settle that timed out on a wedged reader. Those are
+   * reported at ERROR and left for the next start to write. The cases below are
+   * driven through DISCONNECTED for that reason — not because the BUSY case
+   * stopped mattering, but because it is now handled a step earlier.
    */
   describe('LOCATE tag mask reaches hardware before scanning (TRA-1122)', () => {
     const FIRST_EPC = 'E280689400000000001018DD';
@@ -871,13 +883,12 @@ describe('CS108Reader', () => {
       postMessageSpy.mockClear();
     });
 
-    it('writes a target that changed while the reader was mid-transition', async () => {
-      // BUSY, not SCANNING: a retarget landing on a *running* search is now
-      // handled by setSettings cycling the search. What still reaches
-      // startScanning unapplied is a retarget that lands in the transitional
-      // window — which is the reported TRA-1122 timing, since leaving SCANNING
-      // passes through BUSY.
-      (reader as any).readerState = ReaderState.BUSY;
+    it('writes a target the reader could not take when it was pushed', async () => {
+      // The push is reported at ERROR and left unapplied — silenced here so the
+      // suite's output stays clean; that it IS reported is asserted in the
+      // TRA-1225 loudness block rather than duplicated here.
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      (reader as any).readerState = ReaderState.DISCONNECTED;
       await reader.setSettings({ rfid: { targetEPC: SECOND_EPC } });
       (reader as any).readerState = ReaderState.CONNECTED;
       (commandManagerMock.executeSequence as Mock).mockClear();
@@ -885,6 +896,7 @@ describe('CS108Reader', () => {
       await reader.startScanning();
 
       expect(executedSequences()[0]).toEqual(locateSettingsSequence(SECOND_EPC));
+      errorSpy.mockRestore();
     });
 
     it('does not rewrite a mask that is already on the hardware', async () => {
@@ -897,10 +909,12 @@ describe('CS108Reader', () => {
     });
 
     it('surfaces a failed mask write instead of searching for the wrong tag', async () => {
-      (reader as any).readerState = ReaderState.BUSY;
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      (reader as any).readerState = ReaderState.DISCONNECTED;
       await reader.setSettings({ rfid: { targetEPC: SECOND_EPC } });
       (reader as any).readerState = ReaderState.CONNECTED;
       (commandManagerMock.executeSequence as Mock).mockClear();
+      errorSpy.mockRestore();
       // Any failed mask write, not specifically the mutex collision: that error
       // is an invariant violation since TRA-1197 and no longer a thing this
       // path can meet. Pinning the test to it would make it a test of an
@@ -929,6 +943,153 @@ describe('CS108Reader', () => {
       // The LOCATE mode sequence just rewrote the mask, so the start needs no
       // second write.
       expect(commandManagerMock.executeSequence).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  /**
+   * TRA-1225, measured on hardware 2026-08-31 at DEBUG.
+   *
+   * A settings push that arrives while the reader is BUSY was stored and never
+   * applied — at `logger.debug`, which the default INFO level does not print,
+   * so the drop produced NO OUTPUT AT ALL in any captured run.
+   *
+   * The consequence is not the one the reported symptom suggests. The mask does
+   * still reach the hardware: startScanning()'s TRA-1122 backstop writes it.
+   * But it writes it INSIDE the search. That write is 18 commands at a 100ms
+   * settling delay each, preceded by the vendor's ~1.9s post-ABORT quiet
+   * window — about 3.7s — so a 4s trigger hold produced no inventory at all:
+   *
+   *     [Reader] Converging to trigger held - starting scan
+   *     [Reader] Target EPC changed since it was last written - applying...
+   *     [CommandManager] Executing sequence of 18 commands
+   *     [CommandManager] Holding 1861ms for the device's quiet window
+   *     ... steps 1..15 of 18 ...          <- trigger released here
+   *     RESULT: the PREVIOUS tag x2, the requested tag x0
+   *
+   * No RFID_START_SEQUENCE. The search never ran, and the two stray reads of
+   * the previous tag are the tail of the search before it.
+   *
+   * The first search in the same run passes for one reason only: its push
+   * landed while CONNECTED, so setSettings applied the mask and the caller
+   * awaited it. The cost was paid outside the timed window.
+   *
+   * So BUSY must not mean "discard". BUSY is by construction transient — some
+   * sequence is in flight and will publish CONNECTED — so the push waits for
+   * that and then applies, which is what makes `await setSettings(...)` mean
+   * "the radio is configured" again. The 3.7s goes back where the first search
+   * already pays it.
+   */
+  describe('a settings push that lands mid-transition (TRA-1225)', () => {
+    const FIRST_EPC = 'E280689400000000001018DD';
+    const SECOND_EPC = 'E280689400000000001018EE';
+
+    const executedSequences = () =>
+      (commandManagerMock.executeSequence as Mock).mock.calls.map(call => call[0]);
+
+    beforeEach(async () => {
+      await reader.connect();
+      await reader.setMode(ReaderMode.LOCATE, { rfid: { targetEPC: FIRST_EPC } });
+      (reader as any).triggerState = true;
+      (commandManagerMock.executeSequence as Mock).mockClear();
+    });
+
+    it('applies a target that arrives while a sequence is still in flight', async () => {
+      (reader as any).readerState = ReaderState.BUSY;
+
+      const push = reader.setSettings({ rfid: { transmitPower: 30, targetEPC: SECOND_EPC } });
+      // The in-flight sequence completes, exactly as CommandManager publishes it.
+      (reader as any).setReaderState(ReaderState.CONNECTED);
+      await push;
+
+      expect(executedSequences()).toContainEqual(locateSettingsSequence(SECOND_EPC));
+    });
+
+    it('does not resolve until the mask is actually on the hardware', async () => {
+      (reader as any).readerState = ReaderState.BUSY;
+
+      let resolved = false;
+      const push = reader.setSettings({ rfid: { transmitPower: 30, targetEPC: SECOND_EPC } })
+        .then(() => { resolved = true; });
+
+      // Give the push every chance to resolve early. If it does, the caller is
+      // told the settings landed while the radio still carries the old mask —
+      // which is the whole defect, since the write is then displaced into the
+      // search.
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(resolved).toBe(false);
+
+      (reader as any).setReaderState(ReaderState.CONNECTED);
+      await push;
+      expect(resolved).toBe(true);
+    });
+
+    it('leaves nothing for the scan start to write', async () => {
+      (reader as any).readerState = ReaderState.BUSY;
+      const push = reader.setSettings({ rfid: { transmitPower: 30, targetEPC: SECOND_EPC } });
+      (reader as any).setReaderState(ReaderState.CONNECTED);
+      await push;
+      (commandManagerMock.executeSequence as Mock).mockClear();
+
+      await reader.startScanning();
+
+      // The start sequence, and nothing else. A mask write here is the 3.7s
+      // that swallowed the search.
+      expect(executedSequences()).toEqual([RFID_START_SEQUENCE]);
+    });
+
+    /**
+     * `hasHardwareSettings` gates the whole apply block and does not list
+     * targetEPC, so a targetEPC-only push takes NEITHER branch: not applied,
+     * not deferred, not logged at all. The integration spec carries a comment
+     * describing this and works around it by always sending transmitPower.
+     * The workaround is the evidence; remove the need for it.
+     */
+    it('applies a push carrying nothing but a new target', async () => {
+      await reader.setSettings({ rfid: { targetEPC: SECOND_EPC } });
+
+      expect(executedSequences()).toContainEqual(locateSettingsSequence(SECOND_EPC));
+    });
+  });
+
+  /**
+   * The drop was invisible, and that is the most durable part of TRA-1225,
+   * independent of the fix: `logger.debug` with WorkerLogger defaulting to INFO
+   * means every soak log we hold is blind to it.
+   *
+   * These assert against `console` with the logger at its DEFAULT level, not
+   * against logger.warn/logger.error. Spying the logger would pass even if the
+   * level still swallowed the line, which is the failure being fixed rather
+   * than a test of it.
+   */
+  describe('a settings push that cannot be applied says so (TRA-1225)', () => {
+    const TARGET_EPC = 'E280689400000000001018DD';
+    const OTHER_EPC = 'E280689400000000001018EE';
+
+    let errorSpy: Mock;
+    let warnSpy: Mock;
+
+    const whatItSaid = () =>
+      [...errorSpy.mock.calls, ...warnSpy.mock.calls].map(call => call.join(' ')).join('\n');
+
+    beforeEach(async () => {
+      await reader.connect();
+      await reader.setMode(ReaderMode.LOCATE, { rfid: { targetEPC: TARGET_EPC } });
+      errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {}) as unknown as Mock;
+      warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {}) as unknown as Mock;
+    });
+
+    it('names the target it could not apply, at the default log level', async () => {
+      (reader as any).readerState = ReaderState.DISCONNECTED;
+
+      await reader.setSettings({ rfid: { transmitPower: 30, targetEPC: OTHER_EPC } });
+
+      expect(whatItSaid()).toMatch(/targetEPC/i);
+    });
+
+    it('stays quiet when the target did reach the hardware', async () => {
+      await reader.setSettings({ rfid: { transmitPower: 30, targetEPC: OTHER_EPC } });
+
+      expect(whatItSaid()).not.toMatch(/targetEPC/i);
     });
   });
 
