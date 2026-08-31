@@ -51,11 +51,11 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-31 | Task 10A implementation and review | Implemented registry-scoped bounded metrics. Review found negative-duration corruption and missing rollback/concurrency evidence; a fresh fix ignores negative durations and proves exact gathered rollback/concurrent outcomes. Re-review approved; sender/callback instrumentation remains deferred to 10B/10C. |
 | 2026-08-31 | Task 10B implementation and review | Added sender metrics. Review found unexpected outcomes mislabeled permanent and ambiguous variadic recorder loss; a fresh fix added explicit `NewSenderWithMetrics` and maps nil/unrecognized/cancelled outcomes to bounded unknown. Re-review approved exact results, request-only timing, privacy, and concurrency. |
 | 2026-08-31 | Task 10C implementation and review | Added explicit callback metrics. Review found consumer panics mislabeled malformed; a fresh fix marks pending consumer failure before handoff while preserving panic propagation. Re-review approved exact callback outcomes/durations, constructor compatibility, privacy, and concurrency. |
-| 2026-08-31 | Task 11 implementation | Added two cross-component integration tests only: a real-SDK HTTP-transport sender scenario and a configured-handler/Chi callback scenario. They exercise bounded metrics and redaction without storage, workers, root attachment, frontend, or geofencing. The boundary emits no logs, so error and gathered-metric output supply the privacy evidence. Test-only coverage targets already-implemented behavior; no artificial RED phase was claimed. |
+| 2026-08-31 | Task 11 implementation and review | Added cross-component SDK HTTP sender and signed Chi callback integration tests with bounded metrics. Repository-native bootstrap generated ignored embed prerequisites; targeted/race/full tests, vet, module verification, and diff checks pass. Review approved; generated-doc `swag` tidy classification remains a separate pre-existing hygiene issue. |
 
 ### Current handoff
 
-- Next task: independent Task 11 review and final handoff verification.
+- Next task: final broad branch review and completion verification.
 - Implementation rule: use a fresh subagent context for every task, followed by an independent review context.
 - Not implementable in this ticket: frontend and geofence-event generation/integration.
 - Task 9 boundary: `Handler.RegisterRoutes` is independently attachable but is not mounted by `serve.setupRouter`; TRA-1201 has no durable callback consumer to inject.
@@ -706,7 +706,7 @@ go vet ./...
 
 Expected: all commands pass and no external Twilio request occurs.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add backend/internal/notification/twilio/integration_test.go backend/internal/handlers/twiliosms/handler_integration_test.go
