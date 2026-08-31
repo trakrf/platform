@@ -29,6 +29,7 @@
  *   4  the newest rep is a void capture
  *   5  the field was not clear at start (pre-flight gate)
  *   6  a client connected with a mock version the bridge did not expect
+ *   7  the mock connected at pre-flight is the wrong version (see TRA-1216)
  *  64  usage error
  */
 
@@ -284,6 +285,43 @@ export function mockVersionBreach(baseline, now) {
   return { breached: false, reason: 'no mismatch observed' };
 }
 
+/**
+ * Is the mock CURRENTLY connected a different version from the one this bridge
+ * expects? A pre-flight snapshot, and the companion to `mockVersionBreach()`.
+ *
+ * The two observe different things and neither replaces the other: this reads
+ * the version of the client attached right now, the counter catches a stale mock
+ * that connected and disconnected between two polls.
+ *
+ * ⚠ `mock_version_match` is THREE-VALUED and collapsing it is the whole hazard:
+ *
+ *   false  asked, and the answer disagrees. The only case that aborts.
+ *   null   nothing connected yet, or the bridge could not ask. "Cannot check" —
+ *          and it is the NORMAL reading when the watchdog starts before the
+ *          driver's first connect, so it must not abort. It must also never be
+ *          read as agreement.
+ *   true   asked and agreed.
+ *
+ * Costing the null case wrong in either direction breaks the instrument: abort
+ * and no arm can ever start; treat as clean and the guard is decorative.
+ */
+export function mockVersionMismatchAtStart(state) {
+  if (!state || state.mock_version_match !== false) {
+    const known = state && state.mock_version_match === true;
+    return {
+      mismatched: false,
+      reason: known
+        ? `connected mock ${state.mock_version} matches`
+        : 'no mock connected yet, or the bridge could not ask — cannot check',
+    };
+  }
+  return {
+    mismatched: true,
+    reason:
+      `connected mock is ${state.mock_version}, bridge expects ${state.mock_version_expected}`,
+  };
+}
+
 /** Held, and held by the session our own driver connects under. Both sides must
  * be non-empty strings — see the fail-open note above. */
 export function heldByUs(state, ownSession) {
@@ -448,6 +486,18 @@ usage: watch-soak-abort-criteria.mjs --driver-pid <pid> --runs <runs.jsonl> [opt
                        hold by our own rep 1 is not mistaken for contention.
                        Override only if the driver runs with a BLE_SESSION_ID this
                        process cannot see.
+
+exit codes:
+  0   run ended normally (driver gone)
+  2   the bridge did not answer
+  3   consecutive transport failures
+  4   void capture — the canary read zero
+  5   the field was not clear before the first rep
+  6   mock_version_mismatches rose mid-run
+  7   the connected mock is the wrong version at pre-flight
+  64  bad usage
+
+  See docs/runbooks/running-a-soak-arm.md for what each one means in practice.
 `);
   process.exit(64);
 }
@@ -529,6 +579,47 @@ async function main() {
       say('mock-injected browser tab is the usual cause and appears in no process list.');
     }
     process.exit(5);
+  }
+
+  // ---- pre-flight: the browser mock must be the version we think it is ----
+  //
+  // ⚠ THIS COST 45 MINUTES AND A FALSE ARM START on 2026-08-31, and every fact
+  // needed to catch it was already on screen.
+  //
+  // `frontend/package.json` said `^0.16.0`, the bump was merged, `main` was
+  // current — and `node_modules` in the checkout the driver ran from still held
+  // 0.15.0, because `pnpm install` had only ever run inside a worktree that was
+  // then deleted. The arm's first rep connected with the old mock. Seven and a
+  // half hours would have measured a configuration that does not exist.
+  //
+  // `mock_version_match` is THREE-VALUED and the distinction is the whole
+  // point:
+  //
+  //   false  the bridge asked and the answer disagrees. A definite fault, and
+  //          the only case that aborts here.
+  //   null   nothing is connected yet, or the bridge could not ask. "Cannot
+  //          check" — recorded, never treated as agreement. This is the NORMAL
+  //          reading when the watchdog starts before the driver's first
+  //          connect, so aborting on it would make the watchdog unusable.
+  //   true   checked and agreed.
+  //
+  // The counter in `status.mock_version_mismatches` is the other half and is
+  // handled at each poll by mockVersionBreach(); it catches a stale mock that
+  // connects and disconnects between samples, which this snapshot cannot see.
+  const mockAtStart = mockVersionMismatchAtStart(state);
+  if (mockAtStart.mismatched) {
+    say(`ABORT before start: ${mockAtStart.reason}. The arm would measure the wrong`);
+    say('mock and every rep would be uninformative.');
+    say('');
+    say('Almost always a stale install in the checkout the driver runs from —');
+    say('a dependency bump merged, but `pnpm install` never re-ran there:');
+    say('');
+    say('  pnpm install                     # from the repo root you are running in');
+    say('  node -p "require(\'./frontend/node_modules/ble-mcp-test/package.json\').version"');
+    say('');
+    say('A guard proves the artifact in the checkout you run it from — green in a');
+    say('worktree says nothing about the tree launching this arm.');
+    process.exit(7);
   }
 
   const status = await callControl('status');
