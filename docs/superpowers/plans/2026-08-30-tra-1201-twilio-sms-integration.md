@@ -50,11 +50,11 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-31 | Task 10A start | Split the original metrics task into collector primitives (10A), sender integration (10B), and callback integration (10C). The split prevents package cycles, keeps each review-sized task to five or fewer product files, and makes collector behavior independently observable before instrumentation is added. |
 | 2026-08-31 | Task 10A implementation and review | Implemented registry-scoped bounded metrics. Review found negative-duration corruption and missing rollback/concurrency evidence; a fresh fix ignores negative durations and proves exact gathered rollback/concurrent outcomes. Re-review approved; sender/callback instrumentation remains deferred to 10B/10C. |
 | 2026-08-31 | Task 10B implementation and review | Added sender metrics. Review found unexpected outcomes mislabeled permanent and ambiguous variadic recorder loss; a fresh fix added explicit `NewSenderWithMetrics` and maps nil/unrecognized/cancelled outcomes to bounded unknown. Re-review approved exact results, request-only timing, privacy, and concurrency. |
-| 2026-08-31 | Task 10C implementation | Added explicit optional callback metrics injection while preserving `NewHandler(config, consumer)`. Status and inbound callbacks each defer one bounded outcome and boundary-duration observation; gathered real signed/forged request tests cover accepted, invalid-signature, malformed, and nil/typed-nil/error consumer failures without submission metrics or sensitive labels. RED then focused, race, vet, module, notification/handler regression, and diff checks passed. |
+| 2026-08-31 | Task 10C implementation and review | Added explicit callback metrics. Review found consumer panics mislabeled malformed; a fresh fix marks pending consumer failure before handoff while preserving panic propagation. Re-review approved exact callback outcomes/durations, constructor compatibility, privacy, and concurrency. |
 
 ### Current handoff
 
-- Next task: independent Task 10C review.
+- Next task: Task 11, complete independent-boundary integration verification.
 - Implementation rule: use a fresh subagent context for every task, followed by an independent review context.
 - Not implementable in this ticket: frontend and geofence-event generation/integration.
 - Task 9 boundary: `Handler.RegisterRoutes` is independently attachable but is not mounted by `serve.setupRouter`; TRA-1201 has no durable callback consumer to inject.
