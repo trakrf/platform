@@ -47,14 +47,17 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-30 | Task 7 implementation and review | Added a thin status callback receiver using TDD. It emits normalized UTC events for five supported states, rejects invalid/malformed input before handoff, returns explicit consumer failures, and leaves repeated-callback idempotency downstream. Independent review approved all targeted checks and the private clock exception. |
 | 2026-08-31 | Task 8 implementation and review | Implemented signed consent keyword handoff. Review found missing documented `REVOKE`/`OPTOUT`; a fresh fix maps them to `STOP` with observable event tests. Re-review approved all synonyms, privacy/failure/retry behavior, and the explicit no-suppression boundary. |
 | 2026-08-31 | Task 9 implementation and review | Added standalone Chi registration for only signed status/inbound POST callbacks. Tests cover signed handoff, forged 403, exact 405/Allow, and neighboring 404 outcomes. Independent review approved the route surface and deliberate lack of root attachment until a durable consumer exists. |
+| 2026-08-31 | Task 10A start | Split the original metrics task into collector primitives (10A), sender integration (10B), and callback integration (10C). The split prevents package cycles, keeps each review-sized task to five or fewer product files, and makes collector behavior independently observable before instrumentation is added. |
+| 2026-08-31 | Task 10A implementation | Implemented registry-scoped, concurrency-safe bounded Twilio metric collectors using TDD. Gathered-output tests cover exact families/labels/counters/histogram, unknown-input collapse, and duplicate registration errors. Sender and callback-handler instrumentation remain explicitly deferred to Tasks 10B and 10C. |
 
 ### Current handoff
 
-- Next task: Task 10, bounded Twilio metrics.
+- Next task: Task 10B, Twilio sender metric integration.
 - Implementation rule: use a fresh subagent context for every task, followed by an independent review context.
 - Not implementable in this ticket: frontend and geofence-event generation/integration.
 - Task 9 boundary: `Handler.RegisterRoutes` is independently attachable but is not mounted by `serve.setupRouter`; TRA-1201 has no durable callback consumer to inject.
 - Atomic Task 7 exception: `handler.go` gains a private clock dependency initialized by the existing constructor, so status events have a deterministic, injectable UTC occurrence time. The public constructor signature is unchanged.
+- Task 10A boundary: `twilio.NewMetrics(prometheus.Registerer)` returns a registry-scoped `*twilio.Metrics`; its recorder methods normalize all typed-string inputs to finite labels. It does not use the default registry and does not modify sender or callback handlers.
 
 ---
 
@@ -502,7 +505,7 @@ action is an independent Task 9 review.
 
 ---
 
-### Task 10: Add bounded Twilio metrics
+### Task 10A: Add bounded Twilio metric collectors
 
 **MR file count:** 2
 
@@ -510,11 +513,14 @@ action is an independent Task 9 review.
 - Create: `backend/internal/notification/twilio/metrics.go`
 - Create: `backend/internal/notification/twilio/metrics_test.go`
 
-**Consumes:** sender outcomes and callback outcomes.
+**Consumes:** a Prometheus `Registerer`; callers and tests can expose its
+collectors through the corresponding `Gatherer` interface.
 
-**Produces:** bounded provider metrics.
+**Produces:** a concurrency-safe, injected-registry `twilio.Metrics` recorder with
+bounded submission and callback outcome APIs. This task deliberately does not
+modify sender or callback handlers.
 
-- [ ] **Step 1: Write failing metric tests**
+- [x] **Step 1: Write failing metric tests**
 
 Define:
 
@@ -524,25 +530,132 @@ trakrf_twilio_callbacks_total{type,result}
 trakrf_twilio_request_duration_seconds
 ```
 
-Allow only fixed result values. Assert metric descriptors contain no organization, delivery, phone, error-message, or message-body labels.
+Construct the recorder with an isolated `prometheus.Registry`, record accepted
+and failure outcomes, then gather real metric families. Assert the exact metric
+names, labels, counter values, and histogram observation count. Assert unknown
+result/type inputs map to fixed fallback label values and cannot create
+unbounded series. Assert duplicate registration returns an error, rather than
+panicking. Do not inspect recorder fields or assert call order.
 
-- [ ] **Step 2: Verify failure**
+- [x] **Step 2: Verify failure**
 
 Run: `cd backend && go test ./internal/notification/twilio -run TestMetrics -count=1`
 
 Expected: FAIL because metrics are undefined.
 
-- [ ] **Step 3: Implement instrumentation**
+Observed: FAIL with undefined `twilio.NewMetrics` and recorder type/constant
+symbols before `metrics.go` was created.
 
-Instrument accepted, transient error, permanent error, rejected, invalid signature, malformed callback, and consumer failure paths.
+- [x] **Step 3: Implement collector primitives**
 
-- [ ] **Step 4: Verify and commit**
+Implement `NewMetrics(prometheus.Registerer) (*Metrics, error)` plus public
+recorder methods for submission result, callback type/result, and request
+duration. The constructor registers all three collectors against the supplied
+registerer and returns registration errors; a supplied registry also implements
+`prometheus.Gatherer` for observable exposition in callers and tests. Normalize
+all public label inputs to documented finite sets before they reach Prometheus;
+no metric has labels for organization, delivery, phone, Message SID, body,
+error text, error code, or credentials.
 
-Run: `cd backend && go test ./internal/notification/twilio ./internal/handlers/twiliosms -count=1`
+- [x] **Step 4: Verify**
+
+Run: `cd backend && go test -race ./internal/notification/twilio -run TestMetrics -count=1 && go vet ./internal/notification/twilio && go mod tidy -diff && go mod verify && go test ./internal/notification/... -count=1 && git diff --check`
 
 ```bash
 git add backend/internal/notification/twilio/metrics.go backend/internal/notification/twilio/metrics_test.go
-git commit -m "feat(TRA-1201): instrument Twilio boundary"
+git commit -m "feat(TRA-1201): add bounded Twilio metric collectors"
+```
+
+All verification commands passed. No commit was created because this
+implementation context must leave integration to the parent agent.
+
+---
+
+### Task 10B: Instrument Twilio sender outcomes
+
+**MR file count:** 2
+
+**Files:**
+- Modify: `backend/internal/notification/twilio/sender.go`
+- Modify: `backend/internal/notification/twilio/sender_test.go`
+
+**Consumes:** `twilio.Metrics` from Task 10A and sender outcomes.
+
+**Produces:** sender submission and request-duration observations only.
+
+- [ ] **Step 1: Write failing sender outcome tests**
+
+Build the sender with an injected Task 10A recorder and isolated registry.
+Exercise accepted, normalized transient/permanent/rejected failures, and
+pre-submit cancellation through the real sender boundary, then gather the
+recorder's metrics. Assert bounded result labels and no request or callback
+payload data in labels.
+
+- [ ] **Step 2: Verify failure**
+
+Run: `cd backend && go test ./internal/notification/twilio -run 'TestSender.*Metrics|TestSendSMS.*Metrics' -count=1`
+
+Expected: FAIL because the sender does not yet accept or invoke the recorder.
+
+- [ ] **Step 3: Add sender-only instrumentation**
+
+Inject the recorder without changing the `sms.Sender` interface. Record exactly
+one submission result per attempted send and duration only around the provider
+request. Map cancellation and any unexpected result via Task 10A's bounded API.
+
+- [ ] **Step 4: Verify and commit**
+
+Run: `cd backend && go test -race ./internal/notification/twilio -run 'TestSender|TestSendSMS|TestMetrics' -count=1 && go vet ./internal/notification/twilio && go test ./internal/notification/... -count=1 && git diff --check`
+
+```bash
+git add backend/internal/notification/twilio/sender.go backend/internal/notification/twilio/sender_test.go
+git commit -m "feat(TRA-1201): instrument Twilio sender metrics"
+```
+
+---
+
+### Task 10C: Instrument Twilio callback outcomes
+
+**MR file count:** 4
+
+**Files:**
+- Modify: `backend/internal/handlers/twiliosms/handler.go`
+- Modify: `backend/internal/handlers/twiliosms/status.go`
+- Modify: `backend/internal/handlers/twiliosms/inbound.go`
+- Modify: `backend/internal/handlers/twiliosms/*_test.go` (only the existing focused callback test files needed for outcome coverage)
+
+**Consumes:** `twilio.Metrics` from Task 10A and verified callback outcomes.
+
+**Produces:** callback result and request-duration observations only.
+
+- [ ] **Step 1: Write failing callback outcome tests**
+
+Inject a Task 10A recorder into the callback handler. Gather actual metric
+families after signed status and inbound successes, invalid signatures,
+malformed callbacks, and consumer failures. Assert types are only `status`,
+`inbound`, or Task 10A's fallback and that labels omit IDs, phone numbers,
+bodies, error text/codes, and credentials.
+
+- [ ] **Step 2: Verify failure**
+
+Run: `cd backend && go test ./internal/handlers/twiliosms -run 'TestStatus.*Metrics|TestInbound.*Metrics' -count=1`
+
+Expected: FAIL because the handler does not yet accept or invoke the recorder.
+
+- [ ] **Step 3: Add callback-only instrumentation**
+
+Inject the recorder at handler construction without adding a handler-to-sender
+dependency. Record exactly one bounded callback outcome and request duration
+per callback attempt, including invalid signature, malformed, and consumer
+failure outcomes.
+
+- [ ] **Step 4: Verify and commit**
+
+Run: `cd backend && go test -race ./internal/handlers/twiliosms -count=1 && go vet ./internal/handlers/twiliosms && go test ./internal/notification/twilio ./internal/handlers/twiliosms -count=1 && git diff --check`
+
+```bash
+git add backend/internal/handlers/twiliosms/handler.go backend/internal/handlers/twiliosms/status.go backend/internal/handlers/twiliosms/inbound.go backend/internal/handlers/twiliosms/*_test.go
+git commit -m "feat(TRA-1201): instrument Twilio callback metrics"
 ```
 
 ---
