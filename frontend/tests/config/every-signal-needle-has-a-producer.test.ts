@@ -38,7 +38,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { SIGNALS, E2E_SIGNALS } from '../../scripts/suite-run-signals.mjs';
+import { SIGNALS, E2E_SIGNALS, COMMAND_TIMEOUT_PREFIX } from '../../scripts/suite-run-signals.mjs';
 
 const FRONTEND_ROOT = path.resolve(__dirname, '../..');
 
@@ -137,7 +137,19 @@ const HAYSTACK = (() => {
   const signalsModule = path.join(FRONTEND_ROOT, 'scripts', 'suite-run-signals.mjs');
   const files = SEARCH_DIRS.flatMap((d) => collectSources(path.join(FRONTEND_ROOT, d)));
   return files
-    .filter((f) => f !== signalsModule && !f.endsWith('every-signal-needle-has-a-producer.test.ts'))
+    .filter(
+      (f) =>
+        f !== signalsModule &&
+        !f.endsWith('every-signal-needle-has-a-producer.test.ts') &&
+        // TRA-1226. This file builds real `[CommandManager] Command timeout: <OP>`
+        // lines as FIXTURES, so leaving it in makes the producer check satisfiable
+        // by a test of the very thing being checked. Caught by deliberate break:
+        // rewording the producer in command.ts left the suite green until this
+        // exclusion existed. Same reason the signals module is excluded above —
+        // a haystack must hold only code that could EMIT the line, never code
+        // that tests, consumes, or documents it.
+        !f.endsWith('soak-command-timeouts-by-op.test.ts')
+    )
     .map((f) => stripComments(readFileSync(f, 'utf8')))
     .join('\n');
 })();
@@ -233,6 +245,36 @@ describe('SIGNALS needles', () => {
         expect((SIGNALS as Record<string, string>)[name]).toBe(needle);
       }
     }
+  });
+
+  /**
+   * The per-op timeout PARSER gets the same rule as the needles (TRA-1226).
+   *
+   * `countCommandTimeouts` is not in SIGNALS, so every assertion above skips it
+   * — and it would be the worst place to lose coverage, because its failure mode
+   * is quieter than a dead needle's. A dead needle reports 0 for one op code. A
+   * dead prefix reports `{}` for EVERY op code, which reads as a reader that
+   * answered everything it was asked, on every rep, forever.
+   *
+   * That is the same defect the parser was introduced to fix, one level up:
+   * the fix for "the table only counts what someone enumerated" must not itself
+   * be a string nothing checks.
+   */
+  it('the command-timeout prefix the per-op parser depends on has a producer', () => {
+    expect(
+      HAYSTACK.includes(COMMAND_TIMEOUT_PREFIX),
+      `No source under ${SEARCH_DIRS.join('/, ')}/ contains ${JSON.stringify(COMMAND_TIMEOUT_PREFIX)}.\n` +
+        `countCommandTimeouts() parses the op name out of that line. If the message was reworded, ` +
+        `the parser now returns {} for every rep — which reads as "the device answered everything" ` +
+        `rather than "the parser stopped matching".`
+    ).toBe(true);
+  });
+
+  it('the powerOffTimeouts needle is built from that same prefix, so the two cannot drift', () => {
+    // The legacy single-op needle and the parser must count the same line. Two
+    // spellings of one signal is how a number silently starts meaning two
+    // things — and both are reported side by side in the summary table.
+    expect((SIGNALS as Record<string, string>).powerOffTimeouts).toContain(COMMAND_TIMEOUT_PREFIX);
   });
 
   it('declares nothing that is not a needle', () => {

@@ -374,8 +374,32 @@ describe('signals are per-runner, and absence is not zero', () => {
   it('vitest signals are byte-identical to today — no e2e keys leak in', () => {
     const log = fixture('vitest.log', '[Harness] connect\n[Harness] disconnect\n');
     const counts = readSignals(log, 'vitest');
-    expect(Object.keys(counts).sort()).toEqual(['logMissing', ...Object.keys(SIGNALS)].sort());
+    // `commandTimeouts` is named explicitly because it is NOT a needle — it is a
+    // parsed per-op map (TRA-1226), so deriving the expected key set from
+    // SIGNALS alone cannot see it. Listing it here keeps this assertion exact
+    // rather than quietly loosening it to a subset check: a genuine e2e leak
+    // must still fail, and it does, below.
+    expect(Object.keys(counts).sort()).toEqual(
+      ['logMissing', 'commandTimeouts', ...Object.keys(SIGNALS)].sort()
+    );
     expect(counts.harnessLines).toBe(2);
+  });
+
+  it('no e2e-only key reaches a vitest record', () => {
+    // The guard the assertion above is named for, stated directly. It used to be
+    // implied by an exact key-set match against SIGNALS; once a non-needle field
+    // joined that record the implication got weaker, so the real rule is written
+    // out rather than left to be inferred from a list.
+    const log = fixture('vitest-leak.log', '[Harness] x\n');
+    const counts = readSignals(log, 'vitest');
+    const e2eOnly = Object.keys(E2E_SIGNALS).filter((name) => !(name in SIGNALS));
+
+    expect(e2eOnly.length, 'the e2e table must have at least one exclusive key').toBeGreaterThan(0);
+    for (const name of e2eOnly) {
+      expect(counts, `${name} is an e2e-only needle and must not appear here`).not.toHaveProperty(
+        name
+      );
+    }
   });
 
   it('an e2e rep records null for a signal it cannot produce, not 0', () => {

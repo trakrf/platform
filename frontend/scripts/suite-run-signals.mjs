@@ -113,6 +113,80 @@ export const SIGNALS = {
 };
 
 /**
+ * The CommandManager's timeout line, up to the op name it appends.
+ *
+ * Shared by `powerOffTimeouts` above and by `countCommandTimeouts` below, so the
+ * needle and the parser cannot drift into counting different lines.
+ */
+export const COMMAND_TIMEOUT_PREFIX = '[CommandManager] Command timeout: ';
+
+/**
+ * Every command timeout in a log, broken down by op name (TRA-1226).
+ *
+ * ## Why this is a parser and not more needles
+ *
+ * `powerOffTimeouts` above counts ONE op code. On the 2026-08-31 arm that meant
+ * 203 command timeouts of which 138 were counted: `GET_TRIGGER_STATE` (0xA001)
+ * ran 63 and `RFID_FIRMWARE_COMMAND` (0x8002) ran 2, and **neither reached any
+ * summary, RUN-IDENTITY, or cross-arm comparison.** The 0x8002 one is what
+ * failed rep 1 — it put the reader into Error, so a deferred `targetEPC` push
+ * was abandoned and Locate ran against the previously applied mask.
+ *
+ * Adding two more needles would have fixed those two and left the next one
+ * invisible. A fixed list can only count what somebody thought to enumerate and
+ * reads a confident 0 for the rest — the same defect as TRA-1224's allowlist,
+ * one level up. That is not hypothetical here: TRA-1223 asserted the device
+ * ignored "exactly one op code" while its own first-occurrence table carried
+ * 0xA001 at 76 TX / 14 RX, and no instrument contradicted it because no
+ * instrument was looking.
+ *
+ * So the op name is parsed out of the line. **A newly-silent op code appears
+ * without anyone having predicted it**, which is the property that matters.
+ *
+ * ⚠ Returns `{}` for a log that carried no timeouts — a real measurement — and
+ * the caller must keep that distinct from the `null` a runner gets when it
+ * cannot observe these at all. Same null-vs-zero rule as everywhere else here.
+ */
+export function countCommandTimeouts(text) {
+  const counts = {};
+  // SPLIT on the literal prefix rather than interpolating it into a RegExp.
+  //
+  // The first version built `new RegExp(PREFIX.replace(/[[\]]/g, '\\$&') + ...)`
+  // and escaped only the brackets it happened to know about. CodeQL flagged it:
+  // a backslash in the prefix would not be escaped and would corrupt the
+  // pattern. Widening the escape set to the full metacharacter list fixes that
+  // instance and leaves the shape — a regex assembled from a string, correct
+  // only while nobody edits the string. Splitting on the literal cannot be
+  // wrong about escaping because it never escapes anything, and it is the same
+  // idiom `readSignals` already uses to count needles a few lines up.
+  //
+  // Only the op-name matcher stays a regex, and it is a static literal.
+  const parts = text.split(COMMAND_TIMEOUT_PREFIX);
+  for (let i = 1; i < parts.length; i++) {
+    // Op names are the CS108Event `name` fields: SCREAMING_SNAKE_CASE, anchored
+    // to the character immediately after the prefix.
+    const op = /^[A-Z0-9_]+/.exec(parts[i]);
+    if (op) counts[op[0]] = (counts[op[0]] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/**
+ * `countCommandTimeouts` for a log on disk.
+ *
+ * `null` when the log is gone — it measured nothing, and an empty map would say
+ * the opposite.
+ */
+export function readCommandTimeouts(logPath) {
+  if (!logPath || !existsSync(logPath)) return null;
+  try {
+    return countCommandTimeouts(readFileSync(logPath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The needles a PLAYWRIGHT repetition can actually produce (TRA-1206).
  *
  * The soak driver gained an e2e backend so it could run the suite TRA-1200
@@ -485,6 +559,11 @@ export function readSignals(logPath, runner = 'vitest') {
   for (const name of Object.keys(SIGNALS)) {
     if (!(name in counts)) counts[name] = null;
   }
+  // Per-op command timeouts (TRA-1226). null on a runner that cannot observe
+  // them, for the same reason as every other absent needle above: `{}` there
+  // would read as "the device answered everything", which is a claim this
+  // record has no standing to make.
+  counts.commandTimeouts = runner === 'vitest' ? countCommandTimeouts(text) : null;
   return counts;
 }
 
@@ -519,8 +598,26 @@ export function resolveSignals(record) {
   // very signal the new needle was added to detect, reported as a zero. That is
   // the failure this function's docstring exists to prevent, so it cannot be
   // keyed on a single field that happens to be current today.
+  // `commandTimeouts` is checked explicitly because it is NOT a member of
+  // SIGNALS — it is a parsed map, not a needle, so the loop above cannot see it.
+  // Without this clause a pre-TRA-1226 record passes the gate and is returned
+  // with no per-op breakdown at all, on a run whose log is sitting right there:
+  // precisely the "silently missing the very signal the new needle was added to
+  // detect" failure this comment block was written about the last time.
+  //
+  // ⚠ VITEST ONLY, and that restriction is load-bearing rather than tidy.
+  // Recomputation below calls `readSignals(log)` with no runner, i.e. against
+  // the VITEST table. For an e2e record that turns every vitest-only null into a
+  // 0 — the null-vs-zero conflation this module exists to prevent. So an e2e
+  // record must not be made stale by a field it can never carry a value for.
+  // Caught by `soak-driver-runner-backends.test.ts`, which was written for
+  // exactly this hazard the last time someone widened the gate.
+  const needsCommandTimeouts = runnerOf(record) === 'vitest';
   const isCurrent =
-    stored && !stored.logMissing && Object.keys(SIGNALS).every((name) => stored[name] !== undefined);
+    stored &&
+    !stored.logMissing &&
+    Object.keys(SIGNALS).every((name) => stored[name] !== undefined) &&
+    (!needsCommandTimeouts || stored.commandTimeouts !== undefined);
   if (isCurrent) {
     return { signals: stored, source: 'record' };
   }
