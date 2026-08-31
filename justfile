@@ -48,7 +48,14 @@ alias be := backend
 # ============================================================================
 # Run checks across all workspaces
 
-lint: (frontend "lint") (backend "lint") (cli "lint")
+# TRA-1219 item 3 — CONTRIBUTING.md had no consumer and rotted silently: every
+# command in its quickstart was dead. A dependency of `lint` rather than its own
+# job, so it runs inside the existing `lint-test` required check instead of
+# adding a context the branch-protection ruleset would have to be taught.
+check-contributing:
+    @./scripts/assert-contributing-paths.sh
+
+lint: check-contributing (frontend "lint") (backend "lint") (cli "lint")
 
 test: test-ops test-release-guards test-db-init test-env-drift test-bootstrap (frontend "test") (backend "test") (cli "test")
 
