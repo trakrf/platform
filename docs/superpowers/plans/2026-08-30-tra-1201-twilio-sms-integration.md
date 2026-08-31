@@ -51,10 +51,11 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-31 | Task 10A implementation and review | Implemented registry-scoped bounded metrics. Review found negative-duration corruption and missing rollback/concurrency evidence; a fresh fix ignores negative durations and proves exact gathered rollback/concurrent outcomes. Re-review approved; sender/callback instrumentation remains deferred to 10B/10C. |
 | 2026-08-31 | Task 10B implementation and review | Added sender metrics. Review found unexpected outcomes mislabeled permanent and ambiguous variadic recorder loss; a fresh fix added explicit `NewSenderWithMetrics` and maps nil/unrecognized/cancelled outcomes to bounded unknown. Re-review approved exact results, request-only timing, privacy, and concurrency. |
 | 2026-08-31 | Task 10C implementation and review | Added explicit callback metrics. Review found consumer panics mislabeled malformed; a fresh fix marks pending consumer failure before handoff while preserving panic propagation. Re-review approved exact callback outcomes/durations, constructor compatibility, privacy, and concurrency. |
+| 2026-08-31 | Task 11 implementation | Added two cross-component integration tests only: a real-SDK HTTP-transport sender scenario and a configured-handler/Chi callback scenario. They exercise bounded metrics and redaction without storage, workers, root attachment, frontend, or geofencing. The boundary emits no logs, so error and gathered-metric output supply the privacy evidence. Test-only coverage targets already-implemented behavior; no artificial RED phase was claimed. |
 
 ### Current handoff
 
-- Next task: Task 11, complete independent-boundary integration verification.
+- Next task: independent Task 11 review and final handoff verification.
 - Implementation rule: use a fresh subagent context for every task, followed by an independent review context.
 - Not implementable in this ticket: frontend and geofence-event generation/integration.
 - Task 9 boundary: `Handler.RegisterRoutes` is independently attachable but is not mounted by `serve.setupRouter`; TRA-1201 has no durable callback consumer to inject.
@@ -62,6 +63,7 @@ This section is the durable handoff record across fresh implementation contexts.
 - Task 10A boundary: `twilio.NewMetrics(prometheus.Registerer)` returns a registry-scoped `*twilio.Metrics`; its recorder methods normalize all typed-string inputs to finite labels. It does not use the default registry and does not modify sender or callback handlers.
 - Task 10B boundary: `twilio.NewSender(config)` remains unchanged; `NewSenderWithMetrics(config, *Metrics)` explicitly injects one optional recorder. `SendSMS` records one bounded result per call, times only `CreateMessage`, and never records callback metrics.
 - Task 10C boundary: `NewHandler(config, consumer)` remains unchanged; `NewHandlerWithMetrics(config, consumer, *twilio.Metrics)` accepts one optional recorder, and a nil recorder is a no-op. Every status/inbound handler invocation records one bounded callback result plus one callback-boundary duration when a recorder is present; unrelated signed inbound text is accepted, and no submission metric is emitted.
+- Task 11 verification: package/race suites, `go test ./... -count=1`, and `go vet ./...` pass after the repository-native bootstrap generated its ignored embed inputs. `go mod verify` passes; `go mod tidy -diff` reports only the existing `github.com/swaggo/swag` direct/indirect classification delta, which Task 11 leaves untouched.
 
 ---
 
@@ -682,15 +684,17 @@ git commit -m "feat(TRA-1201): instrument Twilio callback metrics"
 
 **Produces:** integration evidence without storage, workers, or external requests.
 
-- [ ] **Step 1: Add sender integration coverage**
+- [x] **Step 1: Add sender integration coverage**
 
-Using a fake Twilio client, verify Messaging Service sending, returned Message SID/status, error classification, concurrent safety, and redacted logs.
+Using the real SDK HTTP transport seam, verify Messaging Service sending, no
+raw `From`, returned Message SID/status, error classification, concurrent
+safety, and redacted returned-error/metric output. The boundary emits no logs.
 
-- [ ] **Step 2: Add callback integration coverage**
+- [x] **Step 2: Add callback integration coverage**
 
 Using signed fixtures and an in-memory fake consumer, verify status and STOP/START handoff, invalid-signature rejection, repeated callback delivery, and absence of arbitrary inbound body persistence.
 
-- [ ] **Step 3: Run full verification**
+- [x] **Step 3: Run full verification**
 
 ```bash
 cd backend
