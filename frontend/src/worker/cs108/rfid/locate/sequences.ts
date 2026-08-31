@@ -35,7 +35,7 @@ import { logger } from '../../../utils/logger.js';
 export const LOCATE_CONFIG_SEQUENCE: CommandSequence = [
   {
     event: RFID_POWER_ON,
-    retryOnError: true  // Power commands may fail initially
+    retryDelays: [100]  // Power commands may fail initially
   },
 
   // Set Inventory Parameters matching vendor app configuration

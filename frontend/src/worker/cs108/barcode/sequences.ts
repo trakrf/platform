@@ -20,7 +20,7 @@ import { ReaderState } from '../../types/reader.js';
 export const BARCODE_CONFIG_SEQUENCE: CommandSequence = [
   {
     event: BARCODE_POWER_ON,
-    retryOnError: true  // Power commands may fail initially
+    retryDelays: [100]  // Power commands may fail initially
   },
   {
     event: BARCODE_SEND_COMMAND,

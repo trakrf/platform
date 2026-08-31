@@ -37,6 +37,23 @@ export class SequenceAbortedError extends Error {
 }
 
 /**
+ * The retry path used to carry an ALREADY_RETRIED symbol so a nested,
+ * recursive re-dispatch could tell "first failure" from "already retried".
+ * Before that it was the string ' (already retried)' appended to the message,
+ * which forced building a NEW Error to propagate — and that discarded the class
+ * of the error being wrapped, so a retried SequenceAbortedError arrived as a
+ * plain Error. reader.ts matched on message text and accidentally compensated;
+ * narrowing that match to instanceof exposed it on hardware as a failing
+ * inventory sequence (TRA-1187).
+ *
+ * Both are gone. runSequence() now retries in a LOOP, holds the original error
+ * object in a local, and rethrows THAT. There is no second entry point that
+ * needs to be told what happened, so there is nothing to mark. The invariant
+ * "never rebuild the error" is now a property of the shape rather than a rule
+ * a flag reminds you to follow.
+ */
+
+/**
  * An INVARIANT VIOLATION: a command was dispatched while one was in flight.
  *
  * This used to be a routine outcome — the mutex rejecting a concurrent caller —
@@ -50,47 +67,6 @@ export class SequenceAbortedError extends Error {
  * has two owners — which is not a condition any caller should absorb as benign.
  * A benign branch for an impossible error is the shape that swallows a real one.
  */
-/**
- * Marks an error as having already been through the sequence retry.
- *
- * A PROPERTY, not a message suffix. This used to be the string
- * `' (already retried)'` appended to the message, tested with
- * `errorMessage.includes('(already retried)')` — a flag carried in prose, which
- * meant the only way to propagate it was to build a NEW `Error`, and building a
- * new Error discarded the class of the one being wrapped.
- *
- * That destroyed error identity on the retry path: a retried
- * `SequenceAbortedError` reached its consumer as a plain `Error` whose text
- * still contained "aborted". `reader.ts` matched on that text and therefore
- * still behaved correctly — the over-wide match was accidentally compensating
- * for the identity loss. Narrowing that match to `instanceof` exposed this, on
- * hardware, as a failing inventory sequence (TRA-1187).
- *
- * Two message-shaped mechanisms propping each other up: neither was visible
- * while both were in place.
- */
-const ALREADY_RETRIED = Symbol.for('trakrf.cs108.alreadyRetried');
-
-function wasAlreadyRetried(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && ALREADY_RETRIED in error;
-}
-
-/**
- * Flag the error and return IT — never a copy.
- *
- * Preserving the object preserves its class and its stack, which is the whole
- * point: every consumer downstream discriminates by class now.
- */
-function markRetried(error: unknown): unknown {
-  if (typeof error === 'object' && error !== null) {
-    Object.defineProperty(error, ALREADY_RETRIED, { value: true, enumerable: false });
-    return error;
-  }
-  const wrapped = new Error(String(error));
-  Object.defineProperty(wrapped, ALREADY_RETRIED, { value: true, enumerable: false });
-  return wrapped;
-}
-
 export class CommandInFlightError extends Error {
   constructor(message = 'Command already active - executeCommand called concurrently') {
     super(message);
@@ -585,36 +561,53 @@ export class CommandManager {
       const cmd = sequence[i];
       logger.debug(`[CommandManager] Sequence step ${i + 1}/${sequence.length}: ${cmd.event.name} (0x${cmd.event.eventCode.toString(16)})`)
 
-      try {
-        // dispatchCommand will throw SequenceAbortedError if aborted
-        await this.dispatchCommand(cmd.event, cmd.payload, cmd.quietPeriodAfter, cmd.ignoresQuietPeriod);
-        logger.debug(`[CommandManager] Sequence step ${i + 1}/${sequence.length} completed: ${cmd.event.name}`);
-      } catch (error: unknown) {
-        // Set ERROR state on failure (if we have state context)
-        logger.debug(`[CommandManager] Setting ERROR state due to command failure`);
-        this.announceSettled(ReaderState.ERROR);
+      // Attempt the command, then walk `retryDelays` until it lands or the
+      // schedule is spent.
+      //
+      // A LOOP, not a recursive re-dispatch. The previous shape retried exactly
+      // once and had to mark the error so the nested call could tell "first
+      // failure" from "already retried" — the mechanism ALREADY_RETRIED existed
+      // for. Here the attempt count is a loop variable, the original error
+      // object is simply held and rethrown, and error identity is preserved
+      // structurally rather than by a flag. That is what TRA-1187 actually
+      // needed.
+      const delays = cmd.retryDelays ?? [];
+      let lastError: unknown;
 
-        // Don't retry on sequence aborts
-        if (error instanceof SequenceAbortedError) {
-          throw error;
-        }
+      for (let attempt = 0; ; attempt++) {
+        try {
+          // dispatchCommand will throw SequenceAbortedError if aborted
+          await this.dispatchCommand(cmd.event, cmd.payload, cmd.quietPeriodAfter, cmd.ignoresQuietPeriod);
+          logger.debug(`[CommandManager] Sequence step ${i + 1}/${sequence.length} completed: ${cmd.event.name}`);
+          lastError = undefined;
+          break;
+        } catch (error: unknown) {
+          logger.debug(`[CommandManager] Setting ERROR state due to command failure`);
+          this.announceSettled(ReaderState.ERROR);
 
-        // If retryOnError is set and this is the first failure, retry once
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (cmd.retryOnError && !wasAlreadyRetried(error)) {
-          logger.debug(`[CommandManager] Command failed with: ${errorMessage}`);
-          logger.debug(`[CommandManager] Retrying ${cmd.event.name} per sequence configuration`);
-          await new Promise(resolve => setTimeout(resolve, 100)); // Brief delay
-          try {
-            await this.dispatchCommand(cmd.event, cmd.payload, cmd.quietPeriodAfter, cmd.ignoresQuietPeriod);
-          } catch (retryError: unknown) {
-            // Mark to prevent infinite retry, WITHOUT rebuilding the error —
-            // see ALREADY_RETRIED. Rebuilding is what lost the class.
-            throw markRetried(retryError);
+          // An abort is a decision, not a fault — never retry through one.
+          if (error instanceof SequenceAbortedError) {
+            throw error;
           }
-        } else {
-          throw error; // Re-throw if no retry configured or already retried
+
+          lastError = error;
+          if (attempt >= delays.length) break;
+
+          const wait = delays[attempt];
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          logger.debug(`[CommandManager] Command failed with: ${errorMessage}`);
+          logger.debug(
+            `[CommandManager] Retrying ${cmd.event.name} in ${wait}ms ` +
+            `(attempt ${attempt + 2}/${delays.length + 1})`
+          );
+          await new Promise(resolve => setTimeout(resolve, wait));
         }
+      }
+
+      // The ORIGINAL error object, never a rebuild — consumers discriminate by
+      // class, and rebuilding is what lost it before (TRA-1187).
+      if (lastError !== undefined) {
+        throw lastError;
       }
 
       // Apply delay if specified (and not aborted)

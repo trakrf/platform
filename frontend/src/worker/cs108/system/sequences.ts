@@ -30,11 +30,11 @@ export const BATTERY_VOLTAGE_SEQUENCE: CommandSequence = [
 export const IDLE_SEQUENCE: CommandSequence = [
   {
     event: RFID_POWER_OFF,
-    retryOnError: true  // Power commands may fail initially
+    retryDelays: [100]  // Power commands may fail initially
   },
   {
     event: BARCODE_POWER_OFF,
-    retryOnError: true  // Barcode module may need retry
+    retryDelays: [100]  // Barcode module may need retry
   },
   {
     event: GET_TRIGGER_STATE  // Check if trigger is already pressed on connect

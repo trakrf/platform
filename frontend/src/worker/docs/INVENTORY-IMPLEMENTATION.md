@@ -155,7 +155,7 @@ export const INVENTORY_SEQUENCE: CommandSequence = [
   {
     event: RFID_POWER_ON,
     delay: 500,
-    retryOnError: true
+    retryDelays: [100]
   },
   // Dynamic settings using applyRfidSettings helper
   ...applyRfidSettings(getInventorySettings()).map(payload => ({

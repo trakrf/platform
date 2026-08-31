@@ -26,7 +26,7 @@ import { RFID_POWER_ON, RFID_FIRMWARE_COMMAND } from '../../event.js';
 export const INVENTORY_CONFIG_SEQUENCE: CommandSequence = [
   {
     event: RFID_POWER_ON,
-    retryOnError: true  // Power commands may fail initially
+    retryDelays: [100]  // Power commands may fail initially
   },
   // Set antenna power to 30dBm (default, can be overridden by setSettings)
   {

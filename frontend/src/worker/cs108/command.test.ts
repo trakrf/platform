@@ -332,9 +332,9 @@ describe('CommandManager', () => {
       await expect(promise).resolves.toBeUndefined();
     });
 
-    it('should retry on error if retryOnError is true', async () => {
+    it('should retry on error if retryDelays is set', async () => {
       const sequence = [
-        { event: testEvent, retryOnError: true }
+        { event: testEvent, retryDelays: [100] }
       ];
 
       const promise = commandManager.executeSequence(sequence);

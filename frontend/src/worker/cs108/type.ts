@@ -91,7 +91,26 @@ export interface SequenceCommand {
   event: CS108Event;
   payload?: Uint8Array;
   delay?: number;      // Optional delay after this command (ms)
-  retryOnError?: boolean; // Whether to retry this command once if it fails (default: false)
+  /**
+   * Backoff schedule for re-sending this command when it fails (ms per retry).
+   *
+   * Absent or empty means one attempt and no retry. `[100, 200, 500, 1000]` is
+   * five attempts: the original, then four retries spaced by those gaps.
+   *
+   * The gap is IN ADDITION to the command's own timeout, which has already
+   * elapsed in silence — so `[100]` against a 200ms timeout re-sends 300ms after
+   * the original send, not 100ms.
+   *
+   * That first gap is not politeness. It is a quarantine window: a response that
+   * arrives late, after we gave up, lands while nothing is in flight and is
+   * discarded, rather than arriving mid-retry and settling a command it does not
+   * belong to. Every RFID firmware command shares op code 0x8002, so a
+   * mis-settled response is a one-behind offset that persists (TRA-1154).
+   *
+   * A `SequenceAbortedError` is never retried through — an abort is a decision,
+   * not a fault.
+   */
+  retryDelays?: number[];
   finalState?: ReaderStateType;  // State to transition to after successful sequence completion
 
   /**

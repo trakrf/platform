@@ -459,7 +459,7 @@ describe('LOCATE_CONFIG_SEQUENCE', () => {
 
     // First command should be RFID_POWER_ON
     expect(LOCATE_CONFIG_SEQUENCE[0].event).toBe(RFID_POWER_ON);
-    expect(LOCATE_CONFIG_SEQUENCE[0].retryOnError).toBe(true);
+    expect(LOCATE_CONFIG_SEQUENCE[0].retryDelays).toEqual([100]);
     // settlingDelay is now on the event definition, not the sequence command
 
     // Should have configuration commands
