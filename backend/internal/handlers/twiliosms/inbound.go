@@ -54,7 +54,7 @@ func (h *Handler) Inbound(w http.ResponseWriter, r *http.Request) {
 
 func normalizedInboundKeyword(body string) (string, bool) {
 	switch strings.ToUpper(strings.TrimSpace(body)) {
-	case "STOP", "CANCEL", "UNSUBSCRIBE", "END", "QUIT", "STOPALL":
+	case "STOP", "CANCEL", "UNSUBSCRIBE", "END", "QUIT", "STOPALL", "REVOKE", "OPTOUT":
 		return "STOP", true
 	case "START", "UNSTOP":
 		return "START", true

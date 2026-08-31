@@ -45,6 +45,8 @@ func TestInbound_NormalizesStandardConsentKeywords(t *testing.T) {
 		{name: "end", body: " End ", keyword: "STOP"},
 		{name: "quit", body: "quit", keyword: "STOP"},
 		{name: "stopall", body: " STOPALL ", keyword: "STOP"},
+		{name: "revoke", body: " ReVoKe ", keyword: "STOP"},
+		{name: "optout", body: "\tOpToUt\n", keyword: "STOP"},
 		{name: "start", body: " start ", keyword: "START"},
 		{name: "unstop", body: "UnStOp", keyword: "START"},
 	} {
