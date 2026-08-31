@@ -77,6 +77,40 @@ printf '{"op":"get_connection_state"}\n' | nc -U "${XDG_RUNTIME_DIR}/ble-bridge.
 - **`held`** — someone owns the command path and can write to the device.
 - **`observer_count`** — how many others are attached read-only.
 
+### `held: false` is NECESSARY and NOT SUFFICIENT
+
+**The reader is shared with the ble-mcp-test session** (reachable on cc2cc as
+`bridge`), which runs its own hardware suites and holds the device for the length
+of a publish or a soak.
+
+A state query reads **state, not intent**. `held: false` is therefore equally
+consistent with *"the other side has finished"* and *"the other side is between
+two attempts"* — a retried publish, a spec that disconnects between reps, a suite
+mid-restart. **The query cannot tell them apart, so it can never establish
+clearance on its own.**
+
+> **The reader changes hands on an explicit message.** Announce before connecting,
+> announce when finished, and announce again **before a retry**. Then check
+> `get_connection_state` as a second guard — behind the signal, never instead of it.
+
+If nobody answers within ~10 minutes, check the state and, if free, take it **and
+announce that you have taken it**. Announcing into an empty inbox still leaves the
+record. The protocol must not deadlock on an absent counterpart.
+
+**Measured, 2026-08-31.** ble-mcp-test's first publish passed its 23-test hardware
+gate and died at the last step on an expired OTP; it re-attempted 26 seconds later.
+Platform polled inside that gap, read `held: false`, and connected. The flag was
+telling the truth and the lock was genuinely enforced — the collision produced real
+`DEVICE_BUSY` refusals naming the holder. The failure was that a **critical
+section** (gate → OTP → retry) outlasted the **lock hold** protecting it. Cost:
+8 of 23 e2e tests and a publish attempt.
+
+⚠ **This is a convention, not a control.** It has no red state: if either side
+forgets to send the words, nothing fails — the sessions simply collide again and
+reconstruct it afterwards. A real lock is being designed in the ble-mcp-test repo
+(TRA-1221), whose acceptance criteria include deleting this section and the
+`CLAUDE.md` line pointing at it. **Do not keep both.**
+
 **`observer_count > 0` is the hazard worth naming.** It is most often a leftover
 mock-injected browser tab, which **appears in no process listing and in no log**
 — so every `ps`/`pgrep`/`ss` recipe reports a clear field while a tab quietly
