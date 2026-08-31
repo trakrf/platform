@@ -149,13 +149,24 @@ export const COMMAND_TIMEOUT_PREFIX = '[CommandManager] Command timeout: ';
  */
 export function countCommandTimeouts(text) {
   const counts = {};
-  // Op names are the CS108Event `name` fields: SCREAMING_SNAKE_CASE.
-  const pattern = new RegExp(
-    `${COMMAND_TIMEOUT_PREFIX.replace(/[[\]]/g, '\\$&')}([A-Z0-9_]+)`,
-    'g'
-  );
-  for (const match of text.matchAll(pattern)) {
-    counts[match[1]] = (counts[match[1]] ?? 0) + 1;
+  // SPLIT on the literal prefix rather than interpolating it into a RegExp.
+  //
+  // The first version built `new RegExp(PREFIX.replace(/[[\]]/g, '\\$&') + ...)`
+  // and escaped only the brackets it happened to know about. CodeQL flagged it:
+  // a backslash in the prefix would not be escaped and would corrupt the
+  // pattern. Widening the escape set to the full metacharacter list fixes that
+  // instance and leaves the shape — a regex assembled from a string, correct
+  // only while nobody edits the string. Splitting on the literal cannot be
+  // wrong about escaping because it never escapes anything, and it is the same
+  // idiom `readSignals` already uses to count needles a few lines up.
+  //
+  // Only the op-name matcher stays a regex, and it is a static literal.
+  const parts = text.split(COMMAND_TIMEOUT_PREFIX);
+  for (let i = 1; i < parts.length; i++) {
+    // Op names are the CS108Event `name` fields: SCREAMING_SNAKE_CASE, anchored
+    // to the character immediately after the prefix.
+    const op = /^[A-Z0-9_]+/.exec(parts[i]);
+    if (op) counts[op[0]] = (counts[op[0]] ?? 0) + 1;
   }
   return counts;
 }
