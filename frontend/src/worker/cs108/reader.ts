@@ -25,6 +25,7 @@ import {
   ReaderMode,
   RainTarget,
   type ReaderModeType,
+  type ReaderStateType,
   type ReaderSettings
 } from '../types/reader.js';
 import { postWorkerEvent, WorkerEventType, type WorkerEvent } from '../types/events.js';
@@ -42,6 +43,20 @@ import { applyRfidSettings, type RfidSettings } from './rfid/firmware-command.js
 import { LOCATE_CONFIG_SEQUENCE, locateSettingsSequence } from './rfid/locate/sequences.js';
 import { transmitPowerSequence, RFID_START_SEQUENCE, RFID_STOP_SEQUENCE } from './rfid/sequences.js';
 import { RFID_FIRMWARE_COMMAND } from './event.js';
+
+/**
+ * How long a settings push waits for a transient reader state to clear before
+ * giving up and reporting that it could not apply.
+ *
+ * Generous on purpose. The point of the wait is that BUSY *ends* — the longest
+ * thing that holds it is a mode change, which is tens of commands each with a
+ * settling delay, plus any quiet window the device declared. This has to
+ * outlast that comfortably or the timeout becomes a second silent drop with
+ * extra steps. It is a backstop against a wedged reader, not a scheduling
+ * knob, and it must stay finite: an unbounded wait here would hang the
+ * DeviceManager command queue behind a reader that is never coming back.
+ */
+const SETTINGS_SETTLE_TIMEOUT_MS = 15000;
 
 /**
  * CS108 RFID Reader
@@ -66,6 +81,8 @@ class CS108Reader extends BaseReader {
   private lastAppliedTargetEPC?: string; // The LOCATE tag mask actually written to hardware
   private scanStartedByTrigger = false;  // Whether the running scan is the trigger's to stop
   private converging = false;            // Re-entrancy guard for convergeToTriggerState()
+  // Callers parked until the reader stops being BUSY. See waitForSettledState().
+  private settleWaiters = new Set<(state: ReaderStateType) => void>();
 
   constructor() {
     super();
@@ -599,6 +616,62 @@ class CS108Reader extends BaseReader {
   }
 
   /**
+   * Publish a state change, and release anything waiting on the reader to settle.
+   *
+   * Overridden rather than hooked through StateContext because StateContext only
+   * sees the states CommandManager publishes. connect() and disconnect() set the
+   * state directly in BaseReader, and a waiter that a disconnect could not wake
+   * is an unsatisfiable waiter — it would sit until its timeout with the answer
+   * already known. Taking the base method is what makes this the one choke point
+   * for every state change rather than most of them.
+   */
+  protected setReaderState(newState: ReaderStateType): void {
+    super.setReaderState(newState);
+
+    if (this.settleWaiters.size === 0) return;
+    // Copy: a waiter removes itself from the set as it resolves.
+    for (const settle of [...this.settleWaiters]) settle(newState);
+  }
+
+  /**
+   * Wait for a transient reader state to resolve into a settled one.
+   *
+   * Resolves with whatever state ended the wait, so the caller decides what to
+   * do about it — CONNECTED means "apply now", anything else means "report it".
+   * Resolving rather than throwing is deliberate: the caller has to be able to
+   * tell "settled, but into DISCONNECTED" from "still BUSY when time ran out",
+   * and both of those are reportable outcomes rather than exceptions.
+   *
+   * Always resolves. Never rejects, never waits forever.
+   */
+  private waitForSettledState(timeoutMs: number): Promise<ReaderStateType> {
+    const isTransient = (state: ReaderStateType) =>
+      state === ReaderState.BUSY || state === ReaderState.CONNECTING;
+
+    if (!isTransient(this.readerState)) {
+      return Promise.resolve(this.readerState);
+    }
+
+    return new Promise<ReaderStateType>((resolve) => {
+      const settle = (state: ReaderStateType) => {
+        if (isTransient(state)) return;
+        this.settleWaiters.delete(settle);
+        clearTimeout(timer);
+        resolve(state);
+      };
+
+      // Declared after `settle` and closed over by it: `settle` cannot run
+      // before it is in the waiter set, which is after this line.
+      const timer = setTimeout(() => {
+        this.settleWaiters.delete(settle);
+        resolve(this.readerState);
+      }, timeoutMs);
+
+      this.settleWaiters.add(settle);
+    });
+  }
+
+  /**
    * Update reader settings - simplified version
    * Just stores settings and applies hardware changes when READY
    * No mode-based filtering, no complex validation
@@ -655,13 +728,52 @@ class CS108Reader extends BaseReader {
       }
     }
 
-    // Check if we need to apply hardware settings
+    // Check if we need to apply hardware settings.
+    //
+    // targetEPC belongs in this list and was missing from it. This flag gates
+    // the whole block below, INCLUDING the tag-mask write that block ends with,
+    // so a push carrying nothing but a new target matched neither branch: not
+    // applied, not reported, not logged at any level. The integration spec
+    // documented that and worked around it by always sending transmitPower
+    // alongside — a workaround at the call site is the evidence, so remove the
+    // need for it rather than the comment.
     const hasHardwareSettings =
       settings.rfid?.transmitPower !== undefined ||
       settings.rfid?.session !== undefined ||
       settings.rfid?.algorithm !== undefined ||
       settings.rfid?.inventoryMode !== undefined ||
+      settings.rfid?.targetEPC !== undefined ||
       settings.barcode !== undefined;
+
+    // WAIT OUT A TRANSITION RATHER THAN DISCARDING THE PUSH.
+    //
+    // BUSY is transient by construction: a sequence is in flight and will
+    // publish CONNECTED when it finishes. Discarding a push that lands there
+    // did not merely lose the write — it moved it. The mask still reached the
+    // hardware, from startScanning()'s TRA-1122 backstop, but now INSIDE the
+    // user's search: 18 commands at a 100ms settling delay each, behind the
+    // vendor's post-ABORT quiet window. Measured on hardware at 1861ms + ~1.8s,
+    // against a 4s trigger hold — the search never started at all and the only
+    // reads were strays from the previous one. TRA-1225.
+    //
+    // Waiting is what makes `await setSettings(...)` mean "the radio is
+    // configured", which is what the caller already believes it means. The cost
+    // does not disappear; it goes back to being paid in the settings call,
+    // which is where a push that lands while CONNECTED has always paid it.
+    if (hasHardwareSettings && (this.readerState === ReaderState.BUSY ||
+                                this.readerState === ReaderState.CONNECTING)) {
+      logger.info(
+        `[Reader] Settings push arrived while ${this.readerState} - ` +
+        'waiting for the reader to settle before applying'
+      );
+      const settled = await this.waitForSettledState(SETTINGS_SETTLE_TIMEOUT_MS);
+      if (settled === ReaderState.BUSY || settled === ReaderState.CONNECTING) {
+        logger.error(
+          `[Reader] Reader still ${settled} after ${SETTINGS_SETTLE_TIMEOUT_MS}ms - ` +
+          'giving up on the settle. The reader is wedged, not merely busy.'
+        );
+      }
+    }
 
     // If we have hardware settings and we're READY, apply them
     if (hasHardwareSettings && this.readerState === ReaderState.CONNECTED) {
@@ -786,8 +898,50 @@ class CS108Reader extends BaseReader {
         throw error;
       }
     } else if (hasHardwareSettings && this.readerState !== ReaderState.CONNECTED) {
-      // We have hardware settings but can't apply them now - just log
-      logger.debug('[Reader] Hardware settings stored but not applied (reader not READY)');
+      // A push that could not reach the radio is REPORTED, never swallowed.
+      //
+      // This was `logger.debug`, and WorkerLogger defaults to INFO, so the drop
+      // produced no output at all: every soak log we hold is blind to it, and it
+      // was found only by temporarily raising the default and re-running. That
+      // is the durable half of TRA-1225 and it outlives whatever the fix turns
+      // out to be — a silent drop is not just a missing write, it is a missing
+      // write that cannot be recovered from evidence already collected.
+      //
+      // Report what was actually lost, not the whole push. Reaching here does
+      // not mean nothing applied: the retarget-while-scanning path above cycles
+      // a running search and DOES write the new mask, and crying about a
+      // targetEPC that is already on the radio would train the next reader of
+      // these logs to ignore the line.
+      const unapplied: string[] = [];
+      if (settings.rfid?.transmitPower !== undefined) unapplied.push('transmitPower');
+      if (settings.rfid?.session !== undefined) unapplied.push('session');
+      if (settings.rfid?.algorithm !== undefined) unapplied.push('algorithm');
+      if (settings.rfid?.inventoryMode !== undefined) unapplied.push('inventoryMode');
+      if (settings.barcode !== undefined) unapplied.push('barcode');
+
+      // lastAppliedTargetEPC is the record of what the hardware actually holds,
+      // so it — not the push — decides whether the target got there.
+      const targetEPC = settings.rfid?.targetEPC;
+      const targetMissedTheRadio =
+        targetEPC !== undefined && targetEPC !== this.lastAppliedTargetEPC;
+
+      if (targetMissedTheRadio) {
+        // A targetEPC is not a preference. It IS the search, and the Locate
+        // mask is the only EPC filter in the path — addRssiReading() never
+        // receives an EPC — so a target that did not reach the radio means the
+        // next search runs against the previous tag with nothing downstream to
+        // catch it. That is an error, not a note.
+        logger.error(
+          `[Reader] targetEPC '${targetEPC}' did NOT reach the radio (reader is ` +
+          `${this.readerState}). Locate will run against the previously applied ` +
+          `mask '${this.lastAppliedTargetEPC ?? 'none'}' until something writes this one.`
+        );
+      } else if (unapplied.length > 0) {
+        logger.warn(
+          `[Reader] Hardware settings not applied (reader is ${this.readerState}): ` +
+          unapplied.join(', ')
+        );
+      }
     }
 
     // Emit settings updated event
