@@ -9,11 +9,12 @@ TrakRF Platform is an RFID/BLE asset tracking system for manufacturing and logis
 ## Before You Start
 
 ### Required Tools
+- **just** - The entry point for every workflow. Run recipes from the project root
 - **Go 1.25+** - For backend development (required for Air hot-reload)
-- **Node.js 18+** - For frontend development
-- **Docker & Docker Compose** - For running dependencies
+- **Node.js 18+ and pnpm 9+** - For frontend development. pnpm only; use `pnpm dlx`, never `npx`
+- **Docker & Docker Compose** - Runs TimescaleDB and the backend
+- **direnv** - Auto-loads `.env.local`
 - **Git** - For version control
-- **TimescaleDB** - Via Docker or TigerData cloud
 
 ### Quick Setup
 ```bash
@@ -23,20 +24,28 @@ TrakRF Platform is an RFID/BLE asset tracking system for manufacturing and logis
 git clone https://github.com/YOUR_USERNAME/platform.git
 cd platform
 
-# 3. Start dependencies
-docker-compose up -d timescaledb
+# 3. Configure environment. Optional — every value has a working local default,
+#    so the stack comes up with no env file at all. You need this only for
+#    things with no sensible default, such as MQTT credentials.
+cp .env.local.example .env.local
+direnv allow
 
-# 4. Set up environment
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
+# 4. Generate the embedded build targets. Takes a couple of minutes cold and
+#    needs no supervision, so it is worth backgrounding. Without it the build
+#    fails with `pattern frontend/dist: no matching files found`.
+just bootstrap
 
-# 5. Run migrations
-cd backend && go run cmd/migrate/main.go up
+# 5. Start the stack: database, then migrations, then the backend
+just dev
 
-# 6. Run tests
-go test ./...
-cd ../frontend && pnpm test
+# 6. Run the tests
+just test
 ```
+
+There is **one** local env file, `.env.local`, and it holds connection *parts*
+rather than URLs. `just bootstrap` symlinks `.env` to it, because docker compose
+reads `.env` while direnv reads `.env.local`. See the README for why that matters
+and for the local database roles — this guide does not restate it.
 
 ## Making Changes
 
@@ -84,20 +93,23 @@ export async function fetchAssetLocation(assetId: string): Promise<Location> {
 ```
 
 ### 3. Test Your Changes
+
+Run recipes from the project root; `just` delegates into each workspace.
+
 ```bash
-# Backend tests
-cd backend
-go test ./...
-go test -race ./...  # Race condition check
+# Everything — lint, test and build across backend, frontend, cli and database
+just validate
 
-# Frontend tests
-cd frontend
-pnpm test
-pnpm run lint
+# Or a single workspace
+just backend test
+just frontend test
+just lint
 
-# Integration tests (requires running services)
-docker-compose up -d
-go test ./tests/integration -tags=integration
+# Integration tests. They are in-package behind a build tag, not a separate
+# directory, and they need a live database plus PG_ADMIN_URL — without it the
+# whole package fails at setup rather than skipping.
+just database up
+just backend test-integration
 ```
 
 ### 4. Commit Your Work
@@ -135,13 +147,11 @@ describe('Asset Service', () => {
 
 ### API Integration Tests
 ```bash
-# Run full stack locally
-docker-compose up -d
-cd backend && go run cmd/server/main.go &
-cd frontend && pnpm dev &
+# Run the full stack locally: database, migrations, then backend and frontend
+just dev-local
 
-# Run API tests
-cd tests/api && pnpm test
+# Run the API contract tests against it
+just test-contract
 ```
 
 ## Submitting Your Work
@@ -171,24 +181,24 @@ cd tests/api && pnpm test
 ## Common Tasks
 
 ### Adding a New API Endpoint
-1. Define the route in `backend/api/routes.go`
-2. Implement handler in appropriate controller
-3. Add service layer logic
+1. Define the route in `backend/internal/cmd/serve/router.go`
+2. Implement the handler under `backend/internal/handlers/`
+3. Add service layer logic under `backend/internal/services/`
 4. Write tests for handler and service
-5. Update API documentation
+5. Update the OpenAPI annotations — the spec is generated from Go, never hand-edited
 
 ### Adding a Frontend Feature
-1. Create component in appropriate directory
+1. Create the component in the appropriate directory
 2. Add API client code in `services/`
-3. Update relevant Redux store/hooks
+3. Update the relevant store or hook — this app uses zustand and TanStack Query
 4. Add component tests
-5. Update Storybook if applicable
 
 ### Database Changes
-1. Create migration in `database/migrations/`
-2. Test migration up and down
-3. Update repository interfaces
-4. Consider TimescaleDB features (continuous aggregates, compression)
+1. Create the migration in `backend/migrations/`
+2. Run `just backend migrate-checksums` — **CI fails without it**, and applied migrations are immutable
+3. Test the migration up and down
+4. Update repository interfaces
+5. Consider TimescaleDB features (continuous aggregates, compression)
 
 ## Cutting a Release
 
