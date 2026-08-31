@@ -49,17 +49,17 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-31 | Task 9 implementation and review | Added standalone Chi registration for only signed status/inbound POST callbacks. Tests cover signed handoff, forged 403, exact 405/Allow, and neighboring 404 outcomes. Independent review approved the route surface and deliberate lack of root attachment until a durable consumer exists. |
 | 2026-08-31 | Task 10A start | Split the original metrics task into collector primitives (10A), sender integration (10B), and callback integration (10C). The split prevents package cycles, keeps each review-sized task to five or fewer product files, and makes collector behavior independently observable before instrumentation is added. |
 | 2026-08-31 | Task 10A implementation and review | Implemented registry-scoped bounded metrics. Review found negative-duration corruption and missing rollback/concurrency evidence; a fresh fix ignores negative durations and proves exact gathered rollback/concurrent outcomes. Re-review approved; sender/callback instrumentation remains deferred to 10B/10C. |
-| 2026-08-31 | Task 10B implementation | Added optional sender metrics injection with no-op nil behavior. A real SDK HTTP-boundary test gathers exactly one finite submission outcome for accepted/transient/permanent/rejected and pre-cancelled sends, four request-duration observations for four attempted provider requests, and no callback series. Independent review remains next. |
+| 2026-08-31 | Task 10B implementation and review | Added sender metrics. Review found unexpected outcomes mislabeled permanent and ambiguous variadic recorder loss; a fresh fix added explicit `NewSenderWithMetrics` and maps nil/unrecognized/cancelled outcomes to bounded unknown. Re-review approved exact results, request-only timing, privacy, and concurrency. |
 
 ### Current handoff
 
-- Next task: independent review of Task 10B, Twilio sender metric integration.
+- Next task: Task 10C, callback metric integration.
 - Implementation rule: use a fresh subagent context for every task, followed by an independent review context.
 - Not implementable in this ticket: frontend and geofence-event generation/integration.
 - Task 9 boundary: `Handler.RegisterRoutes` is independently attachable but is not mounted by `serve.setupRouter`; TRA-1201 has no durable callback consumer to inject.
 - Atomic Task 7 exception: `handler.go` gains a private clock dependency initialized by the existing constructor, so status events have a deterministic, injectable UTC occurrence time. The public constructor signature is unchanged.
 - Task 10A boundary: `twilio.NewMetrics(prometheus.Registerer)` returns a registry-scoped `*twilio.Metrics`; its recorder methods normalize all typed-string inputs to finite labels. It does not use the default registry and does not modify sender or callback handlers.
-- Task 10B boundary: `twilio.NewSender` and package-local sender constructors accept an optional `*twilio.Metrics`; omitted or nil metrics are no-ops. `SendSMS` records exactly one bounded submission result per call, records duration only around `CreateMessage`, and does not record callback metrics. Task 10C remains callback-only.
+- Task 10B boundary: `twilio.NewSender(config)` remains unchanged; `NewSenderWithMetrics(config, *Metrics)` explicitly injects one optional recorder. `SendSMS` records one bounded result per call, times only `CreateMessage`, and never records callback metrics.
 
 ---
 
