@@ -120,7 +120,7 @@ func (sender *Sender) observeRequestDuration(duration time.Duration) {
 }
 
 func submissionResult(err error) SubmissionResult {
-	var providerErr *providerError
+	var providerErr *sms.ProviderError
 	if !errors.As(err, &providerErr) {
 		return metricSubmissionResultUnknown
 	}

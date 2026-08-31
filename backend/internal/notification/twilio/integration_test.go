@@ -87,9 +87,9 @@ func TestSenderIntegration_SubmitsThroughMessagingServiceWithBoundedOutcomes(t *
 
 	submission, err = sender.SendSMS(context.Background(), sms.Command{ToE164: privateDestination, Body: privateBody})
 	require.Equal(t, sms.Submission{}, submission)
-	var providerErr *providerError
+	var providerErr *sms.ProviderError
 	require.ErrorAs(t, err, &providerErr)
-	require.Equal(t, sms.ProviderError{Kind: sms.ErrorPermanent, Code: "21211", HTTPStatus: http.StatusBadRequest}, providerErr.ProviderError)
+	require.Equal(t, sms.ProviderError{Kind: sms.ErrorPermanent, Code: "21211", HTTPStatus: http.StatusBadRequest}, *providerErr)
 	for _, sensitive := range []string{privateDestination, privateBody, privateCredential} {
 		require.NotContains(t, err.Error(), sensitive)
 	}

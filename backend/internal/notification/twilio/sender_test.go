@@ -149,9 +149,9 @@ func TestSendSMS_NormalizesAndRedactsProviderHTTPError(t *testing.T) {
 	submission, err := sender.SendSMS(context.Background(), command)
 
 	require.Equal(t, sms.Submission{}, submission)
-	var normalized *providerError
+	var normalized *sms.ProviderError
 	require.ErrorAs(t, err, &normalized)
-	require.Equal(t, sms.ProviderError{Kind: sms.ErrorPermanent, Code: "21211", HTTPStatus: 400}, normalized.ProviderError)
+	require.Equal(t, sms.ProviderError{Kind: sms.ErrorPermanent, Code: "21211", HTTPStatus: 400}, *normalized)
 	for _, sensitive := range []string{command.ToE164, command.Body, sensitiveCredential} {
 		require.NotContains(t, err.Error(), sensitive)
 	}
@@ -164,9 +164,9 @@ func TestSendSMS_NormalizesNilSDKResponse(t *testing.T) {
 	submission, err := sender.SendSMS(context.Background(), sms.Command{ToE164: sensitiveDestination, Body: sensitiveBody})
 
 	require.Equal(t, sms.Submission{}, submission)
-	var normalized *providerError
+	var normalized *sms.ProviderError
 	require.ErrorAs(t, err, &normalized)
-	require.Equal(t, sms.ProviderError{Kind: sms.ErrorPermanent, Code: unknownCode}, normalized.ProviderError)
+	require.Equal(t, sms.ProviderError{Kind: sms.ErrorPermanent, Code: unknownCode}, *normalized)
 	for _, sensitive := range []string{sensitiveDestination, sensitiveBody} {
 		require.NotContains(t, err.Error(), sensitive)
 	}
@@ -258,7 +258,7 @@ func TestSendSMS_RecordsMetricsAtProviderBoundary(t *testing.T) {
 			}
 
 			require.Equal(t, sms.Submission{}, submission)
-			var providerErr *providerError
+			var providerErr *sms.ProviderError
 			require.ErrorAs(t, err, &providerErr)
 			require.Equal(t, test.wantKind, providerErr.Kind)
 		})
@@ -343,9 +343,9 @@ func TestSendSMS_RecordsUnknownMetricsForUnexpectedOutcomes(t *testing.T) {
 			submission, err := sender.SendSMS(context.Background(), sms.Command{ToE164: sensitiveDestination, Body: sensitiveBody})
 
 			require.Equal(t, sms.Submission{}, submission)
-			var providerErr *providerError
+			var providerErr *sms.ProviderError
 			require.ErrorAs(t, err, &providerErr)
-			require.Equal(t, sms.ProviderError{Kind: sms.ErrorPermanent, Code: unknownCode}, providerErr.ProviderError)
+			require.Equal(t, sms.ProviderError{Kind: sms.ErrorPermanent, Code: unknownCode}, *providerErr)
 
 			families, err := registry.Gather()
 			require.NoError(t, err)

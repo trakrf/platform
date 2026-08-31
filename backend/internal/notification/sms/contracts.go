@@ -4,6 +4,7 @@ package sms
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -34,6 +35,24 @@ type ProviderError struct {
 	Kind       ErrorKind
 	Code       string
 	HTTPStatus int
+}
+
+// Error returns a bounded, provider-neutral description. It intentionally
+// excludes provider response text and request data.
+func (err *ProviderError) Error() string {
+	if err == nil || err.Kind == "" {
+		return "SMS provider failure"
+	}
+	if err.Code == "" {
+		if err.HTTPStatus == 0 {
+			return fmt.Sprintf("SMS provider %s failure", err.Kind)
+		}
+		return fmt.Sprintf("SMS provider %s failure (HTTP %d)", err.Kind, err.HTTPStatus)
+	}
+	if err.HTTPStatus == 0 {
+		return fmt.Sprintf("SMS provider %s failure (code %s)", err.Kind, err.Code)
+	}
+	return fmt.Sprintf("SMS provider %s failure (code %s, HTTP %d)", err.Kind, err.Code, err.HTTPStatus)
 }
 
 // Sender submits SMS commands through a provider.

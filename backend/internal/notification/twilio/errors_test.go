@@ -96,9 +96,9 @@ func TestClassifyError(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			got := classifyError(test.err)
 
-			var normalized *providerError
+			var normalized *sms.ProviderError
 			require.ErrorAs(t, got, &normalized)
-			require.Equal(t, test.want, normalized.ProviderError)
+			require.Equal(t, test.want, *normalized)
 			for _, sensitive := range []string{sensitiveDestination, sensitiveBody, sensitiveCredential} {
 				require.NotContains(t, got.Error(), sensitive)
 			}

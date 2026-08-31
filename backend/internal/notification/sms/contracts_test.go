@@ -71,3 +71,23 @@ func TestPublicSMSContracts(t *testing.T) {
 		t.Errorf("ErrorRejected = %q, want %q", sms.ErrorRejected, wantRejected)
 	}
 }
+
+// This fails if callers cannot inspect normalized provider failures through
+// Go's public error contract, or if their text exposes provider-specific data.
+func TestProviderErrorIsPublicRedactedError(t *testing.T) {
+	providerErr := &sms.ProviderError{
+		Kind:       sms.ErrorPermanent,
+		Code:       "21211",
+		HTTPStatus: 400,
+	}
+
+	err, ok := any(providerErr).(error)
+	if !ok {
+		t.Fatal("ProviderError does not implement error")
+	}
+
+	const want = "SMS provider permanent failure (code 21211, HTTP 400)"
+	if got := err.Error(); got != want {
+		t.Errorf("ProviderError.Error() = %q, want %q", got, want)
+	}
+}

@@ -2,7 +2,6 @@ package twilio
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
 
 	"github.com/trakrf/platform/backend/internal/notification/sms"
@@ -14,23 +13,6 @@ const (
 	temporaryNetworkCode = "temporary_network"
 	unknownCode          = "unknown"
 )
-
-// providerError is the redacted error returned from the Twilio boundary. It
-// deliberately does not unwrap its source because Twilio error messages and
-// details can include submitted request data.
-type providerError struct {
-	sms.ProviderError
-}
-
-func (err *providerError) Error() string {
-	if err.Code == "" {
-		return fmt.Sprintf("Twilio SMS provider %s failure", err.Kind)
-	}
-	if err.HTTPStatus == 0 {
-		return fmt.Sprintf("Twilio SMS provider %s failure (code %s)", err.Kind, err.Code)
-	}
-	return fmt.Sprintf("Twilio SMS provider %s failure (code %s, HTTP %d)", err.Kind, err.Code, err.HTTPStatus)
-}
 
 // classifyError converts provider and transport failures into bounded handling
 // categories without retaining raw error text or request data.
@@ -95,9 +77,9 @@ func classifyTwilioFailure(code string, status int) sms.ErrorKind {
 }
 
 func newProviderError(kind sms.ErrorKind, code string, status int) error {
-	return &providerError{ProviderError: sms.ProviderError{
+	return &sms.ProviderError{
 		Kind:       kind,
 		Code:       code,
 		HTTPStatus: status,
-	}}
+	}
 }
