@@ -19,27 +19,50 @@ const config = getE2EConfig();
  * Includes retry logic with backoff for bridge server recovery
  */
 export async function connectToDevice(page: Page): Promise<void> {
-  // ONE test-side retry, and the reason is specific.
+  // ONE test-side retry. It survives ble-mcp-test 0.16.0, and the reason it
+  // survives is NOT the reason it was originally written.
   //
-  // This used to read "v0.4.2: Mock has built-in retry logic, no need for
-  // test-side retries". Two versions of wrong: 0.4.2 is eight releases back, and
-  // the claim is not true of the failure this suite actually hits.
+  // The old note here justified it by "RETRYABLE_CONNECT_CODES, which is
+  // `['NOT_READY']`" — a fact about 0.12.0 that is now false: 0.16.0 adds
+  // `DEVICE_BUSY_SELF` and retries it internally (250ms, x1.3, 5 attempts).
+  // Taken at face value that reads as "the mock covers this now, delete the
+  // retry", and it was deleted on exactly that reasoning before this note
+  // replaced it.
   //
-  // ble-mcp-test 0.12.0 does retry connect failures — but only
-  // RETRYABLE_CONNECT_CODES, which is `['NOT_READY']`. The command path being
-  // owned by another connection is `Device is busy`, and upstream refuses to
-  // retry it ON PURPOSE: it is a loud refusal that no amount of waiting inside
-  // one connect attempt will fix.
+  // ⚠ THAT REASONING IS WRONG, AND THE GAP IT MISSES IS THE ONE THIS COVERS.
   //
-  // Which is precisely our shape. Playwright opens a fresh page per spec, so the
-  // previous spec's session may still own the command path for a moment after
-  // its socket closes. That is not a fault to retry INSIDE a connect; it is a
-  // handoff that needs a beat between attempts. So the retry belongs here, in
-  // the suite, and nowhere else.
+  // `DEVICE_BUSY_SELF` is not "the holder shares our session id". The bridge
+  // requires BOTH conditions (`ws/ownership.py`):
   //
-  // Bounded to two attempts on purpose. If a second attempt cannot connect, the
-  // path is genuinely held and hiding that behind more retries would turn a
-  // contention bug into a slow flake.
+  //     if session and current.session == session and current.closing:
+  //         raise CommandPathBusySelf(...)      # retryable
+  //     raise CommandPathBusy(...)              # loud, never retried
+  //
+  // `closing` is set in the relay's `finally`, so it is true only once the
+  // bridge has begun processing the socket close. A holder that is same-named
+  // but NOT YET closing — or never closes — yields plain `DEVICE_BUSY`, which
+  // the mock deliberately does not retry. Session-id equality is necessary and
+  // nowhere near sufficient, and the ids being pinned per host
+  // (`tests/config/vite-bridge.config.ts`) says nothing about the ordering.
+  //
+  // We produce that case on purpose. `disconnectDevice()` below is bounded by
+  // DISCONNECT_BUDGET_MS and never throws — a cleanup step must not fail a test
+  // whose subject already passed (TRA-1148) — and its own note says a disconnect
+  // that did not complete "can leave a zombie bridge session for the next spec".
+  // A zombie holder is not closing. So on exactly the runs where teardown ran
+  // out of budget, the next page gets the loud refusal, and it is the mock's
+  // correct behaviour rather than a bug to report upstream.
+  //
+  // Hence: the beat still belongs here. Bounded to two attempts on purpose — if
+  // a second attempt cannot connect, the path is genuinely held, and hiding that
+  // behind more retries turns a contention bug into a slow flake.
+  //
+  // Known and accepted: this catches EVERY error, not only a busy refusal, so a
+  // missing button or a dead bridge also gets a free second attempt. Narrowing
+  // it needs the typed error, which does not survive the page boundary — the
+  // failure arriving here is a Playwright timeout, not a `ConnectError`. Worth
+  // fixing when something makes the code reachable; not worth faking with a
+  // message match, which is the trap the rest of this file's history is about.
   const ATTEMPTS = 2;
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
     try {

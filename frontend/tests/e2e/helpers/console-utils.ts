@@ -42,7 +42,29 @@ const DEFAULT_ALLOWED_ERRORS = [
   'Command timeout after 2000ms: RFID Firmware Command (0x8002)', // Background RFID cleanup - benign
   'Command timeout after 5000ms: RFID Power Off (0x8001)', // RFID power commands - firmware quirk
   'Command timeout after 5000ms: RFID Power On (0x8000)', // RFID power commands - firmware quirk
-  'Device is busy with another session', // Session handling - bridge needs cleanup between runs
+  // REMOVED 2026-08-31: 'Device is busy with another session'.
+  //
+  // It matched nothing. Verified on both sides of the seam rather than assumed:
+  // ble-mcp-test has zero occurrences in 0.16.0 outside a CHANGELOG entry and a
+  // design doc attributing it to `bridge-server.ts` — the TypeScript/Noble
+  // bridge, deleted in the Python replatform — and platform emits it nowhere
+  // either. Dead since that replatform, not a 0.16.0 regression.
+  //
+  // Not replaced, and deliberately not replaced with a code match. Two reasons:
+  //
+  // 1. A console monitor sees RENDERED TEXT, never the thrown object, so
+  //    `error.code` is unreachable from here. The code is a real contract —
+  //    ble-mcp-test's wire spec says a client MUST discriminate on `code` and
+  //    MUST NOT match on `error`, and it is enforced across the language
+  //    boundary — but that contract is for whoever catches the error, which is
+  //    the transport, not this monitor.
+  // 2. There is nothing left to allow. A self-collision is now retried inside
+  //    the mock (`DEVICE_BUSY_SELF`, 0.16.0) and never reaches the console as an
+  //    error. What remains is a genuinely foreign holder, and that MUST fail the
+  //    run rather than be waved through — allowlisting it would hide the one
+  //    case the refusal exists to make loud.
+  //
+  // See TRA-1216.
 ];
 
 export class ConsoleMonitor {

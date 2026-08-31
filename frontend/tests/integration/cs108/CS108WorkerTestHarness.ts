@@ -151,6 +151,24 @@ interface MockTestingApi {
  *
  * Do not reintroduce a cooldown here without first showing that awaiting the
  * teardown is insufficient. See TRA-1193 and TRA-1189.
+ *
+ * ## That precondition WAS met once, and the answer was a retry, not a wait
+ *
+ * `connectPastABusyRelease()` below is that retry, added on the 2026-08-31 arm
+ * where 63 connects were refused by our own session id and the holder released
+ * 12-21ms LATER every time. So awaiting the teardown demonstrably did not cover
+ * that path — the precondition above was met, honestly.
+ *
+ * It is a RETRY, not a cooldown, and the distinction is the whole reason it is
+ * allowed to exist here: it costs nothing when the path is free, and vitest's
+ * per-file isolation cannot silently skip it, because the failure drives it
+ * rather than remembered state.
+ *
+ * ble-mcp-test 0.16.0 took over the orderly half of that case
+ * (`DEVICE_BUSY_SELF`, retried inside the mock), so the retry now fires rarely.
+ * It was deleted outright at one point and put back: `DEVICE_BUSY_SELF` also
+ * requires the holder to be `closing`, and a teardown that did not land leaves
+ * one that is not. See the note on the method itself.
  */
 
 export class CS108WorkerTestHarness {
@@ -200,18 +218,15 @@ export class CS108WorkerTestHarness {
    * Connect, riding out a refusal caused by our OWN previous connection still
    * releasing.
    *
-   * This is NOT the `CONNECTION_COOLDOWN_MS` the note above the class rejected,
-   * and the difference is the point. That was a fixed 250ms paid before every
-   * connect whether or not anything was in the way, and — being module-level
-   * state — vitest's per-file isolation reset it to 0, so it skipped the first
-   * `initialize()` of each file, the exact boundary it existed for. A retry pays
-   * nothing when the path is free, fires precisely when it is not, and cannot be
-   * silently skipped by an isolation reset because the failure drives it rather
-   * than remembered state.
+   * This is NOT the `CONNECTION_COOLDOWN_MS` the note above the class rejected.
+   * That was a fixed 250ms paid before every connect whether or not anything was
+   * in the way, and — being module-level state — vitest's per-file isolation
+   * reset it to 0, so it skipped the first `initialize()` of each file, the
+   * exact boundary it existed for. A retry pays nothing when the path is free,
+   * fires precisely when it is not, and cannot be silently skipped by an
+   * isolation reset because the failure drives it rather than remembered state.
    *
-   * That note also set the precondition for touching this at all: "do not
-   * reintroduce a cooldown here without first showing that awaiting the teardown
-   * is insufficient." Shown, on the 2026-08-31 200-rep arm:
+   * The evidence, from the 2026-08-31 200-rep arm:
    *
    *   63 reps refused "Device is busy" by our own session id
    *   holder age at refusal   min 18.35s  median 18.36s  max 23.59s
@@ -219,32 +234,40 @@ export class CS108WorkerTestHarness {
    *
    * The release lands a few milliseconds after the refusal every time — the
    * bridge's close-processing cost, which ble-mcp-test measured independently
-   * over 997 cycles (median 16ms, p99 21ms, max 30ms). So awaiting the teardown
-   * is not covering this path, and the wait that is owed has not been paid.
+   * over 997 cycles (median 16ms, p99 21ms, max 30ms).
    *
-   * Those 63 reps arrived as one contiguous block, not scattered, which is what
-   * makes this worth fixing rather than tolerating: a refused rep fails fast
-   * (73-82s against a 145s norm), so the next rep starts earlier and lands in
-   * the same window, and the failure sustains itself for an hour.
+   * ## Why this SURVIVED ble-mcp-test 0.16.0
    *
-   * The schedule is ~12x the measured worst case on the first step alone. It is
-   * deliberately generous because the cost is zero unless a collision happens.
+   * It was deleted once, on the reasoning that 0.16.0's `DEVICE_BUSY_SELF`
+   * covers this case and the surviving `DEVICE_BUSY` is therefore only ever a
+   * foreign holder. **That reasoning is wrong, and the gap it misses is the one
+   * this method exists for.**
    *
-   * ⚠ INTERIM, and it deliberately overrides the mock's stated policy.
-   * `ble-mcp-test/src/constants.ts` excludes DEVICE_BUSY from its retryable set
-   * on the grounds that "another connection owns the command path, and no amount
-   * of waiting changes that", enforced by
-   * `test_the_busy_error_is_not_one_the_mock_silently_retries`.
+   * `DEVICE_BUSY_SELF` is not "the holder shares our session id". The bridge
+   * requires BOTH conditions (`ws/ownership.py`):
    *
-   * That reasoning holds for a FOREIGN holder — a browser tab, another machine —
-   * and is false for the case measured here, where the holder is our own
-   * previous connection and releases in 12-21ms. The bridge already distinguishes
-   * them: its refusal names the holding session, and here it is our own session
-   * id on both sides.
+   *     if session and current.session == session and current.closing:
+   *         raise CommandPathBusySelf(...)      # retryable by the mock
+   *     raise CommandPathBusy(...)              # loud, never retried
    *
-   * The proper fix is in the mock: treat own-session busy as retryable, keep
-   * foreign-session busy loud. When that lands, DELETE this method — do not keep
-   * both, or the retry budget is paid twice and the two policies drift.
+   * `closing` is set in the relay's `finally`, so it is true only once the
+   * bridge has begun processing the socket close. A holder that is ours but NOT
+   * YET closing — or one that never closes — is plain `DEVICE_BUSY`. Session-id
+   * equality is necessary and nowhere near sufficient.
+   *
+   * We can still produce that. `cleanup()` swallows a failing
+   * `transport.disconnect()` so teardown always completes, which is right — but
+   * it means a disconnect that did not land leaves a holder that is not closing,
+   * and TRA-1217 is the standing proof that a teardown can fail in ways nobody
+   * predicted. `DEVICE_BUSY_SELF` covers the orderly case; this covers the one
+   * where our own teardown did not happen.
+   *
+   * What 0.16.0 DID change: the orderly self-collision is now retried inside the
+   * mock, so this fires far less often. It is a backstop rather than the primary
+   * path — which is why the schedule staying generous costs nothing.
+   *
+   * ⚠ Do not delete this on "the mock handles busy now" without first checking
+   * `closing`. That is the check the first attempt skipped.
    */
   private async connectPastABusyRelease(
     transport: CS108BLETransport
@@ -259,7 +282,10 @@ export class CS108WorkerTestHarness {
         // and `cs108-ble-transport.ts:341` reads `error.code` for exactly this
         // reason; an earlier draft of this method matched on message text and
         // would have been INERT — indistinguishable from a working retry until
-        // a collision happened, eight hours into a soak.
+        // a collision happened, eight hours into a soak. ble-mcp-test's wire
+        // spec is normative on this: a client MUST discriminate on `code` and
+        // MUST NOT match on `error`, because the message is prose and is free to
+        // be reworded.
         const code = (error as { code?: string })?.code;
         const isBusy = code === 'DEVICE_BUSY';
 
