@@ -75,6 +75,16 @@ const COMPOSED_AT_RUNTIME: Record<string, { staticPart: string; dynamicPart: str
     staticPart: 'Timeout waiting for event: ',
     dynamicPart: 'TRIGGER_STATE_CHANGED',
   },
+  // CommandManager logs `[CommandManager] Command timeout: ${event.name}` on a
+  // command that went unanswered, and the name comes from the CS108Event
+  // constant in worker/cs108/event.ts. Both halves matter and for different
+  // reasons: reword the message and the needle stops matching; rename the event
+  // and it starts counting a different command's silence, which is worse,
+  // because the count stays plausible. TRA-1223.
+  powerOffTimeouts: {
+    staticPart: '[CommandManager] Command timeout: ',
+    dynamicPart: 'RFID_POWER_OFF',
+  },
 };
 
 /** Source trees that can plausibly emit a log line. */
