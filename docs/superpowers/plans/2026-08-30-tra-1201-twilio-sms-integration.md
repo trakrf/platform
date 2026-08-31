@@ -50,16 +50,18 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-31 | Task 10A start | Split the original metrics task into collector primitives (10A), sender integration (10B), and callback integration (10C). The split prevents package cycles, keeps each review-sized task to five or fewer product files, and makes collector behavior independently observable before instrumentation is added. |
 | 2026-08-31 | Task 10A implementation and review | Implemented registry-scoped bounded metrics. Review found negative-duration corruption and missing rollback/concurrency evidence; a fresh fix ignores negative durations and proves exact gathered rollback/concurrent outcomes. Re-review approved; sender/callback instrumentation remains deferred to 10B/10C. |
 | 2026-08-31 | Task 10B implementation and review | Added sender metrics. Review found unexpected outcomes mislabeled permanent and ambiguous variadic recorder loss; a fresh fix added explicit `NewSenderWithMetrics` and maps nil/unrecognized/cancelled outcomes to bounded unknown. Re-review approved exact results, request-only timing, privacy, and concurrency. |
+| 2026-08-31 | Task 10C implementation | Added explicit optional callback metrics injection while preserving `NewHandler(config, consumer)`. Status and inbound callbacks each defer one bounded outcome and boundary-duration observation; gathered real signed/forged request tests cover accepted, invalid-signature, malformed, and nil/typed-nil/error consumer failures without submission metrics or sensitive labels. RED then focused, race, vet, module, notification/handler regression, and diff checks passed. |
 
 ### Current handoff
 
-- Next task: Task 10C, callback metric integration.
+- Next task: independent Task 10C review.
 - Implementation rule: use a fresh subagent context for every task, followed by an independent review context.
 - Not implementable in this ticket: frontend and geofence-event generation/integration.
 - Task 9 boundary: `Handler.RegisterRoutes` is independently attachable but is not mounted by `serve.setupRouter`; TRA-1201 has no durable callback consumer to inject.
 - Atomic Task 7 exception: `handler.go` gains a private clock dependency initialized by the existing constructor, so status events have a deterministic, injectable UTC occurrence time. The public constructor signature is unchanged.
 - Task 10A boundary: `twilio.NewMetrics(prometheus.Registerer)` returns a registry-scoped `*twilio.Metrics`; its recorder methods normalize all typed-string inputs to finite labels. It does not use the default registry and does not modify sender or callback handlers.
 - Task 10B boundary: `twilio.NewSender(config)` remains unchanged; `NewSenderWithMetrics(config, *Metrics)` explicitly injects one optional recorder. `SendSMS` records one bounded result per call, times only `CreateMessage`, and never records callback metrics.
+- Task 10C boundary: `NewHandler(config, consumer)` remains unchanged; `NewHandlerWithMetrics(config, consumer, *twilio.Metrics)` accepts one optional recorder, and a nil recorder is a no-op. Every status/inbound handler invocation records one bounded callback result plus one callback-boundary duration when a recorder is present; unrelated signed inbound text is accepted, and no submission metric is emitted.
 
 ---
 
@@ -636,7 +638,7 @@ an independent Task 10B review.
 
 **Produces:** callback result and request-duration observations only.
 
-- [ ] **Step 1: Write failing callback outcome tests**
+- [x] **Step 1: Write failing callback outcome tests**
 
 Inject a Task 10A recorder into the callback handler. Gather actual metric
 families after signed status and inbound successes, invalid signatures,
@@ -644,20 +646,20 @@ malformed callbacks, and consumer failures. Assert types are only `status`,
 `inbound`, or Task 10A's fallback and that labels omit IDs, phone numbers,
 bodies, error text/codes, and credentials.
 
-- [ ] **Step 2: Verify failure**
+- [x] **Step 2: Verify failure**
 
 Run: `cd backend && go test ./internal/handlers/twiliosms -run 'TestStatus.*Metrics|TestInbound.*Metrics' -count=1`
 
 Expected: FAIL because the handler does not yet accept or invoke the recorder.
 
-- [ ] **Step 3: Add callback-only instrumentation**
+- [x] **Step 3: Add callback-only instrumentation**
 
 Inject the recorder at handler construction without adding a handler-to-sender
 dependency. Record exactly one bounded callback outcome and request duration
 per callback attempt, including invalid signature, malformed, and consumer
 failure outcomes.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run: `cd backend && go test -race ./internal/handlers/twiliosms -count=1 && go vet ./internal/handlers/twiliosms && go test ./internal/notification/twilio ./internal/handlers/twiliosms -count=1 && git diff --check`
 

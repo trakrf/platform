@@ -4,15 +4,24 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/trakrf/platform/backend/internal/notification/sms"
+	"github.com/trakrf/platform/backend/internal/notification/twilio"
 )
 
 // Inbound receives a signature-verified Twilio inbound-message callback.
 func (h *Handler) Inbound(w http.ResponseWriter, r *http.Request) {
+	startedAt := time.Now()
+	result := twilio.CallbackMalformed
+	defer func() {
+		h.recordCallback(twilio.CallbackInbound, result, startedAt)
+	}()
+
 	form, err := h.verifiedForm(w, r)
 	if err != nil {
 		if errors.Is(err, errInvalidSignature) {
+			result = twilio.CallbackInvalidSignature
 			http.Error(w, "invalid callback signature", http.StatusForbidden)
 			return
 		}
@@ -22,6 +31,7 @@ func (h *Handler) Inbound(w http.ResponseWriter, r *http.Request) {
 
 	keyword, recognized := normalizedInboundKeyword(form.Get("Body"))
 	if !recognized {
+		result = twilio.CallbackAccepted
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -34,6 +44,7 @@ func (h *Handler) Inbound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if nilCallbackConsumer(h.consumer) {
+		result = twilio.CallbackConsumerFailure
 		http.Error(w, "callback consumer unavailable", http.StatusInternalServerError)
 		return
 	}
@@ -45,10 +56,12 @@ func (h *Handler) Inbound(w http.ResponseWriter, r *http.Request) {
 		Keyword:           keyword,
 		ReceivedAt:        h.currentTime(),
 	}); err != nil {
+		result = twilio.CallbackConsumerFailure
 		http.Error(w, "callback consumer failed", http.StatusInternalServerError)
 		return
 	}
 
+	result = twilio.CallbackAccepted
 	w.WriteHeader(http.StatusNoContent)
 }
 

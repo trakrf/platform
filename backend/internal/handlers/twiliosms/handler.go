@@ -17,11 +17,18 @@ type Handler struct {
 	publicBaseURL string
 	validator     client.RequestValidator
 	now           func() time.Time
+	metrics       *twilio.Metrics
 }
 
 // NewHandler builds a Twilio callback handler only from a complete Twilio
 // configuration with a canonical public HTTPS origin.
 func NewHandler(config twilio.Config, consumer sms.CallbackConsumer) (*Handler, error) {
+	return NewHandlerWithMetrics(config, consumer, nil)
+}
+
+// NewHandlerWithMetrics builds a Twilio callback handler with an optional
+// boundary metrics recorder. A nil recorder leaves callback behavior unchanged.
+func NewHandlerWithMetrics(config twilio.Config, consumer sms.CallbackConsumer, metrics *twilio.Metrics) (*Handler, error) {
 	if !config.Enabled() {
 		return nil, errors.New("Twilio callback configuration is incomplete")
 	}
@@ -34,7 +41,17 @@ func NewHandler(config twilio.Config, consumer sms.CallbackConsumer) (*Handler, 
 		publicBaseURL: config.PublicBaseURL,
 		validator:     client.NewRequestValidator(config.AuthToken),
 		now:           time.Now,
+		metrics:       metrics,
 	}, nil
+}
+
+func (h *Handler) recordCallback(callbackType twilio.CallbackType, result twilio.CallbackResult, startedAt time.Time) {
+	if h.metrics == nil {
+		return
+	}
+
+	h.metrics.RecordCallback(callbackType, result)
+	h.metrics.ObserveRequestDuration(time.Since(startedAt))
 }
 
 func validCallbackPublicBaseURL(raw string) bool {

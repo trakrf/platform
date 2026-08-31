@@ -7,13 +7,21 @@ import (
 	"time"
 
 	"github.com/trakrf/platform/backend/internal/notification/sms"
+	"github.com/trakrf/platform/backend/internal/notification/twilio"
 )
 
 // Status receives a signature-verified Twilio delivery-status callback.
 func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
+	startedAt := time.Now()
+	result := twilio.CallbackMalformed
+	defer func() {
+		h.recordCallback(twilio.CallbackStatus, result, startedAt)
+	}()
+
 	form, err := h.verifiedForm(w, r)
 	if err != nil {
 		if errors.Is(err, errInvalidSignature) {
+			result = twilio.CallbackInvalidSignature
 			http.Error(w, "invalid callback signature", http.StatusForbidden)
 			return
 		}
@@ -28,6 +36,7 @@ func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if nilCallbackConsumer(h.consumer) {
+		result = twilio.CallbackConsumerFailure
 		http.Error(w, "callback consumer unavailable", http.StatusInternalServerError)
 		return
 	}
@@ -38,10 +47,12 @@ func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 		ErrorCode:         form.Get("ErrorCode"),
 		OccurredAt:        h.currentTime(),
 	}); err != nil {
+		result = twilio.CallbackConsumerFailure
 		http.Error(w, "callback consumer failed", http.StatusInternalServerError)
 		return
 	}
 
+	result = twilio.CallbackAccepted
 	w.WriteHeader(http.StatusNoContent)
 }
 
