@@ -151,6 +151,37 @@ interface MockTestingApi {
  *
  * Do not reintroduce a cooldown here without first showing that awaiting the
  * teardown is insufficient. See TRA-1193 and TRA-1189.
+ *
+ * ## That precondition WAS met once, and the answer still is not a client-side wait
+ *
+ * REMOVED 2026-08-31: `connectPastABusyRelease()`, an interim retry of a
+ * `DEVICE_BUSY` connect on `[250, 500, 1000]`ms. It was added because awaiting
+ * the teardown demonstrably did not cover one path — on the 2026-08-31 200-rep
+ * arm, 63 connects were refused by our own session id and the holder released
+ * 12-21ms LATER every time (median 16ms), which is the bridge's close-processing
+ * cost and not ours to shrink.
+ *
+ * So the evidence was real and the retry was correct for its window. What made
+ * it interim is that it overrode the mock's stated policy from the outside:
+ * ble-mcp-test excluded `DEVICE_BUSY` from its retryable set on the grounds that
+ * "another connection owns the command path, and no amount of waiting changes
+ * that" — true of a FOREIGN holder, false of our own claim still closing.
+ *
+ * ble-mcp-test 0.16.0 splits those: `DEVICE_BUSY_SELF` is retried inside the
+ * mock's own connect loop, `DEVICE_BUSY` stays loud and unretried. The wait is
+ * now paid once, by the side that measured it — the same argument that removed
+ * `CONNECTION_COOLDOWN_MS` above.
+ *
+ * ⚠ Keeping the retry after 0.16.0 would not have been merely redundant, it
+ * would have been WRONG: a self-collision no longer arrives as `DEVICE_BUSY`, so
+ * the only thing still reaching that matcher is a genuinely foreign holder —
+ * exactly the case that must fail fast. An obsolete retry inverts its own
+ * purpose rather than idling.
+ *
+ * `frontend/tests/config/installed-mock-retryable-connect-codes.test.ts` is the
+ * guard: it asserts `DEVICE_BUSY_SELF` is in the installed package's retryable
+ * set, so a downgrade or a silently-failed bump goes red here instead of
+ * quietly restoring the gap this removal depends on. See TRA-1216.
  */
 
 export class CS108WorkerTestHarness {
@@ -180,7 +211,11 @@ export class CS108WorkerTestHarness {
     this.worker = new CS108Reader();
 
     this.transport = new CS108BLETransport();
-    const port = await this.connectPastABusyRelease(this.transport);
+
+    // A plain connect. The interim `connectPastABusyRelease()` that used to
+    // wrap this is gone as of ble-mcp-test 0.16.0, which retries the one busy
+    // case that waiting actually fixes — see the note above the class.
+    const port = await this.transport.connect();
 
     const linkProfile = this.transport.isNetworked() ? 'networked' : 'native';
     this.worker.setLinkProfile(linkProfile);
@@ -194,91 +229,6 @@ export class CS108WorkerTestHarness {
     // so one line per connect keeps that detector honest. It also records the
     // resolved link profile, which nothing else states.
     console.log(`[Harness] transport connected, link profile ${linkProfile}`);
-  }
-
-  /**
-   * Connect, riding out a refusal caused by our OWN previous connection still
-   * releasing.
-   *
-   * This is NOT the `CONNECTION_COOLDOWN_MS` the note above the class rejected,
-   * and the difference is the point. That was a fixed 250ms paid before every
-   * connect whether or not anything was in the way, and — being module-level
-   * state — vitest's per-file isolation reset it to 0, so it skipped the first
-   * `initialize()` of each file, the exact boundary it existed for. A retry pays
-   * nothing when the path is free, fires precisely when it is not, and cannot be
-   * silently skipped by an isolation reset because the failure drives it rather
-   * than remembered state.
-   *
-   * That note also set the precondition for touching this at all: "do not
-   * reintroduce a cooldown here without first showing that awaiting the teardown
-   * is insufficient." Shown, on the 2026-08-31 200-rep arm:
-   *
-   *   63 reps refused "Device is busy" by our own session id
-   *   holder age at refusal   min 18.35s  median 18.36s  max 23.59s
-   *   holder released AFTER   min 12ms    median 16ms    max 21ms
-   *
-   * The release lands a few milliseconds after the refusal every time — the
-   * bridge's close-processing cost, which ble-mcp-test measured independently
-   * over 997 cycles (median 16ms, p99 21ms, max 30ms). So awaiting the teardown
-   * is not covering this path, and the wait that is owed has not been paid.
-   *
-   * Those 63 reps arrived as one contiguous block, not scattered, which is what
-   * makes this worth fixing rather than tolerating: a refused rep fails fast
-   * (73-82s against a 145s norm), so the next rep starts earlier and lands in
-   * the same window, and the failure sustains itself for an hour.
-   *
-   * The schedule is ~12x the measured worst case on the first step alone. It is
-   * deliberately generous because the cost is zero unless a collision happens.
-   *
-   * ⚠ INTERIM, and it deliberately overrides the mock's stated policy.
-   * `ble-mcp-test/src/constants.ts` excludes DEVICE_BUSY from its retryable set
-   * on the grounds that "another connection owns the command path, and no amount
-   * of waiting changes that", enforced by
-   * `test_the_busy_error_is_not_one_the_mock_silently_retries`.
-   *
-   * That reasoning holds for a FOREIGN holder — a browser tab, another machine —
-   * and is false for the case measured here, where the holder is our own
-   * previous connection and releases in 12-21ms. The bridge already distinguishes
-   * them: its refusal names the holding session, and here it is our own session
-   * id on both sides.
-   *
-   * The proper fix is in the mock: treat own-session busy as retryable, keep
-   * foreign-session busy loud. When that lands, DELETE this method — do not keep
-   * both, or the retry budget is paid twice and the two policies drift.
-   */
-  private async connectPastABusyRelease(
-    transport: CS108BLETransport
-  ): Promise<MessagePort> {
-    const delays = [250, 500, 1000];
-
-    for (let attempt = 0; ; attempt++) {
-      try {
-        return await transport.connect();
-      } catch (error: unknown) {
-        // Match the CODE, not the message. The mock rejects with a typed error
-        // and `cs108-ble-transport.ts:341` reads `error.code` for exactly this
-        // reason; an earlier draft of this method matched on message text and
-        // would have been INERT — indistinguishable from a working retry until
-        // a collision happened, eight hours into a soak.
-        const code = (error as { code?: string })?.code;
-        const isBusy = code === 'DEVICE_BUSY';
-
-        if (!isBusy || attempt >= delays.length) {
-          throw error;
-        }
-
-        // Countable on purpose. Before this existed, a refusal reached the
-        // report as an ordinary spec failure and the cause was only findable by
-        // grepping the bridge's own log — 63 reps were screened out of an arm on
-        // a fingerprint inferred from ackSamples while the bridge was printing
-        // the reason in English the whole time.
-        console.log(
-          `[Harness] connect refused as busy (attempt ${attempt + 1}), ` +
-          `retrying in ${delays[attempt]}ms`
-        );
-        await new Promise(resolve => setTimeout(resolve, delays[attempt]));
-      }
-    }
   }
 
   /**

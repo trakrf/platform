@@ -19,42 +19,40 @@ const config = getE2EConfig();
  * Includes retry logic with backoff for bridge server recovery
  */
 export async function connectToDevice(page: Page): Promise<void> {
-  // ONE test-side retry, and the reason is specific.
+  // No test-side retry. The mock owns this one now.
   //
-  // This used to read "v0.4.2: Mock has built-in retry logic, no need for
-  // test-side retries". Two versions of wrong: 0.4.2 is eight releases back, and
-  // the claim is not true of the failure this suite actually hits.
+  // There used to be one, bounded to two attempts with a 1000ms beat, and its
+  // reasoning was correct when written: ble-mcp-test retried only
+  // `RETRYABLE_CONNECT_CODES`, which was `['NOT_READY']`, and the command path
+  // being owned by another connection came back as `DEVICE_BUSY` — which
+  // upstream refused to retry ON PURPOSE, as a loud refusal no amount of waiting
+  // fixes. Playwright opens a fresh page per spec, so the previous spec's
+  // session could still own the path for a moment after its socket closed, and
+  // that beat belonged somewhere.
   //
-  // ble-mcp-test 0.12.0 does retry connect failures — but only
-  // RETRYABLE_CONNECT_CODES, which is `['NOT_READY']`. The command path being
-  // owned by another connection is `Device is busy`, and upstream refuses to
-  // retry it ON PURPOSE: it is a loud refusal that no amount of waiting inside
-  // one connect attempt will fix.
+  // ⚠ THE REASON EXPIRED, WHICH IS WHY THIS IS GONE RATHER THAN KEPT.
+  // ble-mcp-test 0.16.0 splits `DEVICE_BUSY_SELF` — our own claim still closing,
+  // measured at 12-21ms — out of `DEVICE_BUSY`, and retries it inside its own
+  // connect loop (250ms, x1.3, 5 attempts, ~2.4s ceiling). The previous-spec
+  // handoff described above IS that case: the e2e session id is pinned per host
+  // (`tests/config/ble-bridge.config.ts`), so a fresh page colliding with the
+  // page before it is a self-collision by definition.
   //
-  // Which is precisely our shape. Playwright opens a fresh page per spec, so the
-  // previous spec's session may still own the command path for a moment after
-  // its socket closes. That is not a fault to retry INSIDE a connect; it is a
-  // handoff that needs a beat between attempts. So the retry belongs here, in
-  // the suite, and nowhere else.
+  // So the wait is still paid — once, inside the path that measured it, by the
+  // side that owns the policy. A second copy here would pay it twice, and the
+  // two would drift.
   //
-  // Bounded to two attempts on purpose. If a second attempt cannot connect, the
-  // path is genuinely held and hiding that behind more retries would turn a
-  // contention bug into a slow flake.
-  const ATTEMPTS = 2;
-  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-    try {
-      await connectToDeviceOnce(page);
-      return;
-    } catch (error) {
-      if (attempt === ATTEMPTS) throw error;
-      console.warn(
-        `[Connection] Connect attempt ${attempt}/${ATTEMPTS} failed, retrying once: ${error}`
-      );
-      // Long enough for the bridge to process the previous socket close, which
-      // is what releases the command path (TRA-1153).
-      await page.waitForTimeout(1000);
-    }
-  }
+  // What this deliberately does NOT do is retry anything else. The old loop
+  // caught every error and retried once, which was broader than its own
+  // justification: a missing button, a dead bridge and a wedged reader all got a
+  // free second attempt they had no claim to, and a 2x-slower failure reads as
+  // contention when it is not. If a genuine non-busy flake shows up here, fix it
+  // where it happens rather than restoring a blanket retry.
+  //
+  // Guarded by `tests/config/installed-mock-retryable-connect-codes.test.ts`,
+  // which goes red if the installed mock ever loses `DEVICE_BUSY_SELF`. See
+  // TRA-1216.
+  await connectToDeviceOnce(page);
 }
 
 async function connectToDeviceOnce(page: Page): Promise<void> {
