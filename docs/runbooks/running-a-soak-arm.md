@@ -57,9 +57,12 @@ cosmetic: the same commit passed `locate-mask-length-variants.spec.ts` 140 times
 on one arrangement and failed 6/6 on another (`TRA-1225`). If the comparison is
 to a previous arm, the bench must be the same bench.
 
-**The suite passes once.** One `--reps 1` cycle before committing hours. A spec
-failing every rep pins the rep-failure rate at 100% and makes any hypothesis
-that mentions failures unmeasurable.
+**That the suite can pass at all on this bench.** Either a separate `--reps 1`
+run or lingering for rep 1 of the real arm (§3) gets you there — they test the
+same thing. Lingering is marginally better because it exercises the exact
+configuration that will run, and it is one fewer step; take whichever you will
+actually do. What matters is that *something* proves a green rep before you
+commit hours.
 
 ---
 
@@ -99,7 +102,46 @@ reps are usually *faster*, which biases a failing arm short. Re-derive from
 
 ---
 
-## 3. Read RUN-IDENTITY before walking away
+## 3. Do not walk away until the first full rep lands
+
+**Watch rep 1 to completion. It costs ~2 minutes and it is the cheapest guard in
+this document.**
+
+```bash
+tail -f frontend/.suite-runs/ARM-<date>-driver.log
+```
+
+One line per rep:
+
+```
+[suite-runs] fixed rep 1/200 exit=1 101s clients@start=0 \
+  failed: tests/integration/cs108/locate-mask-length-variants.spec.ts (4)
+```
+
+**`exit=0` and no `failed:` — go.** Anything else, stop the arm and look, because
+a rep-1 failure is almost never the phenomenon you are measuring. It is a
+configuration fault, and every one of them is cheap to fix and expensive to sleep
+through:
+
+- the wrong mock installed in this checkout (now exit 7, but check anyway)
+- a spec that is red on *this* bench — tag population, a moved antenna
+- a dev server or browser tab contending for the reader
+- a spec left red on purpose by another ticket
+
+**A rep that fails for a configuration reason does not become informative by
+being repeated 200 times.** It pins the rep-failure rate at 100%, which kills any
+hypothesis phrased in terms of failures — half of TRA-1223's falsification test,
+for one.
+
+This was learned the expensive way on 2026-08-31: an arm launched and left, found
+27 reps later at **0 passed / 27 failed**, every rep failing the same spec from
+rep 1. Forty-five minutes to notice something visible in two.
+
+Stop cleanly, never by killing the driver — see *Watching* below.
+
+---
+
+## 4. Read RUN-IDENTITY before walking away
 
 The watchdog writes the start-of-run facts to `--identity`. **Read them.** They
 are the record of what the arm actually measured, and on 2026-08-31 the tell for
@@ -119,7 +161,7 @@ at a real proxy. `pnpm test:hardware` closes that if you need certainty.
 
 ---
 
-## 4. Watching, and what is not an abort
+## 5. Watching, and what is not an abort
 
 | exit | meaning |
 | -- | -- |
@@ -147,7 +189,7 @@ touch frontend/.suite-runs/STOP
 
 ---
 
-## 5. Analysis
+## 6. Analysis
 
 Run **from `frontend/`** or with absolute paths — a relative path resolves
 against `.suite-runs/` and fails in a way that looks like a detector firing.
@@ -175,7 +217,7 @@ tolerated arm produce the same rep table.
 
 ---
 
-## 6. Comparing two arms
+## 7. Comparing two arms
 
 **One variable per campaign.** Instrument churn between arms is what cost
 TRA-1197 a day: 26 commits of harness changes landed between an arm and its
@@ -195,7 +237,7 @@ composition change was real (p=0.001).
 
 ---
 
-## 7. Traps that actually bit
+## 8. Traps that actually bit
 
 Each of these cost real time. They are here because they recur, not as
 cautionary decoration.
