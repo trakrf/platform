@@ -45,11 +45,11 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-30 | Task 5 implementation and review | Implemented the sender. Review rejected discarded cancellation, SDK-internal/fake-bookkeeping tests, and an untidy checksum set. A fresh fix added pre-submit cancellation and real SDK HTTP-contract tests for auth, account path, exact forms/no `From`, callbacks, response/error outcomes, and concurrency. Re-review approved; all targeted/race/vet/module/regression/diff checks pass. |
 | 2026-08-30 | Task 6 implementation and review | Added bounded, signature-verified form parsing. Review found unsigned duplicate values and unsafe handler construction; a fresh fix rejects duplicate keys and makes construction fail closed for disabled/invalid config. Re-review approved; external URL/proxy/body-bound and all targeted checks pass. |
 | 2026-08-30 | Task 7 implementation and review | Added a thin status callback receiver using TDD. It emits normalized UTC events for five supported states, rejects invalid/malformed input before handoff, returns explicit consumer failures, and leaves repeated-callback idempotency downstream. Independent review approved all targeted checks and the private clock exception. |
-| 2026-08-31 | Task 8 implementation and review follow-up | Added regression rows for Twilio's documented `REVOKE` and `OPTOUT` opt-out keywords, including trimmed/case-insensitive bodies and assertions on the normalized downstream `InboundKeyword` event. The normalizer maps both to `STOP`; no provider suppression or `OptOutType` policy is implemented. |
+| 2026-08-31 | Task 8 implementation and review | Implemented signed consent keyword handoff. Review found missing documented `REVOKE`/`OPTOUT`; a fresh fix maps them to `STOP` with observable event tests. Re-review approved all synonyms, privacy/failure/retry behavior, and the explicit no-suppression boundary. |
 
 ### Current handoff
 
-- Task 8 is complete; next task is Task 8 independent re-review.
+- Next task: Task 9, public callback route definitions.
 - Implementation rule: use a fresh subagent context for every task, followed by an independent review context.
 - Not implementable in this ticket: frontend and geofence-event generation/integration.
 - Atomic Task 7 exception: `handler.go` gains a private clock dependency initialized by the existing constructor, so status events have a deterministic, injectable UTC occurrence time. The public constructor signature is unchanged.
