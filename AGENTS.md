@@ -1,11 +1,8 @@
 # AGENTS.md — trakrf working agreements
 
-Byte-identical in `docs`, `platform` and `infra`; each repo's `CLAUDE.md` imports
-it and adds its own specifics. Public repos — write for a world reader.
-
-Only what a fresh session gets wrong otherwise. Branch, commit and merge rules
-are in `CONTRIBUTING.md`, tooling choices in `.claude/csw.json`; neither is
-restated here. `ble-mcp-test` is not in this family and keeps its own.
+Identical in `docs`, `platform` and `infra` — change it in all three or none.
+These repos are public. Add only what a fresh session gets wrong otherwise.
+Branches, commits, merges: `CONTRIBUTING.md`. Tooling: `.claude/csw.json`.
 
 ## Specs, plans and notes are never tracked
 
