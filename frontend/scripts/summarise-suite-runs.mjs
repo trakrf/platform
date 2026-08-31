@@ -312,6 +312,86 @@ const REFERENCE_DENSITY = {
   secondUnique: 'mean 125, median 127',
 };
 
+/**
+ * Did the CS108's silent window happen, and did TRA-1217 absorb it?
+ *
+ * ⚠ THIS SECTION EXISTS BECAUSE THE FIX REMOVED ITS OWN SYMPTOM. Before
+ * TRA-1217 the window announced itself by killing reps and emitting
+ * `link-close`; now it is tolerated, so a recurrence and a quiet night produce
+ * the same rep table. Reading a clean arm as "the fix worked" is only valid if
+ * the condition occurred, and nothing else in this report can tell you that.
+ *
+ * The three counts are the falsification test written out, and they are meant to
+ * be read TOGETHER rather than as three statistics:
+ *
+ *   timeouts > 0, cleanup-failures 0  ->  the window happened and was absorbed.
+ *                                         This is the fix working, and the only
+ *                                         reading that earns TRA-1217 credit.
+ *   timeouts 0                        ->  NOT EVIDENCE OF ANYTHING. The device
+ *                                         was quiet. Says nothing about the fix.
+ *   cleanup-failures > 0              ->  the tolerance did not hold. Regression.
+ *
+ * The middle row is the one that matters most and is easiest to misread, so it
+ * is printed as a verdict rather than left to the reader. A soak that spends
+ * eight hours proving nothing should say so in words.
+ */
+export function powerOffWindowTable(records) {
+  const usable = records.filter((r) => r.signals && !r.signals.logMissing);
+  if (usable.length === 0) {
+    return '_No repetition carried a verified capture — the window is unobservable in this run._';
+  }
+
+  // null means the needle cannot fire on this runner (e2e), which is a different
+  // claim from zero and must not be summed into one.
+  const observable = usable.filter((r) => typeof r.signals.powerOffTimeouts === 'number');
+  if (observable.length === 0) {
+    return (
+      '_These needles are vitest-only; no repetition in this run could produce them. ' +
+      'The window is unobservable here, which is not the same as absent._'
+    );
+  }
+
+  const sum = (key) => observable.reduce((acc, r) => acc + (r.signals[key] ?? 0), 0);
+  const repsWith = (key) => observable.filter((r) => (r.signals[key] ?? 0) > 0).length;
+
+  const timeouts = sum('powerOffTimeouts');
+  const tolerated = sum('toleratedPowerOffs');
+  const cleanupFailed = sum('modeSwitchFailed');
+  const n = observable.length;
+
+  const lines = [
+    '| signal | occurrences | reps affected |',
+    '| -- | -- | -- |',
+    `| \`Command timeout: RFID_POWER_OFF\` — device silent | ${timeouts} | ${repsWith('powerOffTimeouts')}/${n} |`,
+    `| tolerated, sequence continued — rescued by TRA-1217 | ${tolerated} | ${repsWith('toleratedPowerOffs')}/${n} |`,
+    `| \`Mode switching failed during cleanup\` — tolerance did NOT hold | ${cleanupFailed} | ${repsWith('modeSwitchFailed')}/${n} |`,
+    '',
+  ];
+
+  if (cleanupFailed > 0) {
+    lines.push(
+      `**REGRESSION — the tolerance did not hold on ${repsWith('modeSwitchFailed')} rep(s).** ` +
+        'TRA-1217 makes a mode change survive an unanswered `RFID_POWER_OFF`; a cleanup failure ' +
+        'means something got past it. Read the affected reps before trusting anything else here.'
+    );
+  } else if (timeouts > 0) {
+    lines.push(
+      `**The window occurred and was absorbed.** ${timeouts} unanswered \`RFID_POWER_OFF\` ` +
+        `attempt(s) across ${repsWith('powerOffTimeouts')} rep(s), no cleanup failures. Before ` +
+        'TRA-1217 these reps would have failed. This is the arm that earns the fix its credit.'
+    );
+  } else {
+    lines.push(
+      '**The device never went silent in this run, so this arm says NOTHING about TRA-1217.** ' +
+        'Zero here is the absence of the condition, not evidence the fix works — the window ' +
+        'appeared once in 200 reps and cannot be summoned. Do not report a clean arm as ' +
+        'confirmation; it only shows nothing regressed.'
+    );
+  }
+
+  return lines.join('\n');
+}
+
 export function densityTable(records) {
   const resolved = records.map((r) => resolveReadCycles(r));
   const measured = resolved.filter(({ readCycles }) =>
@@ -446,6 +526,8 @@ function main() {
   console.log(signalPairingTable(records));
   console.log(`\n## Wedge mode — TRA-1150's two failure modes, scored separately\n`);
   console.log(wedgeModeTable(records));
+  console.log(`\n## The CS108's silent window — did it happen, and did TRA-1217 absorb it?\n`);
+  console.log(powerOffWindowTable(records));
   console.log(`\n## Field density\n`);
   console.log(densityTable(records));
   console.log(`\n## Record integrity\n`);

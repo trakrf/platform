@@ -72,6 +72,44 @@ export const SIGNALS = {
   // scripts/ack-latency-report.mjs.
   linkCloses: '[ble-timing] link-close',
   connectSamples: '[ble-timing] connect',
+
+  // ── The CS108's silent window, after TRA-1217 made it survivable ──────────
+  //
+  // ⚠ THE FIX DISABLED THE DETECTOR. Read this before trusting a clean arm.
+  //
+  // The device stops acknowledging RFID_POWER_OFF (0x8001) for long stretches —
+  // 82 minutes across 63 reps on 2026-08-31 — while answering every 0x8002
+  // one-for-one and streaming tag data. It used to announce itself: the teardown
+  // failed, `locate.spec.ts`'s afterAll threw past its own `cleanup()`, the link
+  // stayed claimed, and `linkCloses` above counted 63 of them.
+  //
+  // TRA-1217 fixed both halves. A mode change now tolerates the unanswered
+  // power-off and `cleanup()` always runs — so a recurrence costs nothing, kills
+  // no reps, and **emits no link-close**. Which leaves these two indistinguishable
+  // on every count above:
+  //
+  //     the window recurred and was absorbed   ->  reps pass, linkCloses 0
+  //     the window never happened              ->  reps pass, linkCloses 0
+  //
+  // An arm cannot tell you the fix worked if it cannot tell you the condition
+  // occurred. These three needles are what separates them, and they are the
+  // falsification test on TRA-1217 written out mechanically: if the fix works,
+  // `powerOffTimeouts` stays NON-ZERO while `linkCloses` and rep failures go to
+  // zero. If all of them go to zero together, something else moved and TRA-1217
+  // is not what did it. TRA-1223.
+  //
+  // Per-attempt, so this is the raw count of device silence — 14-23 per rep
+  // inside the 2026-08-31 window, 0 in all 137 clean reps. Perfect separation,
+  // which is what makes it worth counting rather than a noisy proxy.
+  powerOffTimeouts: '[CommandManager] Command timeout: RFID_POWER_OFF',
+  // Once per mode change that spent its whole retry schedule and carried on
+  // anyway. This is the rescue counter: every occurrence is a rep that would
+  // have died before TRA-1217.
+  toleratedPowerOffs: 'tolerated, continuing the sequence',
+  // The teardown giving up. 63/63 in the failing reps, 0/137 in the clean ones.
+  // Should now be ZERO even when the window recurs — if it fires alongside
+  // `powerOffTimeouts`, the tolerance did not hold and the fix is incomplete.
+  modeSwitchFailed: 'Mode switching failed during cleanup',
 };
 
 /**
@@ -92,8 +130,26 @@ export const SIGNALS = {
  *   triggerTimeout   Same file — it is CS108WorkerTestHarness that rejects with
  *                    `Timeout waiting for event: ...`.
  *
- * Both are STRUCTURAL: the emitter is a file no browser loads, so no change to
- * the e2e path can make them fire. Do not "fix" them.
+ *   powerOffTimeouts   `[CommandManager] …` is logged by the worker, which DOES
+ *   toleratedPowerOffs run in the browser under e2e — but these are `logger.warn`,
+ *                      and `shouldForwardConsoleLine` keeps a non-error line only
+ *                      if it contains one of `[ble-timing]`, `Error`, `Failed`,
+ *                      `BLE`, `Connect`, `WebSocket`, `force`, `cleanup`,
+ *                      `disconnect`. None of those appears in either message,
+ *                      so the forwarder drops them and the needle would read a
+ *                      confident 0 on every e2e rep however loud the device was.
+ *                      INCIDENTAL, not structural — widening the forwarder would
+ *                      make them fire. Do that deliberately if an e2e arm ever
+ *                      needs them, and measure it rather than assuming (TRA-1209
+ *                      is the precedent: the `[ble-timing]` needles sat at a
+ *                      confident 0 here for exactly this reason).
+ *   modeSwitchFailed   Logged by locate.spec.ts, an integration spec. No browser
+ *                      loads it — structural, like the two at the top.
+ *
+ * STRUCTURAL — `harnessLines`, `triggerTimeout`, `modeSwitchFailed`: the emitter
+ * is a file no browser loads, so no change to the e2e path can make them fire.
+ * Do not "fix" those. The two `[CommandManager]` needles are the other kind, and
+ * the distinction is why each says which it is rather than just "absent".
  *
  * The three `[ble-timing]` needles used to be listed here too, and they were the
  * other kind — absent for an INCIDENTAL reason. They are `console.info` from

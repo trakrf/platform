@@ -323,8 +323,28 @@ describe('playwright report parsing', () => {
  * — not a structural one, and TRA-1209 fixed the forwarder. That distinction is
  * exactly why they were recorded as `null` rather than `0`: a zero would have
  * read as "the transport did nothing" and nobody would have gone looking.
+ *
+ * ⚠ MIXED LIST as of TRA-1223, and the mixture is deliberate. The list means
+ * "carries null on an e2e rep", which is the right membership test for this
+ * file's purpose, but the REASONS differ and the difference decides whether an
+ * entry may ever leave:
+ *
+ *   structural   harnessLines, triggerTimeout, modeSwitchFailed — the emitter is
+ *                a file no browser loads. These can never leave.
+ *   incidental   powerOffTimeouts, toleratedPowerOffs — the worker DOES run in
+ *                the browser, but these are `logger.warn` and carry none of the
+ *                console forwarder's KEEP tokens, so it drops them. Widening the
+ *                forwarder would move them out, exactly as TRA-1209 moved the
+ *                `[ble-timing]` needles out. Do that on a measurement, not on an
+ *                assumption.
  */
-const VITEST_ONLY = ['harnessLines', 'triggerTimeout'];
+const VITEST_ONLY = [
+  'harnessLines',
+  'triggerTimeout',
+  'powerOffTimeouts',
+  'toleratedPowerOffs',
+  'modeSwitchFailed',
+];
 
 describe('signals are per-runner, and absence is not zero', () => {
   it('the e2e needle table omits every vitest-only needle', () => {
