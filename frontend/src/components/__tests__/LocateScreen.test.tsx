@@ -23,6 +23,11 @@ let mockFilteredRSSI = -120;
 // fields keep the frozen values a finished search left behind — the TRA-1123
 // state the screen used to render straight to the operator.
 let mockStatsStale = false;
+// TRA-1171: "is the tag audible right now" is no longer the same question as
+// "what is the gauge showing". null means the two still agree, which is every
+// pre-existing case in this file; set it explicitly to simulate the window
+// after a release, where a value is held on screen but nothing is being heard.
+let mockHearingTag: boolean | null = null;
 const mockSetTarget = vi.fn();
 const mockLocateStats = {
   currentRSSI: -120,
@@ -43,6 +48,7 @@ vi.mock('@/stores/locateStore', () => ({
     setStatusMessage: mockSetStatusMessage,
     setTarget: mockSetTarget,
     getFilteredRSSI: () => mockFilteredRSSI,
+    isHearingTag: () => mockHearingTag ?? mockFilteredRSSI > -120,
     getStatistics: () => mockStatsStale
       ? { currentRSSI: -120, averageRSSI: -120, peakRSSI: -120, updateRate: 0 }
       : {
@@ -85,11 +91,18 @@ vi.mock('@/stores/deviceStore', () => ({
 }));
 
 // Web Audio has no jsdom implementation; the tone hook is not under test here.
+//
+// The three output fns are hoisted rather than created per render so a test can
+// assert on them. TRA-1171's reported symptom IS the audio — a tone that keeps
+// sounding after the operator lets go — so it has to be observable.
+const mockUpdateProximity = vi.fn();
+const mockStartSearching = vi.fn();
+const mockStopBeeping = vi.fn();
 vi.mock('@/hooks/useWebAudioTone', () => ({
   useWebAudioTone: () => ({
-    updateProximity: vi.fn(),
-    startSearching: vi.fn(),
-    stopBeeping: vi.fn(),
+    updateProximity: mockUpdateProximity,
+    startSearching: mockStartSearching,
+    stopBeeping: mockStopBeeping,
     toggleSound: vi.fn(),
     isEnabled: false,
     isPlaying: false
@@ -338,6 +351,74 @@ describe('LocateScreen signal display (TRA-1080)', () => {
     await screen.findByTestId('gauge-value');
 
     expect(statusRowValue()).toBe('Searching');
+  });
+});
+
+/**
+ * TRA-1171: the operator lets go and the alarm keeps sounding.
+ *
+ * Several tag packets per stop arrive after the ABORT. They are genuinely
+ * fresh, so no staleness rule can refuse them — the store's release gate does
+ * that (see locateStore.test.ts). What this file covers is the consequence for
+ * the screen: the two outputs must part company. Audio stops; the gauge holds.
+ *
+ * Holding the gauge is not a nicety. The operator released the trigger in
+ * order to read the number, and blanking it at that instant reads as "the item
+ * is not here" — the same false negative TRA-1080 and TRA-1123 exist to
+ * prevent, reached from the opposite direction.
+ */
+describe('LocateScreen release behaviour (TRA-1171)', () => {
+  afterEach(() => {
+    cleanup();
+    resetDeviceState();
+    mockFilteredRSSI = -120;
+    mockHearingTag = null;
+    mockLocateStats.updateRate = 0;
+    mockLocateStats.currentRSSI = -120;
+    mockUpdateProximity.mockClear();
+    mockStartSearching.mockClear();
+    mockStopBeeping.mockClear();
+  });
+
+  it('keeps the last reading on the gauge after the release', async () => {
+    // The held value: the store stops decaying once the search ends, so
+    // getFilteredRSSI() still reports it.
+    mockDeviceState.readerState = ReaderState.CONNECTED;
+    mockFilteredRSSI = -40;
+    mockHearingTag = false;
+
+    render(<LocateScreen />);
+
+    expect(await screen.findByTestId('gauge-value')).toHaveTextContent('-40 dBm');
+  });
+
+  it('stops the beeper on release even though a reading is still displayed', async () => {
+    mockDeviceState.readerState = ReaderState.CONNECTED;
+    mockFilteredRSSI = -40;
+    mockHearingTag = false;
+
+    render(<LocateScreen />);
+    await screen.findByTestId('gauge-value');
+
+    expect(mockStopBeeping).toHaveBeenCalled();
+    expect(
+      mockUpdateProximity,
+      'a held value must not drive proximity audio'
+    ).not.toHaveBeenCalled();
+  });
+
+  it('still drives proximity audio while the tag is genuinely being heard', async () => {
+    // The guard against over-correcting: this is the working case, and it must
+    // not be silenced along with the released one.
+    mockDeviceState.readerState = ReaderState.SCANNING;
+    mockFilteredRSSI = -40;
+    mockHearingTag = true;
+
+    render(<LocateScreen />);
+    await screen.findByTestId('gauge-value');
+
+    expect(mockUpdateProximity).toHaveBeenCalledWith(-40);
+    expect(mockStopBeeping).not.toHaveBeenCalled();
   });
 });
 
