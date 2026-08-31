@@ -16,6 +16,10 @@ describe('locateStore statistics staleness (TRA-1123 / TRA-1089)', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     useLocateStore.getState().clearBuffer();
+    // Staleness is a property of a RUNNING search (TRA-1171). Every case here
+    // is mid-search, so arm the gate — otherwise the reads are refused before
+    // any of this file's behaviour is reached.
+    useLocateStore.getState().setSearchActive(true);
   });
 
   afterEach(() => {
@@ -84,6 +88,7 @@ describe('locateStore target tracking (TRA-1123)', () => {
     vi.useFakeTimers();
     useLocateStore.getState().clearBuffer();
     useLocateStore.getState().setTarget('');
+    useLocateStore.getState().setSearchActive(true);
   });
 
   afterEach(() => {
@@ -145,6 +150,7 @@ describe('locateStore rejects reads from other tags (stray admissions)', () => {
     vi.useFakeTimers();
     useLocateStore.getState().clearBuffer();
     useLocateStore.getState().setTarget('');
+    useLocateStore.getState().setSearchActive(true);
   });
 
   afterEach(() => {
@@ -218,5 +224,111 @@ describe('locateStore rejects reads from other tags (stray admissions)', () => {
 
     expect(useLocateStore.getState().rssiBuffer).toHaveLength(0);
     expect(useLocateStore.getState().getStatistics().currentRSSI).toBe(DEFAULT_RSSI);
+  });
+});
+
+/**
+ * TRA-1171: on trigger release, audio stops and the gauge FREEZES on the last
+ * value — the two outputs are deliberately not treated the same.
+ *
+ * Several tag packets per stop keep arriving after the ABORT. They are
+ * genuinely fresh, so every staleness defence above passes them through by
+ * design, and they are what keeps the gauge moving and the alarm sounding
+ * after the operator has let go. Refusing to consume them is the only thing
+ * that ends it.
+ *
+ * The held value is the RESULT of the search, not a stale reading: the
+ * operator released the trigger in order to read it. Zeroing it would be the
+ * same false negative TRA-1080 and TRA-1123 exist to prevent, reached from the
+ * opposite direction.
+ */
+describe('locateStore release gate (TRA-1171)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    useLocateStore.setState({ targetEPC: '' });
+    useLocateStore.getState().clearBuffer();
+    useLocateStore.getState().setSearchActive(false);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('drops reads that arrive while no search is active', () => {
+    useLocateStore.getState().addRssiReading(-35);
+
+    expect(useLocateStore.getState().currentRSSI).toBe(DEFAULT_RSSI);
+    expect(useLocateStore.getState().rssiBuffer).toHaveLength(0);
+  });
+
+  it('accepts reads while a search is active', () => {
+    useLocateStore.getState().setSearchActive(true);
+
+    useLocateStore.getState().addRssiReading(-35);
+
+    expect(useLocateStore.getState().currentRSSI).toBe(-35);
+  });
+
+  it('HOLDS the last gauge value after the search ends — does not zero it', () => {
+    useLocateStore.getState().setSearchActive(true);
+    useLocateStore.getState().addRssiReading(-35);
+
+    useLocateStore.getState().setSearchActive(false);
+    vi.advanceTimersByTime(STALE_THRESHOLD_MS + 5000);
+
+    expect(useLocateStore.getState().getFilteredRSSI()).toBe(-35);
+    expect(useLocateStore.getState().getStatistics().currentRSSI).toBe(-35);
+  });
+
+  it('still decays to "no signal" while a search IS active', () => {
+    useLocateStore.getState().setSearchActive(true);
+    useLocateStore.getState().addRssiReading(-35);
+
+    vi.advanceTimersByTime(STALE_THRESHOLD_MS + 5000);
+
+    expect(useLocateStore.getState().getFilteredRSSI()).toBe(DEFAULT_RSSI);
+    expect(useLocateStore.getState().getStatistics().currentRSSI).toBe(DEFAULT_RSSI);
+  });
+
+  it('silences the tag-heard signal on release while the gauge still holds', () => {
+    // This pair is the whole point of splitting the two signals: the beeper
+    // must go quiet while the number stays on screen.
+    useLocateStore.getState().setSearchActive(true);
+    useLocateStore.getState().addRssiReading(-35);
+    expect(useLocateStore.getState().isHearingTag()).toBe(true);
+
+    useLocateStore.getState().setSearchActive(false);
+
+    expect(useLocateStore.getState().isHearingTag()).toBe(false);
+    expect(useLocateStore.getState().getFilteredRSSI()).toBe(-35);
+  });
+
+  it('reports the tag as not heard during an active search once reads go stale', () => {
+    useLocateStore.getState().setSearchActive(true);
+    useLocateStore.getState().addRssiReading(-35);
+
+    vi.advanceTimersByTime(STALE_THRESHOLD_MS + 1);
+
+    expect(useLocateStore.getState().isHearingTag()).toBe(false);
+  });
+
+  it('clears a held value when the target changes', () => {
+    useLocateStore.getState().setSearchActive(true);
+    useLocateStore.getState().addRssiReading(-35);
+    useLocateStore.getState().setSearchActive(false);
+
+    useLocateStore.getState().setTarget('E280110C');
+
+    expect(useLocateStore.getState().getFilteredRSSI()).toBe(DEFAULT_RSSI);
+  });
+
+  it('does not close the gate when the buffer is cleared mid-search', () => {
+    // setTarget() clears the buffer, and retargeting mid-search must not stop
+    // the search — the operator is still holding the trigger.
+    useLocateStore.getState().setSearchActive(true);
+
+    useLocateStore.getState().setTarget('E280110C');
+
+    expect(useLocateStore.getState().searchActive).toBe(true);
   });
 });
