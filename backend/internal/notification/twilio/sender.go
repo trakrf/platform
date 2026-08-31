@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/trakrf/platform/backend/internal/notification/sms"
 	twiliogo "github.com/twilio/twilio-go"
@@ -18,6 +19,7 @@ type Sender struct {
 	messages            messageCreator
 	messagingServiceSID string
 	statusCallbackURL   string
+	metrics             *Metrics
 }
 
 type messageCreator interface {
@@ -33,7 +35,7 @@ func (creator *sdkMessageCreator) CreateMessage(params *openapi.CreateMessagePar
 }
 
 // NewSender constructs a sender using API-key credentials and Account SID context.
-func NewSender(config Config) (*Sender, error) {
+func NewSender(config Config, metrics ...*Metrics) (*Sender, error) {
 	if !config.Enabled() {
 		return nil, errors.New("Twilio sender configuration is incomplete")
 	}
@@ -41,10 +43,10 @@ func NewSender(config Config) (*Sender, error) {
 		return nil, errors.New("Twilio sender public base URL must be a canonical HTTPS origin")
 	}
 
-	return newSender(config, nil), nil
+	return newSender(config, nil, metrics...), nil
 }
 
-func newSender(config Config, httpClient *http.Client) *Sender {
+func newSender(config Config, httpClient *http.Client, metrics ...*Metrics) *Sender {
 	client := &twilioclient.Client{
 		Credentials: twilioclient.NewCredentials(config.APIKeySID, config.APIKeySecret),
 		HTTPClient:  httpClient,
@@ -52,14 +54,15 @@ func newSender(config Config, httpClient *http.Client) *Sender {
 	client.SetAccountSid(config.AccountSID)
 	restClient := twiliogo.NewRestClientWithParams(twiliogo.ClientParams{Client: client})
 
-	return newSenderWithMessages(config, &sdkMessageCreator{client: restClient})
+	return newSenderWithMessages(config, &sdkMessageCreator{client: restClient}, metrics...)
 }
 
-func newSenderWithMessages(config Config, messages messageCreator) *Sender {
+func newSenderWithMessages(config Config, messages messageCreator, metrics ...*Metrics) *Sender {
 	return &Sender{
 		messages:            messages,
 		messagingServiceSID: config.MessagingServiceSID,
 		statusCallbackURL:   config.PublicBaseURL + statusCallbackPath,
+		metrics:             optionalMetrics(metrics),
 	}
 }
 
@@ -67,6 +70,7 @@ func newSenderWithMessages(config Config, messages messageCreator) *Sender {
 // the provider's accepted-message identity and initial status.
 func (sender *Sender) SendSMS(ctx context.Context, command sms.Command) (sms.Submission, error) {
 	if cause := context.Cause(ctx); cause != nil {
+		sender.recordSubmission(metricSubmissionResultUnknown)
 		return sms.Submission{}, cause
 	}
 
@@ -76,18 +80,62 @@ func (sender *Sender) SendSMS(ctx context.Context, command sms.Command) (sms.Sub
 	params.SetMessagingServiceSid(sender.messagingServiceSID)
 	params.SetStatusCallback(sender.statusCallbackURL)
 
+	requestStarted := time.Now()
 	message, err := sender.messages.CreateMessage(params)
+	sender.observeRequestDuration(time.Since(requestStarted))
 	if err != nil {
-		return sms.Submission{}, classifyError(err)
+		providerErr := classifyError(err)
+		sender.recordSubmission(submissionResult(providerErr))
+		return sms.Submission{}, providerErr
 	}
 	if message == nil {
-		return sms.Submission{}, classifyError(errors.New("Twilio returned no message"))
+		providerErr := classifyError(errors.New("Twilio returned no message"))
+		sender.recordSubmission(submissionResult(providerErr))
+		return sms.Submission{}, providerErr
 	}
 
+	sender.recordSubmission(SubmissionAccepted)
 	return sms.Submission{
 		ProviderMessageID: stringValue(message.Sid),
 		Status:            stringValue(message.Status),
 	}, nil
+}
+
+func optionalMetrics(metrics []*Metrics) *Metrics {
+	if len(metrics) == 0 {
+		return nil
+	}
+	return metrics[0]
+}
+
+func (sender *Sender) recordSubmission(result SubmissionResult) {
+	if sender.metrics != nil {
+		sender.metrics.RecordSubmission(result)
+	}
+}
+
+func (sender *Sender) observeRequestDuration(duration time.Duration) {
+	if sender.metrics != nil {
+		sender.metrics.ObserveRequestDuration(duration)
+	}
+}
+
+func submissionResult(err error) SubmissionResult {
+	var providerErr *providerError
+	if !errors.As(err, &providerErr) {
+		return metricSubmissionResultUnknown
+	}
+
+	switch providerErr.Kind {
+	case sms.ErrorTransient:
+		return SubmissionTransientError
+	case sms.ErrorPermanent:
+		return SubmissionPermanentError
+	case sms.ErrorRejected:
+		return SubmissionRejected
+	default:
+		return metricSubmissionResultUnknown
+	}
 }
 
 func stringValue(value *string) string {
