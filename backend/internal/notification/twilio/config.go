@@ -30,17 +30,28 @@ func ConfigFromEnv() (Config, error) {
 		PublicBaseURL:       os.Getenv("TWILIO_PUBLIC_BASE_URL"),
 	}
 
-	if config == (Config{}) {
-		return config, nil
-	}
-	if !config.Enabled() {
-		return Config{}, errors.New("Twilio configuration is incomplete")
-	}
-	if !validPublicBaseURL(config.PublicBaseURL) {
-		return Config{}, errors.New("Twilio public base URL must be a canonical HTTPS origin")
+	if err := config.Validate(); err != nil {
+		return Config{}, err
 	}
 
 	return config, nil
+}
+
+// Validate checks whether Config is either disabled or complete and safe to
+// activate. An all-empty configuration is valid but disabled; callers that
+// require an active integration must reject that state separately.
+func (c Config) Validate() error {
+	if c == (Config{}) {
+		return nil
+	}
+	if !c.Enabled() {
+		return errors.New("Twilio configuration is incomplete")
+	}
+	if !validPublicBaseURL(c.PublicBaseURL) {
+		return errors.New("Twilio public base URL must be a canonical HTTPS origin")
+	}
+
+	return nil
 }
 
 // Enabled reports whether every value required to use Twilio is configured.

@@ -47,6 +47,44 @@ func TestConfigFromEnv_AllEmptyDisablesTwilio(t *testing.T) {
 	require.False(t, config.Enabled())
 }
 
+// This fails if public configuration validation treats disabled configuration
+// as active or accepts a partial configuration that could expose credentials.
+func TestConfigValidate_PreservesDisabledStateAndRejectsPartialConfiguration(t *testing.T) {
+	partial := twilio.Config{
+		AccountSID:          accountSID,
+		APIKeySID:           apiKeySID,
+		APIKeySecret:        apiKeySecret,
+		AuthToken:           authToken,
+		MessagingServiceSID: messagingServiceSID,
+	}
+
+	require.NoError(t, (twilio.Config{}).Validate())
+	err := partial.Validate()
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), apiKeySecret)
+	require.NotContains(t, err.Error(), authToken)
+}
+
+// This fails if public configuration validation accepts a callback URL that
+// cannot be used as the exact externally visible signature-validation origin.
+func TestConfigValidate_RejectsNonCanonicalPublicOrigin(t *testing.T) {
+	config := twilio.Config{
+		AccountSID:          accountSID,
+		APIKeySID:           apiKeySID,
+		APIKeySecret:        apiKeySecret,
+		AuthToken:           authToken,
+		MessagingServiceSID: messagingServiceSID,
+		PublicBaseURL:       "https://api.example.com/",
+	}
+
+	err := config.Validate()
+
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), config.PublicBaseURL)
+	require.NotContains(t, err.Error(), apiKeySecret)
+	require.NotContains(t, err.Error(), authToken)
+}
+
 // This fails if a fully configured integration loses or changes a configured value.
 func TestConfigFromEnv_CompleteConfigEnablesTwilio(t *testing.T) {
 	setCompleteConfig(t)

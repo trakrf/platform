@@ -3,7 +3,6 @@ package twiliosms
 
 import (
 	"errors"
-	"net/url"
 	"time"
 
 	"github.com/trakrf/platform/backend/internal/notification/sms"
@@ -29,11 +28,11 @@ func NewHandler(config twilio.Config, consumer sms.CallbackConsumer) (*Handler, 
 // NewHandlerWithMetrics builds a Twilio callback handler with an optional
 // boundary metrics recorder. A nil recorder leaves callback behavior unchanged.
 func NewHandlerWithMetrics(config twilio.Config, consumer sms.CallbackConsumer, metrics *twilio.Metrics) (*Handler, error) {
-	if !config.Enabled() {
+	if config == (twilio.Config{}) {
 		return nil, errors.New("Twilio callback configuration is incomplete")
 	}
-	if !validCallbackPublicBaseURL(config.PublicBaseURL) {
-		return nil, errors.New("Twilio callback public base URL must be a canonical HTTPS origin")
+	if err := config.Validate(); err != nil {
+		return nil, err
 	}
 
 	return &Handler{
@@ -52,18 +51,4 @@ func (h *Handler) recordCallback(callbackType twilio.CallbackType, result twilio
 
 	h.metrics.RecordCallback(callbackType, result)
 	h.metrics.ObserveRequestDuration(time.Since(startedAt))
-}
-
-func validCallbackPublicBaseURL(raw string) bool {
-	parsed, err := url.ParseRequestURI(raw)
-	return err == nil &&
-		parsed.Scheme == "https" &&
-		parsed.Host != "" &&
-		parsed.User == nil &&
-		parsed.Path == "" &&
-		parsed.RawPath == "" &&
-		parsed.RawQuery == "" &&
-		parsed.Fragment == "" &&
-		!parsed.ForceQuery &&
-		parsed.Opaque == ""
 }

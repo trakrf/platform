@@ -43,11 +43,11 @@ func NewSender(config Config) (*Sender, error) {
 // NewSenderWithMetrics constructs a sender with an optional metrics recorder.
 // A nil recorder leaves sender behavior uninstrumented.
 func NewSenderWithMetrics(config Config, metrics *Metrics) (*Sender, error) {
-	if !config.Enabled() {
+	if config == (Config{}) {
 		return nil, errors.New("Twilio sender configuration is incomplete")
 	}
-	if !validPublicBaseURL(config.PublicBaseURL) {
-		return nil, errors.New("Twilio sender public base URL must be a canonical HTTPS origin")
+	if err := config.Validate(); err != nil {
+		return nil, err
 	}
 
 	return newSender(config, nil, metrics), nil

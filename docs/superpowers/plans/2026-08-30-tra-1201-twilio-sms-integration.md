@@ -53,10 +53,11 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-31 | Task 10C implementation and review | Added explicit callback metrics. Review found consumer panics mislabeled malformed; a fresh fix marks pending consumer failure before handoff while preserving panic propagation. Re-review approved exact callback outcomes/durations, constructor compatibility, privacy, and concurrency. |
 | 2026-08-31 | Task 11 implementation and review | Added cross-component SDK HTTP sender and signed Chi callback integration tests with bounded metrics. Repository-native bootstrap generated ignored embed prerequisites; targeted/race/full tests, vet, module verification, and diff checks pass. Review approved; generated-doc `swag` tidy classification remains a separate pre-existing hygiene issue. |
 | 2026-08-31 | Final-fix B sender | Resolved final-review Important 2 and Minor 2 with TDD. A 2xx SDK response now requires non-blank Message SID and initial status; otherwise the sender returns an empty submission and public redacted unknown provider error while recording one unknown result and one request duration. The constructor test now asserts pre-cancelled observable behavior and gathered metrics rather than private sender state. |
+| 2026-08-31 | Final-fix C configuration | Resolved final-review Minor 1 with TDD. Added public `twilio.Config.Validate`: all-empty configuration remains valid but disabled, whereas partial configuration and non-canonical public origins are rejected with redacted errors. `ConfigFromEnv` delegates to it; sender and callback constructors explicitly reject disabled configuration and delegate every non-disabled configuration to the same validation. |
 
 ### Current handoff
 
-- Next task: independent final review of final-fix B.
+- Next task: independent final review of final-fixes A through C.
 - Implementation rule: use a fresh subagent context for every task, followed by an independent review context.
 - Not implementable in this ticket: frontend and geofence-event generation/integration.
 - Task 9 boundary: `Handler.RegisterRoutes` is independently attachable but is not mounted by `serve.setupRouter`; TRA-1201 has no durable callback consumer to inject.
@@ -66,6 +67,7 @@ This section is the durable handoff record across fresh implementation contexts.
 - Task 10C boundary: `NewHandler(config, consumer)` remains unchanged; `NewHandlerWithMetrics(config, consumer, *twilio.Metrics)` accepts one optional recorder, and a nil recorder is a no-op. Every status/inbound handler invocation records one bounded callback result plus one callback-boundary duration when a recorder is present; unrelated signed inbound text is accepted, and no submission metric is emitted.
 - Task 11 verification: package/race suites, `go test ./... -count=1`, and `go vet ./...` pass after the repository-native bootstrap generated its ignored embed inputs. `go mod verify` passes; `go mod tidy -diff` reports only the existing `github.com/swaggo/swag` direct/indirect classification delta, which Task 11 leaves untouched.
 - Final-fix B boundary: an accepted sender submission requires non-blank SDK Message SID and initial status. Missing, empty, or whitespace-only values are an attempted unknown provider outcome with no usable submission. Public `NewSender` and `NewSenderWithMetrics` cancellation behavior is verified without private-state assertions. Configuration validation duplication and operations documentation remain outside this pass.
+- Final-fix C boundary: public `Config.Validate` is the single owner of complete/partial/canonical-origin validation and intentionally accepts only the all-empty disabled state without error. `ConfigFromEnv` preserves that disabled result; `NewSender` and `NewHandler` reject it before using the shared validation for every non-disabled configuration. No cancellation, accepted-SID, or documentation behavior changed.
 
 ---
 
