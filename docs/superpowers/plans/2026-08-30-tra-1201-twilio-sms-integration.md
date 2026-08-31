@@ -46,12 +46,14 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-30 | Task 6 implementation and review | Added bounded, signature-verified form parsing. Review found unsigned duplicate values and unsafe handler construction; a fresh fix rejects duplicate keys and makes construction fail closed for disabled/invalid config. Re-review approved; external URL/proxy/body-bound and all targeted checks pass. |
 | 2026-08-30 | Task 7 implementation and review | Added a thin status callback receiver using TDD. It emits normalized UTC events for five supported states, rejects invalid/malformed input before handoff, returns explicit consumer failures, and leaves repeated-callback idempotency downstream. Independent review approved all targeted checks and the private clock exception. |
 | 2026-08-31 | Task 8 implementation and review | Implemented signed consent keyword handoff. Review found missing documented `REVOKE`/`OPTOUT`; a fresh fix maps them to `STOP` with observable event tests. Re-review approved all synonyms, privacy/failure/retry behavior, and the explicit no-suppression boundary. |
+| 2026-08-31 | Task 9 implementation | Added standalone Chi registration for only the signed status and inbound POST callbacks. Focused route tests observed the missing method RED, then GREEN for unauthenticated signed event handoff, forged-signature rejection, exact 405/Allow behavior, and undeclared-path 404s. The production root router remains deliberately unmodified until later work provides a durable consumer. |
 
 ### Current handoff
 
-- Next task: Task 9, public callback route definitions.
+- Next task: Task 10, bounded Twilio metrics.
 - Implementation rule: use a fresh subagent context for every task, followed by an independent review context.
 - Not implementable in this ticket: frontend and geofence-event generation/integration.
+- Task 9 boundary: `Handler.RegisterRoutes` is independently attachable but is not mounted by `serve.setupRouter`; TRA-1201 has no durable callback consumer to inject.
 - Atomic Task 7 exception: `handler.go` gains a private clock dependency initialized by the existing constructor, so status events have a deterministic, injectable UTC occurrence time. The public constructor signature is unchanged.
 
 ---
@@ -472,21 +474,21 @@ git commit -m "feat(TRA-1201): parse Twilio consent callbacks"
 
 **Produces:** `Handler.RegisterRoutes(chi.Router)`.
 
-- [ ] **Step 1: Write failing route tests**
+- [x] **Step 1: Write failing route tests**
 
 Verify public form-encoded POST routes at `/api/v1/notifications/twilio/status` and `/api/v1/notifications/twilio/inbound`, no TrakRF authentication dependency, signature rejection at the handler, and `405` with `Allow: POST` for GET.
 
-- [ ] **Step 2: Verify failure**
+- [x] **Step 2: Verify failure**
 
 Run: `cd backend && go test ./internal/handlers/twiliosms -run TestRoutes -count=1`
 
 Expected: FAIL because `RegisterRoutes` is undefined.
 
-- [ ] **Step 3: Implement route registration**
+- [x] **Step 3: Implement route registration**
 
 Register only the two form-encoded POST endpoints. Production attachment to the root router occurs in the later integration work that supplies a real callback consumer.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify**
 
 Run: `cd backend && go test ./internal/handlers/twiliosms -run TestRoutes -count=1`
 
@@ -494,6 +496,9 @@ Run: `cd backend && go test ./internal/handlers/twiliosms -run TestRoutes -count
 git add backend/internal/handlers/twiliosms/routes.go backend/internal/handlers/twiliosms/routes_test.go
 git commit -m "feat(TRA-1201): define Twilio callback routes"
 ```
+
+No commit was created, per the implementation-context instruction. The next
+action is an independent Task 9 review.
 
 ---
 
