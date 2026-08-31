@@ -150,6 +150,29 @@ export interface SequenceCommand {
    * whose behaviour inside the window has not been observed on a reader.
    */
   ignoresQuietPeriod?: boolean;
+
+  /**
+   * Let the sequence continue when this command never lands.
+   *
+   * Applied only after the command's own `retryDelays` schedule is spent, and
+   * never to a `SequenceAbortedError` — an abort is a decision, not a fault.
+   * The failure is logged at warn level and the sequence proceeds to its next
+   * step and its normal final state; nothing is reported to the caller.
+   *
+   * The case it exists for: a CS108 that stopped acknowledging RFID_POWER_OFF
+   * (0x8001) for 82 minutes while answering every 0x8002 firmware command
+   * one-for-one and streaming tag data throughout. Because IDLE_SEQUENCE opens
+   * with that power-off and prefixes every mode, one silent op code failed every
+   * mode change, put the reader in ERROR, and cost 63 of 200 soak reps
+   * (TRA-1217).
+   *
+   * ⚠ Like `ignoresQuietPeriod`, this is a claim about the DEVICE and about one
+   * op code — that failing to confirm THIS command leaves the reader usable.
+   * Do not spread it to a command whose failure has not been watched on a reader
+   * and reasoned about; a step that quietly cannot fail is a step nobody can
+   * tell is broken.
+   */
+  toleratesFailure?: boolean;
 }
 
 /**

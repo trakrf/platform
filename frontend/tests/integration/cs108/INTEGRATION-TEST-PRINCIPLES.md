@@ -169,6 +169,26 @@ The test harness NEVER provides:
 - Ability to modify state directly
 - Request-response patterns at transport layer
 
+## `cleanup()` runs on every path out of `afterAll`
+
+`harness.cleanup()` is the only thing that disconnects the transport and awaits
+the mock's teardown, so it is what stops the next spec file's connect racing
+this file's socket close. **Put it in a `finally`.** Everything in front of it —
+quiescing the radio with `setMode(IDLE)`, the worker's own `disconnect()` — is
+best effort and may throw.
+
+This is a rule because it has already been broken. `locate.spec.ts` guarded its
+first two mode changes and then called an unguarded `setMode(IDLE)` in the catch
+as a fallback. When the reader stopped acknowledging `RFID_POWER_OFF` for 82
+minutes, all three mode changes failed, the fallback threw out of `afterAll`, and
+`cleanup()` never ran. The link stayed claimed, closed later on its own, and the
+next spec file's connect was refused `DEVICE_BUSY` — 63 of 200 reps in the
+2026-08-31 arm, every one landing at the same spot. The reader misbehaving was
+one defect; a teardown that leaks the link when anything ahead of it fails was a
+second, and it is the one this rule closes. TRA-1217.
+
+A fallback that can itself fail is not a fallback. Guard it, or drop it.
+
 ## Summary
 
 Integration tests prove that the worker's public API, combined with the bidirectional stream architecture, actually works in practice. If a test needs to violate these principles to pass, the production code is broken, not the test.
