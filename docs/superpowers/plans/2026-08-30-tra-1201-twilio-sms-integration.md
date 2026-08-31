@@ -52,10 +52,11 @@ This section is the durable handoff record across fresh implementation contexts.
 | 2026-08-31 | Task 10B implementation and review | Added sender metrics. Review found unexpected outcomes mislabeled permanent and ambiguous variadic recorder loss; a fresh fix added explicit `NewSenderWithMetrics` and maps nil/unrecognized/cancelled outcomes to bounded unknown. Re-review approved exact results, request-only timing, privacy, and concurrency. |
 | 2026-08-31 | Task 10C implementation and review | Added explicit callback metrics. Review found consumer panics mislabeled malformed; a fresh fix marks pending consumer failure before handoff while preserving panic propagation. Re-review approved exact callback outcomes/durations, constructor compatibility, privacy, and concurrency. |
 | 2026-08-31 | Task 11 implementation and review | Added cross-component SDK HTTP sender and signed Chi callback integration tests with bounded metrics. Repository-native bootstrap generated ignored embed prerequisites; targeted/race/full tests, vet, module verification, and diff checks pass. Review approved; generated-doc `swag` tidy classification remains a separate pre-existing hygiene issue. |
+| 2026-08-31 | Final-fix B sender | Resolved final-review Important 2 and Minor 2 with TDD. A 2xx SDK response now requires non-blank Message SID and initial status; otherwise the sender returns an empty submission and public redacted unknown provider error while recording one unknown result and one request duration. The constructor test now asserts pre-cancelled observable behavior and gathered metrics rather than private sender state. |
 
 ### Current handoff
 
-- Next task: final broad branch review and completion verification.
+- Next task: independent final review of final-fix B.
 - Implementation rule: use a fresh subagent context for every task, followed by an independent review context.
 - Not implementable in this ticket: frontend and geofence-event generation/integration.
 - Task 9 boundary: `Handler.RegisterRoutes` is independently attachable but is not mounted by `serve.setupRouter`; TRA-1201 has no durable callback consumer to inject.
@@ -64,6 +65,7 @@ This section is the durable handoff record across fresh implementation contexts.
 - Task 10B boundary: `twilio.NewSender(config)` remains unchanged; `NewSenderWithMetrics(config, *Metrics)` explicitly injects one optional recorder. `SendSMS` records one bounded result per call, times only `CreateMessage`, and never records callback metrics.
 - Task 10C boundary: `NewHandler(config, consumer)` remains unchanged; `NewHandlerWithMetrics(config, consumer, *twilio.Metrics)` accepts one optional recorder, and a nil recorder is a no-op. Every status/inbound handler invocation records one bounded callback result plus one callback-boundary duration when a recorder is present; unrelated signed inbound text is accepted, and no submission metric is emitted.
 - Task 11 verification: package/race suites, `go test ./... -count=1`, and `go vet ./...` pass after the repository-native bootstrap generated its ignored embed inputs. `go mod verify` passes; `go mod tidy -diff` reports only the existing `github.com/swaggo/swag` direct/indirect classification delta, which Task 11 leaves untouched.
+- Final-fix B boundary: an accepted sender submission requires non-blank SDK Message SID and initial status. Missing, empty, or whitespace-only values are an attempted unknown provider outcome with no usable submission. Public `NewSender` and `NewSenderWithMetrics` cancellation behavior is verified without private-state assertions. Configuration validation duplication and operations documentation remain outside this pass.
 
 ---
 

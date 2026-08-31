@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/trakrf/platform/backend/internal/notification/sms"
@@ -94,8 +95,8 @@ func (sender *Sender) SendSMS(ctx context.Context, command sms.Command) (sms.Sub
 		sender.recordSubmission(submissionResult(providerErr))
 		return sms.Submission{}, providerErr
 	}
-	if message == nil {
-		providerErr := classifyError(errors.New("Twilio returned no message"))
+	if message == nil || strings.TrimSpace(stringValue(message.Sid)) == "" || strings.TrimSpace(stringValue(message.Status)) == "" {
+		providerErr := classifyError(errors.New("Twilio returned an incomplete accepted message"))
 		sender.recordSubmission(submissionResult(providerErr))
 		return sms.Submission{}, providerErr
 	}

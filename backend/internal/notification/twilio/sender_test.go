@@ -62,17 +62,17 @@ func TestNewSender_RejectsDisabledAndInvalidConfig(t *testing.T) {
 	}
 }
 
-// This fails if the public constructors lose the no-recorder default, accept a
-// nil recorder incorrectly, or fail to retain an explicitly supplied recorder.
+// This fails if public sender construction loses its optional-recorder behavior
+// at the observable pre-submit cancellation boundary.
 func TestNewSender_MetricsConstruction(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	metrics, err := NewMetrics(registry)
 	require.NoError(t, err)
 
 	tests := []struct {
-		name  string
-		build func() (*Sender, error)
-		want  *Metrics
+		name               string
+		build              func() (*Sender, error)
+		wantUnknownMetrics bool
 	}{
 		{
 			name: "no recorder",
@@ -91,7 +91,7 @@ func TestNewSender_MetricsConstruction(t *testing.T) {
 			build: func() (*Sender, error) {
 				return NewSenderWithMetrics(completeSenderConfig(), metrics)
 			},
-			want: metrics,
+			wantUnknownMetrics: true,
 		},
 	}
 
@@ -101,7 +101,42 @@ func TestNewSender_MetricsConstruction(t *testing.T) {
 
 			require.NoError(t, err)
 			require.NotNil(t, sender)
-			require.Same(t, test.want, sender.metrics)
+			cause := errors.New("caller cancelled before submission")
+			ctx, cancel := context.WithCancelCause(context.Background())
+			cancel(cause)
+
+			submission, err := sender.SendSMS(ctx, sms.Command{ToE164: sensitiveDestination, Body: sensitiveBody})
+
+			require.Equal(t, sms.Submission{}, submission)
+			require.ErrorIs(t, err, cause)
+
+			if !test.wantUnknownMetrics {
+				return
+			}
+
+			families, err := registry.Gather()
+			require.NoError(t, err)
+			var sawSubmission, sawDuration bool
+			for _, family := range families {
+				switch family.GetName() {
+				case "trakrf_twilio_submissions_total":
+					sawSubmission = true
+					require.Len(t, family.GetMetric(), 1)
+					metric := family.GetMetric()[0]
+					require.Equal(t, float64(1), metric.GetCounter().GetValue())
+					require.Len(t, metric.GetLabel(), 1)
+					require.Equal(t, "result", metric.GetLabel()[0].GetName())
+					require.Equal(t, metricSubmissionResultUnknown, metric.GetLabel()[0].GetValue())
+				case "trakrf_twilio_request_duration_seconds":
+					sawDuration = true
+					require.Len(t, family.GetMetric(), 1)
+					require.Equal(t, uint64(0), family.GetMetric()[0].GetHistogram().GetSampleCount())
+				default:
+					t.Fatalf("unexpected metric family %q", family.GetName())
+				}
+			}
+			require.True(t, sawSubmission)
+			require.True(t, sawDuration)
 		})
 	}
 }
@@ -169,6 +204,71 @@ func TestSendSMS_NormalizesNilSDKResponse(t *testing.T) {
 	require.Equal(t, sms.ProviderError{Kind: sms.ErrorPermanent, Code: unknownCode}, *normalized)
 	for _, sensitive := range []string{sensitiveDestination, sensitiveBody} {
 		require.NotContains(t, err.Error(), sensitive)
+	}
+}
+
+// This fails if a 2xx SDK response without both an accepted Message SID and
+// initial status becomes an unusable accepted submission or known outcome.
+func TestSendSMS_NormalizesIncompleteAcceptedSDKResponse(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "empty object", body: `{}`},
+		{name: "missing message SID", body: `{"status":"queued"}`},
+		{name: "empty message SID", body: `{"sid":"","status":"queued"}`},
+		{name: "whitespace message SID", body: `{"sid":" ","status":"queued"}`},
+		{name: "missing initial status", body: `{"sid":"SM123"}`},
+		{name: "empty initial status", body: `{"sid":"SM123","status":""}`},
+		{name: "whitespace initial status", body: `{"sid":"SM123","status":" "}`},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			registry := prometheus.NewRegistry()
+			metrics, err := NewMetrics(registry)
+			require.NoError(t, err)
+
+			var requests atomic.Int32
+			sender := newSender(completeSenderConfig(), &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+				requests.Add(1)
+				return httpJSONResponse(request, http.StatusCreated, test.body), nil
+			})}, metrics)
+
+			submission, err := sender.SendSMS(context.Background(), sms.Command{ToE164: sensitiveDestination, Body: sensitiveBody})
+
+			require.Equal(t, sms.Submission{}, submission)
+			var providerErr *sms.ProviderError
+			require.ErrorAs(t, err, &providerErr)
+			require.Equal(t, sms.ProviderError{Kind: sms.ErrorPermanent, Code: unknownCode}, *providerErr)
+			require.Equal(t, int32(1), requests.Load())
+			for _, sensitive := range []string{sensitiveDestination, sensitiveBody, testAPIKeySecret} {
+				require.NotContains(t, err.Error(), sensitive)
+			}
+
+			families, err := registry.Gather()
+			require.NoError(t, err)
+			var sawSubmission, sawDuration bool
+			for _, family := range families {
+				switch family.GetName() {
+				case "trakrf_twilio_submissions_total":
+					sawSubmission = true
+					require.Len(t, family.GetMetric(), 1)
+					metric := family.GetMetric()[0]
+					require.Equal(t, float64(1), metric.GetCounter().GetValue())
+					require.Len(t, metric.GetLabel(), 1)
+					require.Equal(t, metricSubmissionResultUnknown, metric.GetLabel()[0].GetValue())
+				case "trakrf_twilio_request_duration_seconds":
+					sawDuration = true
+					require.Len(t, family.GetMetric(), 1)
+					require.Equal(t, uint64(1), family.GetMetric()[0].GetHistogram().GetSampleCount())
+				default:
+					t.Fatalf("unexpected metric family %q", family.GetName())
+				}
+			}
+			require.True(t, sawSubmission)
+			require.True(t, sawDuration)
+		})
 	}
 }
 
