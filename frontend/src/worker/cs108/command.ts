@@ -594,11 +594,20 @@ export class CommandManager {
           break;
         } catch (error: unknown) {
           // An abort is a decision, not a fault — never retry through one, and
-          // never tolerate one. Checked BEFORE the state announcement so an
-          // abort does not publish ERROR on its way past: the setMode taking
-          // over owns the state from here.
+          // never tolerate one. It publishes NO state on its way past: the
+          // operation taking over owns the state from here.
+          //
+          // This branch used to announce ERROR, which contradicted the sentence
+          // above it and cost the same thing the retry case did. A mode change
+          // taking the wire is not a fault, and announcing a terminal state on
+          // one woke a settings push parked on BUSY, which then found the reader
+          // not CONNECTED and dropped its targetEPC. Same defect, second route.
+          //
+          // Announcing nothing also leaves `busyAnnounced` set, so the reader
+          // stays BUSY across the handover rather than flashing a state nothing
+          // has actually reached, and the incoming operation's own
+          // announceSettled re-arms it. TRA-1237.
           if (error instanceof SequenceAbortedError) {
-            this.announceSettled(ReaderState.ERROR);
             throw error;
           }
 

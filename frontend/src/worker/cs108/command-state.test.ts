@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, type Mock } from 'vitest';
-import { CommandManager } from './command.js';
+import { CommandManager, SequenceAbortedError } from './command.js';
 import type { StateContext } from './state-context.js';
 import type { CommandSequence } from './type.js';
 import { ReaderState } from '../types/reader.js';
@@ -245,6 +245,55 @@ describe('CommandManager State Transitions', () => {
     // would also pass on a manager that published nothing at all.
     expect((mockStateContext.setReaderState as Mock).mock.calls.map(call => call[0]))
       .toEqual([ReaderState.BUSY, ReaderState.CONNECTED]);
+  });
+
+  /**
+   * An abort is a HANDOFF, not a fault.
+   *
+   * The comment on this branch has always said so — "an abort does not publish
+   * ERROR on its way past: the setMode taking over owns the state from here" —
+   * and the branch published ERROR anyway. Comment and code disagreed, and the
+   * code won, which is the same defect as the retry case above reached by a
+   * second route: a mode change taking the wire announced a terminal state, and
+   * a settings push parked on BUSY woke on it and dropped its targetEPC.
+   *
+   * Publishing nothing leaves `busyAnnounced` set, so the reader stays BUSY
+   * across the handover and the incoming operation's own announcement re-arms
+   * it. That is what "owns the state from here" means. TRA-1237.
+   */
+  it('does not publish ERROR when a sequence is aborted — the operation taking over owns the state', async () => {
+    const mockStateContext: StateContext = {
+      getReaderState: vi.fn().mockReturnValue(ReaderState.CONNECTED),
+      setReaderState: vi.fn()
+    };
+    const manager = new CommandManager(vi.fn(), undefined, mockStateContext);
+
+    // Two steps, so the abort lands BETWEEN them: runSequence resets the abort
+    // flag on entry, so a flag set before executeSequence would be cleared and
+    // the catch under test would never run.
+    const sequence: CommandSequence = [
+      { event: GET_BATTERY_VOLTAGE },
+      { event: GET_BATTERY_VOLTAGE, finalState: ReaderState.CONNECTED }
+    ];
+    const success = {
+      event: GET_BATTERY_VOLTAGE,
+      rawPayload: new Uint8Array([0x00, 0x50]),
+      eventCode: 0xA000,
+      payload: undefined
+    };
+
+    const executePromise = manager.executeSequence(sequence);
+    await new Promise(resolve => setTimeout(resolve, 5));
+
+    // Not awaited: abortSequence sets its flag synchronously and then waits for
+    // the in-flight command, which only completes on the response below.
+    void manager.abortSequence('mode change taking over');
+    manager.handleCommandResponse(success as any);
+
+    await expect(executePromise).rejects.toThrow(SequenceAbortedError);
+
+    expect((mockStateContext.setReaderState as Mock).mock.calls.map(call => call[0]))
+      .not.toContain(ReaderState.ERROR);
   });
 });
 describe('CommandManager transport write failure', () => {
