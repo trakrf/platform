@@ -373,19 +373,40 @@ class CS108Reader extends BaseReader {
     for (const packet of packets) {
       logger.debug(`Packet: ${packet.event.name} (0x${packet.eventCode.toString(16)}), isCommand: ${packet.event.isCommand}, isNotification: ${packet.event.isNotification}`);
 
-      // Special handling for ERROR_NOTIFICATION with "Wrong header prefix" error
-      // This error occurs when the CS108 hardware misinterprets fragmented inventory packets
-      // as malformed commands. This is a known hardware issue that occurs during RFID operations.
-      // Since inventory packets are streaming and non-critical, we can safely ignore these
-      // specific errors. They don't indicate actual communication problems.
-      if (packet.event.name === 'ERROR_NOTIFICATION' && packet.rawPayload.length >= 2) {
-        const errorCode = (packet.rawPayload[0] << 8) | packet.rawPayload[1];
-        if (errorCode === 0x0000) {
-          // Always ignore "Wrong header prefix" errors - they're spurious from the hardware
-          // The CS108 firmware incorrectly interprets its own fragmented packets as commands
-          logger.debug('[Reader] Ignoring spurious "Wrong header prefix" error from CS108 hardware');
-          continue; // Skip this packet entirely
+      // A rejection is a FAULT, and it is handled before ordinary routing.
+      //
+      // `0xA101` says the device refused something we sent, or that it is in a
+      // state that needs addressing before business as usual. It is also the
+      // only way the CS108 reports a refusal: a rejection comes back under
+      // 0xA101 and never under the op code being rejected, so the command that
+      // caused it sees nothing and waits out its own timeout.
+      //
+      // This block used to do the opposite. It matched code 0x0000 and
+      // `continue`d, on the belief that those frames were "spurious" and did
+      // not "indicate actual communication problems". The 2026-09-01 hardware
+      // capture measured 1543 of them across one 86-minute window — one per
+      // unanswered command, median 34 ms after the command they answered,
+      // against 26 ms for a healthy reply to the same op code. They were
+      // replies, and 0x0000 was the code the device actually used, so the
+      // discard threw away every one of them before any handler ran. The window
+      // presented as a silent device for the length of an entire soak arm.
+      //
+      // Handled up front rather than left to the isCommand/isNotification
+      // dispatch below, because under that dispatch a fault arriving while a
+      // command is in flight goes to the command path and is never counted,
+      // while one arriving idle goes to the notification path and never settles
+      // anything. A fault should not have to win a routing race to be seen.
+      //
+      // Refs: TRA-1229, TRA-1223.
+      if (packet.event.name === 'ERROR_NOTIFICATION') {
+        // Always: name it, count it, surface it.
+        this.notificationRouter.handleNotification(packet);
+
+        // And fail the command it answers, rather than letting it time out.
+        if (this.commandManager.isWaitingForResponse(packet)) {
+          this.commandManager.handleCommandResponse(packet);
         }
+        continue;
       }
 
       // First check if this is a command response we're waiting for.

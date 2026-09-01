@@ -169,7 +169,12 @@ describe('Notification System Integration', () => {
           isCommand: false,
           isNotification: true,
         } as CS108Event,
-        payload: 0x0004, // Unknown event error
+        // 0x0003 is "Unknown event" in the byte-stream spec. This test used to
+        // pass 0x0004 and expect "Unknown event code", which is the off-by-one
+        // that TRA-1229 removed: the enum numbered every spec code one higher,
+        // so the device's real codes were mislabelled and 0x0000 — the one it
+        // actually sends — fell off the end of the map entirely.
+        payload: 0x0003,
         rawData: new Uint8Array([]),
         timestamp: Date.now(),
       };
@@ -181,8 +186,8 @@ describe('Notification System Integration', () => {
         type: 'DEVICE_ERROR',
         payload: {
           severity: 'warning',
-          message: 'Unknown event code',
-          code: '0004',
+          message: 'Unknown event',
+          code: '0003',
           details: { module: undefined },
         },
         timestamp: expect.any(Number)

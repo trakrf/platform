@@ -331,6 +331,46 @@ const REFERENCE_DENSITY = {
  * Read it alongside the window table, not instead of it: this one says WHAT went
  * unanswered, that one says whether the tolerance held.
  */
+/**
+ * Device-raised rejections per rep (TRA-1229).
+ *
+ * `0xA101` is how the CS108 refuses a command — the rejection never comes back
+ * under the op code being rejected, so the command that caused it sees nothing
+ * and times out. Until TRA-1229 these were discarded in `reader.ts` and this
+ * table would have read empty through an 86-minute fault storm carrying 1543 of
+ * them.
+ *
+ * Read it ALONGSIDE the op-code table above: a rep with many unanswered
+ * commands and a matching error count was refused, not ignored, and those are
+ * different defects. A rep with unanswered commands and NO errors is the case
+ * where the device really did go quiet.
+ */
+export function errorNotificationTable(records) {
+  const seen = records.filter(r => r.signals?.errorNotifications != null);
+  if (seen.length === 0) {
+    return '_No rep could observe error notifications — a runner that cannot see them._';
+  }
+  const withErrors = seen.filter(r => r.signals.errorNotifications > 0);
+  const total = seen.reduce((n, r) => n + r.signals.errorNotifications, 0);
+  if (withErrors.length === 0) {
+    return `_No rep raised a device rejection (0 across ${seen.length} rep(s) that could see them)._`;
+  }
+  const worst = withErrors.reduce((a, b) =>
+    b.signals.errorNotifications > a.signals.errorNotifications ? b : a);
+  const lines = [
+    '| measure | value |',
+    '| -- | -- |',
+    `| reps raising at least one rejection | ${withErrors.length}/${seen.length} |`,
+    `| total rejections | ${total} |`,
+    `| worst rep | ${worst.rep} (${worst.signals.errorNotifications}) |`,
+    '',
+    '⚠ **A rejection means the device refused the command, not that it ignored it.**',
+    'Compare against the op-code table above: unanswered commands WITH a matching',
+    'rejection count are refusals; unanswered commands with none are silence. Refs TRA-1229.',
+  ];
+  return lines.join('\n');
+}
+
 export function commandTimeoutsByOpTable(records) {
   // RESOLVED, not read raw. Every archived arm predates this field, and its logs
   // are usually still on disk — reading `r.signals` directly would report the
@@ -618,6 +658,8 @@ function main() {
   console.log(powerOffWindowTable(records));
   console.log(`\n## Every unanswered command, by op code\n`);
   console.log(commandTimeoutsByOpTable(records));
+  console.log(`\n## Device-raised rejections (0xA101)\n`);
+  console.log(errorNotificationTable(records));
   console.log(`\n## Field density\n`);
   console.log(densityTable(records));
   console.log(`\n## Record integrity\n`);
