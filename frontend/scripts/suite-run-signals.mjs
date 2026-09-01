@@ -147,6 +147,46 @@ export const COMMAND_TIMEOUT_PREFIX = '[CommandManager] Command timeout: ';
  * the caller must keep that distinct from the `null` a runner gets when it
  * cannot observe these at all. Same null-vs-zero rule as everywhere else here.
  */
+/**
+ * The producer's own running total, as it appears in a `[CS108 Error]` line.
+ *
+ * Exported so the parser below and any future needle read the same shape, and
+ * so `every-signal-needle-has-a-producer` can find the string in `src/`.
+ */
+export const ERROR_NOTIFICATION_TOTAL_RE = /\[CS108 Error\][^\n]*?\[(\d+) seen this session\]/g;
+
+/**
+ * How many `0xA101` ERROR_NOTIFICATION frames the worker saw in a rep (TRA-1229).
+ *
+ * ## Why this reads a total instead of counting lines
+ *
+ * `0xA101` is how the CS108 refuses a command: the rejection comes back under
+ * 0xA101 and never under the op code being rejected. On the 2026-09-01 arm the
+ * device sent 1543 of them inside one 86-minute window, one per unanswered
+ * command, 34 ms after the command they answered. The arm reported none of it:
+ * `reader.ts` discarded the frames, and the handler's rate limiter would have
+ * capped what survived at a handful of lines per code anyway.
+ *
+ * The discard is gone, but the rate limiter stays — an 18-per-minute fault
+ * storm should not bury the rep log. So counting lines would undercount by two
+ * orders of magnitude, which is the failure this file exists to prevent:
+ * a confident number measured off the wrong population.
+ *
+ * The producer therefore carries its own unconditional total on every line it
+ * does emit, and this takes the highest. One surviving line reports the truth.
+ *
+ * ⚠ Returns 0 for a clean rep — a real measurement — never `null`. Same
+ * null-vs-zero rule as the rest of this table.
+ */
+export function countErrorNotifications(text) {
+  let max = 0;
+  for (const m of text.matchAll(ERROR_NOTIFICATION_TOTAL_RE)) {
+    const n = Number(m[1]);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return max;
+}
+
 export function countCommandTimeouts(text) {
   const counts = {};
   // SPLIT on the literal prefix rather than interpolating it into a RegExp.
@@ -564,6 +604,10 @@ export function readSignals(logPath, runner = 'vitest') {
   // would read as "the device answered everything", which is a claim this
   // record has no standing to make.
   counts.commandTimeouts = runner === 'vitest' ? countCommandTimeouts(text) : null;
+  // `0xA101` fault frames (TRA-1229). Same null-on-a-blind-runner rule: a 0
+  // here means the device raised no rejections, and that is only sayable by a
+  // runner that could have seen them.
+  counts.errorNotifications = runner === 'vitest' ? countErrorNotifications(text) : null;
   return counts;
 }
 

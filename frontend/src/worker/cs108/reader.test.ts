@@ -195,6 +195,63 @@ describe('CS108Reader', () => {
       expect(commandManagerMock.handleCommandResponse).toHaveBeenCalledWith(mockPacket);
     });
 
+    /**
+     * `0xA101` carrying 0x0000 used to be matched and `continue`d before any
+     * routing, on a comment asserting it was "spurious" and did not "indicate
+     * actual communication problems". The 2026-09-01 hardware capture measured
+     * 1543 of them in 86 minutes, one per unanswered command, arriving a median
+     * 34 ms after the command they answered — the same latency as a healthy
+     * reply. The discard is why an 86-minute fault storm reached no handler at
+     * all. Refs TRA-1229.
+     */
+    it('does not discard the ERROR_NOTIFICATION the device actually sends (0x0000)', () => {
+      const mockPacket: CS108Packet = {
+        header: { prefix: 0xA7B3, messageLength: 2, flags: 0, reserved: 0, crc: 0 },
+        eventCode: 0xA101,
+        event: { eventCode: 0xA101, name: 'ERROR_NOTIFICATION', isCommand: true, isNotification: true },
+        rawPayload: new Uint8Array([0x00, 0x00]),
+        payload: 0x0000
+      } as unknown as CS108Packet;
+
+      (packetHandlerMock.processIncomingData as Mock).mockReturnValue([mockPacket]);
+      (commandManagerMock.isWaitingForResponse as Mock).mockReturnValue(false);
+
+      (reader as any).handleBleData(new Uint8Array([0xA7, 0xB3]));
+
+      const router = (notificationManagerMock.getRouter as Mock).mock.results[0]?.value ||
+                     (notificationManagerMock.getRouter as Mock)();
+      expect(router.handleNotification).toHaveBeenCalledWith(mockPacket);
+    });
+
+    /**
+     * A rejection is a fault: it says we sent something the device refused, or
+     * that the device is in a state that needs addressing before business as
+     * usual. It must not have to win a routing race against the ordinary
+     * isCommand/isNotification dispatch to be seen.
+     */
+    it('routes ERROR_NOTIFICATION to the fault path even while a command is in flight', () => {
+      const mockPacket: CS108Packet = {
+        header: { prefix: 0xA7B3, messageLength: 2, flags: 0, reserved: 0, crc: 0 },
+        eventCode: 0xA101,
+        event: { eventCode: 0xA101, name: 'ERROR_NOTIFICATION', isCommand: true, isNotification: true },
+        rawPayload: new Uint8Array([0x00, 0x00]),
+        payload: 0x0000
+      } as unknown as CS108Packet;
+
+      (packetHandlerMock.processIncomingData as Mock).mockReturnValue([mockPacket]);
+      // A command IS in flight and the manager would claim this packet.
+      (commandManagerMock.isWaitingForResponse as Mock).mockReturnValue(true);
+
+      (reader as any).handleBleData(new Uint8Array([0xA7, 0xB3]));
+
+      // It still reaches the error handler, so the fault is counted and named,
+      // and it still settles the command rather than letting it time out.
+      const router = (notificationManagerMock.getRouter as Mock).mock.results[0]?.value ||
+                     (notificationManagerMock.getRouter as Mock)();
+      expect(router.handleNotification).toHaveBeenCalledWith(mockPacket);
+      expect(commandManagerMock.handleCommandResponse).toHaveBeenCalledWith(mockPacket);
+    });
+
     it('should route notification packets to notification router', () => {
       const testData = new Uint8Array([0xA7, 0xB3, 0x00, 0x02]);
       const mockPacket: CS108Packet = {

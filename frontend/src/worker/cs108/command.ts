@@ -24,6 +24,7 @@ import type { CommandSequence } from './type.js';
 import type { StateContext } from './state-context.js';
 import { PacketHandler } from './packet.js';
 import { logger } from '../utils/logger.js';
+import { describeErrorCode } from './system/error.js';
 import { ReaderState, type ReaderStateType } from '../types/reader.js';
 
 /**
@@ -387,14 +388,12 @@ export class CommandManager {
       let errorMessage = `Command failed: ${packet.event.name}`;
       if (packet.event.name === 'ERROR_NOTIFICATION' && packet.rawPayload.length >= 2) {
         const errorCode = (packet.rawPayload[0] << 8) | packet.rawPayload[1];
-        // Map known error codes
-        const errorMessages: Record<number, string> = {
-          0x0000: 'Wrong header prefix',
-          0x0001: 'Payload length too large',
-          0x0002: 'Unknown target',
-          0x0003: 'Unknown event'
-        };
-        const errorDesc = errorMessages[errorCode] || `Unknown error 0x${errorCode.toString(16).padStart(4, '0')}`;
+        // One table, in system/error.ts. It used to be duplicated here, and the
+        // two copies disagreed: this one matched the spec while the other
+        // numbered every code one higher, so the same wire bytes were named
+        // correctly on this path and as "Unknown error" on the notification
+        // path. Refs TRA-1229.
+        const errorDesc = describeErrorCode(errorCode);
         errorMessage = `Command rejected: ${errorDesc} (0x${errorCode.toString(16).padStart(4, '0')})`;
 
         // If this is a "Wrong header prefix" error, log packet history for debugging

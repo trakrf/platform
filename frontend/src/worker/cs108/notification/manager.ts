@@ -69,6 +69,12 @@ export interface NotificationManagerConfig {
 export class NotificationManager {
   private router: NotificationRouter;
   private config: NotificationManagerConfig;
+  /**
+   * Held as a field, not constructed inline at registration, so its counts are
+   * reachable. `0xA101` is a fault signal and its arrival rate is diagnostic —
+   * an 86-minute fault storm reached the log as 8 lines. Refs TRA-1229.
+   */
+  private readonly errorNotificationHandler = new ErrorNotificationHandler();
 
   constructor(
     emitNotificationEvent: (event: Omit<WorkerEvent, 'timestamp'>) => void,
@@ -101,7 +107,7 @@ export class NotificationManager {
     this.router.register(EventCodes.TRIGGER_STATE, new TriggerStateHandler());
     this.router.register(EventCodes.TRIGGER_PRESSED, new TriggerPressedHandler());
     this.router.register(EventCodes.TRIGGER_RELEASED, new TriggerReleasedHandler());
-    this.router.register(EventCodes.ERROR_NOTIFICATION, new ErrorNotificationHandler());
+    this.router.register(EventCodes.ERROR_NOTIFICATION, this.errorNotificationHandler);
 
     // RFID handlers
     // Create inventory handler with default configuration
@@ -131,6 +137,11 @@ export class NotificationManager {
    */
   getRouter(): NotificationRouter {
     return this.router;
+  }
+
+  /** The `0xA101` handler, for its unconditional arrival counts. Refs TRA-1229. */
+  getErrorNotificationHandler(): ErrorNotificationHandler {
+    return this.errorNotificationHandler;
   }
 
 
