@@ -77,6 +77,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, appendFileSync, rmSync, existsSync, openSync, closeSync } from 'node:fs';
+import { formatRepLine, formatProgressBlock } from './arm-progress.mjs';
 import path from 'node:path';
 import { readSignals, readReadCycles } from './suite-run-signals.mjs';
 
@@ -107,6 +108,15 @@ const RECORD_SCHEMA = 3;
 const RUN_ID = new Date().toISOString().replace(/[:.]/g, '-');
 const ARTIFACT_DIR = path.resolve(process.cwd(), '.suite-runs');
 const RECORD_PATH = path.join(ARTIFACT_DIR, 'runs.jsonl');
+
+/**
+ * How often the progress block prints, in reps (TRA-1240).
+ *
+ * Ten is roughly 22 minutes at a healthy 135s rep — often enough to catch a
+ * wedge while it is still worth stopping for, rare enough that the block does
+ * not become the noise it exists to cut through.
+ */
+const PROGRESS_EVERY = 10;
 const SUITE_ROOTS = {
   vitest: 'tests/integration/',
   e2e: 'tests/e2e/',
@@ -819,6 +829,11 @@ function main() {
   );
   console.log(`[suite-runs] stop cleanly with: touch ${path.relative(process.cwd(), stopFile)}`);
 
+  // Held in memory only for the progress block; `runs.jsonl` remains the record
+  // and is unchanged. TRA-1240.
+  const done = [];
+  const startedAt = Date.now();
+
   for (let rep = 1; rep <= args.reps; rep += 1) {
     if (existsSync(stopFile)) {
       console.log(`[suite-runs] STOP seen; finished ${rep - 1}/${args.reps} repetitions.`);
@@ -826,19 +841,24 @@ function main() {
       break;
     }
     const record = runOnce({ ...args, rep, appPreflight: app });
-    const failedFiles = record.files.filter((f) => f.status === 'failed');
-    const summary = failedFiles.length
-      ? failedFiles.map((f) => `${f.name} (${f.failed.length})`).join(', ')
-      : 'none';
-    console.log(
-      `[suite-runs] ${args.shape} rep ${rep}/${args.reps}` +
-        ` exit=${record.exitCode}` +
-        ` ${Math.round(record.durationMs / 1000)}s` +
-        ` clients@start=${record.wsClientsAtStart}` +
-        ` failed: ${summary}` +
-        (record.reportMissing ? ' [REPORT MISSING]' : '')
-    );
+    done.push(record);
+
+    // One line per rep, now carrying WHY. The previous line reported `exit=1`
+    // and a list of absolute spec paths, which meant every diagnosis started by
+    // opening a per-rep log, and a wedge rep — the one most worth reading —
+    // rendered as ~350 characters of five full paths. TRA-1240.
+    console.log(`[suite-runs] ${formatRepLine(record, args.reps)}`);
+
+    // An aggregate every PROGRESS_EVERY reps. The strip is the part that earns
+    // its place: a wedge is a RUN of consecutive failures, and totals cannot
+    // show a run — seven scattered and seven consecutive are the same number and
+    // completely different arms.
+    if (rep % PROGRESS_EVERY === 0 && rep !== args.reps) {
+      console.log(formatProgressBlock(done, args.reps, startedAt));
+    }
   }
+
+  if (done.length) console.log(formatProgressBlock(done, args.reps, startedAt));
 
   console.log(`[suite-runs] record: ${RECORD_PATH}`);
 }
