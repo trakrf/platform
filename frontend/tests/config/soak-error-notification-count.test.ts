@@ -12,7 +12,15 @@
  * rep log. So the producer carries its own running total and the parser reads
  * the highest one. A rate-limited line still reports an accurate count.
  *
- * Refs: TRA-1229.
+ * ⚠ These fixtures are SYNTHETIC — they were written by hand and so cannot
+ * catch a producer that stops emitting what they describe. That is exactly how
+ * the original design shipped: the parser was verified against a log that had
+ * never been through the rate limiter. The test that closes that gap drives the
+ * real handler and reads what it actually wrote —
+ * `src/worker/cs108/error-count-survives-rate-limiting.test.ts`. Keep both:
+ * this one pins the grammar, that one pins the contract.
+ *
+ * Refs: TRA-1229, TRA-1231.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -21,10 +29,11 @@ import { countErrorNotifications, ERROR_NOTIFICATION_TOTAL_RE } from '../../scri
 describe('countErrorNotifications', () => {
   it('reads the running total rather than counting rate-limited lines', () => {
     const text = [
-      '[Worker] ERROR: [CS108 Error] Wrong header prefix (0x0000) [1 seen this session]',
+      '[Worker] WARN: [CS108 Error] fault-count total=1 code=0x0000',
+      '[Worker] ERROR: [CS108 Error] Wrong header prefix (0x0000)',
       'noise',
-      '[Worker] ERROR: [CS108 Error] Wrong header prefix (0x0000) [742 seen this session]',
-      '[Worker] ERROR: [CS108 Error] Wrong header prefix (0x0000) [1543 seen this session]',
+      '[Worker] WARN: [CS108 Error] fault-count total=742 code=0x0000',
+      '[Worker] WARN: [CS108 Error] fault-count total=1543 code=0x0000',
     ].join('\n');
 
     expect(countErrorNotifications(text)).toBe(1543);
@@ -41,6 +50,17 @@ describe('countErrorNotifications', () => {
 
   it('is not fooled by a line that merely mentions the prefix', () => {
     expect(countErrorNotifications('[CS108 Error] something without a total')).toBe(0);
+  });
+
+  /**
+   * ⚠ The descriptive line is RATE LIMITED and must not be the count's source.
+   * Reading a total off it undercounts whenever a storm ends inside the
+   * suppression window — measured at exactly 2x on a 3-rep mini arm.
+   */
+  it('ignores the rate-limited descriptive line', () => {
+    expect(countErrorNotifications(
+      '[Worker] ERROR: [CS108 Error] Wrong header prefix (0x0000) (9 occurrences in last 5s)'
+    )).toBe(0);
   });
 
   it('exports the pattern so the needle and the parser cannot drift apart', () => {

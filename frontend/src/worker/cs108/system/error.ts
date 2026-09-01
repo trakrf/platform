@@ -118,6 +118,27 @@ export class ErrorNotificationHandler implements NotificationHandler {
     this.errorCounts.set(errorCode, (this.errorCounts.get(errorCode) ?? 0) + 1);
     this.totalErrors += 1;
 
+    // ⚠ UNCONDITIONAL, and separate from the descriptive line above on purpose.
+    //
+    // TRA-1229 put the running total on the rate-limited line, reasoning that a
+    // surviving line still reports an accurate count. **The limiter eats the
+    // tail**: at a threshold of 3, six arrivals inside the interval log totals
+    // 1, 2, 3 and suppress the rest, so the highest LOGGED total is not the
+    // final total. A 3-rep mini arm measured the bridge seeing 18 frames while
+    // the instrument reported 9 — exactly half.
+    //
+    // The limiter stays: it is what keeps an 18-per-minute fault storm from
+    // burying a rep log, and that is a job worth doing. The count simply must
+    // not depend on it. One terse line per arrival costs ~40 lines per rep at
+    // occurrence-3 rates, which is nothing.
+    //
+    // Parsed by `ERROR_NOTIFICATION_TOTAL_RE` in scripts/suite-run-signals.mjs
+    // — keep the wording in step. Refs TRA-1231.
+    logger.warn(
+      `[CS108 Error] fault-count total=${this.totalErrors} ` +
+      `code=0x${errorCode.toString(16).padStart(4, '0')}`
+    );
+
     // Check rate limiting
     if (this.shouldLog(errorCode)) {
       const rateInfo = this.errorRateLimit.get(errorCode);
@@ -125,15 +146,8 @@ export class ErrorNotificationHandler implements NotificationHandler {
         ? ` (${rateInfo.count} occurrences in last ${this.ERROR_LOG_INTERVAL_MS / 1000}s)`
         : '';
 
-      // The running total rides the line because the line is rate-limited and
-      // the count must not be. A soak arm reads the highest total it sees, so
-      // one surviving line still reports an accurate figure for a storm that
-      // logged a hundredth of its arrivals. Parsed by
-      // `scripts/suite-run-signals.mjs` — keep the wording in step with
-      // `ERROR_NOTIFICATION_TOTAL_RE` there. Refs TRA-1229.
       logger.error(
-        `[CS108 Error] ${description} (0x${errorCode.toString(16).padStart(4, '0')})${suffix}` +
-        ` [${this.totalErrors} seen this session]`
+        `[CS108 Error] ${description} (0x${errorCode.toString(16).padStart(4, '0')})${suffix}`
       );
     }
 
