@@ -396,6 +396,18 @@ export class CommandManager {
         const errorDesc = describeErrorCode(errorCode);
         errorMessage = `Command rejected: ${errorDesc} (0x${errorCode.toString(16).padStart(4, '0')})`;
 
+        // Counted per op by the soak instrument, exactly as `Command timeout:`
+        // is. It has to be its own line: TRA-1229 settles a refused command
+        // from its 0xA101 reply in ~34ms, which CLEARS the timeout, so the
+        // timeout line never fires and every needle keyed to it reads zero
+        // through a fault storm. Keep the wording in step with
+        // COMMAND_REJECTION_PREFIX in scripts/suite-run-signals.mjs.
+        // Refs TRA-1230.
+        logger.warn(
+          `[CommandManager] Command rejected: ${inFlight.name} — ${errorDesc} ` +
+          `(0x${errorCode.toString(16).padStart(4, '0')})`
+        );
+
         // If this is a "Wrong header prefix" error, log packet history for debugging
         if (errorCode === 0x0000) {
           const debugReport = this.packetHandler.getDebugReport('Wrong header prefix (0x0000)');
@@ -623,10 +635,15 @@ export class CommandManager {
         // what it was told and nobody is informed by an exception, so the log
         // line is the whole record — and it is what a soak report greps for.
         const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
+        // "went unanswered" was true when the only way to fail was a timeout.
+        // Since TRA-1229 a command can also be ANSWERED with a refusal, and
+        // calling that unanswered is the same category error the whole
+        // 0xA101 investigation turned on. Refs TRA-1230.
+        const refused = errorMessage.startsWith('Command rejected:');
         logger.warn(
           `[CommandManager] ${cmd.event.name} (0x${cmd.event.eventCode.toString(16)}) ` +
-          `went unanswered after ${delays.length + 1} attempt(s): ${errorMessage} — ` +
-          `tolerated, continuing the sequence`
+          `${refused ? 'was refused' : 'went unanswered'} after ${delays.length + 1} attempt(s): ` +
+          `${errorMessage} — tolerated, continuing the sequence`
         );
       }
 

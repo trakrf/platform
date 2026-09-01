@@ -487,14 +487,38 @@ export function powerOffWindowTable(records) {
   const cleanupFailed = sum('modeSwitchFailed');
   const n = observable.length;
 
+  // Refusals are the THIRD state, and without them a refusal window falls into
+  // the branch written for a quiet device. Since TRA-1229 a refused command is
+  // settled from its 0xA101 reply in ~34ms, which clears the timeout, so
+  // `timeouts` is 0 through a storm of them. Refs TRA-1230.
+  const rejByOp = {};
+  for (const r of observable) {
+    for (const [op, c] of Object.entries(r.signals.commandRejections ?? {})) {
+      rejByOp[op] = (rejByOp[op] ?? 0) + c;
+    }
+  }
+  const rejections = Object.values(rejByOp).reduce((a, b) => a + b, 0);
+  const repsRefused = observable.filter(
+    (r) => Object.keys(r.signals.commandRejections ?? {}).length > 0
+  ).length;
+
   const lines = [
     '| signal | occurrences | reps affected |',
     '| -- | -- | -- |',
     `| \`Command timeout: RFID_POWER_OFF\` — device silent | ${timeouts} | ${repsWith('powerOffTimeouts')}/${n} |`,
     `| tolerated, sequence continued — rescued by TRA-1217 | ${tolerated} | ${repsWith('toleratedPowerOffs')}/${n} |`,
     `| \`Mode switching failed during cleanup\` — tolerance did NOT hold | ${cleanupFailed} | ${repsWith('modeSwitchFailed')}/${n} |`,
+    `| \`Command rejected\` — device REFUSED, did not go silent | ${rejections} | ${repsRefused}/${n} |`,
     '',
   ];
+
+  if (rejections > 0) {
+    const byOp = Object.entries(rejByOp)
+      .sort((a, b) => b[1] - a[1])
+      .map(([op, c]) => `\`${op}\` ${c}`)
+      .join(', ');
+    lines.push(`Refused op codes: ${byOp}`, '');
+  }
 
   if (cleanupFailed > 0) {
     lines.push(
@@ -507,6 +531,16 @@ export function powerOffWindowTable(records) {
       `**The window occurred and was absorbed.** ${timeouts} unanswered \`RFID_POWER_OFF\` ` +
         `attempt(s) across ${repsWith('powerOffTimeouts')} rep(s), no cleanup failures. Before ` +
         'TRA-1217 these reps would have failed. This is the arm that earns the fix its credit.'
+    );
+  } else if (rejections > 0) {
+    lines.push(
+      `**REFUSED, not silent — and this is a THIRD state the older wording had no room for.** ` +
+        `${rejections} command(s) across ${repsRefused} rep(s) came back with an explicit ` +
+        'rejection, answered in ~34ms rather than left unanswered. `powerOffTimeouts` reads 0 ' +
+        'because TRA-1229 settles a refused command from its `0xA101` reply before the timeout ' +
+        'can fire — so a zero there is NOT a quiet device here. Read the refused op codes above: ' +
+        '"no answer came" and "the answer was no" are different device behaviours and the ' +
+        'distinction is what TRA-1223 turned on.'
     );
   } else {
     lines.push(

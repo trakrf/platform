@@ -374,14 +374,15 @@ describe('signals are per-runner, and absence is not zero', () => {
   it('vitest signals are byte-identical to today — no e2e keys leak in', () => {
     const log = fixture('vitest.log', '[Harness] connect\n[Harness] disconnect\n');
     const counts = readSignals(log, 'vitest');
-    // `commandTimeouts` and `errorNotifications` are named explicitly because
-    // neither is a needle — one is a parsed per-op map (TRA-1226), the other a
+    // `commandTimeouts`, `errorNotifications` and `commandRejections` are named
+    // explicitly because none of them is a needle — one is a parsed per-op map (TRA-1226), the other a
     // running total read off the producer's own line (TRA-1229) — so deriving
     // the expected key set from SIGNALS alone cannot see either. Listing them
     // keeps this assertion exact rather than quietly loosening it to a subset
     // check: a genuine e2e leak must still fail, and it does, below.
     expect(Object.keys(counts).sort()).toEqual(
-      ['logMissing', 'commandTimeouts', 'errorNotifications', ...Object.keys(SIGNALS)].sort()
+      ['logMissing', 'commandTimeouts', 'errorNotifications', 'commandRejections',
+       ...Object.keys(SIGNALS)].sort()
     );
     expect(counts.harnessLines).toBe(2);
   });

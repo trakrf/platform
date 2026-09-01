@@ -187,6 +187,53 @@ export function countErrorNotifications(text) {
   return max;
 }
 
+/**
+ * The prefix a refused command logs, mirroring `COMMAND_TIMEOUT_PREFIX`.
+ *
+ * Exported so the parser and the producer cannot drift, and so
+ * `every-signal-needle-has-a-producer` can find the string in `src/`.
+ */
+export const COMMAND_REJECTION_PREFIX = '[CommandManager] Command rejected: ';
+
+/**
+ * Every command the DEVICE refused, by op name (TRA-1230).
+ *
+ * ## Why this exists separately from countCommandTimeouts
+ *
+ * `[CommandManager] Command timeout: <name>` is logged from exactly one place —
+ * the `setTimeout` callback. TRA-1229 settles a refused command from its
+ * `0xA101` reply in ~34ms, which CLEARS that timeout, so the line never fires.
+ * Every needle keyed to it then reads a confident zero: on the 2026-09-01 arm
+ * shape that turns `powerOffTimeouts 1115` into `0` and the per-op table into
+ * `{}`, through a window in which the device refused ~1500 commands.
+ *
+ * A timeout and a refusal are different device behaviours — "no answer came"
+ * versus "the answer was no" — and collapsing them would lose the distinction
+ * the whole TRA-1223 investigation turned on. So they are counted separately
+ * and read together.
+ *
+ * Parsed per op for the same reason as the timeout table: a fixed list counts
+ * only what somebody enumerated. `GET_TRIGGER_STATE` reached no summary for
+ * weeks because nobody had thought to add it.
+ *
+ * ⚠ Returns `{}` for a rep that carried no refusals — a real measurement — and
+ * the caller must keep that distinct from the `null` a runner gets when it
+ * cannot observe these at all.
+ */
+export function countCommandRejections(text) {
+  const counts = {};
+  // SPLIT on the literal prefix rather than interpolating into a RegExp, for
+  // the reason spelled out on countCommandTimeouts: a pattern assembled from a
+  // string is correct only while nobody edits the string.
+  const parts = text.split(COMMAND_REJECTION_PREFIX);
+  for (let i = 1; i < parts.length; i += 1) {
+    // `<OP_NAME> — <desc> (0xNNNN)` — the op name runs to the first space.
+    const op = parts[i].split(/[\s\n]/, 1)[0];
+    if (op) counts[op] = (counts[op] ?? 0) + 1;
+  }
+  return counts;
+}
+
 export function countCommandTimeouts(text) {
   const counts = {};
   // SPLIT on the literal prefix rather than interpolating it into a RegExp.
@@ -608,6 +655,9 @@ export function readSignals(logPath, runner = 'vitest') {
   // here means the device raised no rejections, and that is only sayable by a
   // runner that could have seen them.
   counts.errorNotifications = runner === 'vitest' ? countErrorNotifications(text) : null;
+  // Per-op REFUSALS (TRA-1230). Counted apart from timeouts because they are
+  // different device behaviours and because the timeout needle cannot see them.
+  counts.commandRejections = runner === 'vitest' ? countCommandRejections(text) : null;
   return counts;
 }
 
