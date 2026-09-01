@@ -178,18 +178,51 @@ export const ERROR_NOTIFICATION_TOTAL_RE = /\[CS108 Error\] fault-count total=(\
  * a confident number measured off the wrong population.
  *
  * The producer therefore carries its own unconditional total on every line it
- * does emit, and this takes the highest. One surviving line reports the truth.
+ * does emit, and a rate-limited line still reports an accurate count.
+ *
+ * ## Why the highest total is NOT the answer (TRA-1236)
+ *
+ * The counter lives on `ErrorNotificationHandler`, which is per WORKER SESSION.
+ * A wedged rep reconnects repeatedly, so each session writes its own
+ * `total=1,2,3…` sequence and the highest number in the log belongs to whichever
+ * session ran longest — not to the rep. Taking a global maximum read one session
+ * and called it the rep.
+ *
+ * It was ~10x low precisely in the wedged reps, which are the ones an arm exists
+ * to measure, and correct everywhere else:
+ *
+ *   rep 137  errNotif 4  rejections 36
+ *   rep 140  errNotif 3  rejections 39
+ *
+ * Found by an inequality that cannot hold — every rejection IS an 0xA101 and not
+ * every 0xA101 produces a rejection, so `rejections <= errorNotifications` is
+ * forced, and the arm reported 247 > 208.
+ *
+ * So: walk the totals and sum the maximum of each monotonically increasing run.
+ * A total that is less than OR EQUAL TO its predecessor starts a new run —
+ * equality counts because a single session never emits the same total twice, the
+ * counter being incremented before the line is written. Equality can therefore
+ * only mean the counter was reset.
  *
  * ⚠ Returns 0 for a clean rep — a real measurement — never `null`. Same
  * null-vs-zero rule as the rest of this table.
  */
 export function countErrorNotifications(text) {
-  let max = 0;
+  let total = 0;
+  let runMax = 0;
   for (const m of text.matchAll(ERROR_NOTIFICATION_TOTAL_RE)) {
     const n = Number(m[1]);
-    if (Number.isFinite(n) && n > max) max = n;
+    if (!Number.isFinite(n)) continue;
+    if (n <= runMax) {
+      // The counter went backwards or repeated: a new worker session started.
+      // Bank the run that just ended before opening the next one.
+      total += runMax;
+      runMax = n;
+    } else {
+      runMax = n;
+    }
   }
-  return max;
+  return total + runMax;
 }
 
 /**
