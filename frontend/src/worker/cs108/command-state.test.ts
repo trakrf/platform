@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, type Mock } from 'vitest';
 import { CommandManager } from './command.js';
 import type { StateContext } from './state-context.js';
 import type { CommandSequence } from './type.js';
@@ -184,6 +184,67 @@ describe('CommandManager State Transitions', () => {
     expect(mockStateContext.setReaderState).toHaveBeenCalledTimes(2);
     expect(mockStateContext.setReaderState).toHaveBeenNthCalledWith(1, ReaderState.BUSY);
     expect(mockStateContext.setReaderState).toHaveBeenNthCalledWith(2, ReaderState.CONNECTED);
+  });
+
+  /**
+   * ERROR is a verdict on the SEQUENCE, never on one attempt of one step.
+   *
+   * It used to be published from inside the attempt loop, before `retryDelays`
+   * were walked — so a command that failed once and succeeded on the retry
+   * announced "the hardware is in an unknown condition" and then recovered from
+   * it about two seconds later.
+   *
+   * That is not a cosmetic flicker. `Reader.waitForSettledState` treats ERROR as
+   * a state a transition has SETTLED into, so a settings push parked on BUSY was
+   * woken by it, found the reader not CONNECTED, and dropped the targetEPC it was
+   * carrying — leaving Locate to search on the previous tag's mask. 27 of 33
+   * failures in the 2026-09-01 200-rep arm trace to exactly that. TRA-1237.
+   */
+  it('does not publish ERROR for a step that fails once and succeeds on retry', async () => {
+    const mockStateContext: StateContext = {
+      getReaderState: vi.fn().mockReturnValue(ReaderState.CONNECTED),
+      setReaderState: vi.fn()
+    };
+    const mockSendToTransport = vi.fn();
+    const manager = new CommandManager(mockSendToTransport, undefined, mockStateContext);
+
+    const sequence: CommandSequence = [{
+      event: GET_BATTERY_VOLTAGE,
+      retryDelays: [10],
+      finalState: ReaderState.CONNECTED
+    }];
+
+    // ERROR_NOTIFICATION is what actually fails a step here. GET_BATTERY_VOLTAGE
+    // declares no `successByte`, so handleCommandResponse resolves ANY payload
+    // for it — an earlier draft of this test "failed" the first attempt with a
+    // wrong success byte, retried nothing, and passed against the broken code.
+    const failure = {
+      event: ERROR_NOTIFICATION,
+      rawPayload: new Uint8Array([0x00, 0x03]),
+      eventCode: 0xFFFF,
+      payload: undefined
+    };
+    const success = {
+      event: GET_BATTERY_VOLTAGE,
+      rawPayload: new Uint8Array([0x00, 0x50]),
+      eventCode: 0xA000,
+      payload: undefined
+    };
+
+    const executePromise = manager.executeSequence(sequence);
+    setTimeout(() => manager.handleCommandResponse(failure as any), 10);
+    setTimeout(() => manager.handleCommandResponse(success as any), 40);
+
+    await executePromise;
+
+    // The retry is the premise of the whole test. Without this the assertion
+    // below is satisfied by a run that never failed an attempt at all.
+    expect(mockSendToTransport).toHaveBeenCalledTimes(2);
+
+    // The whole trace, not just the absence of ERROR: asserting only "no ERROR"
+    // would also pass on a manager that published nothing at all.
+    expect((mockStateContext.setReaderState as Mock).mock.calls.map(call => call[0]))
+      .toEqual([ReaderState.BUSY, ReaderState.CONNECTED]);
   });
 });
 describe('CommandManager transport write failure', () => {

@@ -602,14 +602,22 @@ export class CommandManager {
             throw error;
           }
 
-          // A tolerated step's failure is not the sequence's failure, so it must
-          // not publish ERROR — that state is what callers read to conclude the
-          // hardware is in an unknown condition, and this one is not.
-          if (!cmd.toleratesFailure) {
-            logger.debug(`[CommandManager] Setting ERROR state due to command failure`);
-            this.announceSettled(ReaderState.ERROR);
-          }
-
+          // NO STATE IS PUBLISHED HERE. An attempt is not the sequence.
+          //
+          // This used to announce ERROR from inside the loop, before
+          // `retryDelays` were walked, and the argument against it is the one
+          // the tolerated case already made: that state is what callers read to
+          // conclude the hardware is in an unknown condition. A step with
+          // retries left is not that either — it is a step that is about to be
+          // tried again, and usually succeeds.
+          //
+          // The cost was not cosmetic. Reader.waitForSettledState treats ERROR
+          // as a state a transition has SETTLED into, so a settings push parked
+          // on BUSY woke on it, found the reader not CONNECTED, and dropped the
+          // targetEPC — leaving Locate searching on the previous tag's mask
+          // while the reader recovered two seconds later. 27 of 33 failures in
+          // the 2026-09-01 200-rep arm are that, and none of them involved a
+          // sequence that actually failed. TRA-1237.
           lastError = error;
           if (attempt >= delays.length) break;
 
@@ -628,6 +636,12 @@ export class CommandManager {
       // class, and rebuilding is what lost it before (TRA-1187).
       if (lastError !== undefined) {
         if (!cmd.toleratesFailure) {
+          // The sequence has genuinely failed: the retry schedule is spent and
+          // this step is not tolerated. THIS is the moment ERROR means what its
+          // readers take it to mean, so it is published here and nowhere else.
+          // TRA-1237.
+          logger.debug(`[CommandManager] Setting ERROR state due to command failure`);
+          this.announceSettled(ReaderState.ERROR);
           throw lastError;
         }
 
