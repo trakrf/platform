@@ -148,12 +148,17 @@ export const COMMAND_TIMEOUT_PREFIX = '[CommandManager] Command timeout: ';
  * cannot observe these at all. Same null-vs-zero rule as everywhere else here.
  */
 /**
- * The producer's own running total, as it appears in a `[CS108 Error]` line.
+ * The producer's own running total, on its UNCONDITIONAL `fault-count` line.
+ *
+ * ⚠ Deliberately NOT the descriptive `[CS108 Error] <desc>` line, which is rate
+ * limited. Reading the total off a limited line undercounts whenever the storm
+ * ends inside the suppression window — measured at exactly 2x on a 3-rep mini
+ * arm, 18 frames reported as 9. Refs TRA-1231.
  *
  * Exported so the parser below and any future needle read the same shape, and
  * so `every-signal-needle-has-a-producer` can find the string in `src/`.
  */
-export const ERROR_NOTIFICATION_TOTAL_RE = /\[CS108 Error\][^\n]*?\[(\d+) seen this session\]/g;
+export const ERROR_NOTIFICATION_TOTAL_RE = /\[CS108 Error\] fault-count total=(\d+)/g;
 
 /**
  * How many `0xA101` ERROR_NOTIFICATION frames the worker saw in a rep (TRA-1229).
