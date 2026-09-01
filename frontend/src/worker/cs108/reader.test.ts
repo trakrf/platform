@@ -1095,6 +1095,37 @@ describe('CS108Reader', () => {
     });
 
     /**
+     * The complement to TRA-1237, and it has to keep working.
+     *
+     * That fix stops CommandManager publishing ERROR for a step that is about
+     * to be retried, and for an abort — so the only ERROR that now reaches this
+     * waiter is a sequence that genuinely failed with its retries spent. On
+     * that, dropping the push is CORRECT: waiting it out would wait for an
+     * answer already known.
+     *
+     * What must not be lost is the report. This line is the entire reason
+     * TRA-1237 was findable — it was already being written, loudly, in every
+     * rep it happened in, and the defect surfaced only once someone counted the
+     * lines. A fix that made the drop quieter would have been a worse outcome
+     * than the drop.
+     */
+    it('still drops and REPORTS a push when the reader settles into a genuine ERROR', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      (reader as any).readerState = ReaderState.BUSY;
+
+      const push = reader.setSettings({ rfid: { transmitPower: 30, targetEPC: SECOND_EPC } });
+      (reader as any).setReaderState(ReaderState.ERROR);
+      await push;
+
+      expect(executedSequences()).not.toContainEqual(locateSettingsSequence(SECOND_EPC));
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[Worker] ERROR:',
+        expect.stringContaining('did NOT reach the radio')
+      );
+      consoleErrorSpy.mockRestore();
+    });
+
+    /**
      * `hasHardwareSettings` gates the whole apply block and does not list
      * targetEPC, so a targetEPC-only push takes NEITHER branch: not applied,
      * not deferred, not logged at all. The integration spec carries a comment
