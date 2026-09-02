@@ -1,11 +1,11 @@
 # Twilio SMS application integration
 
 This document describes the application-side configuration boundary for the
-TRA-1201 Twilio SMS integration. It is a developer-facing contract for loading
+Twilio SMS integration. It is a developer-facing contract for loading
 settings and constructing callback URLs; it does not activate Twilio traffic or
 provision an account resource.
 
-> **Activation warning:** TRA-1201 defines and tests `Handler.RegisterRoutes`,
+> **Activation warning:** This integration defines and tests `Handler.RegisterRoutes`,
 > but `serve.setupRouter` does **not** mount these callbacks. The paths below
 > are not reachable production endpoints today. They are intended future public,
 > signature-protected endpoints. Do not configure or activate Twilio callback
