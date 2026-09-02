@@ -12,6 +12,11 @@ import type { ScalarPayload } from './payload-types.js';
 import { parseUint8, parseBatteryPercentage } from './system/parser.js';
 // parseInventoryTag removed - parsing handled by InventoryHandler
 import { parseBarcodeData } from './barcode/parser.js';
+import {
+  GET_SILICON_LAB_VERSION,
+  GET_BLUETOOTH_VERSION,
+  GET_SERIAL_NUMBER
+} from './system/device-info.js';
 // import { RFID_REGISTERS } from './rfid/constant.js'; // TODO: Uncomment when implementing register writes
 
 // =============================================================================
@@ -383,7 +388,19 @@ export const CS108_EVENT_MAP = new Map<number, CS108Event>([
   [0xA003, STOP_BATTERY_REPORTING],
   [0xA008, START_TRIGGER_REPORTING],
   [0xA009, STOP_TRIGGER_REPORTING],
-  
+
+  // Reader identity, defined in system/device-info.ts.
+  //
+  // Registration is not bookkeeping here. `PacketHandler` resolves an incoming
+  // packet through this map and THROWS on an unknown event code, after which
+  // the parser byte-slides to resync — so an unregistered command transmits
+  // fine, is answered, and then times out. The failure looks like a dead
+  // command, which is a long way from "the map is missing a line".
+  [0xB000, GET_SILICON_LAB_VERSION],
+  [0xB004, GET_SERIAL_NUMBER],
+  [0xC000, GET_BLUETOOTH_VERSION],
+
+
   // Barcode Commands
   [0x9002, BARCODE_TRIGGER_SCAN],
   [0x9003, BARCODE_SEND_COMMAND],

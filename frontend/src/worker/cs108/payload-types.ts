@@ -16,6 +16,9 @@ import type {
   InventoryCyclePacket,
   RegisterAccessPacket
 } from './rfid/packet-types.js';
+// Type-only, so this does not close a runtime cycle with `type.ts`.
+import type { BoardVersion } from './system/device-info.js';
+import type { RegisterResponse } from './rfid/register-response.js';
 
 // ============================================================================
 // Simple Scalar Payloads
@@ -119,7 +122,11 @@ export type RFIDInventoryPayload =
 export type CS108PayloadType =
   // Simple types
   | ScalarPayload                // Single number (battery %, trigger state, etc.)
+  | string                       // Serial number (0xB004) — the one textual payload
   | ErrorPayload                 // Error code and message
+  // Reader identity
+  | BoardVersion                 // Silicon Labs / Bluetooth board firmware (0xB000, 0xC000)
+  | RegisterResponse             // An RFID register read back over 0x8002
   // Barcode
   | BarcodeDataPayload           // Barcode scan result
   // RFID simple
