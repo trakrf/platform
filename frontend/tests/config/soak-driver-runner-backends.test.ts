@@ -344,6 +344,17 @@ const VITEST_ONLY = [
   'powerOffTimeouts',
   'toleratedPowerOffs',
   'modeSwitchFailed',
+  // incidental, and a THIRD reason worth naming: this one would be counted
+  // HALF. An occurrence emits two lines, and only one of them —
+  // `[setMode] Failed to set Idle mode: CommandInFlightError: ...` — carries a
+  // token the console forwarder keeps (its first limb passes any text
+  // containing `Failed`). The tolerated step's WARN does not. Admitting it to
+  // E2E_SIGNALS would therefore produce a count that means something different
+  // per runner, silently halved, which is worse than the honest null: a low
+  // number reads as a mostly-clean arm where an absent one reads as
+  // unobserved. Widening the forwarder to keep both lines is what would move
+  // it out — on a measurement, not on an assumption. TRA-1239.
+  'commandInFlight',
 ];
 
 describe('signals are per-runner, and absence is not zero', () => {

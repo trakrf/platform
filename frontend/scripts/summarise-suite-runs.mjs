@@ -554,6 +554,90 @@ export function powerOffWindowTable(records) {
   return lines.join('\n');
 }
 
+/**
+ * Did the HOST leak the wire? — TRA-1239.
+ *
+ * Every other command section above scores what the DEVICE did. This one scores
+ * what we did: `CommandInFlightError` fires when a dispatch finds the in-flight
+ * slot occupied, and since the queue landed the only way that happens is
+ * something claiming the slot and failing to give it back.
+ *
+ * ## Why a zero here means more than a zero in the silent-window section
+ *
+ * `powerOffWindowTable` has to say a clean arm proves nothing, because the
+ * device's silent window appeared once in 200 reps and cannot be summoned. The
+ * asymmetry is worth stating because a reader who has just read that section
+ * will carry the caution across, and here it is wrong: the leak is HOST-side and
+ * deterministic given a failed send. An arm that tore the transport down — which
+ * every rep does — had the opportunity. So zero is a pass.
+ *
+ * The one way it lies is an arm that never disconnected, so the verdict says so
+ * rather than leaving it to be inferred.
+ *
+ * ⚠ The count is LINES, not occurrences: each event emits a WARN from the
+ * tolerated step and an ERROR from the sequence behind it. The 2026-09-01 arm's
+ * 26 lines are 13 events. This is not pedantry — TRA-1239 shipped with a
+ * pre-registered baseline of "6", hand-counted, and the archive says 13.
+ */
+export function commandInFlightTable(records) {
+  const usable = records.filter((r) => r.signals && !r.signals.logMissing);
+  if (usable.length === 0) {
+    return '_No repetition carried a verified capture — a leaked wire is unobservable in this run._';
+  }
+
+  // null is "this runner cannot see the line", which is not zero. Summing them
+  // would report an e2e-only arm as proof the wire was never leaked.
+  const observable = usable.filter((r) => typeof r.signals.commandInFlight === 'number');
+  if (observable.length === 0) {
+    return (
+      '_This needle is vitest-only; no repetition in this run could produce it. ' +
+      'Unobservable here, which is not the same as absent._'
+    );
+  }
+
+  const n = observable.length;
+  const lines_ = observable.reduce((acc, r) => acc + (r.signals.commandInFlight ?? 0), 0);
+  const repsWith = observable.filter((r) => (r.signals.commandInFlight ?? 0) > 0).length;
+  // Two log lines per occurrence. Reported as a floor rather than a division,
+  // because a rep that failed before the ERROR half emits an odd count.
+  const events = Math.ceil(lines_ / 2);
+
+  const out = [
+    '| signal | lines | reps affected |',
+    '| -- | -- | -- |',
+    `| \`Command already active\` — the wire was leaked | ${lines_} | ${repsWith}/${n} |`,
+    '',
+  ];
+
+  if (lines_ > 0) {
+    out.push(
+      `**REGRESSION — the in-flight slot was leaked on ${repsWith} of ${n} rep(s).** ` +
+        `${lines_} line(s), roughly ${events} occurrence(s): each one emits a WARN from the ` +
+        'tolerated step and an ERROR from the sequence behind it, so this count is LINES and ' +
+        'not events.',
+      '',
+      '⚠ **Do not go looking for two concurrent callers.** The error says ' +
+        '`executeCommand called concurrently`, and that wording predates the queue. The queue ' +
+        'makes genuine concurrency unreachable, so what this actually reports is that the SLOT ' +
+        'WAS NOT FREE — something claimed it and did not release it. TRA-1239 was exactly that: ' +
+        '`sendToTransport` throwing synchronously on a torn-down port, leaving `inFlight` set ' +
+        'for a command that never reached the radio. Read the failing reps for what claimed it.'
+    );
+  } else {
+    out.push(
+      '**The wire was never leaked in this run.** Unlike the silent-window section above, this ' +
+        'zero IS evidence: the leak is host-side and deterministic given a failed send, so an ' +
+        'arm that exercised the failure had the opportunity to show it.',
+      '',
+      '⚠ That holds only if teardown actually ran. An arm whose reps never disconnected never ' +
+        'put a closed port under a dispatch, and did not test this — check `linkCloses` and the ' +
+        'rep count before reading this as a pass.'
+    );
+  }
+
+  return out.join('\n');
+}
+
 export function densityTable(records) {
   const resolved = records.map((r) => resolveReadCycles(r));
   const measured = resolved.filter(({ readCycles }) =>
@@ -694,6 +778,8 @@ function main() {
   console.log(commandTimeoutsByOpTable(records));
   console.log(`\n## Device-raised rejections (0xA101)\n`);
   console.log(errorNotificationTable(records));
+  console.log(`\n## Did the HOST leak the wire? — TRA-1239\n`);
+  console.log(commandInFlightTable(records));
   console.log(`\n## Field density\n`);
   console.log(densityTable(records));
   console.log(`\n## Record integrity\n`);
