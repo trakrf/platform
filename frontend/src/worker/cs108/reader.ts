@@ -36,7 +36,7 @@ import { PacketHandler, type LinkProfile, type FragmentMetrics } from './packet.
 import { NotificationManager } from './notification/manager.js';
 import { NotificationRouter } from './notification/router.js';
 import { logger, LogLevel } from '../utils/logger.js';
-import type { CommandSequence } from './type.js';
+import type { CommandSequence, CS108Packet } from './type.js';
 import { IDLE_SEQUENCE, BATTERY_VOLTAGE_SEQUENCE } from './system/sequences.js';
 import {
   IDENTITY_SEQUENCE,
