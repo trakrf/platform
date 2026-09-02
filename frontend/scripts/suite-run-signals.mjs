@@ -110,6 +110,41 @@ export const SIGNALS = {
   // Should now be ZERO even when the window recurs — if it fires alongside
   // `powerOffTimeouts`, the tolerance did not hold and the fix is incomplete.
   modeSwitchFailed: 'Mode switching failed during cleanup',
+
+  // ── The host leaking the wire, which is NOT the device going silent ───────
+  //
+  // `CommandInFlightError`. Every other counter above is about what the DEVICE
+  // did; this one is about the host claiming the in-flight slot and failing to
+  // give it back, after which the next dispatch is refused against a command
+  // that never reached the radio.
+  //
+  // TARGET: ZERO — including inside a wedge window, which is the only place it
+  // has ever been observed. Not "low". A non-zero count means something claims
+  // the slot without releasing it, which is what the error's docblock in
+  // worker/cs108/command.ts now tells a reader to go looking for.
+  //
+  // ⚠ Counted, not parsed per op, and that breaks deliberately from
+  // `commandTimeouts` / `commandRejections` a few lines down. Those parse
+  // because a fixed list can only count what somebody enumerated (TRA-1226).
+  // That argument does not carry here: one constructor emits one message, and
+  // the half that actually kills a mode change —
+  //
+  //   [setMode] Failed to set Idle mode: CommandInFlightError: Command already
+  //   active - executeCommand called concurrently
+  //
+  // — carries no op name at all. A per-op table would report `{}` for those and
+  // read as coverage it does not have.
+  //
+  // ⚠ TWO LINES PER OCCURRENCE: the tolerated step's WARN and the failing
+  // sequence's ERROR. The 2026-09-01 arm's 26 lines are 13 events. Zero is
+  // zero either way, which is why the target survives the ambiguity — but do
+  // not report this count as an event count.
+  //
+  // It exists because TRA-1239 was pre-registered against a hand-counted
+  // baseline ("6 per 200, reps 5/6/39, where the device was refusing") that the
+  // archive contradicts in both halves: 13, all in reps 137-143, and no refusal
+  // involved. A number nobody can regenerate is a number that drifts. TRA-1239.
+  commandInFlight: 'Command already active - executeCommand called concurrently',
 };
 
 /**
