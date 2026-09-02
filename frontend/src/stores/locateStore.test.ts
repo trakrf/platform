@@ -241,6 +241,13 @@ describe('locateStore rejects reads from other tags (stray admissions)', () => {
  * operator released the trigger in order to read it. Zeroing it would be the
  * same false negative TRA-1080 and TRA-1123 exist to prevent, reached from the
  * opposite direction.
+ *
+ * ⚠ But only when there WAS a result. Held-vs-decayed is decided as of the
+ * RELEASE, not as of now. A search that ended while hearing nothing holds "No
+ * signal"; it must not revive its last reading the moment the staleness rule
+ * stops applying, which would put a number back on a gauge the operator had
+ * just watched fall to zero — the false POSITIVE, and the worse of the two on
+ * a tag finder. Reported from hardware by Mike, 2026-09-01.
  */
 describe('locateStore release gate (TRA-1171)', () => {
   beforeEach(() => {
@@ -278,6 +285,69 @@ describe('locateStore release gate (TRA-1171)', () => {
 
     expect(useLocateStore.getState().getFilteredRSSI()).toBe(-35);
     expect(useLocateStore.getState().getStatistics().currentRSSI).toBe(-35);
+  });
+
+  it('HOLDS "no signal" when the search ended hearing nothing — does not revive the last read', () => {
+    // The defect this guards: the gauge had already fallen to zero mid-search,
+    // and the release put -35 back on it.
+    useLocateStore.getState().setSearchActive(true);
+    useLocateStore.getState().addRssiReading(-35);
+
+    vi.advanceTimersByTime(STALE_THRESHOLD_MS + 1);
+    expect(useLocateStore.getState().getFilteredRSSI()).toBe(DEFAULT_RSSI);
+
+    useLocateStore.getState().setSearchActive(false);
+
+    expect(useLocateStore.getState().getFilteredRSSI()).toBe(DEFAULT_RSSI);
+    expect(useLocateStore.getState().getStatistics().currentRSSI).toBe(DEFAULT_RSSI);
+  });
+
+  it('keeps holding "no signal" as time passes after such a release', () => {
+    // The held verdict is fixed at the release, so it cannot drift back either
+    // way once the operator is just looking at the screen.
+    useLocateStore.getState().setSearchActive(true);
+    useLocateStore.getState().addRssiReading(-35);
+    vi.advanceTimersByTime(STALE_THRESHOLD_MS + 1);
+    useLocateStore.getState().setSearchActive(false);
+
+    vi.advanceTimersByTime(30_000);
+
+    expect(useLocateStore.getState().getFilteredRSSI()).toBe(DEFAULT_RSSI);
+    expect(useLocateStore.getState().getStatistics().currentRSSI).toBe(DEFAULT_RSSI);
+  });
+
+  it('still holds a result released while the tag WAS being heard', () => {
+    // The boundary: same release path, opposite verdict. Guards against
+    // fixing the revive by zeroing every release.
+    useLocateStore.getState().setSearchActive(true);
+    useLocateStore.getState().addRssiReading(-42);
+
+    vi.advanceTimersByTime(STALE_THRESHOLD_MS - 100);
+    useLocateStore.getState().setSearchActive(false);
+    vi.advanceTimersByTime(30_000);
+
+    expect(useLocateStore.getState().getFilteredRSSI()).toBe(-42);
+    expect(useLocateStore.getState().getStatistics().currentRSSI).toBe(-42);
+  });
+
+  it('freezes the gauge at the release value and does not drift afterwards', () => {
+    // Two different readings, so the 500ms weighted average is NOT the same
+    // number as the last read. Under a clock that keeps running, the window
+    // drains over the next half second and the gauge slides off the release
+    // value onto currentRSSI. It must not move at all.
+    useLocateStore.getState().setSearchActive(true);
+    useLocateStore.getState().addRssiReading(-60);
+    vi.advanceTimersByTime(100);
+    useLocateStore.getState().addRssiReading(-40);
+
+    const atRelease = useLocateStore.getState().getFilteredRSSI();
+    useLocateStore.getState().setSearchActive(false);
+
+    vi.advanceTimersByTime(400);
+    expect(useLocateStore.getState().getFilteredRSSI()).toBe(atRelease);
+
+    vi.advanceTimersByTime(10_000);
+    expect(useLocateStore.getState().getFilteredRSSI()).toBe(atRelease);
   });
 
   it('still decays to "no signal" while a search IS active', () => {
