@@ -26,7 +26,8 @@ import {
   RainTarget,
   type ReaderModeType,
   type ReaderStateType,
-  type ReaderSettings
+  type ReaderSettings,
+  type ReaderDetails
 } from '../types/reader.js';
 import { postWorkerEvent, WorkerEventType, type WorkerEvent } from '../types/events.js';
 import { CommandManager, SequenceAbortedError, CommandInFlightError } from './command.js';
@@ -35,8 +36,15 @@ import { PacketHandler, type LinkProfile, type FragmentMetrics } from './packet.
 import { NotificationManager } from './notification/manager.js';
 import { NotificationRouter } from './notification/router.js';
 import { logger, LogLevel } from '../utils/logger.js';
-import type { CommandSequence } from './type.js';
+import type { CommandSequence, CS108Packet } from './type.js';
 import { IDLE_SEQUENCE, BATTERY_VOLTAGE_SEQUENCE } from './system/sequences.js';
+import {
+  IDENTITY_SEQUENCE,
+  RFID_IDENTITY_SEQUENCE,
+  applyIdentityPacket,
+  isRegisterResponsePacket,
+  formatReaderDetails
+} from './system/identity.js';
 import { INVENTORY_CONFIG_SEQUENCE } from './rfid/inventory/sequences.js';
 import { BARCODE_CONFIG_SEQUENCE, BARCODE_START_SEQUENCE, BARCODE_STOP_SEQUENCE } from './barcode/sequences.js';
 import { applyRfidSettings, type RfidSettings } from './rfid/firmware-command.js';
@@ -81,6 +89,13 @@ class CS108Reader extends BaseReader {
   private lastAppliedTargetEPC?: string; // The LOCATE tag mask actually written to hardware
   private scanStartedByTrigger = false;  // Whether the running scan is the trigger's to stop
   private converging = false;            // Re-entrancy guard for convergeToTriggerState()
+  /**
+   * What the connected reader turned out to be. Empty until it answers, and
+   * emptied again on disconnect: these describe THIS reader, and carrying them
+   * across would open the next connection showing the previous device's
+   * firmware — worse than showing nothing, because it looks read. TRA-1232.
+   */
+  private readerDetails: ReaderDetails = {};
   // Callers parked until the reader stops being BUSY. See waitForSettledState().
   private settleWaiters = new Set<(state: ReaderStateType) => void>();
 
@@ -300,7 +315,74 @@ class CS108Reader extends BaseReader {
     // connect, resolved from the active tab — which is INVENTORY on the default
     // Scan tab, not IDLE (TRA-1101).
 
+    await this.readBoardIdentity();
+
     logger.debug('[Reader] Connected successfully');
+  }
+
+  /**
+   * Ask the Bluetooth board what it is.
+   *
+   * Three commands, one at a time, and every one of them optional. A version
+   * string is worth having and it is not worth a failed connect, so each
+   * failure is logged and stepped over rather than propagated — nobody is
+   * waiting on a serial number, and the operator is waiting on the reader.
+   *
+   * `runExclusive` rather than `executeSequence` because a sequence publishes
+   * BUSY on its way in and CONNECTED on its way out. Those would land while
+   * `BaseReader.connect()` is still in CONNECTING and has yet to publish
+   * CONNECTED itself, so the UI would see the reader connect, and the state
+   * machine's CONNECTED choke point would fire, before the connect finished.
+   *
+   * The values are not taken from what these calls RESOLVE with. They arrive by
+   * observation in `handleBleData`, which is the same path the register reads
+   * use and is right whether or not a response settles the command that asked
+   * for it. Refs TRA-1232.
+   */
+  private async readBoardIdentity(): Promise<void> {
+    await this.commandManager.runExclusive(async (run) => {
+      for (const step of IDENTITY_SEQUENCE) {
+        try {
+          await run.command(step.event, step.payload);
+        } catch (error) {
+          logger.warn(
+            `[Reader] ${step.event.name} did not answer; reader details will be incomplete`,
+            error
+          );
+        }
+      }
+    });
+  }
+
+  /**
+   * Fold anything a packet says about the reader's identity into what we know.
+   *
+   * Called from `handleBleData` before the split into command responses and
+   * notifications, because the two kinds of answer leave it by different doors:
+   * a board version settles the command that asked for it and carries on to the
+   * command manager, while a register value settles nothing — the `0x8002`
+   * status ack already did that — and is consumed.
+   *
+   * The echoed `reg_addr` is what makes the register half safe: a register read
+   * is the one self-identifying exchange the RFID processor performs
+   * (TRA-1154), so a reply is filed against the register the DEVICE names
+   * rather than the one we last asked about.
+   */
+  private observeReaderIdentity(packet: CS108Packet): void {
+    const updated = applyIdentityPacket(this.readerDetails, packet);
+    if (!updated) return;
+
+    this.readerDetails = updated;
+
+    // One line per update, so every rep of every soak arm attributes its own
+    // capture. Parsed by scripts/suite-run-signals.mjs — keep the prefix and
+    // this call in step with READER_DETAILS_PREFIX there.
+    logger.info(formatReaderDetails(this.readerDetails));
+
+    postWorkerEvent({
+      type: WorkerEventType.READER_DETAILS,
+      payload: { details: { ...this.readerDetails } }
+    });
   }
   
   /**
@@ -321,6 +403,9 @@ class CS108Reader extends BaseReader {
 
     // Nothing is on the hardware any more, so nothing was applied
     this.lastAppliedTargetEPC = undefined;
+
+    // And these described the reader that just went away.
+    this.readerDetails = {};
 
     // Abort any running sequence on disconnect
     this.commandManager.abortSequence('Disconnect requested');
@@ -372,6 +457,23 @@ class CS108Reader extends BaseReader {
     // Route each packet based on event flags
     for (const packet of packets) {
       logger.debug(`Packet: ${packet.event.name} (0x${packet.eventCode.toString(16)}), isCommand: ${packet.event.isCommand}, isNotification: ${packet.event.isNotification}`);
+
+      // Identity is read by OBSERVATION, ahead of routing. A board-version
+      // reply is also the answer to a command in flight and goes on to settle
+      // it; a register value is not, and is consumed here.
+      this.observeReaderIdentity(packet);
+
+      // ⚠ A register value arrives on 0x8100 — the RFID processor's uplink DATA
+      // channel, which it shares with tag reads — and NOT on the 0x8002 the
+      // read was sent on. Measured on hardware 2026-09-02; see
+      // isRegisterResponsePacket().
+      //
+      // So it reaches this loop as an INVENTORY_TAG notification, and
+      // InventoryParser cannot read it: `pkt_ver 0x70` hits the unknown-version
+      // branch, byte-slides one at a time and charges eight `parseErrors` per
+      // register read. It answers no command in flight either — the 0x8002
+      // status ack already settled the read. Nothing downstream wants it.
+      if (isRegisterResponsePacket(packet)) continue;
 
       // A rejection is a FAULT, and it is handled before ordinary routing.
       //
@@ -592,7 +694,8 @@ class CS108Reader extends BaseReader {
         return [
           ...IDLE_SEQUENCE,
           ...INVENTORY_CONFIG_SEQUENCE,
-          ...transmitPowerSequence(this.readerSettings.rfid?.transmitPower)
+          ...transmitPowerSequence(this.readerSettings.rfid?.transmitPower),
+          ...this.rfidIdentityReads()
         ];
 
       case ReaderMode.LOCATE: {
@@ -606,6 +709,10 @@ class CS108Reader extends BaseReader {
           ...IDLE_SEQUENCE,
           ...LOCATE_CONFIG_SEQUENCE,
           ...transmitPowerSequence(this.readerSettings.rfid?.transmitPower),
+          // Ahead of the mask, not after it. The mask sequence being LAST is a
+          // property this file's tests pin down (TRA-1091/TRA-1122), and two
+          // identity reads are not a reason to move it.
+          ...this.rfidIdentityReads(),
           ...locateSettingsSequence(targetEPC)
         ];
       }
@@ -625,6 +732,26 @@ class CS108Reader extends BaseReader {
       default:
         throw new Error(`Unsupported reader mode: ${mode}`);
     }
+  }
+
+  /**
+   * The two RFID processor registers, if we still need them.
+   *
+   * These live on the R2000, and the R2000 is powered OFF at connect —
+   * `IDLE_SEQUENCE` opens with `RFID_POWER_OFF` and it is the RFID mode
+   * sequences that open with `RFID_POWER_ON`. Reading them at connect would
+   * mean powering the radio up and down for two register values, on a device
+   * whose characterised fault is `RFID_POWER_OFF` going silent for minutes at a
+   * time (TRA-1217). So they ride the first RFID mode of a connection instead,
+   * where the radio is already on and firmware commands are already flowing.
+   *
+   * Once per connection, gated on the answer rather than on a flag. A handheld
+   * session is a long run of mode changes and the firmware version does not
+   * move between them; two extra commands on every one would be a permanent tax
+   * on the hottest path in the app for something we already know.
+   */
+  private rfidIdentityReads(): CommandSequence {
+    return this.readerDetails.rfidFirmware === undefined ? [...RFID_IDENTITY_SEQUENCE] : [];
   }
   
   /**

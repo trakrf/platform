@@ -12,6 +12,11 @@ import type { ScalarPayload } from './payload-types.js';
 import { parseUint8, parseBatteryPercentage } from './system/parser.js';
 // parseInventoryTag removed - parsing handled by InventoryHandler
 import { parseBarcodeData } from './barcode/parser.js';
+import {
+  GET_SILICON_LAB_VERSION,
+  GET_BLUETOOTH_VERSION,
+  GET_SERIAL_NUMBER
+} from './system/device-info.js';
 // import { RFID_REGISTERS } from './rfid/constant.js'; // TODO: Uncomment when implementing register writes
 
 // =============================================================================
@@ -272,6 +277,15 @@ export const RFID_FIRMWARE_COMMAND: CS108Event = {
   responseLength: 1,   // Status byte: 0x00 = success, 0xFF = failure
   successByte: 0x00,
   parser: parseUint8,
+  // ⚠ `responseLength: 1` is right for a register READ as well as a write, and
+  // that was not obvious enough to leave unsaid.
+  //
+  // A read looked like it would need a variable payload here, because the
+  // 8-byte REG_RESP carrying the value would fail `successByte` — 0x70 is not
+  // 0x00. It does not: measured on hardware 2026-09-02, this op code answers a
+  // read with the SAME one-byte status a write gets, and the value comes back
+  // separately on 0x8100, the RFID processor's uplink data channel. See
+  // system/identity.ts. Refs TRA-1232.
   // 200ms, from measurement rather than caution.
   //
   // 4,879 firmware-command responses captured on hardware 2026-08-30:
@@ -383,7 +397,19 @@ export const CS108_EVENT_MAP = new Map<number, CS108Event>([
   [0xA003, STOP_BATTERY_REPORTING],
   [0xA008, START_TRIGGER_REPORTING],
   [0xA009, STOP_TRIGGER_REPORTING],
-  
+
+  // Reader identity, defined in system/device-info.ts.
+  //
+  // Registration is not bookkeeping here. `PacketHandler` resolves an incoming
+  // packet through this map and THROWS on an unknown event code, after which
+  // the parser byte-slides to resync — so an unregistered command transmits
+  // fine, is answered, and then times out. The failure looks like a dead
+  // command, which is a long way from "the map is missing a line".
+  [0xB000, GET_SILICON_LAB_VERSION],
+  [0xB004, GET_SERIAL_NUMBER],
+  [0xC000, GET_BLUETOOTH_VERSION],
+
+
   // Barcode Commands
   [0x9002, BARCODE_TRIGGER_SCAN],
   [0x9003, BARCODE_SEND_COMMAND],

@@ -87,35 +87,55 @@ export function parseSerialNumber(payload: Uint8Array): string {
   }
 }
 
+/**
+ * ⚠ The `module` byte is the DESTINATION BOARD, not a category.
+ *
+ * These three do NOT go to the notification board. The vendor's routing table
+ * is `destinationsID = { 0xc2, 0x6a, 0xd9, 0xe8, 0x5f }`
+ * (`BluetoothProtocol/BTSend.cs:32`), indexed by `SendAsync`'s second argument:
+ * `ClassSiliconLabIC` sends `0xB000` and `0xB004` with index 3 — 0xE8 — and
+ * `ClassBluetoothIC` sends `0xC000` with index 4 — 0x5F.
+ *
+ * Addressing the wrong board is indistinguishable from a dead command: the
+ * packet is well formed, it goes out, and nothing ever answers.
+ */
 export const GET_SILICON_LAB_VERSION: CS108Event = {
   name: 'GET_SILICON_LAB_VERSION',
   eventCode: 0xB000,
-  module: CS108_MODULES.NOTIFICATION,
+  module: CS108_MODULES.SILICON_LAB,
   isCommand: true,
   isNotification: false,
   payloadLength: 0,
   responseLength: BOARD_VERSION_LENGTH,
+  parser: parseBoardVersion,
   description: 'Get Silicon Lab IC firmware version',
 };
 
 export const GET_BLUETOOTH_VERSION: CS108Event = {
   name: 'GET_BLUETOOTH_VERSION',
   eventCode: 0xC000,
-  module: CS108_MODULES.NOTIFICATION,
+  module: CS108_MODULES.BLUETOOTH,
   isCommand: true,
   isNotification: false,
   payloadLength: 0,
   responseLength: BOARD_VERSION_LENGTH,
+  parser: parseBoardVersion,
   description: 'Get Bluetooth IC firmware version',
 };
 
 export const GET_SERIAL_NUMBER: CS108Event = {
   name: 'GET_SERIAL_NUMBER',
   eventCode: 0xB004,
-  module: CS108_MODULES.NOTIFICATION,
+  module: CS108_MODULES.SILICON_LAB,
   isCommand: true,
   isNotification: false,
-  payloadLength: 0,
+  // One zero byte, because the vendor sends one: `ClassSiliconLabIC.cs:62`
+  // passes `new byte[1]` here while the GETVERSION call on the line above
+  // passes `null`. Whether the board requires it is not a question we can put
+  // to the device, so we match the only client known to work.
+  payloadLength: 1,
+  payload: new Uint8Array([0x00]),
   responseLength: SERIAL_NUMBER_LENGTH,
+  parser: parseSerialNumber,
   description: 'Get reader serial number',
 };

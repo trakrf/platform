@@ -4,15 +4,33 @@
  * ## Why this did not exist
  *
  * `createFirmwareCommand` has had a `READ_REGISTER` branch since it was
- * written, and nothing has ever called it. Every register operation we perform
- * is a WRITE — and per the spec, **a write gets no response at all**:
+ * written, and until TRA-1232 nothing had ever called it. Every register
+ * operation we performed was a WRITE.
  *
- * > This response packet only comes back when the operation is Read register.
- * > There is no response if the operation is write register.
+ * ## ⚠ What the hardware said, and what it corrected
  *
- * So `RFID_FIRMWARE_COMMAND` declares `responseLength: 1` and `parseUint8`,
- * which is correct for the status byte a write acknowledgement carries and
- * cannot represent a register value. We could ask; we could not hear the answer.
+ * Two things this file used to assert are wrong, and both were reasoned from
+ * the spec rather than measured. The first register read this codebase ever
+ * performed, 2026-09-02, settled them:
+ *
+ * ```
+ * TX  A7 B3 0A C2 82 37 00 00 80 02 70 00 00 00 00 00 00 00   read FIRMWARE_VER
+ * RX  A7 B3 03 C2 82 9E 32 F1 80 02 00                        status, on 0x8002
+ * RX  A7 B3 0A C2 02 9E 97 80 81 00 70 00 00 00 29 60 00 02   REG_RESP, on 0x8100
+ * ```
+ *
+ * 1. **"A write gets no response at all"** — the spec sentence *"There is no
+ *    response if the operation is write register"* is about the REG_RESP, not
+ *    about the link. Every firmware command, read or write, is acknowledged on
+ *    `0x8002` with the same one-byte status.
+ * 2. **A register value does not come back on `0x8002`.** It arrives on
+ *    `0x8100`, the RFID processor's uplink DATA channel, alongside tag reads
+ *    and discriminated by the payload's first byte — which is exactly how the
+ *    vendor library dispatches it (`ClassRFID.cs:803`, `case 0x00: case 0x70:`).
+ *
+ * So `responseLength: 1` and `parseUint8` on `RFID_FIRMWARE_COMMAND` were right
+ * all along, for reads as well as writes. What was missing was never a variable
+ * payload; it was a listener on the other channel.
  *
  * ## Why it is worth building now
  *
@@ -38,7 +56,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseRegisterResponse, decodeFirmwareVersion } from './register-response';
+import {
+  parseRegisterResponse,
+  decodeFirmwareVersion,
+  isRegisterResponse,
+} from './register-response';
 import { RFID_REGISTERS } from './constant';
 
 /** A REG_RESP as the device sends it: pkt_ver, reserved, addr LSB-first, data LSB-first. */
@@ -50,6 +72,76 @@ function regResp(addr: number, data: number): Uint8Array {
     data & 0xFF, (data >> 8) & 0xFF, (data >> 16) & 0xFF, (data >> 24) & 0xFF,
   ]);
 }
+
+describe('isRegisterResponse', () => {
+  /**
+   * A register value shares the RFID uplink channel `0x8100` with tag reads,
+   * and telling them apart is the whole reason this predicate exists.
+   *
+   * Inventory packets carry `pkt_ver` 0x03 or 0x04, the abort confirmation
+   * carries 0x40, and a register response carries 0x70 in exactly eight bytes.
+   * Without this check a register value reaches `InventoryParser`, which does
+   * not know 0x70, byte-slides one at a time and charges eight `parseErrors`
+   * for it.
+   */
+  it('recognises the 8-byte REG_RESP shape', () => {
+    expect(isRegisterResponse(regResp(RFID_REGISTERS.FIRMWARE_VER, 0))).toBe(true);
+  });
+
+  /**
+   * The bytes the bench reader actually sent, 2026-09-02, answering the first
+   * register read this codebase has ever performed:
+   *
+   *   A7 B3 0A C2 02 9E 97 80 81 00 70 00 00 00 29 60 00 02
+   *
+   * Kept as a literal rather than rebuilt by `regResp` — the helper encodes the
+   * same belief the parser does, so a test written only from it would agree
+   * with a wrong parser.
+   */
+  it('recognises what the reader really sent', () => {
+    const measured = new Uint8Array([0x70, 0x00, 0x00, 0x00, 0x29, 0x60, 0x00, 0x02]);
+    expect(isRegisterResponse(measured)).toBe(true);
+    expect(parseRegisterResponse(measured)).toEqual({
+      register: RFID_REGISTERS.FIRMWARE_VER,
+      value: 0x02006029,
+    });
+    // V2.6.41 — the image on the bench CS108. CSL publishes V2.6.46, so this
+    // reader is downrev, consistently with both its board firmwares.
+    expect(decodeFirmwareVersion(0x02006029).text).toBe('2.6.41');
+  });
+
+  it('does not mistake a command acknowledgement for a register value', () => {
+    // The status byte the device sends for every firmware command, read or
+    // write. Captured on hardware, thousands of times.
+    expect(isRegisterResponse(new Uint8Array([0x00]))).toBe(false);
+    // Nor a failure status.
+    expect(isRegisterResponse(new Uint8Array([0xFF]))).toBe(false);
+  });
+
+  it('rejects a payload of the right length that is not low-level API', () => {
+    const notLowLevel = regResp(RFID_REGISTERS.MAC_ERROR, 0);
+    notLowLevel[0] = 0x01;  // a command-begin packet's pkt_ver
+    expect(isRegisterResponse(notLowLevel)).toBe(false);
+  });
+
+  /**
+   * The neighbours on `0x8100`. Each is a real packet version the RFID
+   * processor sends on the same channel, and mistaking one for a register value
+   * would file a tag read as a firmware version.
+   */
+  it('rejects the other packet versions that share the uplink channel', () => {
+    for (const pktVer of [0x01, 0x02, 0x03, 0x04, 0x40]) {
+      const other = regResp(0x0000, 0);
+      other[0] = pktVer;
+      expect(isRegisterResponse(other), `pkt_ver 0x${pktVer.toString(16)}`).toBe(false);
+    }
+  });
+
+  it('rejects a truncated register response rather than guessing at it', () => {
+    expect(isRegisterResponse(regResp(RFID_REGISTERS.MAC_ERROR, 0).subarray(0, 7))).toBe(false);
+    expect(isRegisterResponse(new Uint8Array(0))).toBe(false);
+  });
+});
 
 describe('parseRegisterResponse', () => {
   it('reads the address and value back, both byte-swapped', () => {

@@ -377,6 +377,13 @@ export class DeviceManager {
           useDeviceStore.getState().setBatteryPercentage(event.payload.percentage);
           break;
 
+        case WorkerEventType.READER_DETAILS:
+          // Arrives more than once per connection: three values at connect and
+          // two more once the radio is powered. The worker sends the whole
+          // picture each time rather than a delta, so this is a plain set.
+          useDeviceStore.getState().setReaderDetails(event.payload.details);
+          break;
+
         case WorkerEventType.LOCATE_UPDATE: {
           // Route locate updates to the locate store
           // Ignore readings older than 1 second (stale data)

@@ -26,6 +26,8 @@ import {
   parseBoardVersion,
   parseSerialNumber,
 } from './device-info';
+import { CS108_MODULES } from '../type';
+import { getEventByCode } from '../event';
 
 describe('board firmware version commands', () => {
   it('uses the op codes the spec assigns', () => {
@@ -98,5 +100,69 @@ describe('parseSerialNumber', () => {
     // The vendor wraps this in try/catch and yields "" — a missing serial is
     // not worth failing a connect over.
     expect(parseSerialNumber(new Uint8Array(0))).toBe('');
+  });
+});
+
+describe('board command addressing', () => {
+  /**
+   * The module byte names the DESTINATION BOARD, and getting it wrong is the
+   * second way one of these looks like a dead command: the packet is well
+   * formed, it is sent, and the board it names never answers.
+   *
+   * The vendor's own table is `destinationsID = { 0xc2, 0x6a, 0xd9, 0xe8, 0x5f }`
+   * (`BluetoothProtocol/BTSend.cs:32`), indexed by the second argument of
+   * `SendAsync`. `ClassSiliconLabIC` sends `0xB000` and `0xB004` with index 3 —
+   * 0xE8, the Silicon Labs IC — and `ClassBluetoothIC` sends `0xC000` with
+   * index 4 — 0x5F, the Bluetooth IC. Neither goes to the notification board.
+   */
+  it('addresses the Silicon Labs IC for its own version and serial', () => {
+    expect(GET_SILICON_LAB_VERSION.module).toBe(CS108_MODULES.SILICON_LAB);
+    expect(GET_SERIAL_NUMBER.module).toBe(CS108_MODULES.SILICON_LAB);
+  });
+
+  it('addresses the Bluetooth IC for the Bluetooth version', () => {
+    expect(GET_BLUETOOTH_VERSION.module).toBe(CS108_MODULES.BLUETOOTH);
+  });
+
+  /**
+   * `ClassSiliconLabIC.cs:62` sends GETSERIALNUMBER with `new byte[1]` while
+   * GETVERSION on the line above sends `null`. One zero byte, deliberately, on
+   * that one command — so we send it too, rather than reason about whether it
+   * matters on a device we cannot ask.
+   */
+  it('carries the one payload byte the vendor sends with the serial read', () => {
+    expect(GET_SERIAL_NUMBER.payload).toEqual(new Uint8Array([0x00]));
+    expect(GET_SILICON_LAB_VERSION.payload).toBeUndefined();
+    expect(GET_BLUETOOTH_VERSION.payload).toBeUndefined();
+  });
+
+  /**
+   * A response arrives decoded, or it arrives as raw bytes nobody reads.
+   * `PacketHandler` runs `event.parser` over the payload; without one these
+   * three resolve to a `Uint8Array` and every caller re-derives the decode this
+   * module already owns.
+   */
+  it('decodes its own response', () => {
+    expect(GET_SILICON_LAB_VERSION.parser?.(new Uint8Array([1, 0, 17])))
+      .toMatchObject({ text: '1.0.17' });
+    expect(GET_BLUETOOTH_VERSION.parser?.(new Uint8Array([1, 0, 20])))
+      .toMatchObject({ text: '1.0.20' });
+    expect(GET_SERIAL_NUMBER.parser?.(new TextEncoder().encode('CS108ABC12345')))
+      .toBe('CS108ABC12345');
+  });
+});
+
+describe('registration in the event map', () => {
+  /**
+   * The gap that made the merged layer inert. `PacketHandler` resolves an
+   * incoming packet through `CS108_EVENT_MAP` and THROWS on an unknown event
+   * code, after which the parser byte-slides to resync. So an unregistered
+   * command transmits fine and then times out, and the failure reads as a dead
+   * command rather than as a missing registration.
+   */
+  it('resolves each op code back to its event', () => {
+    expect(getEventByCode(0xB000)).toBe(GET_SILICON_LAB_VERSION);
+    expect(getEventByCode(0xC000)).toBe(GET_BLUETOOTH_VERSION);
+    expect(getEventByCode(0xB004)).toBe(GET_SERIAL_NUMBER);
   });
 });

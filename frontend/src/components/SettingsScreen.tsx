@@ -7,6 +7,7 @@ import { Bluetooth, Zap, Settings2, Info, RefreshCw, ChevronDown, ChevronUp, Sma
 import { ConnectIcon } from '@/components/icons/ConnectIcon';
 import toast from 'react-hot-toast';
 import { appVersion } from '@/version';
+import { ReaderDetailsPanel } from '@/components/ReaderDetailsPanel';
 
 export default function SettingsScreen() {
   // Set active tab when component mounts - standard React pattern
@@ -18,6 +19,7 @@ export default function SettingsScreen() {
   const [readerState, setLocalReaderState] = useState(useDeviceStore.getState().readerState);
   const [batteryPercentage, setBatteryPercentage] = useState(useDeviceStore.getState().batteryPercentage);
   const [deviceName, setDeviceName] = useState(useDeviceStore.getState().deviceName);
+  const [readerDetails, setReaderDetails] = useState(useDeviceStore.getState().readerDetails);
   
   const [rfPower, setLocalRfPower] = useState(useSettingsStore.getState().rfid?.transmitPower ?? 30);
   const [isAdvancedExpanded, setIsAdvancedExpanded] = useState(false);
@@ -44,6 +46,7 @@ export default function SettingsScreen() {
       setLocalReaderState(state.readerState);
       setBatteryPercentage(state.batteryPercentage);
       setDeviceName(state.deviceName);
+      setReaderDetails(state.readerDetails);
     });
     
     // Subscribe to settings store changes
@@ -152,12 +155,21 @@ export default function SettingsScreen() {
             readerState === ReaderState.DISCONNECTED ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'
           }`}>
             {readerState === ReaderState.DISCONNECTED ?
-              'Connect your device to start scanning' : 
+              'Connect your device to start scanning' :
               'Device is connected and ready to scan'
             }
           </p>
+
+          {/*
+            Here rather than buried in Advanced Settings. This is the answer to
+            "what is this reader" — the question a support conversation opens
+            with and the one every capture we have ever taken cannot answer.
+            The Device Information block below is about the APP; this is about
+            the hardware in the operator's hand. TRA-1232.
+          */}
+          <ReaderDetailsPanel details={readerDetails} />
         </div>
-        
+
         <button
           onClick={handleConnectClick}
           disabled={
@@ -390,6 +402,12 @@ export default function SettingsScreen() {
                         const connectionInfo = {
                           readerState,
                           deviceName,
+                          // What the reader IS, alongside what it is doing.
+                          // Whatever a diagnostic carries has to say which
+                          // firmware it was taken on, or it cannot be
+                          // attributed later — and flashing destroys the
+                          // attribution permanently. TRA-1232.
+                          readerDetails,
                           batteryPercentage: getBatteryPercentage(),
                           browserSupported: isBrowserSupported,
                           inventoryRunning: readerState === ReaderState.SCANNING

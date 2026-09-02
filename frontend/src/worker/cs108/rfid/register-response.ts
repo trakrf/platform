@@ -40,6 +40,31 @@ export interface RegisterResponse {
 }
 
 /**
+ * Is this `0x8002` payload a register value, or a write acknowledgement?
+ *
+ * One op code carries both on the way up, and they are not the same length or
+ * the same shape:
+ *
+ * ```
+ * A7 B3 03 C2 82 9E 32 F1 80 02 00                          write ack, 1 byte
+ * A7 B3 0A C2 82 9E .. .. 80 02 70 00 aa aa dd dd dd dd     REG_RESP, 8 bytes
+ * ```
+ *
+ * The first line is measured, not assumed — it is what the bench reader answers
+ * a register write with, and it is what `successByte: 0x00` on
+ * `RFID_FIRMWARE_COMMAND` has always been checking. Judged by that same rule a
+ * REG_RESP fails, because `0x70 !== 0x00`: a good answer reported as a failed
+ * command.
+ *
+ * Deliberately narrow. It says only "this is shaped like a register response",
+ * and every other `0x8002` payload — including one truncated in transit — is
+ * left to the existing status-byte rule rather than guessed at.
+ */
+export function isRegisterResponse(payload: Uint8Array): boolean {
+  return payload.length === REG_RESP_LENGTH && payload[0] === LOW_LEVEL_PKT_VER;
+}
+
+/**
  * Decode a REG_RESP payload.
  *
  * ⚠ Both multi-byte fields are **byte-swapped** — spec A.3's "REVERSELY

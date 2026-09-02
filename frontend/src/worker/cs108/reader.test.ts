@@ -10,6 +10,7 @@ import { BARCODE_CONFIG_SEQUENCE } from './barcode/sequences.js';
 import { LOCATE_CONFIG_SEQUENCE, locateSettingsSequence } from './rfid/locate/sequences.js';
 import { RFID_REGISTERS } from './rfid/constant.js';
 import { RFID_START_SEQUENCE } from './rfid/sequences.js';
+import { RFID_IDENTITY_SEQUENCE } from './system/identity.js';
 import { removeLeadingZeros } from '../../utils/reconciliationUtils';
 import type { CS108Packet } from './type.js';
 
@@ -170,6 +171,230 @@ describe('CS108Reader', () => {
       await reader.disconnect();
 
       expect(commandManagerMock.abortSequence).toHaveBeenCalledWith('Disconnect requested');
+    });
+
+    /**
+     * Reader details describe THIS reader. Carrying them across a disconnect
+     * would mean the next connection opens showing the previous device's
+     * firmware — which is worse than showing nothing, because it looks read.
+     */
+    it('forgets what the last reader was', async () => {
+      await reader.connect();
+      (reader as any).readerDetails = { serialNumber: 'CS108ABC12345' };
+
+      await reader.disconnect();
+
+      expect((reader as any).readerDetails).toEqual({});
+    });
+  });
+
+  /**
+   * Reading the reader's own identity (TRA-1232).
+   *
+   * Nothing we produce records the reader's firmware, so a capture cannot say
+   * what it was taken on and flashing destroys the attribution permanently.
+   */
+  describe('reader identity', () => {
+    /**
+     * A REG_RESP as the device sends it: pkt_ver, reserved, addr LE, data LE.
+     *
+     * ⚠ On 0x8100, not on the 0x8002 the read was sent on — measured on
+     * hardware 2026-09-02. 0x8002 answers a read with the same one-byte status
+     * a write gets; the value arrives on the RFID processor's uplink data
+     * channel, which it shares with tag reads.
+     */
+    function registerResponsePacket(register: number, value: number): CS108Packet {
+      return {
+        eventCode: 0x8100,
+        event: { eventCode: 0x8100, name: 'INVENTORY_TAG', isCommand: false, isNotification: true },
+        rawPayload: new Uint8Array([
+          0x70, 0x00,
+          register & 0xFF, (register >> 8) & 0xFF,
+          value & 0xFF, (value >> 8) & 0xFF, (value >> 16) & 0xFF, (value >> 24) & 0xFF,
+        ]),
+        payload: undefined,
+      } as unknown as CS108Packet;
+    }
+
+    it('asks the Bluetooth board what it is, on connect', async () => {
+      await reader.connect();
+
+      const asked = (commandManagerMock.executeCommand as Mock).mock.calls.map(
+        ([event]) => event.eventCode
+      );
+      expect(asked).toEqual([0xB000, 0xC000, 0xB004]);
+    });
+
+    /**
+     * The whole read is a nice-to-have and a connect is not. A board that will
+     * not answer must not cost the operator their session.
+     */
+    it('connects anyway when the board will not answer', async () => {
+      (commandManagerMock.executeCommand as Mock).mockRejectedValue(new Error('Command timeout'));
+
+      await expect(reader.connect()).resolves.toBe(true);
+      expect(reader.getState()).toBe(ReaderState.CONNECTED);
+    });
+
+    it('keeps asking the rest after one read fails', async () => {
+      (commandManagerMock.executeCommand as Mock)
+        .mockRejectedValueOnce(new Error('Command timeout'))
+        .mockResolvedValue(undefined);
+
+      await reader.connect();
+
+      expect((commandManagerMock.executeCommand as Mock).mock.calls.map(([e]) => e.eventCode))
+        .toEqual([0xB000, 0xC000, 0xB004]);
+    });
+
+    /**
+     * Observed at the packet choke point, BEFORE the split into command
+     * responses and notifications.
+     *
+     * A register response may settle the command that asked for it, or arrive a
+     * beat later with nothing in flight, depending on whether the device also
+     * sends a status byte first. Nothing here has ever read a register from
+     * this device and the vendor source does not settle the question, so the
+     * observation has to be right under either behaviour.
+     */
+    it('reads the RFID firmware version out of a register response', () => {
+      const raw = (2 << 24) | (6 << 12) | 46;  // V2.6.46, the published image
+      (packetHandlerMock.processIncomingData as Mock).mockReturnValue([
+        registerResponsePacket(RFID_REGISTERS.FIRMWARE_VER, raw),
+      ]);
+
+      (reader as any).handleBleData(new Uint8Array([0xA7, 0xB3]));
+
+      expect((reader as any).readerDetails).toEqual({ rfidFirmware: '2.6.46' });
+      expect(postMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'READER_DETAILS',
+        payload: { details: { rfidFirmware: '2.6.46' } },
+      }));
+    });
+
+    /**
+     * ⚠ A register value arrives as an INVENTORY_TAG notification, and
+     * `InventoryParser` cannot read it: `pkt_ver 0x70` hits its unknown-version
+     * branch, byte-slides one byte at a time and charges eight `parseErrors`
+     * per register read. It answers no command in flight either — the 0x8002
+     * status ack already settled the read.
+     *
+     * So it is consumed here. Nothing downstream wants it, and routing it would
+     * quietly pollute a health counter on every connection.
+     */
+    it('consumes a register response instead of routing it to the tag parser', () => {
+      const router = (reader as any).notificationRouter;
+      (packetHandlerMock.processIncomingData as Mock).mockReturnValue([
+        registerResponsePacket(RFID_REGISTERS.MAC_ERROR, 0),
+      ]);
+
+      (reader as any).handleBleData(new Uint8Array([0xA7, 0xB3]));
+
+      expect(router.handleNotification).not.toHaveBeenCalled();
+    });
+
+    /** The other half: an actual tag read on that channel still gets through. */
+    it('still routes an ordinary inventory packet on the same channel', () => {
+      const router = (reader as any).notificationRouter;
+      (packetHandlerMock.processIncomingData as Mock).mockReturnValue([{
+        eventCode: 0x8100,
+        event: { eventCode: 0x8100, name: 'INVENTORY_TAG', isCommand: false, isNotification: true },
+        rawPayload: new Uint8Array([0x04, 0x00, 0x05, 0x80, 0x0A, 0x00, 0x00, 0x00]),
+        payload: undefined,
+      } as unknown as CS108Packet]);
+
+      (reader as any).handleBleData(new Uint8Array([0xA7, 0xB3]));
+
+      expect(router.handleNotification).toHaveBeenCalled();
+    });
+
+    it('reads the MAC error, including a healthy zero', () => {
+      (packetHandlerMock.processIncomingData as Mock).mockReturnValue([
+        registerResponsePacket(RFID_REGISTERS.MAC_ERROR, 0),
+      ]);
+
+      (reader as any).handleBleData(new Uint8Array([0xA7, 0xB3]));
+
+      expect((reader as any).readerDetails).toEqual({ macError: 0 });
+    });
+
+    /**
+     * Thousands of register WRITES per session are acknowledged on this same op
+     * code with a one-byte status, and none of them says anything about
+     * identity. Re-emitting on each would be a message storm.
+     */
+    it('says nothing on an ordinary firmware-command acknowledgement', () => {
+      (packetHandlerMock.processIncomingData as Mock).mockReturnValue([{
+        eventCode: 0x8002,
+        event: { eventCode: 0x8002, name: 'RFID_FIRMWARE_COMMAND', isCommand: true, isNotification: false },
+        rawPayload: new Uint8Array([0x00]),
+        payload: undefined,
+      } as unknown as CS108Packet]);
+
+      (reader as any).handleBleData(new Uint8Array([0xA7, 0xB3]));
+
+      expect((reader as any).readerDetails).toEqual({});
+      expect(postMessageSpy).not.toHaveBeenCalledWith(expect.objectContaining({
+        type: 'READER_DETAILS',
+      }));
+    });
+
+    /**
+     * The R2000 is POWERED OFF at connect — IDLE_SEQUENCE opens with
+     * RFID_POWER_OFF — so these two reads ride the first mode that powers the
+     * radio on, rather than costing the connect path a power cycle on a device
+     * whose characterised fault is RFID_POWER_OFF going silent (TRA-1217).
+     */
+    it('puts the register reads in an RFID mode sequence', async () => {
+      await reader.connect();
+      vi.clearAllMocks();
+
+      await reader.setMode(ReaderMode.INVENTORY);
+
+      const sequence = (commandManagerMock.executeSequence as Mock).mock.calls[0][0];
+      for (const read of RFID_IDENTITY_SEQUENCE) expect(sequence).toContain(read);
+    });
+
+    it('puts them in LOCATE too, without displacing the tag mask from the end', async () => {
+      await reader.connect();
+      vi.clearAllMocks();
+
+      await reader.setMode(ReaderMode.LOCATE, { rfid: { targetEPC: 'E280689400000000001018DD' } });
+
+      const sequence = (commandManagerMock.executeSequence as Mock).mock.calls[0][0];
+      for (const read of RFID_IDENTITY_SEQUENCE) expect(sequence).toContain(read);
+      // TRA-1091/TRA-1122 pin the mask as the tail of a LOCATE sequence, and
+      // two identity reads are not a reason to move it.
+      const mask = locateSettingsSequence('E280689400000000001018DD');
+      expect(sequence.slice(-mask.length)).toEqual(mask);
+    });
+
+    /** IDLE and BARCODE leave the radio off. Asking it anything there is noise. */
+    it('does not append them to a mode that leaves the radio off', async () => {
+      await reader.connect();
+      vi.clearAllMocks();
+
+      await reader.setMode(ReaderMode.IDLE);
+
+      const sequence = (commandManagerMock.executeSequence as Mock).mock.calls[0][0];
+      expect(sequence).not.toContain(RFID_IDENTITY_SEQUENCE[0]);
+    });
+
+    /**
+     * Once per connection, not once per mode change. A handheld session is a
+     * long run of mode changes, and the firmware version does not move between
+     * them — two extra commands on every one would be a permanent tax on the
+     * hottest path in the app for an answer we already have.
+     */
+    it('stops asking once the reader has answered', async () => {
+      await reader.connect();
+      (reader as any).readerDetails = { rfidFirmware: '2.6.46' };
+      vi.clearAllMocks();
+
+      await reader.setMode(ReaderMode.INVENTORY);
+
+      const sequence = (commandManagerMock.executeSequence as Mock).mock.calls[0][0];
+      expect(sequence).not.toContain(RFID_IDENTITY_SEQUENCE[0]);
     });
   });
 

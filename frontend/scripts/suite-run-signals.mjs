@@ -312,6 +312,73 @@ export function readCommandTimeouts(logPath) {
 }
 
 /**
+ * What the reader said it was (TRA-1232).
+ *
+ * ## Why an arm has to carry this
+ *
+ * Every capture we hold is unattributed. The 2026-09-01 campaign produced four
+ * transport captures of a device-side defect and none of them can say what
+ * firmware it was observed on; that had to be reconstructed from notes after
+ * the fact, which is the "quoted rather than measured" failure the campaign
+ * spent itself correcting. Flashing the reader destroys the attribution
+ * permanently, so this is the one part of TRA-1232 with a deadline on it.
+ *
+ * ## Why it is not RUN-IDENTITY
+ *
+ * The ticket asked for it there. RUN-IDENTITY is written by
+ * `watch-soak-abort-criteria.mjs`, which talks to the BRIDGE — and the bridge
+ * has no path to the reader's firmware. It reports its own version and the
+ * device MAC and nothing else. The reader is the only thing that knows, so the
+ * worker logs it and this parses it back, per rep, the same shape as
+ * `readReadCycles`.
+ *
+ * Keep `READER_DETAILS_PREFIX` in step with `READER_DETAILS_LOG_PREFIX` in
+ * `src/worker/cs108/system/identity.ts`.
+ */
+export const READER_DETAILS_PREFIX = '[Reader] Reader details: ';
+
+/**
+ * Extract the reader's identity from a captured rep log, or `null`.
+ *
+ * `null` is a measurement: this rep never heard from the reader. An empty
+ * object would say the opposite — that we asked and it has no firmware
+ * versions — and is exactly the substitution the rest of this module refuses to
+ * make.
+ *
+ * Takes the LAST line rather than the first. The worker emits one each time a
+ * value lands, and the values land at two different moments: three at connect,
+ * two more once the radio is powered. The first line is a partial read missing
+ * the most valuable of the three versions.
+ */
+export function readReaderDetails(logPath) {
+  if (!logPath || !existsSync(logPath)) return null;
+  let text;
+  try {
+    text = readFileSync(logPath, 'utf8');
+  } catch {
+    return null;
+  }
+
+  // SPLIT on the literal prefix, for the reason spelled out on
+  // countCommandTimeouts: a pattern assembled from a string is correct only
+  // while nobody edits the string.
+  const parts = text.split(READER_DETAILS_PREFIX);
+  if (parts.length < 2) return null;
+
+  const line = parts[parts.length - 1].split('\n', 1)[0];
+  try {
+    const parsed = JSON.parse(line);
+    // A JSON scalar is not a reader. Only an object is an answer.
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    // A capture cut mid-write leaves the JSON unclosed. That rep recorded
+    // nothing usable, and it must read as nothing rather than take down the
+    // summary every other rep in the arm depends on.
+    return null;
+  }
+}
+
+/**
  * The needles a PLAYWRIGHT repetition can actually produce (TRA-1206).
  *
  * The soak driver gained an e2e backend so it could run the suite TRA-1200
@@ -696,6 +763,20 @@ export function readSignals(logPath, runner = 'vitest') {
   // Per-op REFUSALS (TRA-1230). Counted apart from timeouts because they are
   // different device behaviours and because the timeout needle cannot see them.
   counts.commandRejections = runner === 'vitest' ? countCommandRejections(text) : null;
+  // What the reader said it was (TRA-1232). Not gated on the runner, because
+  // `readReaderDetails` already answers null when the line is absent and that
+  // is the honest reading on either path.
+  //
+  // ⚠ In practice a vitest rep gets a value and an e2e rep will read null. The
+  // line is a `logger.info` from the worker, which under e2e means a real Web
+  // Worker's console, and it would have to survive BOTH Playwright's handling
+  // of worker console messages and `shouldForwardConsoleLine` — whose KEEP list
+  // contains no substring of it. Neither of those has been checked on a
+  // browser, so no limb has been added to the forwarder on the strength of
+  // guessing: a filter widened for a line that never arrives is a change that
+  // measures nothing and looks like coverage. Check it on preview before
+  // claiming an e2e arm attributes itself.
+  counts.readerDetails = readReaderDetails(logPath);
   return counts;
 }
 
