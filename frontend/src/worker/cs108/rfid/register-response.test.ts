@@ -38,7 +38,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseRegisterResponse, decodeFirmwareVersion } from './register-response';
+import {
+  parseRegisterResponse,
+  decodeFirmwareVersion,
+  isRegisterResponse,
+} from './register-response';
 import { RFID_REGISTERS } from './constant';
 
 /** A REG_RESP as the device sends it: pkt_ver, reserved, addr LSB-first, data LSB-first. */
@@ -50,6 +54,43 @@ function regResp(addr: number, data: number): Uint8Array {
     data & 0xFF, (data >> 8) & 0xFF, (data >> 16) & 0xFF, (data >> 24) & 0xFF,
   ]);
 }
+
+describe('isRegisterResponse', () => {
+  /**
+   * Two different payloads share op code `0x8002` on the way up, and telling
+   * them apart is the whole reason this predicate exists.
+   *
+   * A register WRITE is acknowledged with a one-byte status. That is not
+   * inference: `A7 B3 03 C2 82 9E 32 F1 80 02 00` was captured off the bench
+   * reader, thousands of times, and it is what `successByte: 0x00` on
+   * `RFID_FIRMWARE_COMMAND` has always been checking.
+   *
+   * A register READ answers with an 8-byte REG_RESP whose first byte is 0x70.
+   * Run through the same `successByte` check, 0x70 !== 0x00, and a perfectly
+   * good answer is reported as a failed command.
+   */
+  it('recognises the 8-byte REG_RESP shape', () => {
+    expect(isRegisterResponse(regResp(RFID_REGISTERS.FIRMWARE_VER, 0))).toBe(true);
+  });
+
+  it('does not mistake a write acknowledgement for a register value', () => {
+    // The status byte the device actually sends, captured on hardware.
+    expect(isRegisterResponse(new Uint8Array([0x00]))).toBe(false);
+    // Nor a failure status.
+    expect(isRegisterResponse(new Uint8Array([0xFF]))).toBe(false);
+  });
+
+  it('rejects a payload of the right length that is not low-level API', () => {
+    const notLowLevel = regResp(RFID_REGISTERS.MAC_ERROR, 0);
+    notLowLevel[0] = 0x01;  // a command-begin packet's pkt_ver
+    expect(isRegisterResponse(notLowLevel)).toBe(false);
+  });
+
+  it('rejects a truncated register response rather than guessing at it', () => {
+    expect(isRegisterResponse(regResp(RFID_REGISTERS.MAC_ERROR, 0).subarray(0, 7))).toBe(false);
+    expect(isRegisterResponse(new Uint8Array(0))).toBe(false);
+  });
+});
 
 describe('parseRegisterResponse', () => {
   it('reads the address and value back, both byte-swapped', () => {

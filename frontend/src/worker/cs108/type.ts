@@ -38,6 +38,23 @@ export interface CS108Event<T extends CS108PayloadType = CS108PayloadType> {
   readonly responseLength?: number;    // Expected response size
   readonly successByte?: number;       // Success indicator (usually 0x00)
 
+  /**
+   * Did this response succeed? Consulted instead of `successByte` when present.
+   *
+   * `successByte` can describe exactly one answer shape, and `0x8002` has two:
+   * a one-byte status for a register write, and an 8-byte REG_RESP for a
+   * register read whose first byte is `0x70`. Under the byte rule the second
+   * one reads as a failure, because `0x70 !== 0x00` — a good register value
+   * reported as a failed command.
+   *
+   * This exists so the event that owns an op code owns the question, rather
+   * than `CommandManager` growing a special case for one of them. An event
+   * without a predicate keeps the `successByte` behaviour exactly.
+   *
+   * Refs: TRA-1232.
+   */
+  readonly isSuccess?: (rawPayload: Uint8Array) => boolean;
+
   // Parser (both commands and notifications)
   readonly parser?: PayloadParser<T>;  // Type-safe parser function
 

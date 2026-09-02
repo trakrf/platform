@@ -17,6 +17,7 @@ import {
   GET_BLUETOOTH_VERSION,
   GET_SERIAL_NUMBER
 } from './system/device-info.js';
+import { isRegisterResponse } from './rfid/register-response.js';
 // import { RFID_REGISTERS } from './rfid/constant.js'; // TODO: Uncomment when implementing register writes
 
 // =============================================================================
@@ -277,6 +278,21 @@ export const RFID_FIRMWARE_COMMAND: CS108Event = {
   responseLength: 1,   // Status byte: 0x00 = success, 0xFF = failure
   successByte: 0x00,
   parser: parseUint8,
+  // Two answer shapes on one op code, and `successByte` can only describe one.
+  //
+  // A register WRITE is acknowledged with a one-byte status — measured, not
+  // assumed: `A7 B3 03 C2 82 9E 32 F1 80 02 00`, thousands of times off the
+  // bench reader. A register READ answers with an 8-byte REG_RESP whose first
+  // byte is 0x70, and under the byte rule that reads as a failure because
+  // `0x70 !== 0x00`. Nothing noticed for as long as nothing read a register.
+  //
+  // The status branch is deliberately spelled out rather than delegated back to
+  // `successByte`: a predicate that silently fell through would be two rules
+  // for one question, and the next reader would have to work out which won.
+  //
+  // Refs: TRA-1232.
+  isSuccess: (raw) =>
+    isRegisterResponse(raw) || (raw.length > 0 && raw[0] === 0x00),
   // 200ms, from measurement rather than caution.
   //
   // 4,879 firmware-command responses captured on hardware 2026-08-30:
