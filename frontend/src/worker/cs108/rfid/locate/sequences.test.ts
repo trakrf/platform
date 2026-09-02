@@ -452,6 +452,75 @@ describe('locateSettingsSequence — ambiguous width (TRA-1120)', () => {
   });
 });
 
+/**
+ * TRA-1239 — one silent frame must not leave a Select half-written.
+ *
+ * `reader.ts` splices LOCATE_CONFIG_SEQUENCE and locateSettingsSequence into a
+ * single sequence, and CommandManager aborts a sequence at the first step whose
+ * retry schedule is spent. Before this, the register writes carried no schedule
+ * at all: one unanswered frame anywhere in the ~24 writes ended the rest of
+ * them, leaving the descriptor registers partially configured and INV_CFG —
+ * the write that puts the Selects to work, and the last one — unsent.
+ *
+ * Measured on the 2026-09-01 200-rep arm's packet ring:
+ *
+ *   register writes    45,228 sent    2 unanswered    0.004%
+ *   ABORT (0x8002)      2,346 sent   45 unanswered    1.918%, 44 recovered on retry
+ *
+ * So this is rare, and the retry is known to be answered when it is not. Both
+ * halves matter: rare is why it was never the headline defect, and answered is
+ * why a schedule is worth shipping rather than being a slower way to fail.
+ *
+ * `toleratesFailure` is deliberately NOT set. A tolerated mask write continues
+ * the sequence with the descriptor in an unknown state and tells nobody, which
+ * on Locate means searching on a mask that is part this tag and part the last
+ * one — the failure the operator reads as "the item is not here".
+ */
+describe('register writes survive one unanswered frame', () => {
+  const registerWrites = (sequence: ReturnType<typeof locateSettingsSequence>) =>
+    sequence.filter(cmd => cmd.event === RFID_FIRMWARE_COMMAND);
+
+  const EPC_96 = '112233445566778899AABBCC';
+  const EPC_128 = '112233445566778899AABBCCDDEEFF00';
+
+  it.each([
+    ['the ambiguous-width mask', locateSettingsSequence(EPC_96)],
+    ['the unambiguous 128-bit mask', locateSettingsSequence(EPC_128)],
+    ['the locate mode config', LOCATE_CONFIG_SEQUENCE]
+  ])('gives every write in %s a retry schedule', (_label, sequence) => {
+    const writes = registerWrites(sequence);
+    expect(writes.length).toBeGreaterThan(0);
+
+    for (const write of writes) {
+      expect(write.retryDelays).toEqual([100, 200, 500, 1000]);
+    }
+  });
+
+  it('tolerates none of them', () => {
+    // A half-written descriptor that reports success is worse than a sequence
+    // that fails, because only one of the two is visible to a caller.
+    const everyWrite = [
+      ...registerWrites(locateSettingsSequence(EPC_96)),
+      ...registerWrites(locateSettingsSequence(EPC_128)),
+      ...registerWrites(LOCATE_CONFIG_SEQUENCE)
+    ];
+
+    for (const write of everyWrite) {
+      expect(write.toleratesFailure).toBeFalsy();
+    }
+  });
+
+  it('matches the schedule the ABORT already ships, for the same op code', async () => {
+    // 0x8002 is one op code with one measured answer distribution (p99.9 59.8ms,
+    // max 67.8ms, timeout 200ms). Two schedules for it would be two claims
+    // about the same hardware, and only one of them could be the measured one.
+    const { RFID_STOP_SEQUENCE } = await import('../sequences.js');
+
+    expect(locateSettingsSequence(EPC_96)[0].retryDelays)
+      .toEqual(RFID_STOP_SEQUENCE[0].retryDelays);
+  });
+});
+
 describe('LOCATE_CONFIG_SEQUENCE', () => {
   it('has correct structure', () => {
     // Should have at least power on and configuration commands
@@ -459,7 +528,7 @@ describe('LOCATE_CONFIG_SEQUENCE', () => {
 
     // First command should be RFID_POWER_ON
     expect(LOCATE_CONFIG_SEQUENCE[0].event).toBe(RFID_POWER_ON);
-    expect(LOCATE_CONFIG_SEQUENCE[0].retryOnError).toBe(true);
+    expect(LOCATE_CONFIG_SEQUENCE[0].retryDelays).toEqual([100]);
     // settlingDelay is now on the event definition, not the sequence command
 
     // Should have configuration commands

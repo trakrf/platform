@@ -312,6 +312,332 @@ const REFERENCE_DENSITY = {
   secondUnique: 'mean 125, median 127',
 };
 
+/**
+ * EVERY op code the device stopped answering — including ones nobody predicted.
+ *
+ * ⚠ THE SECTION ABOVE REPORTS ONE OP CODE, AND THAT WAS ONCE THE WHOLE PICTURE.
+ * It is not. On the 2026-08-31 arm the device also stopped answering
+ * `GET_TRIGGER_STATE` (0xA001) — 12-13 times per rep, in the same reps as the
+ * power-offs — and nothing said so, because no needle counted it. Meanwhile
+ * TRA-1223 asserted the reader ignored "exactly one op code" while its own
+ * first-occurrence packet table carried 0xA001 at 76 TX / 14 RX. The data
+ * contradicted the summary in the same document, and no instrument objected.
+ *
+ * So this table is deliberately NOT a list of known op codes. It prints whatever
+ * `countCommandTimeouts` parsed out of the logs, which means **the next op code
+ * to go silent shows up here without anyone having predicted it.** A fixed list
+ * can only ever report the silences somebody already knew about.
+ *
+ * Read it alongside the window table, not instead of it: this one says WHAT went
+ * unanswered, that one says whether the tolerance held.
+ */
+/**
+ * Device-raised rejections per rep (TRA-1229).
+ *
+ * `0xA101` is how the CS108 refuses a command — the rejection never comes back
+ * under the op code being rejected, so the command that caused it sees nothing
+ * and times out. Until TRA-1229 these were discarded in `reader.ts` and this
+ * table would have read empty through an 86-minute fault storm carrying 1543 of
+ * them.
+ *
+ * Read it ALONGSIDE the op-code table above: a rep with many unanswered
+ * commands and a matching error count was refused, not ignored, and those are
+ * different defects. A rep with unanswered commands and NO errors is the case
+ * where the device really did go quiet.
+ */
+export function errorNotificationTable(records) {
+  const seen = records.filter(r => r.signals?.errorNotifications != null);
+  if (seen.length === 0) {
+    return '_No rep could observe error notifications — a runner that cannot see them._';
+  }
+  const withErrors = seen.filter(r => r.signals.errorNotifications > 0);
+  const total = seen.reduce((n, r) => n + r.signals.errorNotifications, 0);
+  if (withErrors.length === 0) {
+    return `_No rep raised a device rejection (0 across ${seen.length} rep(s) that could see them)._`;
+  }
+  const worst = withErrors.reduce((a, b) =>
+    b.signals.errorNotifications > a.signals.errorNotifications ? b : a);
+  const lines = [
+    '| measure | value |',
+    '| -- | -- |',
+    `| reps raising at least one rejection | ${withErrors.length}/${seen.length} |`,
+    `| total rejections | ${total} |`,
+    `| worst rep | ${worst.rep} (${worst.signals.errorNotifications}) |`,
+    '',
+    '⚠ **A rejection means the device refused the command, not that it ignored it.**',
+    'Compare against the op-code table above: unanswered commands WITH a matching',
+    'rejection count are refusals; unanswered commands with none are silence. Refs TRA-1229.',
+  ];
+  return lines.join('\n');
+}
+
+export function commandTimeoutsByOpTable(records) {
+  // RESOLVED, not read raw. Every archived arm predates this field, and its logs
+  // are usually still on disk — reading `r.signals` directly would report the
+  // whole back catalogue as unobservable while the answer sat next to it. That
+  // is how TRA-1226's own numbers were obtained: by hand-grepping the logs of an
+  // arm that had already finished.
+  const usable = records
+    .map((r) => resolveSignals(r).signals)
+    .filter((signals) => signals && !signals.logMissing);
+  if (usable.length === 0) {
+    return '_No repetition carried a verified capture — command timeouts are unobservable in this run._';
+  }
+
+  // null means the runner cannot see these lines at all (e2e drops
+  // `[CommandManager]` warns at the console forwarder). Different claim from an
+  // empty map, and summing the two together would turn "could not look" into
+  // "looked and found nothing".
+  const observable = usable.filter((signals) => signals.commandTimeouts != null);
+  if (observable.length === 0) {
+    return (
+      '_`[CommandManager]` lines are vitest-only; no repetition in this run could produce them. ' +
+      'Command timeouts are unobservable here, which is not the same as absent._'
+    );
+  }
+
+  const totals = new Map();
+  const repsWith = new Map();
+  for (const signals of observable) {
+    for (const [op, count] of Object.entries(signals.commandTimeouts)) {
+      if (!count) continue;
+      totals.set(op, (totals.get(op) ?? 0) + count);
+      repsWith.set(op, (repsWith.get(op) ?? 0) + 1);
+    }
+  }
+
+  const n = observable.length;
+  if (totals.size === 0) {
+    return (
+      '**No command went unanswered in this run, which says NOTHING about the device.** ' +
+      'Zero here is the absence of the condition, not evidence the reader is answering ' +
+      'reliably — the silent window appeared twice in ~400 reps and cannot be summoned. ' +
+      'Report it as "did not occur", never as a clean bill of health.'
+    );
+  }
+
+  const rows = [...totals.entries()].sort((a, b) => b[1] - a[1]);
+  const lines = [
+    '| op code | timeouts | reps affected |',
+    '| -- | -- | -- |',
+    ...rows.map(([op, total]) => `| \`${op}\` | ${total} | ${repsWith.get(op)}/${n} |`),
+    '',
+  ];
+
+  // The reason the table exists: name what is NOT already tracked by a needle,
+  // so a new silence is read as a finding rather than scrolled past.
+  const untracked = rows.filter(([op]) => op !== 'RFID_POWER_OFF').map(([op]) => op);
+  if (untracked.length > 0) {
+    lines.push(
+      `⚠ **${untracked.length} op code(s) beyond \`RFID_POWER_OFF\` went unanswered: ` +
+        `${untracked.map((op) => `\`${op}\``).join(', ')}.** The window is not confined to one ` +
+        'op code. Check the bridge packet capture for TX-vs-RX on each before concluding the ' +
+        'device was silent — an app-side timeout alone cannot distinguish "no answer sent" ' +
+        'from "answer sent and we did not match it". Refs TRA-1223.'
+    );
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Did the CS108's silent window happen, and did TRA-1217 absorb it?
+ *
+ * ⚠ THIS SECTION EXISTS BECAUSE THE FIX REMOVED ITS OWN SYMPTOM. Before
+ * TRA-1217 the window announced itself by killing reps and emitting
+ * `link-close`; now it is tolerated, so a recurrence and a quiet night produce
+ * the same rep table. Reading a clean arm as "the fix worked" is only valid if
+ * the condition occurred, and nothing else in this report can tell you that.
+ *
+ * The three counts are the falsification test written out, and they are meant to
+ * be read TOGETHER rather than as three statistics:
+ *
+ *   timeouts > 0, cleanup-failures 0  ->  the window happened and was absorbed.
+ *                                         This is the fix working, and the only
+ *                                         reading that earns TRA-1217 credit.
+ *   timeouts 0                        ->  NOT EVIDENCE OF ANYTHING. The device
+ *                                         was quiet. Says nothing about the fix.
+ *   cleanup-failures > 0              ->  the tolerance did not hold. Regression.
+ *
+ * The middle row is the one that matters most and is easiest to misread, so it
+ * is printed as a verdict rather than left to the reader. A soak that spends
+ * eight hours proving nothing should say so in words.
+ */
+export function powerOffWindowTable(records) {
+  const usable = records.filter((r) => r.signals && !r.signals.logMissing);
+  if (usable.length === 0) {
+    return '_No repetition carried a verified capture — the window is unobservable in this run._';
+  }
+
+  // null means the needle cannot fire on this runner (e2e), which is a different
+  // claim from zero and must not be summed into one.
+  const observable = usable.filter((r) => typeof r.signals.powerOffTimeouts === 'number');
+  if (observable.length === 0) {
+    return (
+      '_These needles are vitest-only; no repetition in this run could produce them. ' +
+      'The window is unobservable here, which is not the same as absent._'
+    );
+  }
+
+  const sum = (key) => observable.reduce((acc, r) => acc + (r.signals[key] ?? 0), 0);
+  const repsWith = (key) => observable.filter((r) => (r.signals[key] ?? 0) > 0).length;
+
+  const timeouts = sum('powerOffTimeouts');
+  const tolerated = sum('toleratedPowerOffs');
+  const cleanupFailed = sum('modeSwitchFailed');
+  const n = observable.length;
+
+  // Refusals are the THIRD state, and without them a refusal window falls into
+  // the branch written for a quiet device. Since TRA-1229 a refused command is
+  // settled from its 0xA101 reply in ~34ms, which clears the timeout, so
+  // `timeouts` is 0 through a storm of them. Refs TRA-1230.
+  const rejByOp = {};
+  for (const r of observable) {
+    for (const [op, c] of Object.entries(r.signals.commandRejections ?? {})) {
+      rejByOp[op] = (rejByOp[op] ?? 0) + c;
+    }
+  }
+  const rejections = Object.values(rejByOp).reduce((a, b) => a + b, 0);
+  const repsRefused = observable.filter(
+    (r) => Object.keys(r.signals.commandRejections ?? {}).length > 0
+  ).length;
+
+  const lines = [
+    '| signal | occurrences | reps affected |',
+    '| -- | -- | -- |',
+    `| \`Command timeout: RFID_POWER_OFF\` — device silent | ${timeouts} | ${repsWith('powerOffTimeouts')}/${n} |`,
+    `| tolerated, sequence continued — rescued by TRA-1217 | ${tolerated} | ${repsWith('toleratedPowerOffs')}/${n} |`,
+    `| \`Mode switching failed during cleanup\` — tolerance did NOT hold | ${cleanupFailed} | ${repsWith('modeSwitchFailed')}/${n} |`,
+    `| \`Command rejected\` — device REFUSED, did not go silent | ${rejections} | ${repsRefused}/${n} |`,
+    '',
+  ];
+
+  if (rejections > 0) {
+    const byOp = Object.entries(rejByOp)
+      .sort((a, b) => b[1] - a[1])
+      .map(([op, c]) => `\`${op}\` ${c}`)
+      .join(', ');
+    lines.push(`Refused op codes: ${byOp}`, '');
+  }
+
+  if (cleanupFailed > 0) {
+    lines.push(
+      `**REGRESSION — the tolerance did not hold on ${repsWith('modeSwitchFailed')} rep(s).** ` +
+        'TRA-1217 makes a mode change survive an unanswered `RFID_POWER_OFF`; a cleanup failure ' +
+        'means something got past it. Read the affected reps before trusting anything else here.'
+    );
+  } else if (timeouts > 0) {
+    lines.push(
+      `**The window occurred and was absorbed.** ${timeouts} unanswered \`RFID_POWER_OFF\` ` +
+        `attempt(s) across ${repsWith('powerOffTimeouts')} rep(s), no cleanup failures. Before ` +
+        'TRA-1217 these reps would have failed. This is the arm that earns the fix its credit.'
+    );
+  } else if (rejections > 0) {
+    lines.push(
+      `**REFUSED, not silent — and this is a THIRD state the older wording had no room for.** ` +
+        `${rejections} command(s) across ${repsRefused} rep(s) came back with an explicit ` +
+        'rejection, answered in ~34ms rather than left unanswered. `powerOffTimeouts` reads 0 ' +
+        'because TRA-1229 settles a refused command from its `0xA101` reply before the timeout ' +
+        'can fire — so a zero there is NOT a quiet device here. Read the refused op codes above: ' +
+        '"no answer came" and "the answer was no" are different device behaviours and the ' +
+        'distinction is what TRA-1223 turned on.'
+    );
+  } else {
+    lines.push(
+      '**The device never went silent in this run, so this arm says NOTHING about TRA-1217.** ' +
+        'Zero here is the absence of the condition, not evidence the fix works — the window ' +
+        'appeared once in 200 reps and cannot be summoned. Do not report a clean arm as ' +
+        'confirmation; it only shows nothing regressed.'
+    );
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Did the HOST leak the wire? — TRA-1239.
+ *
+ * Every other command section above scores what the DEVICE did. This one scores
+ * what we did: `CommandInFlightError` fires when a dispatch finds the in-flight
+ * slot occupied, and since the queue landed the only way that happens is
+ * something claiming the slot and failing to give it back.
+ *
+ * ## Why a zero here means more than a zero in the silent-window section
+ *
+ * `powerOffWindowTable` has to say a clean arm proves nothing, because the
+ * device's silent window appeared once in 200 reps and cannot be summoned. The
+ * asymmetry is worth stating because a reader who has just read that section
+ * will carry the caution across, and here it is wrong: the leak is HOST-side and
+ * deterministic given a failed send. An arm that tore the transport down — which
+ * every rep does — had the opportunity. So zero is a pass.
+ *
+ * The one way it lies is an arm that never disconnected, so the verdict says so
+ * rather than leaving it to be inferred.
+ *
+ * ⚠ The count is LINES, not occurrences: each event emits a WARN from the
+ * tolerated step and an ERROR from the sequence behind it. The 2026-09-01 arm's
+ * 26 lines are 13 events. This is not pedantry — TRA-1239 shipped with a
+ * pre-registered baseline of "6", hand-counted, and the archive says 13.
+ */
+export function commandInFlightTable(records) {
+  const usable = records.filter((r) => r.signals && !r.signals.logMissing);
+  if (usable.length === 0) {
+    return '_No repetition carried a verified capture — a leaked wire is unobservable in this run._';
+  }
+
+  // null is "this runner cannot see the line", which is not zero. Summing them
+  // would report an e2e-only arm as proof the wire was never leaked.
+  const observable = usable.filter((r) => typeof r.signals.commandInFlight === 'number');
+  if (observable.length === 0) {
+    return (
+      '_This needle is vitest-only; no repetition in this run could produce it. ' +
+      'Unobservable here, which is not the same as absent._'
+    );
+  }
+
+  const n = observable.length;
+  const lines_ = observable.reduce((acc, r) => acc + (r.signals.commandInFlight ?? 0), 0);
+  const repsWith = observable.filter((r) => (r.signals.commandInFlight ?? 0) > 0).length;
+  // Two log lines per occurrence. Reported as a floor rather than a division,
+  // because a rep that failed before the ERROR half emits an odd count.
+  const events = Math.ceil(lines_ / 2);
+
+  const out = [
+    '| signal | lines | reps affected |',
+    '| -- | -- | -- |',
+    `| \`Command already active\` — the wire was leaked | ${lines_} | ${repsWith}/${n} |`,
+    '',
+  ];
+
+  if (lines_ > 0) {
+    out.push(
+      `**REGRESSION — the in-flight slot was leaked on ${repsWith} of ${n} rep(s).** ` +
+        `${lines_} line(s), roughly ${events} occurrence(s): each one emits a WARN from the ` +
+        'tolerated step and an ERROR from the sequence behind it, so this count is LINES and ' +
+        'not events.',
+      '',
+      '⚠ **Do not go looking for two concurrent callers.** The error says ' +
+        '`executeCommand called concurrently`, and that wording predates the queue. The queue ' +
+        'makes genuine concurrency unreachable, so what this actually reports is that the SLOT ' +
+        'WAS NOT FREE — something claimed it and did not release it. TRA-1239 was exactly that: ' +
+        '`sendToTransport` throwing synchronously on a torn-down port, leaving `inFlight` set ' +
+        'for a command that never reached the radio. Read the failing reps for what claimed it.'
+    );
+  } else {
+    out.push(
+      '**The wire was never leaked in this run.** Unlike the silent-window section above, this ' +
+        'zero IS evidence: the leak is host-side and deterministic given a failed send, so an ' +
+        'arm that exercised the failure had the opportunity to show it.',
+      '',
+      '⚠ That holds only if teardown actually ran. An arm whose reps never disconnected never ' +
+        'put a closed port under a dispatch, and did not test this — check `linkCloses` and the ' +
+        'rep count before reading this as a pass.'
+    );
+  }
+
+  return out.join('\n');
+}
+
 export function densityTable(records) {
   const resolved = records.map((r) => resolveReadCycles(r));
   const measured = resolved.filter(({ readCycles }) =>
@@ -446,6 +772,14 @@ function main() {
   console.log(signalPairingTable(records));
   console.log(`\n## Wedge mode — TRA-1150's two failure modes, scored separately\n`);
   console.log(wedgeModeTable(records));
+  console.log(`\n## The CS108's silent window — did it happen, and did TRA-1217 absorb it?\n`);
+  console.log(powerOffWindowTable(records));
+  console.log(`\n## Every unanswered command, by op code\n`);
+  console.log(commandTimeoutsByOpTable(records));
+  console.log(`\n## Device-raised rejections (0xA101)\n`);
+  console.log(errorNotificationTable(records));
+  console.log(`\n## Did the HOST leak the wire? — TRA-1239\n`);
+  console.log(commandInFlightTable(records));
   console.log(`\n## Field density\n`);
   console.log(densityTable(records));
   console.log(`\n## Record integrity\n`);

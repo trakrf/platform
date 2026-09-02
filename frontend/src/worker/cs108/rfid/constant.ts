@@ -9,6 +9,16 @@
  * RFID Register Addresses (for low-level operations)
  */
 export const RFID_REGISTERS = {
+  // Device identity and health (Appendix A.4).
+  //
+  // These are READ registers, and reading one is a path this codebase has never
+  // used: every register operation so far is a write, and per spec A.3 a write
+  // gets no response at all. See `register-response.ts`. Refs TRA-1232.
+  /** Firmware version of the RFID processor. bits 31:24 major, 23:12 minor, 11:0 patch. */
+  FIRMWARE_VER: 0x0000,
+  /** The R2000's own error code — see Appendix B. Zero when healthy. */
+  MAC_ERROR: 0x0005,
+
   // Antenna Configuration
   ANT_CYCLES: 0x0700,
   ANT_PORT_SEL: 0x0701,

@@ -25,7 +25,9 @@ import {
   ReaderMode,
   RainTarget,
   type ReaderModeType,
-  type ReaderSettings
+  type ReaderStateType,
+  type ReaderSettings,
+  type ReaderDetails
 } from '../types/reader.js';
 import { postWorkerEvent, WorkerEventType, type WorkerEvent } from '../types/events.js';
 import { CommandManager, SequenceAbortedError, CommandInFlightError } from './command.js';
@@ -34,14 +36,35 @@ import { PacketHandler, type LinkProfile, type FragmentMetrics } from './packet.
 import { NotificationManager } from './notification/manager.js';
 import { NotificationRouter } from './notification/router.js';
 import { logger, LogLevel } from '../utils/logger.js';
-import type { CommandSequence } from './type.js';
+import type { CommandSequence, CS108Packet } from './type.js';
 import { IDLE_SEQUENCE, BATTERY_VOLTAGE_SEQUENCE } from './system/sequences.js';
+import {
+  IDENTITY_SEQUENCE,
+  RFID_IDENTITY_SEQUENCE,
+  applyIdentityPacket,
+  isRegisterResponsePacket,
+  formatReaderDetails
+} from './system/identity.js';
 import { INVENTORY_CONFIG_SEQUENCE } from './rfid/inventory/sequences.js';
 import { BARCODE_CONFIG_SEQUENCE, BARCODE_START_SEQUENCE, BARCODE_STOP_SEQUENCE } from './barcode/sequences.js';
 import { applyRfidSettings, type RfidSettings } from './rfid/firmware-command.js';
 import { LOCATE_CONFIG_SEQUENCE, locateSettingsSequence } from './rfid/locate/sequences.js';
 import { transmitPowerSequence, RFID_START_SEQUENCE, RFID_STOP_SEQUENCE } from './rfid/sequences.js';
 import { RFID_FIRMWARE_COMMAND } from './event.js';
+
+/**
+ * How long a settings push waits for a transient reader state to clear before
+ * giving up and reporting that it could not apply.
+ *
+ * Generous on purpose. The point of the wait is that BUSY *ends* — the longest
+ * thing that holds it is a mode change, which is tens of commands each with a
+ * settling delay, plus any quiet window the device declared. This has to
+ * outlast that comfortably or the timeout becomes a second silent drop with
+ * extra steps. It is a backstop against a wedged reader, not a scheduling
+ * knob, and it must stay finite: an unbounded wait here would hang the
+ * DeviceManager command queue behind a reader that is never coming back.
+ */
+const SETTINGS_SETTLE_TIMEOUT_MS = 15000;
 
 /**
  * CS108 RFID Reader
@@ -64,6 +87,17 @@ class CS108Reader extends BaseReader {
   private lastBatteryPercentage = -1;
   private scanningRequested = false; // Track if scanning was explicitly requested (button/trigger)
   private lastAppliedTargetEPC?: string; // The LOCATE tag mask actually written to hardware
+  private scanStartedByTrigger = false;  // Whether the running scan is the trigger's to stop
+  private converging = false;            // Re-entrancy guard for convergeToTriggerState()
+  /**
+   * What the connected reader turned out to be. Empty until it answers, and
+   * emptied again on disconnect: these describe THIS reader, and carrying them
+   * across would open the next connection showing the previous device's
+   * firmware — worse than showing nothing, because it looks read. TRA-1232.
+   */
+  private readerDetails: ReaderDetails = {};
+  // Callers parked until the reader stops being BUSY. See waitForSettledState().
+  private settleWaiters = new Set<(state: ReaderStateType) => void>();
 
   constructor() {
     super();
@@ -87,7 +121,23 @@ class CS108Reader extends BaseReader {
     // Create state context for CommandManager
     const stateContext: StateContext = {
       getReaderState: () => this.readerState,
-      setReaderState: (state) => this.setReaderState(state)
+      setReaderState: (state) => {
+        this.setReaderState(state);
+        // THE choke point. Every sequence that finishes publishes its final
+        // state through here, so this is the one place that reliably observes
+        // "the reader has stopped being BUSY" — whichever path made it busy.
+        // Trigger edges are dropped while BUSY on purpose; this is where the
+        // LEVEL gets reconciled afterwards, so a dropped press cannot strand
+        // the reader. Deferred, because converging re-enters start/stop.
+        if (state === ReaderState.CONNECTED) {
+          // setTimeout, NOT queueMicrotask. Convergence is a BACKSTOP: it must
+          // run after everything already in flight, and callers mid-operation
+          // resume on microtasks. Scheduling it as a microtask makes it race
+          // the very caller that just finished a stop and is about to start
+          // again — two startScanning() calls, one of them throwing.
+          setTimeout(() => { void this.convergeToTriggerState(); }, 0);
+        }
+      }
     };
 
     // Initialize command manager with transport callback, notification handler, and state context
@@ -129,6 +179,35 @@ class CS108Reader extends BaseReader {
         this.triggerState = payload?.pressed ?? false;
         logger.debug(`Trigger state updated: ${this.triggerState}`);
 
+        // Tell the UI NOW, not after the scan call completes (TRA-1171).
+        //
+        // This post used to sit at the end of the case, behind an awaited
+        // startScanning()/stopScanning(). The store could not learn the
+        // operator had let go until the ABORT round-trip finished, so the
+        // Locate screen correctly rendered every read that arrived in the
+        // meantime — gauge moving and alarm sounding after the release.
+        //
+        // Posting first also fixes the worse limb: when the awaited call
+        // REJECTS, the event was never emitted at all (TRA-1168).
+        //
+        // Press-side ordering audit, required by TRA-1171's acceptance and
+        // done before this line was written. Subscribers now see pressed=true
+        // BEFORE the reader reports SCANNING. Every consumer of
+        // deviceStore.triggerState was checked:
+        //   - DebugPanel, Header  — render an indicator only.
+        //   - LocateScreen status — requires triggerState AND isScanning to
+        //     agree, so it passes through one extra render with neither
+        //     branch true and settles on the same message.
+        //   - device-manager's button-restart guard — only reachable on
+        //     SCANNING -> CONNECTED, which a press cannot produce.
+        //   - useScanToInput (armed at AssetSearchSort, AssetForm,
+        //     LocationForm) issues setMode(BARCODE) on the edge. Post-TRA-1197
+        //     CommandManager queues instead of throwing, so it waits its turn
+        //     behind the worker's own startScanning() rather than colliding —
+        //     same order as before, without the "Command already active"
+        //     throw that used to be the risk here.
+        postWorkerEvent(event);
+
         // Check if we're in a scanning mode
         if (this.readerMode === ReaderMode.BARCODE ||
             this.readerMode === ReaderMode.INVENTORY ||
@@ -138,8 +217,10 @@ class CS108Reader extends BaseReader {
           const now = Date.now();
           if (now - this.lastTriggerTime < this.triggerDebounceMs) {
             logger.debug('Trigger event debounced, but state tracked for reconciliation');
-            // Still emit for UI feedback even if debounced
-            break;
+            // The UI feedback this used to `break` for has already been posted
+            // above. Breaking now would fall into the post at the end of the
+            // switch and emit the edge twice.
+            return;
           }
           this.lastTriggerTime = now;
 
@@ -163,9 +244,7 @@ class CS108Reader extends BaseReader {
         } else {
           logger.debug(`Trigger event ignored - mode is ${this.readerMode}`);
         }
-        // Post event to DeviceManager for UI sync
-        postWorkerEvent(event);
-        return; // Don't fall through to postWorkerEvent at end
+        return; // already posted above, ahead of the awaits
       }
 
       case 'BARCODE_AUTO_STOP_REQUEST':
@@ -236,7 +315,74 @@ class CS108Reader extends BaseReader {
     // connect, resolved from the active tab — which is INVENTORY on the default
     // Scan tab, not IDLE (TRA-1101).
 
+    await this.readBoardIdentity();
+
     logger.debug('[Reader] Connected successfully');
+  }
+
+  /**
+   * Ask the Bluetooth board what it is.
+   *
+   * Three commands, one at a time, and every one of them optional. A version
+   * string is worth having and it is not worth a failed connect, so each
+   * failure is logged and stepped over rather than propagated — nobody is
+   * waiting on a serial number, and the operator is waiting on the reader.
+   *
+   * `runExclusive` rather than `executeSequence` because a sequence publishes
+   * BUSY on its way in and CONNECTED on its way out. Those would land while
+   * `BaseReader.connect()` is still in CONNECTING and has yet to publish
+   * CONNECTED itself, so the UI would see the reader connect, and the state
+   * machine's CONNECTED choke point would fire, before the connect finished.
+   *
+   * The values are not taken from what these calls RESOLVE with. They arrive by
+   * observation in `handleBleData`, which is the same path the register reads
+   * use and is right whether or not a response settles the command that asked
+   * for it. Refs TRA-1232.
+   */
+  private async readBoardIdentity(): Promise<void> {
+    await this.commandManager.runExclusive(async (run) => {
+      for (const step of IDENTITY_SEQUENCE) {
+        try {
+          await run.command(step.event, step.payload);
+        } catch (error) {
+          logger.warn(
+            `[Reader] ${step.event.name} did not answer; reader details will be incomplete`,
+            error
+          );
+        }
+      }
+    });
+  }
+
+  /**
+   * Fold anything a packet says about the reader's identity into what we know.
+   *
+   * Called from `handleBleData` before the split into command responses and
+   * notifications, because the two kinds of answer leave it by different doors:
+   * a board version settles the command that asked for it and carries on to the
+   * command manager, while a register value settles nothing — the `0x8002`
+   * status ack already did that — and is consumed.
+   *
+   * The echoed `reg_addr` is what makes the register half safe: a register read
+   * is the one self-identifying exchange the RFID processor performs
+   * (TRA-1154), so a reply is filed against the register the DEVICE names
+   * rather than the one we last asked about.
+   */
+  private observeReaderIdentity(packet: CS108Packet): void {
+    const updated = applyIdentityPacket(this.readerDetails, packet);
+    if (!updated) return;
+
+    this.readerDetails = updated;
+
+    // One line per update, so every rep of every soak arm attributes its own
+    // capture. Parsed by scripts/suite-run-signals.mjs — keep the prefix and
+    // this call in step with READER_DETAILS_PREFIX there.
+    logger.info(formatReaderDetails(this.readerDetails));
+
+    postWorkerEvent({
+      type: WorkerEventType.READER_DETAILS,
+      payload: { details: { ...this.readerDetails } }
+    });
   }
   
   /**
@@ -257,6 +403,9 @@ class CS108Reader extends BaseReader {
 
     // Nothing is on the hardware any more, so nothing was applied
     this.lastAppliedTargetEPC = undefined;
+
+    // And these described the reader that just went away.
+    this.readerDetails = {};
 
     // Abort any running sequence on disconnect
     this.commandManager.abortSequence('Disconnect requested');
@@ -309,22 +458,66 @@ class CS108Reader extends BaseReader {
     for (const packet of packets) {
       logger.debug(`Packet: ${packet.event.name} (0x${packet.eventCode.toString(16)}), isCommand: ${packet.event.isCommand}, isNotification: ${packet.event.isNotification}`);
 
-      // Special handling for ERROR_NOTIFICATION with "Wrong header prefix" error
-      // This error occurs when the CS108 hardware misinterprets fragmented inventory packets
-      // as malformed commands. This is a known hardware issue that occurs during RFID operations.
-      // Since inventory packets are streaming and non-critical, we can safely ignore these
-      // specific errors. They don't indicate actual communication problems.
-      if (packet.event.name === 'ERROR_NOTIFICATION' && packet.rawPayload.length >= 2) {
-        const errorCode = (packet.rawPayload[0] << 8) | packet.rawPayload[1];
-        if (errorCode === 0x0000) {
-          // Always ignore "Wrong header prefix" errors - they're spurious from the hardware
-          // The CS108 firmware incorrectly interprets its own fragmented packets as commands
-          logger.debug('[Reader] Ignoring spurious "Wrong header prefix" error from CS108 hardware');
-          continue; // Skip this packet entirely
+      // Identity is read by OBSERVATION, ahead of routing. A board-version
+      // reply is also the answer to a command in flight and goes on to settle
+      // it; a register value is not, and is consumed here.
+      this.observeReaderIdentity(packet);
+
+      // ⚠ A register value arrives on 0x8100 — the RFID processor's uplink DATA
+      // channel, which it shares with tag reads — and NOT on the 0x8002 the
+      // read was sent on. Measured on hardware 2026-09-02; see
+      // isRegisterResponsePacket().
+      //
+      // So it reaches this loop as an INVENTORY_TAG notification, and
+      // InventoryParser cannot read it: `pkt_ver 0x70` hits the unknown-version
+      // branch, byte-slides one at a time and charges eight `parseErrors` per
+      // register read. It answers no command in flight either — the 0x8002
+      // status ack already settled the read. Nothing downstream wants it.
+      if (isRegisterResponsePacket(packet)) continue;
+
+      // A rejection is a FAULT, and it is handled before ordinary routing.
+      //
+      // `0xA101` says the device refused something we sent, or that it is in a
+      // state that needs addressing before business as usual. It is also the
+      // only way the CS108 reports a refusal: a rejection comes back under
+      // 0xA101 and never under the op code being rejected, so the command that
+      // caused it sees nothing and waits out its own timeout.
+      //
+      // This block used to do the opposite. It matched code 0x0000 and
+      // `continue`d, on the belief that those frames were "spurious" and did
+      // not "indicate actual communication problems". The 2026-09-01 hardware
+      // capture measured 1543 of them across one 86-minute window — one per
+      // unanswered command, median 34 ms after the command they answered,
+      // against 26 ms for a healthy reply to the same op code. They were
+      // replies, and 0x0000 was the code the device actually used, so the
+      // discard threw away every one of them before any handler ran. The window
+      // presented as a silent device for the length of an entire soak arm.
+      //
+      // Handled up front rather than left to the isCommand/isNotification
+      // dispatch below, because under that dispatch a fault arriving while a
+      // command is in flight goes to the command path and is never counted,
+      // while one arriving idle goes to the notification path and never settles
+      // anything. A fault should not have to win a routing race to be seen.
+      //
+      // Refs: TRA-1229, TRA-1223.
+      if (packet.event.name === 'ERROR_NOTIFICATION') {
+        // Always: name it, count it, surface it.
+        this.notificationRouter.handleNotification(packet);
+
+        // And fail the command it answers, rather than letting it time out.
+        if (this.commandManager.isWaitingForResponse(packet)) {
+          this.commandManager.handleCommandResponse(packet);
         }
+        continue;
       }
 
-      // First check if this is a command response we're waiting for
+      // First check if this is a command response we're waiting for.
+      //
+      // `isWaitingForResponse()` now compares the packet's op code against the
+      // command in flight, so a command-class packet that answers something
+      // else falls through to the notification router instead of settling it
+      // (TRA-1154). Before, the test was "is anything pending" and the arriving
+      // packet was ignored entirely.
       if (packet.event.isCommand && this.commandManager.isWaitingForResponse(packet)) {
         // This is a response to a pending command - handle ONLY as command
         logger.debug(`Routing command response to manager: ${packet.event.name} (0x${packet.eventCode.toString(16)})`);
@@ -335,6 +528,15 @@ class CS108Reader extends BaseReader {
 
 
         this.notificationRouter.handleNotification(packet);
+      } else {
+        // Command-class, unsolicited, and not declared as a notification: there
+        // is nowhere to route it. Say so. This case existed before and was a
+        // silent `continue`, which is the shape that hides a protocol surprise
+        // for as long as nobody goes looking.
+        logger.warn(
+          `[Reader] Dropping unroutable packet ${packet.event.name} ` +
+          `(0x${packet.eventCode.toString(16)}) - answers no command in flight and is not a notification`
+        );
       }
     }
   }
@@ -441,12 +643,11 @@ class CS108Reader extends BaseReader {
       // start scanning immediately. This handles the case where the trigger
       // press triggered the mode switch (e.g., useScanToInput) and the reader
       // missed the original trigger notification because it was in IDLE mode.
-      if (this.triggerState &&
-          this.readerState === ReaderState.CONNECTED &&
-          (mode === ReaderMode.BARCODE || mode === ReaderMode.INVENTORY || mode === ReaderMode.LOCATE)) {
-        logger.debug('[setMode] Trigger held after mode change - auto-starting scan');
-        await this.startScanning();
-      }
+      // The mode sequence published CONNECTED on its way out, which schedules
+      // convergeToTriggerState(); a trigger still held is picked up there.
+      // Awaited here as well so setMode() does not resolve before the scan it
+      // implies has been started — callers and tests both rely on that.
+      await this.convergeToTriggerState();
 
     } catch (error) {
       logger.error(`[setMode] Failed to set ${mode} mode:`, error);
@@ -493,7 +694,8 @@ class CS108Reader extends BaseReader {
         return [
           ...IDLE_SEQUENCE,
           ...INVENTORY_CONFIG_SEQUENCE,
-          ...transmitPowerSequence(this.readerSettings.rfid?.transmitPower)
+          ...transmitPowerSequence(this.readerSettings.rfid?.transmitPower),
+          ...this.rfidIdentityReads()
         ];
 
       case ReaderMode.LOCATE: {
@@ -507,6 +709,10 @@ class CS108Reader extends BaseReader {
           ...IDLE_SEQUENCE,
           ...LOCATE_CONFIG_SEQUENCE,
           ...transmitPowerSequence(this.readerSettings.rfid?.transmitPower),
+          // Ahead of the mask, not after it. The mask sequence being LAST is a
+          // property this file's tests pin down (TRA-1091/TRA-1122), and two
+          // identity reads are not a reason to move it.
+          ...this.rfidIdentityReads(),
           ...locateSettingsSequence(targetEPC)
         ];
       }
@@ -527,6 +733,26 @@ class CS108Reader extends BaseReader {
         throw new Error(`Unsupported reader mode: ${mode}`);
     }
   }
+
+  /**
+   * The two RFID processor registers, if we still need them.
+   *
+   * These live on the R2000, and the R2000 is powered OFF at connect —
+   * `IDLE_SEQUENCE` opens with `RFID_POWER_OFF` and it is the RFID mode
+   * sequences that open with `RFID_POWER_ON`. Reading them at connect would
+   * mean powering the radio up and down for two register values, on a device
+   * whose characterised fault is `RFID_POWER_OFF` going silent for minutes at a
+   * time (TRA-1217). So they ride the first RFID mode of a connection instead,
+   * where the radio is already on and firmware commands are already flowing.
+   *
+   * Once per connection, gated on the answer rather than on a flag. A handheld
+   * session is a long run of mode changes and the firmware version does not
+   * move between them; two extra commands on every one would be a permanent tax
+   * on the hottest path in the app for something we already know.
+   */
+  private rfidIdentityReads(): CommandSequence {
+    return this.readerDetails.rfidFirmware === undefined ? [...RFID_IDENTITY_SEQUENCE] : [];
+  }
   
   /**
    * Get current reader settings
@@ -535,6 +761,62 @@ class CS108Reader extends BaseReader {
   getSettings(): ReaderSettings {
     // Return a deep copy using native structuredClone (Node 18+, modern browsers)
     return structuredClone(this.readerSettings);
+  }
+
+  /**
+   * Publish a state change, and release anything waiting on the reader to settle.
+   *
+   * Overridden rather than hooked through StateContext because StateContext only
+   * sees the states CommandManager publishes. connect() and disconnect() set the
+   * state directly in BaseReader, and a waiter that a disconnect could not wake
+   * is an unsatisfiable waiter — it would sit until its timeout with the answer
+   * already known. Taking the base method is what makes this the one choke point
+   * for every state change rather than most of them.
+   */
+  protected setReaderState(newState: ReaderStateType): void {
+    super.setReaderState(newState);
+
+    if (this.settleWaiters.size === 0) return;
+    // Copy: a waiter removes itself from the set as it resolves.
+    for (const settle of [...this.settleWaiters]) settle(newState);
+  }
+
+  /**
+   * Wait for a transient reader state to resolve into a settled one.
+   *
+   * Resolves with whatever state ended the wait, so the caller decides what to
+   * do about it — CONNECTED means "apply now", anything else means "report it".
+   * Resolving rather than throwing is deliberate: the caller has to be able to
+   * tell "settled, but into DISCONNECTED" from "still BUSY when time ran out",
+   * and both of those are reportable outcomes rather than exceptions.
+   *
+   * Always resolves. Never rejects, never waits forever.
+   */
+  private waitForSettledState(timeoutMs: number): Promise<ReaderStateType> {
+    const isTransient = (state: ReaderStateType) =>
+      state === ReaderState.BUSY || state === ReaderState.CONNECTING;
+
+    if (!isTransient(this.readerState)) {
+      return Promise.resolve(this.readerState);
+    }
+
+    return new Promise<ReaderStateType>((resolve) => {
+      const settle = (state: ReaderStateType) => {
+        if (isTransient(state)) return;
+        this.settleWaiters.delete(settle);
+        clearTimeout(timer);
+        resolve(state);
+      };
+
+      // Declared after `settle` and closed over by it: `settle` cannot run
+      // before it is in the waiter set, which is after this line.
+      const timer = setTimeout(() => {
+        this.settleWaiters.delete(settle);
+        resolve(this.readerState);
+      }, timeoutMs);
+
+      this.settleWaiters.add(settle);
+    });
   }
 
   /**
@@ -594,71 +876,122 @@ class CS108Reader extends BaseReader {
       }
     }
 
-    // Check if we need to apply hardware settings
+    // Check if we need to apply hardware settings.
+    //
+    // targetEPC belongs in this list and was missing from it. This flag gates
+    // the whole block below, INCLUDING the tag-mask write that block ends with,
+    // so a push carrying nothing but a new target matched neither branch: not
+    // applied, not reported, not logged at any level. The integration spec
+    // documented that and worked around it by always sending transmitPower
+    // alongside — a workaround at the call site is the evidence, so remove the
+    // need for it rather than the comment.
     const hasHardwareSettings =
       settings.rfid?.transmitPower !== undefined ||
       settings.rfid?.session !== undefined ||
       settings.rfid?.algorithm !== undefined ||
       settings.rfid?.inventoryMode !== undefined ||
+      settings.rfid?.targetEPC !== undefined ||
       settings.barcode !== undefined;
+
+    // WAIT OUT A TRANSITION RATHER THAN DISCARDING THE PUSH.
+    //
+    // BUSY is transient by construction: a sequence is in flight and will
+    // publish CONNECTED when it finishes. Discarding a push that lands there
+    // did not merely lose the write — it moved it. The mask still reached the
+    // hardware, from startScanning()'s TRA-1122 backstop, but now INSIDE the
+    // user's search: 18 commands at a 100ms settling delay each, behind the
+    // vendor's post-ABORT quiet window. Measured on hardware at 1861ms + ~1.8s,
+    // against a 4s trigger hold — the search never started at all and the only
+    // reads were strays from the previous one. TRA-1225.
+    //
+    // Waiting is what makes `await setSettings(...)` mean "the radio is
+    // configured", which is what the caller already believes it means. The cost
+    // does not disappear; it goes back to being paid in the settings call,
+    // which is where a push that lands while CONNECTED has always paid it.
+    if (hasHardwareSettings && (this.readerState === ReaderState.BUSY ||
+                                this.readerState === ReaderState.CONNECTING)) {
+      logger.info(
+        `[Reader] Settings push arrived while ${this.readerState} - ` +
+        'waiting for the reader to settle before applying'
+      );
+      const settled = await this.waitForSettledState(SETTINGS_SETTLE_TIMEOUT_MS);
+      if (settled === ReaderState.BUSY || settled === ReaderState.CONNECTING) {
+        logger.error(
+          `[Reader] Reader still ${settled} after ${SETTINGS_SETTLE_TIMEOUT_MS}ms - ` +
+          'giving up on the settle. The reader is wedged, not merely busy.'
+        );
+      }
+    }
 
     // If we have hardware settings and we're READY, apply them
     if (hasHardwareSettings && this.readerState === ReaderState.CONNECTED) {
       try {
-        // Apply transmit power if changed
-        if (settings.rfid?.transmitPower !== undefined) {
-          await this.commandManager.executeSequence(transmitPowerSequence(settings.rfid.transmitPower));
-          logger.debug('[Reader] Applied transmit power');
-        }
+        // ONE exclusive hold on the wire for the whole block, not one per call.
+        //
+        // These steps used to be separate public calls, and they were kept
+        // together only by accident: a concurrent caller made the second one
+        // throw, which bailed the whole block out. Now that a concurrent caller
+        // QUEUES instead, three independent calls would let a mode change land
+        // between them — an inventory session write applied after a switch to
+        // LOCATE, say, on a guard that was evaluated before the switch. Taking
+        // the wire once is what actually makes this atomic; the old behaviour
+        // relied on a throw it no longer gets. TRA-1143.
+        await this.commandManager.runExclusive(async (run) => {
+          // Apply transmit power if changed
+          if (settings.rfid?.transmitPower !== undefined) {
+            await run.sequence(transmitPowerSequence(settings.rfid.transmitPower));
+            logger.debug('[Reader] Applied transmit power');
+          }
 
-        // Apply session/algorithm settings if in INVENTORY mode
-        if (this.readerMode === ReaderMode.INVENTORY) {
-          const rfidSettings = settings.rfid;
-          if (rfidSettings?.session !== undefined ||
-              rfidSettings?.algorithm !== undefined ||
-              rfidSettings?.inventoryMode !== undefined) {
+          // Apply session/algorithm settings if in INVENTORY mode
+          if (this.readerMode === ReaderMode.INVENTORY) {
+            const rfidSettings = settings.rfid;
+            if (rfidSettings?.session !== undefined ||
+                rfidSettings?.algorithm !== undefined ||
+                rfidSettings?.inventoryMode !== undefined) {
 
-            // Convert session to string format if provided
-            let sessionString: 'S0' | 'S1' | 'S2' | 'S3' | undefined;
-            if (rfidSettings.session !== undefined) {
-              const sessionNum = Number(rfidSettings.session);
-              sessionString = `S${sessionNum}` as 'S0' | 'S1' | 'S2' | 'S3';
-            }
-
-            // Build settings object for firmware commands
-            const firmwareSettings: RfidSettings = {
-              ...(sessionString !== undefined && { session: sessionString }),
-              ...(rfidSettings.algorithm !== undefined && { algorithm: rfidSettings.algorithm }),
-              ...(rfidSettings.inventoryMode !== undefined && { inventoryMode: rfidSettings.inventoryMode })
-            };
-
-            if (Object.keys(firmwareSettings).length > 0) {
-              const commands = applyRfidSettings(firmwareSettings);
-              for (const payload of commands) {
-                await this.commandManager.executeCommand(RFID_FIRMWARE_COMMAND, payload);
+              // Convert session to string format if provided
+              let sessionString: 'S0' | 'S1' | 'S2' | 'S3' | undefined;
+              if (rfidSettings.session !== undefined) {
+                const sessionNum = Number(rfidSettings.session);
+                sessionString = `S${sessionNum}` as 'S0' | 'S1' | 'S2' | 'S3';
               }
-              logger.debug(`[Reader] Applied ${commands.length} RFID settings to hardware`);
+
+              // Build settings object for firmware commands
+              const firmwareSettings: RfidSettings = {
+                ...(sessionString !== undefined && { session: sessionString }),
+                ...(rfidSettings.algorithm !== undefined && { algorithm: rfidSettings.algorithm }),
+                ...(rfidSettings.inventoryMode !== undefined && { inventoryMode: rfidSettings.inventoryMode })
+              };
+
+              if (Object.keys(firmwareSettings).length > 0) {
+                const commands = applyRfidSettings(firmwareSettings);
+                for (const payload of commands) {
+                  await run.command(RFID_FIRMWARE_COMMAND, payload);
+                }
+                logger.debug(`[Reader] Applied ${commands.length} RFID settings to hardware`);
+              }
             }
           }
-        }
 
-        // Apply targetEPC immediately if we're in LOCATE mode
-        if (this.readerMode === ReaderMode.LOCATE && settings.rfid?.targetEPC !== undefined) {
-          const epcValue = settings.rfid.targetEPC || '';
-          if (epcValue) {
-            logger.debug('[Reader] Applying EPC tag mask in LOCATE mode');
-            await this.commandManager.executeSequence(locateSettingsSequence(epcValue));
-            this.lastAppliedTargetEPC = epcValue;
-            logger.debug('[Reader] EPC tag mask applied successfully');
-          } else {
-            logger.warn('[Reader] LOCATE mode without targetEPC - will receive all tags');
+          // Apply targetEPC immediately if we're in LOCATE mode
+          if (this.readerMode === ReaderMode.LOCATE && settings.rfid?.targetEPC !== undefined) {
+            const epcValue = settings.rfid.targetEPC || '';
+            if (epcValue) {
+              logger.debug('[Reader] Applying EPC tag mask in LOCATE mode');
+              await run.sequence(locateSettingsSequence(epcValue));
+              this.lastAppliedTargetEPC = epcValue;
+              logger.debug('[Reader] EPC tag mask applied successfully');
+            } else {
+              logger.warn('[Reader] LOCATE mode without targetEPC - will receive all tags');
+            }
           }
-        }
 
-        // TODO: Apply barcode settings when implemented
-        if (settings.barcode) {
-          logger.debug('[Reader] Barcode settings received (implementation pending)');
-        }
+          // TODO: Apply barcode settings when implemented
+          if (settings.barcode) {
+            logger.debug('[Reader] Barcode settings received (implementation pending)');
+          }
+        });
 
       } catch (error) {
         // Handle sequence abortion gracefully.
@@ -681,24 +1014,82 @@ class CS108Reader extends BaseReader {
           // Settings are already stored, will be used next time
           return;
         }
-        // Same situation, different error type (TRA-1091). A concurrent
-        // setMode() — the Locate deep link dispatches both from one click —
-        // leaves the command mutex held, and CommandManager rejects with a
-        // CommandInFlightError, which is not a SequenceAbortedError, so it
-        // misses the branch above and used to surface as ERROR on the primary
-        // Locate path. It is benign for the same reason: the settings are
-        // already stored, and buildModeSequences() reads the tag mask back out
-        // of them, so the mode change applies what this call could not.
+        // TRA-1091's guard, KEPT — but no longer silent.
+        //
+        // It should now be unreachable: a concurrent setMode() makes this call
+        // queue rather than lose the mutex, so the settings get applied instead
+        // of skipped. The temptation was to delete it as dead. That is the
+        // wrong trade. If it fires anyway, the queue has been bypassed and the
+        // wire has two owners — and the two outcomes are not symmetric:
+        //
+        //   swallow it   → a settings write deferred to the mode change, which
+        //                  reads the tag mask back out of readerSettings and
+        //                  applies it. Harmless, and the behaviour TRA-1091
+        //                  shipped after finding this ON HARDWARE.
+        //   propagate it → ERROR on the primary Locate path. That is the defect
+        //                  TRA-1091 exists to prevent.
+        //
+        // So keep the defensive behaviour and remove only the silence: log it
+        // at error level so it is countable and cannot hide, then take the
+        // branch that does not break Locate. A guard crafted against a sharp
+        // edge is not dead just because the edge is currently sheathed.
         if (error instanceof CommandInFlightError) {
-          logger.debug('[Reader] Settings application skipped (command in flight, mode change in progress)');
+          logger.error(
+            '[Reader] CommandInFlightError on the settings path — this should be ' +
+            'unreachable since the command queue landed. Treating it as benign ' +
+            'so Locate survives, but the queue was bypassed and that is a bug:',
+            error
+          );
           return;
         }
         logger.error('[Reader] Failed to apply hardware settings:', error);
         throw error;
       }
     } else if (hasHardwareSettings && this.readerState !== ReaderState.CONNECTED) {
-      // We have hardware settings but can't apply them now - just log
-      logger.debug('[Reader] Hardware settings stored but not applied (reader not READY)');
+      // A push that could not reach the radio is REPORTED, never swallowed.
+      //
+      // This was `logger.debug`, and WorkerLogger defaults to INFO, so the drop
+      // produced no output at all: every soak log we hold is blind to it, and it
+      // was found only by temporarily raising the default and re-running. That
+      // is the durable half of TRA-1225 and it outlives whatever the fix turns
+      // out to be — a silent drop is not just a missing write, it is a missing
+      // write that cannot be recovered from evidence already collected.
+      //
+      // Report what was actually lost, not the whole push. Reaching here does
+      // not mean nothing applied: the retarget-while-scanning path above cycles
+      // a running search and DOES write the new mask, and crying about a
+      // targetEPC that is already on the radio would train the next reader of
+      // these logs to ignore the line.
+      const unapplied: string[] = [];
+      if (settings.rfid?.transmitPower !== undefined) unapplied.push('transmitPower');
+      if (settings.rfid?.session !== undefined) unapplied.push('session');
+      if (settings.rfid?.algorithm !== undefined) unapplied.push('algorithm');
+      if (settings.rfid?.inventoryMode !== undefined) unapplied.push('inventoryMode');
+      if (settings.barcode !== undefined) unapplied.push('barcode');
+
+      // lastAppliedTargetEPC is the record of what the hardware actually holds,
+      // so it — not the push — decides whether the target got there.
+      const targetEPC = settings.rfid?.targetEPC;
+      const targetMissedTheRadio =
+        targetEPC !== undefined && targetEPC !== this.lastAppliedTargetEPC;
+
+      if (targetMissedTheRadio) {
+        // A targetEPC is not a preference. It IS the search, and the Locate
+        // mask is the only EPC filter in the path — addRssiReading() never
+        // receives an EPC — so a target that did not reach the radio means the
+        // next search runs against the previous tag with nothing downstream to
+        // catch it. That is an error, not a note.
+        logger.error(
+          `[Reader] targetEPC '${targetEPC}' did NOT reach the radio (reader is ` +
+          `${this.readerState}). Locate will run against the previously applied ` +
+          `mask '${this.lastAppliedTargetEPC ?? 'none'}' until something writes this one.`
+        );
+      } else if (unapplied.length > 0) {
+        logger.warn(
+          `[Reader] Hardware settings not applied (reader is ${this.readerState}): ` +
+          unapplied.join(', ')
+        );
+      }
     }
 
     // Emit settings updated event
@@ -710,11 +1101,82 @@ class CS108Reader extends BaseReader {
     logger.debug('[Reader] Settings processing complete');
   }
   
+  /**
+   * Reconcile what the reader is DOING against where the trigger actually IS.
+   *
+   * The rule, and it is one rule rather than a set of special cases: trigger
+   * edges that arrive while the reader is BUSY are dropped, and when the reader
+   * settles the LEVEL is reconciled. Dropping edges is right — the alternative
+   * is queueing work for edges the operator has already moved past — but it is
+   * only safe if the level is honoured afterwards, because a dropped press is
+   * followed by no further edge. The finger is already down.
+   *
+   * This replaces three hand-placed reconciliations that had grown apart:
+   * one at the tail of stopScanning(), one at the tail of setMode(), one at the
+   * tail of startScanning(). Between them they left two paths uncovered —
+   * applySettings() and the battery poll both complete a sequence, publish
+   * CONNECTED and never looked at the trigger — so a press dropped during a
+   * settings push or a battery check stranded the reader with the trigger held
+   * and nothing scanning. Found on hardware within seconds of trying, by
+   * cycling the trigger while moving between tabs.
+   *
+   * Consolidating is the fix rather than adding a fourth site: N sites means N
+   * places to forget, and the two that were forgotten are exactly the two that
+   * fire unpredictably.
+   */
+  private async convergeToTriggerState(): Promise<void> {
+    if (this.converging) return;
+
+    // Only meaningful once the reader has settled. BUSY means work is still in
+    // flight and its own completion will bring us back here.
+    if (this.readerState !== ReaderState.CONNECTED && this.readerState !== ReaderState.SCANNING) {
+      return;
+    }
+    if (this.readerMode !== ReaderMode.INVENTORY &&
+        this.readerMode !== ReaderMode.LOCATE &&
+        this.readerMode !== ReaderMode.BARCODE) {
+      return;
+    }
+
+    const wantsScanning = this.triggerState;
+    const isScanning = this.readerState === ReaderState.SCANNING;
+    if (wantsScanning === isScanning) return;
+
+    // Do not tear down a scan the BUTTON started just because no trigger is
+    // held — that scan is not the trigger's to stop.
+    if (isScanning && !this.scanStartedByTrigger) return;
+
+    this.converging = true;
+    try {
+      if (wantsScanning) {
+        logger.debug('[Reader] Converging to trigger held - starting scan');
+        await this.startScanning();
+      } else {
+        logger.debug('[Reader] Converging to trigger released - stopping scan');
+        await this.stopScanning();
+      }
+    } catch (error) {
+      // Convergence is best-effort reconciliation, not a user-initiated
+      // command. Rethrowing here would surface as an unhandled rejection from
+      // a microtask with no caller to receive it.
+      logger.error('[Reader] Trigger convergence failed:', error);
+    } finally {
+      this.converging = false;
+    }
+  }
+
   async startScanning(): Promise<void> {
     logger.debug(`[Reader] Starting scan in ${this.readerMode} mode, state=${this.readerState}`);
 
     // Mark that scanning was explicitly requested
     this.scanningRequested = true;
+
+    // Was the trigger down when this start was requested? Captured BEFORE the
+    // first await, because it is the premise of the convergence check at the
+    // end: only a scan the TRIGGER started should be undone by the trigger
+    // coming up. A button-started scan is not the trigger's to stop.
+    const startedWithTriggerHeld = this.triggerState;
+    this.scanStartedByTrigger = startedWithTriggerHeld;
 
     // Validate we're in a ready state
     if (this.readerState !== ReaderState.CONNECTED) {
@@ -777,12 +1239,29 @@ class CS108Reader extends BaseReader {
       // CommandManager already set state to SCANNING
       logger.debug('[Reader] Scan started successfully');
 
-      // Reconciliation: Check if trigger was released while we were starting
-      // Only stop if BOTH trigger is released AND button is not active
-      if (!this.triggerState && !this.scanningRequested) {
-        logger.debug('[Reader] Trigger released during start, reconciling by stopping');
+      // CONVERGE ON THE TRIGGER'S CURRENT LEVEL, not on the edge that got here.
+      //
+      // Trigger events that arrive while the reader is BUSY are dropped on
+      // purpose — the handler acts only from CONNECTED (press) or SCANNING
+      // (release), and a start holds BUSY throughout. Dropping them is right:
+      // the alternative is queueing work for edges the operator has already
+      // moved past. But dropping an edge is only safe if the LEVEL is
+      // reconciled once the work completes, or the reader ends up scanning
+      // with the operator's finger off the trigger — which feels unresponsive,
+      // and an unresponsive trigger is cycled harder, which drops more edges.
+      //
+      // This check used to read `!this.triggerState && !this.scanningRequested`
+      // and could never fire: startScanning() sets `scanningRequested = true`
+      // as its first statement and nothing clears it before here, so the second
+      // term was always false. It conflated "the on-screen button is holding
+      // this scan" with "somebody called startScanning", and only the first
+      // meaning makes the guard correct. Another control that could not go red.
+      if (startedWithTriggerHeld && !this.triggerState) {
+        logger.debug('[Reader] Trigger released during start, converging by stopping');
         await this.stopScanning();
       }
+      // Anything else the trigger did while this was BUSY is reconciled by
+      // convergeToTriggerState() when the sequence's final state is published.
     } catch (error) {
       logger.error('[Reader] Failed to start scanning:', error);
       // CommandManager already set state to ERROR
@@ -819,30 +1298,21 @@ class CS108Reader extends BaseReader {
 
           await this.commandManager.executeSequence(RFID_STOP_SEQUENCE);
 
-          // Monitor for packet streaming to verify stop worked
-          logger.debug('[Reader] Monitoring packet stream to verify stop...');
-          const packetMonitorStart = Date.now();
-          const maxWaitTime = 2000; // 2 seconds per API documentation
-
-          // Wait and check if packets are still streaming
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Initial wait
-
-          const elapsedTime = Date.now() - packetMonitorStart;
-
-          // Check if we need to force RFID power off
-          // Note: In a real implementation, we'd monitor actual packet flow
-          // For now, we implement the safety mechanism structure
-          if (elapsedTime >= maxWaitTime) {
-            logger.warn('[Reader] Packets may still be streaming after ABORT - forcing RFID power off');
-
-            // Import and execute RFID power off command
-            const { RFID_POWER_OFF } = await import('./event');
-            await this.commandManager.executeCommand(RFID_POWER_OFF);
-
-            logger.debug('[Reader] RFID power forced off to stop packet streaming');
-          } else {
-            logger.debug('[Reader] RFID inventory stopped successfully with ABORT');
-          }
+          // The vendor's 2s buffer-clear window is declared on
+          // RFID_STOP_SEQUENCE and held by CommandManager, so it gates the next
+          // DISPATCH rather than this caller: the operator is told the scan
+          // stopped as soon as the ABORT is acknowledged.
+          //
+          // What used to be here was an unconditional 1000ms sleep followed by
+          // `if (Date.now() - startedJustNow >= 2000)` guarding a forced
+          // RFID_POWER_OFF — a recovery that could not fire, because the
+          // stopwatch was started immediately before the sleep that was meant
+          // to run it down. It cost every stop a perceptible second and bought
+          // nothing, and it waited half the interval it cited. Restoring the
+          // recovery needs a real observation of streaming packets, which is a
+          // different piece of work; a control that cannot go red is worse than
+          // no control, because it reads as one. TRA-1185.
+          logger.debug('[Reader] RFID inventory stopped with ABORT');
           break;
         }
 
@@ -861,18 +1331,12 @@ class CS108Reader extends BaseReader {
       // CommandManager already set state to READY
       logger.debug('[Reader] Scan stopped successfully');
 
-      // Reconciliation: Check if trigger was pressed while we were stopping
-      // Only reconcile if we're in a scanning mode (not IDLE)
-      if (this.triggerState &&
-          (this.readerMode === ReaderMode.INVENTORY ||
-           this.readerMode === ReaderMode.LOCATE ||
-           this.readerMode === ReaderMode.BARCODE)) {
-        logger.debug('[Reader] Trigger pressed during stop, reconciling by starting');
-        // Reset the flag before recursing
-        this.isStoppingScanning = false;
-        await this.startScanning();
-        return; // Exit early to avoid clearing flag twice
-      }
+      // A trigger pressed while we were stopping used to be reconciled by a
+      // bespoke restart here. It is now convergeToTriggerState()'s job, fired
+      // when this stop publishes CONNECTED — same outcome, one implementation.
+      // The flag has to be cleared first either way, or the restart it triggers
+      // sees a stop still in progress.
+      this.isStoppingScanning = false;
     } catch (error) {
       logger.error('[Reader] Failed to stop scanning:', error);
       // CommandManager already set state to ERROR

@@ -8,6 +8,7 @@ describe('DeviceStore', () => {
     useDeviceStore.setState({
       readerState: ReaderState.DISCONNECTED,
       deviceName: null,
+      readerDetails: null,
       batteryPercentage: null,
       triggerState: false,
     });
@@ -31,6 +32,39 @@ describe('DeviceStore', () => {
     });
     
     expect(result.current.deviceName).toBe('CS108ReaderAABBCC');
+  });
+
+  /**
+   * Reader details describe THIS reader (TRA-1232). Absent is a real state —
+   * "the reader has not answered yet" — and it must never read as a value.
+   */
+  it('should update reader details', () => {
+    const { result } = renderHook(() => useDeviceStore());
+
+    act(() => {
+      result.current.setReaderDetails({ rfidFirmware: '2.6.46', macError: 0 });
+    });
+
+    expect(result.current.readerDetails).toEqual({ rfidFirmware: '2.6.46', macError: 0 });
+  });
+
+  /**
+   * They described the reader that just went away. Carrying them across would
+   * open the next connection showing the previous device's firmware — worse
+   * than showing nothing, because it looks read.
+   */
+  it('forgets reader details on disconnect', async () => {
+    const { result } = renderHook(() => useDeviceStore());
+
+    act(() => {
+      result.current.setReaderDetails({ serialNumber: 'CS108ABC12345' });
+    });
+
+    await act(async () => {
+      await result.current.disconnect();
+    });
+
+    expect(result.current.readerDetails).toBeNull();
   });
 
   it('should update battery percentage', () => {

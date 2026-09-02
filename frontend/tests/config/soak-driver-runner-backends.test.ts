@@ -323,8 +323,39 @@ describe('playwright report parsing', () => {
  * — not a structural one, and TRA-1209 fixed the forwarder. That distinction is
  * exactly why they were recorded as `null` rather than `0`: a zero would have
  * read as "the transport did nothing" and nobody would have gone looking.
+ *
+ * ⚠ MIXED LIST as of TRA-1223, and the mixture is deliberate. The list means
+ * "carries null on an e2e rep", which is the right membership test for this
+ * file's purpose, but the REASONS differ and the difference decides whether an
+ * entry may ever leave:
+ *
+ *   structural   harnessLines, triggerTimeout, modeSwitchFailed — the emitter is
+ *                a file no browser loads. These can never leave.
+ *   incidental   powerOffTimeouts, toleratedPowerOffs — the worker DOES run in
+ *                the browser, but these are `logger.warn` and carry none of the
+ *                console forwarder's KEEP tokens, so it drops them. Widening the
+ *                forwarder would move them out, exactly as TRA-1209 moved the
+ *                `[ble-timing]` needles out. Do that on a measurement, not on an
+ *                assumption.
  */
-const VITEST_ONLY = ['harnessLines', 'triggerTimeout'];
+const VITEST_ONLY = [
+  'harnessLines',
+  'triggerTimeout',
+  'powerOffTimeouts',
+  'toleratedPowerOffs',
+  'modeSwitchFailed',
+  // incidental, and a THIRD reason worth naming: this one would be counted
+  // HALF. An occurrence emits two lines, and only one of them —
+  // `[setMode] Failed to set Idle mode: CommandInFlightError: ...` — carries a
+  // token the console forwarder keeps (its first limb passes any text
+  // containing `Failed`). The tolerated step's WARN does not. Admitting it to
+  // E2E_SIGNALS would therefore produce a count that means something different
+  // per runner, silently halved, which is worse than the honest null: a low
+  // number reads as a mostly-clean arm where an absent one reads as
+  // unobserved. Widening the forwarder to keep both lines is what would move
+  // it out — on a measurement, not on an assumption. TRA-1239.
+  'commandInFlight',
+];
 
 describe('signals are per-runner, and absence is not zero', () => {
   it('the e2e needle table omits every vitest-only needle', () => {
@@ -354,8 +385,37 @@ describe('signals are per-runner, and absence is not zero', () => {
   it('vitest signals are byte-identical to today — no e2e keys leak in', () => {
     const log = fixture('vitest.log', '[Harness] connect\n[Harness] disconnect\n');
     const counts = readSignals(log, 'vitest');
-    expect(Object.keys(counts).sort()).toEqual(['logMissing', ...Object.keys(SIGNALS)].sort());
+    // `commandTimeouts`, `errorNotifications`, `commandRejections` and
+    // `readerDetails` are named explicitly because none of them is a needle —
+    // a parsed per-op map (TRA-1226), a running total read off the producer's
+    // own line (TRA-1229), a per-op refusal map (TRA-1230), and an extracted
+    // identity (TRA-1232) — so deriving the expected key set from SIGNALS alone
+    // cannot see any of them. Listing them keeps this assertion exact rather
+    // than quietly loosening it to a subset check: a genuine e2e leak must
+    // still fail, and it does, below.
+    expect(Object.keys(counts).sort()).toEqual(
+      ['logMissing', 'commandTimeouts', 'errorNotifications', 'commandRejections',
+       'readerDetails',
+       ...Object.keys(SIGNALS)].sort()
+    );
     expect(counts.harnessLines).toBe(2);
+  });
+
+  it('no e2e-only key reaches a vitest record', () => {
+    // The guard the assertion above is named for, stated directly. It used to be
+    // implied by an exact key-set match against SIGNALS; once a non-needle field
+    // joined that record the implication got weaker, so the real rule is written
+    // out rather than left to be inferred from a list.
+    const log = fixture('vitest-leak.log', '[Harness] x\n');
+    const counts = readSignals(log, 'vitest');
+    const e2eOnly = Object.keys(E2E_SIGNALS).filter((name) => !(name in SIGNALS));
+
+    expect(e2eOnly.length, 'the e2e table must have at least one exclusive key').toBeGreaterThan(0);
+    for (const name of e2eOnly) {
+      expect(counts, `${name} is an e2e-only needle and must not appear here`).not.toHaveProperty(
+        name
+      );
+    }
   });
 
   it('an e2e rep records null for a signal it cannot produce, not 0', () => {

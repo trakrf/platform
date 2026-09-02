@@ -6,8 +6,8 @@
  * terminated by 0x0D (CR). A single payload may contain multiple complete
  * records, or a record may span multiple payloads.
  *
- * See `docs/superpowers/specs/2026-05-23-tra-821-barcode-fragment-reassembly-design.md`
- * for the empirical firmware behaviors this class handles.
+ * The empirical firmware behaviors this class handles were characterised in
+ * TRA-821.
  */
 
 const RECORD_TERMINATOR = 0x0D;

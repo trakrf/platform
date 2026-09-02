@@ -105,6 +105,26 @@ export function shouldReapplyModeForTarget(
 }
 
 /**
+ * Does this trigger edge close the locate release gate (TRA-1171)?
+ *
+ * A release closes it, and does so without waiting for the reader to leave
+ * SCANNING — that is the window where the post-ABORT reads arrive, and the
+ * whole reason reader.ts posts this event ahead of its awaits.
+ *
+ * A press does NOT open it, and the asymmetry is deliberate. The reader drops
+ * a press unless its state is exactly CONNECTED, so a press is not evidence a
+ * scan started, and an open gate with no scan behind it would admit stray
+ * reads. READER_STATE_CHANGED -> SCANNING is what opens the gate — which also
+ * keeps the on-screen scan button working, since the button produces no
+ * trigger edge at all.
+ *
+ * Collapsing this to `setSearchActive(pressed)` would be wrong both ways.
+ */
+export function closesLocateGate(pressed: boolean): boolean {
+  return !pressed;
+}
+
+/**
  * Resolve the reader mode for a tab. The Scan tab is dual-mode (TRA-1031):
  * its RFID|Barcode toggle decides between INVENTORY and BARCODE. The Kits tab
  * is dual-mode per view (TRA-1033): commission defaults to barcode, verify to
@@ -305,6 +325,11 @@ export class DeviceManager {
           const prevState = useDeviceStore.getState().readerState;
           useDeviceStore.getState().setReaderState(newState);
 
+          // The locate release gate follows the reader (TRA-1171). Opening it
+          // here rather than on the trigger press is what keeps the on-screen
+          // scan button working — the button never produces a trigger edge.
+          useLocateStore.getState().setSearchActive(newState === ReaderState.SCANNING);
+
           // If reader transitions from SCANNING to READY (scan completed)
           // and the scan button is still active, restart scanning
           // This keeps inventory/locate running when triggered by UI button
@@ -352,6 +377,13 @@ export class DeviceManager {
           useDeviceStore.getState().setBatteryPercentage(event.payload.percentage);
           break;
 
+        case WorkerEventType.READER_DETAILS:
+          // Arrives more than once per connection: three values at connect and
+          // two more once the radio is powered. The worker sends the whole
+          // picture each time rather than a delta, so this is a plain set.
+          useDeviceStore.getState().setReaderDetails(event.payload.details);
+          break;
+
         case WorkerEventType.LOCATE_UPDATE: {
           // Route locate updates to the locate store
           // Ignore readings older than 1 second (stale data)
@@ -382,6 +414,14 @@ export class DeviceManager {
           // Handle trigger state from worker
           const triggerPayload = event.payload;
           useDeviceStore.getState().setTriggerState(triggerPayload.pressed);
+
+          // Close the locate gate on release, ahead of the reader leaving
+          // SCANNING (TRA-1171). Those few hundred milliseconds are exactly
+          // when the post-ABORT reads land, and they are what used to keep the
+          // gauge moving and the alarm sounding after the operator let go.
+          if (closesLocateGate(triggerPayload.pressed)) {
+            useLocateStore.getState().setSearchActive(false);
+          }
           // Worker handles start/stop operations directly
           // Don't sync scanButtonActive - let trigger and button be independent
           break;
@@ -510,12 +550,18 @@ export class DeviceManager {
       async (state) => {
         // The Locate target lives in these settings, and gaining or losing one
         // flips the tab between acquiring (BARCODE) and searching (LOCATE)
-        // (TRA-1121). Decided here, and applied *after* the settings push,
-        // because both are commands into a non-re-entrant CommandManager: two
-        // subscribers issuing them back to back means the second loses the
-        // mutex with "Command already active". Losing setSettings is benign —
-        // reader.ts:652 says why — but a lost setMode is never reapplied, and
-        // the reader silently stays in the mode it was already in.
+        // (TRA-1121). Decided here, and applied *after* the settings push, so
+        // the mode change sees the settings it depends on.
+        //
+        // The ORIGINAL reason was different and has expired: CommandManager was
+        // not re-entrant, so two subscribers issuing back to back meant the
+        // second lost the mutex with "Command already active" and a lost
+        // setMode was never reapplied. TRA-1197 made CommandManager queue, so
+        // nothing is dropped now. Keeping the right conclusion attached to a
+        // reason that has stopped being true is worse than being plainly stale:
+        // the next person checks the reason, finds it false, and deletes the
+        // conclusion with it. The ordering is still load-bearing; the mutex is
+        // not the thing enforcing it.
         const nextHasTarget = hasLocateTarget(state.rfid);
         const modeNeedsReapplying = shouldReapplyModeForTarget(
           this.previousHasTarget,

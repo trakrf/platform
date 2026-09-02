@@ -14,6 +14,48 @@
  */
 
 /**
+ * What the connected reader actually is.
+ *
+ * Every field is optional and every field is read from the device, so an
+ * absent one means "we did not get an answer" rather than "the reader does not
+ * have one". That distinction is the point: a capture attributed to the wrong
+ * firmware is worse than a capture attributed to none.
+ *
+ * ⚠ **There is no MAC address here, and that is not an omission.** Web
+ * Bluetooth deliberately does not expose one — `BluetoothDevice.id` is an
+ * opaque identifier scoped to the origin — and the CS108's own Bluetooth board
+ * command set has no MAC read either (`0xC000` is the firmware version,
+ * `0xC003`/`0xC004` set and get the advertised name). `serialNumber` is the
+ * durable per-unit identifier; the advertised name is carried separately, by
+ * the transport that already knows it.
+ *
+ * Refs: TRA-1232.
+ */
+export interface ReaderDetails {
+  /** Silicon Labs microcontroller firmware, `major.minor.build` (`0xB000`). */
+  siliconLabsFirmware?: string;
+  /** Bluetooth board firmware, `major.minor.build` (`0xC000`). */
+  bluetoothFirmware?: string;
+  /**
+   * RFID processor firmware, `major.minor.patch` (register `0x0000`).
+   *
+   * The most valuable of the three: this image is shared across the CS108, the
+   * CS463 and the CS203X, so it is the number that says whether a fixed-reader
+   * customer is exposed to the same device behaviour as a handheld one.
+   */
+  rfidFirmware?: string;
+  /** Reader serial number, 13-byte UTF-8 (`0xB004`). */
+  serialNumber?: string;
+  /**
+   * The RFID processor's own error code (register `0x0005`), zero when healthy.
+   *
+   * Read because the only fault we have ever been able to see is the Bluetooth
+   * board's `0x0000` — the messenger's complaint, not the radio's.
+   */
+  macError?: number;
+}
+
+/**
  * Reader operational states
  */
 export const ReaderState = {

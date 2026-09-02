@@ -20,29 +20,37 @@ import { logger } from '../../utils/logger.js';
  * CS108 error codes
  */
 export enum CS108ErrorCode {
-  WRONG_HEADER_PREFIX = 0x0001,
-  PAYLOAD_LENGTH_TOO_LARGE = 0x0002,
-  UNKNOWN_TARGET = 0x0003,
-  UNKNOWN_EVENT = 0x0004,
-  INVALID_PARAMETER = 0x0005,
-  COMMAND_TIMEOUT = 0x0006,
-  FIRMWARE_ERROR = 0x0007,
-  HARDWARE_ERROR = 0x0008,
+  WRONG_HEADER_PREFIX = 0x0000,
+  PAYLOAD_LENGTH_TOO_LARGE = 0x0001,
+  UNKNOWN_TARGET = 0x0002,
+  UNKNOWN_EVENT = 0x0003,
 }
 
 /**
- * Map error codes to descriptions
+ * Map error codes to descriptions.
+ *
+ * ⚠ These four are the whole of the spec's table. Until TRA-1229 this enum
+ * numbered each of them one higher and carried four more —
+ * `INVALID_PARAMETER`, `COMMAND_TIMEOUT`, `FIRMWARE_ERROR`, `HARDWARE_ERROR`
+ * at 0x0005–0x0008 — which appear nowhere in the byte-stream spec. The shift
+ * mattered: `0x0000` is the code the device sends in practice, and under the
+ * old numbering it fell off the end of the map and reported as "Unknown error".
+ *
+ * `command.ts` has always read the same wire bytes correctly. Two tables that
+ * disagree is the defect; this is now the only one, and `command.ts` imports it.
  */
-const ERROR_DESCRIPTIONS: Record<number, string> = {
+export const ERROR_DESCRIPTIONS: Record<number, string> = {
   [CS108ErrorCode.WRONG_HEADER_PREFIX]: 'Wrong header prefix',
   [CS108ErrorCode.PAYLOAD_LENGTH_TOO_LARGE]: 'Payload length too large',
-  [CS108ErrorCode.UNKNOWN_TARGET]: 'Unknown target module',
-  [CS108ErrorCode.UNKNOWN_EVENT]: 'Unknown event code',
-  [CS108ErrorCode.INVALID_PARAMETER]: 'Invalid parameter',
-  [CS108ErrorCode.COMMAND_TIMEOUT]: 'Command timeout',
-  [CS108ErrorCode.FIRMWARE_ERROR]: 'Firmware error',
-  [CS108ErrorCode.HARDWARE_ERROR]: 'Hardware error',
+  [CS108ErrorCode.UNKNOWN_TARGET]: 'Unknown target',
+  [CS108ErrorCode.UNKNOWN_EVENT]: 'Unknown event',
 };
+
+/** Describe a code, naming the number when the spec does not cover it. */
+export function describeErrorCode(code: number): string {
+  return ERROR_DESCRIPTIONS[code]
+    ?? `Unknown error 0x${code.toString(16).padStart(4, '0')}`;
+}
 
 /**
  * Rate limiting configuration
@@ -59,6 +67,9 @@ interface RateLimitInfo {
  */
 export class ErrorNotificationHandler implements NotificationHandler {
   private errorRateLimit = new Map<number, RateLimitInfo>();
+  /** Unconditional arrival counts, per code and in total. Never rate-limited. */
+  private errorCounts = new Map<number, number>();
+  private totalErrors = 0;
   private readonly ERROR_LOG_THRESHOLD = 3;
   private readonly ERROR_LOG_INTERVAL_MS = 5000;
   private readonly CLEANUP_INTERVAL_MS = 60000; // Clean up old entries every minute
@@ -95,7 +106,38 @@ export class ErrorNotificationHandler implements NotificationHandler {
     }
 
     // Get error description
-    const description = ERROR_DESCRIPTIONS[errorCode] || 'Unknown error';
+    const description = describeErrorCode(errorCode);
+
+    // Count BEFORE the rate limiter, and unconditionally.
+    //
+    // The limiter caps log volume, which is right. What it must not do is make
+    // the frames disappear: on the 2026-09-01 hardware run it turned 1716
+    // arrivals into 8 log lines and nothing else recorded them, so an 86-minute
+    // fault storm was invisible to the soak instrument. A count is cheap and it
+    // is the thing an arm can read. Refs TRA-1229.
+    this.errorCounts.set(errorCode, (this.errorCounts.get(errorCode) ?? 0) + 1);
+    this.totalErrors += 1;
+
+    // ⚠ UNCONDITIONAL, and separate from the descriptive line above on purpose.
+    //
+    // TRA-1229 put the running total on the rate-limited line, reasoning that a
+    // surviving line still reports an accurate count. **The limiter eats the
+    // tail**: at a threshold of 3, six arrivals inside the interval log totals
+    // 1, 2, 3 and suppress the rest, so the highest LOGGED total is not the
+    // final total. A 3-rep mini arm measured the bridge seeing 18 frames while
+    // the instrument reported 9 — exactly half.
+    //
+    // The limiter stays: it is what keeps an 18-per-minute fault storm from
+    // burying a rep log, and that is a job worth doing. The count simply must
+    // not depend on it. One terse line per arrival costs ~40 lines per rep at
+    // occurrence-3 rates, which is nothing.
+    //
+    // Parsed by `ERROR_NOTIFICATION_TOTAL_RE` in scripts/suite-run-signals.mjs
+    // — keep the wording in step. Refs TRA-1231.
+    logger.warn(
+      `[CS108 Error] fault-count total=${this.totalErrors} ` +
+      `code=0x${errorCode.toString(16).padStart(4, '0')}`
+    );
 
     // Check rate limiting
     if (this.shouldLog(errorCode)) {
@@ -131,10 +173,22 @@ export class ErrorNotificationHandler implements NotificationHandler {
   /**
    * Get severity based on error code
    */
-  private getSeverity(errorCode: number): 'warning' | 'error' | 'critical' {
-    if (errorCode === CS108ErrorCode.HARDWARE_ERROR) return 'critical';
-    if (errorCode === CS108ErrorCode.FIRMWARE_ERROR) return 'error';
+  private getSeverity(_errorCode: number): 'warning' | 'error' | 'critical' {
+    // The spec's four codes are all protocol-level rejections: the device
+    // understood the frame well enough to refuse it. The previous branches
+    // named HARDWARE_ERROR and FIRMWARE_ERROR, which are not in the spec and
+    // which the device never sent in 7.5 hours of capture. Refs TRA-1229.
     return 'warning';
+  }
+
+  /** How many `0xA101` frames carried this code. Unaffected by log rate limiting. */
+  getErrorCount(errorCode: number): number {
+    return this.errorCounts.get(errorCode) ?? 0;
+  }
+
+  /** How many `0xA101` frames arrived in total. Unaffected by log rate limiting. */
+  getTotalErrorCount(): number {
+    return this.totalErrors;
   }
 
   /**

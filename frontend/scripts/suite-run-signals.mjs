@@ -72,7 +72,346 @@ export const SIGNALS = {
   // scripts/ack-latency-report.mjs.
   linkCloses: '[ble-timing] link-close',
   connectSamples: '[ble-timing] connect',
+
+  // ── The CS108's silent window, after TRA-1217 made it survivable ──────────
+  //
+  // ⚠ THE FIX DISABLED THE DETECTOR. Read this before trusting a clean arm.
+  //
+  // The device stops acknowledging RFID_POWER_OFF (0x8001) for long stretches —
+  // 82 minutes across 63 reps on 2026-08-31 — while answering every 0x8002
+  // one-for-one and streaming tag data. It used to announce itself: the teardown
+  // failed, `locate.spec.ts`'s afterAll threw past its own `cleanup()`, the link
+  // stayed claimed, and `linkCloses` above counted 63 of them.
+  //
+  // TRA-1217 fixed both halves. A mode change now tolerates the unanswered
+  // power-off and `cleanup()` always runs — so a recurrence costs nothing, kills
+  // no reps, and **emits no link-close**. Which leaves these two indistinguishable
+  // on every count above:
+  //
+  //     the window recurred and was absorbed   ->  reps pass, linkCloses 0
+  //     the window never happened              ->  reps pass, linkCloses 0
+  //
+  // An arm cannot tell you the fix worked if it cannot tell you the condition
+  // occurred. These three needles are what separates them, and they are the
+  // falsification test on TRA-1217 written out mechanically: if the fix works,
+  // `powerOffTimeouts` stays NON-ZERO while `linkCloses` and rep failures go to
+  // zero. If all of them go to zero together, something else moved and TRA-1217
+  // is not what did it. TRA-1223.
+  //
+  // Per-attempt, so this is the raw count of device silence — 14-23 per rep
+  // inside the 2026-08-31 window, 0 in all 137 clean reps. Perfect separation,
+  // which is what makes it worth counting rather than a noisy proxy.
+  powerOffTimeouts: '[CommandManager] Command timeout: RFID_POWER_OFF',
+  // Once per mode change that spent its whole retry schedule and carried on
+  // anyway. This is the rescue counter: every occurrence is a rep that would
+  // have died before TRA-1217.
+  toleratedPowerOffs: 'tolerated, continuing the sequence',
+  // The teardown giving up. 63/63 in the failing reps, 0/137 in the clean ones.
+  // Should now be ZERO even when the window recurs — if it fires alongside
+  // `powerOffTimeouts`, the tolerance did not hold and the fix is incomplete.
+  modeSwitchFailed: 'Mode switching failed during cleanup',
+
+  // ── The host leaking the wire, which is NOT the device going silent ───────
+  //
+  // `CommandInFlightError`. Every other counter above is about what the DEVICE
+  // did; this one is about the host claiming the in-flight slot and failing to
+  // give it back, after which the next dispatch is refused against a command
+  // that never reached the radio.
+  //
+  // TARGET: ZERO — including inside a wedge window, which is the only place it
+  // has ever been observed. Not "low". A non-zero count means something claims
+  // the slot without releasing it, which is what the error's docblock in
+  // worker/cs108/command.ts now tells a reader to go looking for.
+  //
+  // ⚠ Counted, not parsed per op, and that breaks deliberately from
+  // `commandTimeouts` / `commandRejections` a few lines down. Those parse
+  // because a fixed list can only count what somebody enumerated (TRA-1226).
+  // That argument does not carry here: one constructor emits one message, and
+  // the half that actually kills a mode change —
+  //
+  //   [setMode] Failed to set Idle mode: CommandInFlightError: Command already
+  //   active - executeCommand called concurrently
+  //
+  // — carries no op name at all. A per-op table would report `{}` for those and
+  // read as coverage it does not have.
+  //
+  // ⚠ TWO LINES PER OCCURRENCE: the tolerated step's WARN and the failing
+  // sequence's ERROR. The 2026-09-01 arm's 26 lines are 13 events. Zero is
+  // zero either way, which is why the target survives the ambiguity — but do
+  // not report this count as an event count.
+  //
+  // It exists because TRA-1239 was pre-registered against a hand-counted
+  // baseline ("6 per 200, reps 5/6/39, where the device was refusing") that the
+  // archive contradicts in both halves: 13, all in reps 137-143, and no refusal
+  // involved. A number nobody can regenerate is a number that drifts. TRA-1239.
+  commandInFlight: 'Command already active - executeCommand called concurrently',
 };
+
+/**
+ * The CommandManager's timeout line, up to the op name it appends.
+ *
+ * Shared by `powerOffTimeouts` above and by `countCommandTimeouts` below, so the
+ * needle and the parser cannot drift into counting different lines.
+ */
+export const COMMAND_TIMEOUT_PREFIX = '[CommandManager] Command timeout: ';
+
+/**
+ * Every command timeout in a log, broken down by op name (TRA-1226).
+ *
+ * ## Why this is a parser and not more needles
+ *
+ * `powerOffTimeouts` above counts ONE op code. On the 2026-08-31 arm that meant
+ * 203 command timeouts of which 138 were counted: `GET_TRIGGER_STATE` (0xA001)
+ * ran 63 and `RFID_FIRMWARE_COMMAND` (0x8002) ran 2, and **neither reached any
+ * summary, RUN-IDENTITY, or cross-arm comparison.** The 0x8002 one is what
+ * failed rep 1 — it put the reader into Error, so a deferred `targetEPC` push
+ * was abandoned and Locate ran against the previously applied mask.
+ *
+ * Adding two more needles would have fixed those two and left the next one
+ * invisible. A fixed list can only count what somebody thought to enumerate and
+ * reads a confident 0 for the rest — the same defect as TRA-1224's allowlist,
+ * one level up. That is not hypothetical here: TRA-1223 asserted the device
+ * ignored "exactly one op code" while its own first-occurrence table carried
+ * 0xA001 at 76 TX / 14 RX, and no instrument contradicted it because no
+ * instrument was looking.
+ *
+ * So the op name is parsed out of the line. **A newly-silent op code appears
+ * without anyone having predicted it**, which is the property that matters.
+ *
+ * ⚠ Returns `{}` for a log that carried no timeouts — a real measurement — and
+ * the caller must keep that distinct from the `null` a runner gets when it
+ * cannot observe these at all. Same null-vs-zero rule as everywhere else here.
+ */
+/**
+ * The producer's own running total, on its UNCONDITIONAL `fault-count` line.
+ *
+ * ⚠ Deliberately NOT the descriptive `[CS108 Error] <desc>` line, which is rate
+ * limited. Reading the total off a limited line undercounts whenever the storm
+ * ends inside the suppression window — measured at exactly 2x on a 3-rep mini
+ * arm, 18 frames reported as 9. Refs TRA-1231.
+ *
+ * Exported so the parser below and any future needle read the same shape, and
+ * so `every-signal-needle-has-a-producer` can find the string in `src/`.
+ */
+export const ERROR_NOTIFICATION_TOTAL_RE = /\[CS108 Error\] fault-count total=(\d+)/g;
+
+/**
+ * How many `0xA101` ERROR_NOTIFICATION frames the worker saw in a rep (TRA-1229).
+ *
+ * ## Why this reads a total instead of counting lines
+ *
+ * `0xA101` is how the CS108 refuses a command: the rejection comes back under
+ * 0xA101 and never under the op code being rejected. On the 2026-09-01 arm the
+ * device sent 1543 of them inside one 86-minute window, one per unanswered
+ * command, 34 ms after the command they answered. The arm reported none of it:
+ * `reader.ts` discarded the frames, and the handler's rate limiter would have
+ * capped what survived at a handful of lines per code anyway.
+ *
+ * The discard is gone, but the rate limiter stays — an 18-per-minute fault
+ * storm should not bury the rep log. So counting lines would undercount by two
+ * orders of magnitude, which is the failure this file exists to prevent:
+ * a confident number measured off the wrong population.
+ *
+ * The producer therefore carries its own unconditional total on every line it
+ * does emit, and a rate-limited line still reports an accurate count.
+ *
+ * ## Why the highest total is NOT the answer (TRA-1236)
+ *
+ * The counter lives on `ErrorNotificationHandler`, which is per WORKER SESSION.
+ * A wedged rep reconnects repeatedly, so each session writes its own
+ * `total=1,2,3…` sequence and the highest number in the log belongs to whichever
+ * session ran longest — not to the rep. Taking a global maximum read one session
+ * and called it the rep.
+ *
+ * It was ~10x low precisely in the wedged reps, which are the ones an arm exists
+ * to measure, and correct everywhere else:
+ *
+ *   rep 137  errNotif 4  rejections 36
+ *   rep 140  errNotif 3  rejections 39
+ *
+ * Found by an inequality that cannot hold — every rejection IS an 0xA101 and not
+ * every 0xA101 produces a rejection, so `rejections <= errorNotifications` is
+ * forced, and the arm reported 247 > 208.
+ *
+ * So: walk the totals and sum the maximum of each monotonically increasing run.
+ * A total that is less than OR EQUAL TO its predecessor starts a new run —
+ * equality counts because a single session never emits the same total twice, the
+ * counter being incremented before the line is written. Equality can therefore
+ * only mean the counter was reset.
+ *
+ * ⚠ Returns 0 for a clean rep — a real measurement — never `null`. Same
+ * null-vs-zero rule as the rest of this table.
+ */
+export function countErrorNotifications(text) {
+  let total = 0;
+  let runMax = 0;
+  for (const m of text.matchAll(ERROR_NOTIFICATION_TOTAL_RE)) {
+    const n = Number(m[1]);
+    if (!Number.isFinite(n)) continue;
+    if (n <= runMax) {
+      // The counter went backwards or repeated: a new worker session started.
+      // Bank the run that just ended before opening the next one.
+      total += runMax;
+      runMax = n;
+    } else {
+      runMax = n;
+    }
+  }
+  return total + runMax;
+}
+
+/**
+ * The prefix a refused command logs, mirroring `COMMAND_TIMEOUT_PREFIX`.
+ *
+ * Exported so the parser and the producer cannot drift, and so
+ * `every-signal-needle-has-a-producer` can find the string in `src/`.
+ */
+export const COMMAND_REJECTION_PREFIX = '[CommandManager] Command rejected: ';
+
+/**
+ * Every command the DEVICE refused, by op name (TRA-1230).
+ *
+ * ## Why this exists separately from countCommandTimeouts
+ *
+ * `[CommandManager] Command timeout: <name>` is logged from exactly one place —
+ * the `setTimeout` callback. TRA-1229 settles a refused command from its
+ * `0xA101` reply in ~34ms, which CLEARS that timeout, so the line never fires.
+ * Every needle keyed to it then reads a confident zero: on the 2026-09-01 arm
+ * shape that turns `powerOffTimeouts 1115` into `0` and the per-op table into
+ * `{}`, through a window in which the device refused ~1500 commands.
+ *
+ * A timeout and a refusal are different device behaviours — "no answer came"
+ * versus "the answer was no" — and collapsing them would lose the distinction
+ * the whole TRA-1223 investigation turned on. So they are counted separately
+ * and read together.
+ *
+ * Parsed per op for the same reason as the timeout table: a fixed list counts
+ * only what somebody enumerated. `GET_TRIGGER_STATE` reached no summary for
+ * weeks because nobody had thought to add it.
+ *
+ * ⚠ Returns `{}` for a rep that carried no refusals — a real measurement — and
+ * the caller must keep that distinct from the `null` a runner gets when it
+ * cannot observe these at all.
+ */
+export function countCommandRejections(text) {
+  const counts = {};
+  // SPLIT on the literal prefix rather than interpolating into a RegExp, for
+  // the reason spelled out on countCommandTimeouts: a pattern assembled from a
+  // string is correct only while nobody edits the string.
+  const parts = text.split(COMMAND_REJECTION_PREFIX);
+  for (let i = 1; i < parts.length; i += 1) {
+    // `<OP_NAME> — <desc> (0xNNNN)` — the op name runs to the first space.
+    const op = parts[i].split(/[\s\n]/, 1)[0];
+    if (op) counts[op] = (counts[op] ?? 0) + 1;
+  }
+  return counts;
+}
+
+export function countCommandTimeouts(text) {
+  const counts = {};
+  // SPLIT on the literal prefix rather than interpolating it into a RegExp.
+  //
+  // The first version built `new RegExp(PREFIX.replace(/[[\]]/g, '\\$&') + ...)`
+  // and escaped only the brackets it happened to know about. CodeQL flagged it:
+  // a backslash in the prefix would not be escaped and would corrupt the
+  // pattern. Widening the escape set to the full metacharacter list fixes that
+  // instance and leaves the shape — a regex assembled from a string, correct
+  // only while nobody edits the string. Splitting on the literal cannot be
+  // wrong about escaping because it never escapes anything, and it is the same
+  // idiom `readSignals` already uses to count needles a few lines up.
+  //
+  // Only the op-name matcher stays a regex, and it is a static literal.
+  const parts = text.split(COMMAND_TIMEOUT_PREFIX);
+  for (let i = 1; i < parts.length; i++) {
+    // Op names are the CS108Event `name` fields: SCREAMING_SNAKE_CASE, anchored
+    // to the character immediately after the prefix.
+    const op = /^[A-Z0-9_]+/.exec(parts[i]);
+    if (op) counts[op[0]] = (counts[op[0]] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/**
+ * `countCommandTimeouts` for a log on disk.
+ *
+ * `null` when the log is gone — it measured nothing, and an empty map would say
+ * the opposite.
+ */
+export function readCommandTimeouts(logPath) {
+  if (!logPath || !existsSync(logPath)) return null;
+  try {
+    return countCommandTimeouts(readFileSync(logPath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What the reader said it was (TRA-1232).
+ *
+ * ## Why an arm has to carry this
+ *
+ * Every capture we hold is unattributed. The 2026-09-01 campaign produced four
+ * transport captures of a device-side defect and none of them can say what
+ * firmware it was observed on; that had to be reconstructed from notes after
+ * the fact, which is the "quoted rather than measured" failure the campaign
+ * spent itself correcting. Flashing the reader destroys the attribution
+ * permanently, so this is the one part of TRA-1232 with a deadline on it.
+ *
+ * ## Why it is not RUN-IDENTITY
+ *
+ * The ticket asked for it there. RUN-IDENTITY is written by
+ * `watch-soak-abort-criteria.mjs`, which talks to the BRIDGE — and the bridge
+ * has no path to the reader's firmware. It reports its own version and the
+ * device MAC and nothing else. The reader is the only thing that knows, so the
+ * worker logs it and this parses it back, per rep, the same shape as
+ * `readReadCycles`.
+ *
+ * Keep `READER_DETAILS_PREFIX` in step with `READER_DETAILS_LOG_PREFIX` in
+ * `src/worker/cs108/system/identity.ts`.
+ */
+export const READER_DETAILS_PREFIX = '[Reader] Reader details: ';
+
+/**
+ * Extract the reader's identity from a captured rep log, or `null`.
+ *
+ * `null` is a measurement: this rep never heard from the reader. An empty
+ * object would say the opposite — that we asked and it has no firmware
+ * versions — and is exactly the substitution the rest of this module refuses to
+ * make.
+ *
+ * Takes the LAST line rather than the first. The worker emits one each time a
+ * value lands, and the values land at two different moments: three at connect,
+ * two more once the radio is powered. The first line is a partial read missing
+ * the most valuable of the three versions.
+ */
+export function readReaderDetails(logPath) {
+  if (!logPath || !existsSync(logPath)) return null;
+  let text;
+  try {
+    text = readFileSync(logPath, 'utf8');
+  } catch {
+    return null;
+  }
+
+  // SPLIT on the literal prefix, for the reason spelled out on
+  // countCommandTimeouts: a pattern assembled from a string is correct only
+  // while nobody edits the string.
+  const parts = text.split(READER_DETAILS_PREFIX);
+  if (parts.length < 2) return null;
+
+  const line = parts[parts.length - 1].split('\n', 1)[0];
+  try {
+    const parsed = JSON.parse(line);
+    // A JSON scalar is not a reader. Only an object is an answer.
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    // A capture cut mid-write leaves the JSON unclosed. That rep recorded
+    // nothing usable, and it must read as nothing rather than take down the
+    // summary every other rep in the arm depends on.
+    return null;
+  }
+}
 
 /**
  * The needles a PLAYWRIGHT repetition can actually produce (TRA-1206).
@@ -92,8 +431,26 @@ export const SIGNALS = {
  *   triggerTimeout   Same file — it is CS108WorkerTestHarness that rejects with
  *                    `Timeout waiting for event: ...`.
  *
- * Both are STRUCTURAL: the emitter is a file no browser loads, so no change to
- * the e2e path can make them fire. Do not "fix" them.
+ *   powerOffTimeouts   `[CommandManager] …` is logged by the worker, which DOES
+ *   toleratedPowerOffs run in the browser under e2e — but these are `logger.warn`,
+ *                      and `shouldForwardConsoleLine` keeps a non-error line only
+ *                      if it contains one of `[ble-timing]`, `Error`, `Failed`,
+ *                      `BLE`, `Connect`, `WebSocket`, `force`, `cleanup`,
+ *                      `disconnect`. None of those appears in either message,
+ *                      so the forwarder drops them and the needle would read a
+ *                      confident 0 on every e2e rep however loud the device was.
+ *                      INCIDENTAL, not structural — widening the forwarder would
+ *                      make them fire. Do that deliberately if an e2e arm ever
+ *                      needs them, and measure it rather than assuming (TRA-1209
+ *                      is the precedent: the `[ble-timing]` needles sat at a
+ *                      confident 0 here for exactly this reason).
+ *   modeSwitchFailed   Logged by locate.spec.ts, an integration spec. No browser
+ *                      loads it — structural, like the two at the top.
+ *
+ * STRUCTURAL — `harnessLines`, `triggerTimeout`, `modeSwitchFailed`: the emitter
+ * is a file no browser loads, so no change to the e2e path can make them fire.
+ * Do not "fix" those. The two `[CommandManager]` needles are the other kind, and
+ * the distinction is why each says which it is rather than just "absent".
  *
  * The three `[ble-timing]` needles used to be listed here too, and they were the
  * other kind — absent for an INCIDENTAL reason. They are `console.info` from
@@ -429,6 +786,32 @@ export function readSignals(logPath, runner = 'vitest') {
   for (const name of Object.keys(SIGNALS)) {
     if (!(name in counts)) counts[name] = null;
   }
+  // Per-op command timeouts (TRA-1226). null on a runner that cannot observe
+  // them, for the same reason as every other absent needle above: `{}` there
+  // would read as "the device answered everything", which is a claim this
+  // record has no standing to make.
+  counts.commandTimeouts = runner === 'vitest' ? countCommandTimeouts(text) : null;
+  // `0xA101` fault frames (TRA-1229). Same null-on-a-blind-runner rule: a 0
+  // here means the device raised no rejections, and that is only sayable by a
+  // runner that could have seen them.
+  counts.errorNotifications = runner === 'vitest' ? countErrorNotifications(text) : null;
+  // Per-op REFUSALS (TRA-1230). Counted apart from timeouts because they are
+  // different device behaviours and because the timeout needle cannot see them.
+  counts.commandRejections = runner === 'vitest' ? countCommandRejections(text) : null;
+  // What the reader said it was (TRA-1232). Not gated on the runner, because
+  // `readReaderDetails` already answers null when the line is absent and that
+  // is the honest reading on either path.
+  //
+  // ⚠ In practice a vitest rep gets a value and an e2e rep will read null. The
+  // line is a `logger.info` from the worker, which under e2e means a real Web
+  // Worker's console, and it would have to survive BOTH Playwright's handling
+  // of worker console messages and `shouldForwardConsoleLine` — whose KEEP list
+  // contains no substring of it. Neither of those has been checked on a
+  // browser, so no limb has been added to the forwarder on the strength of
+  // guessing: a filter widened for a line that never arrives is a change that
+  // measures nothing and looks like coverage. Check it on preview before
+  // claiming an e2e arm attributes itself.
+  counts.readerDetails = readReaderDetails(logPath);
   return counts;
 }
 
@@ -463,8 +846,26 @@ export function resolveSignals(record) {
   // very signal the new needle was added to detect, reported as a zero. That is
   // the failure this function's docstring exists to prevent, so it cannot be
   // keyed on a single field that happens to be current today.
+  // `commandTimeouts` is checked explicitly because it is NOT a member of
+  // SIGNALS — it is a parsed map, not a needle, so the loop above cannot see it.
+  // Without this clause a pre-TRA-1226 record passes the gate and is returned
+  // with no per-op breakdown at all, on a run whose log is sitting right there:
+  // precisely the "silently missing the very signal the new needle was added to
+  // detect" failure this comment block was written about the last time.
+  //
+  // ⚠ VITEST ONLY, and that restriction is load-bearing rather than tidy.
+  // Recomputation below calls `readSignals(log)` with no runner, i.e. against
+  // the VITEST table. For an e2e record that turns every vitest-only null into a
+  // 0 — the null-vs-zero conflation this module exists to prevent. So an e2e
+  // record must not be made stale by a field it can never carry a value for.
+  // Caught by `soak-driver-runner-backends.test.ts`, which was written for
+  // exactly this hazard the last time someone widened the gate.
+  const needsCommandTimeouts = runnerOf(record) === 'vitest';
   const isCurrent =
-    stored && !stored.logMissing && Object.keys(SIGNALS).every((name) => stored[name] !== undefined);
+    stored &&
+    !stored.logMissing &&
+    Object.keys(SIGNALS).every((name) => stored[name] !== undefined) &&
+    (!needsCommandTimeouts || stored.commandTimeouts !== undefined);
   if (isCurrent) {
     return { signals: stored, source: 'record' };
   }

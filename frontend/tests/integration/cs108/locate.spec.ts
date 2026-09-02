@@ -72,20 +72,35 @@ describe('CS108 Locate Integration', () => {
   afterAll(async () => {
     console.log('🔧 Cleaning up CS108 connection...');
     if (harness) {
-      // Force IDLE sequence to run even if already in IDLE mode
-      // Strategy: briefly switch to INVENTORY, then immediately to IDLE
-      // This ensures RFID_POWER_OFF actually executes to stop any runaway scanning
-      console.log('Forcing IDLE sequence to run (INVENTORY → IDLE)...');
+      // Quiescing the radio is BEST EFFORT; releasing the link is not.
+      //
+      // `cleanup()` is the only thing that disconnects the transport and awaits
+      // the mock's teardown, so it is what stops the next spec file's connect
+      // racing this file's socket close. It lives in `finally` because it used
+      // not to: the fallback below was an unguarded `setMode(IDLE)`, so a reader
+      // that failed the first two mode changes failed the third as well, threw
+      // out of afterAll, and skipped `cleanup()` entirely. The link stayed
+      // claimed, closed later on its own, and barcode.spec.ts's connect was
+      // refused DEVICE_BUSY — 63 of 200 reps in the 2026-08-31 arm, every one
+      // of them landing at exactly that spot. TRA-1217.
       try {
-        await harness.setMode(ReaderMode.INVENTORY); // Force mode change
-        await harness.setMode(ReaderMode.IDLE);       // Now IDLE sequence will run
+        // Force the IDLE sequence to run even if already in IDLE mode: briefly
+        // switch to INVENTORY first, so RFID_POWER_OFF actually executes and
+        // stops any runaway scanning rather than being skipped as a no-op.
+        console.log('Forcing IDLE sequence to run (INVENTORY → IDLE)...');
+        await harness.setMode(ReaderMode.INVENTORY);
+        await harness.setMode(ReaderMode.IDLE);
       } catch (error) {
         console.warn('Mode switching failed during cleanup:', error);
-        // Still try direct IDLE in case we're in a weird state
-        await harness.setMode(ReaderMode.IDLE);
+        // Still try direct IDLE in case we're in a weird state.
+        try {
+          await harness.setMode(ReaderMode.IDLE);
+        } catch (retryError) {
+          console.warn('Direct IDLE also failed during cleanup:', retryError);
+        }
+      } finally {
+        await harness.cleanup();
       }
-
-      await harness.cleanup();
     }
     console.log('✓ Disconnected');
   });

@@ -196,7 +196,7 @@ docs/superpowers/
 # being built and reviewed, then go stale fast (PIDs, bench state, host facts)
 # while still reading as authoritative because they are checked in. Durable
 # conclusions belong in CLAUDE.md, an ADR or a code comment; the narrative and
-# evidence belong on the ticket. Named to match ble-mcp-test.
+# evidence belong on the ticket.
 docs/notes/
 docs/investigations/
 

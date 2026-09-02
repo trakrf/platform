@@ -4,6 +4,7 @@ import {
   hasLocateTarget,
   shouldReapplyModeForTarget,
   tagReadToStoreTags,
+  closesLocateGate,
 } from './device-manager';
 import { ReaderMode } from '@/worker/types/reader';
 import { useTagStore } from '@/stores/tagStore';
@@ -92,16 +93,17 @@ describe('hasLocateTarget (TRA-1121)', () => {
 });
 
 /**
- * A settings change and a mode change are two commands into a non-re-entrant
- * CommandManager. They used to be issued from two separate settingsStore
- * subscribers, which zustand fires back to back, so the second lost the mutex
- * with "Command already active" — silently, because nothing caught it. The
- * reader documents the same collision from TRA-1091 at reader.ts:652, where
- * losing setSettings is benign; losing setMode is not, because nothing reapplies
- * it and the reader simply never leaves the mode it was in.
+ * A settings change and a mode change used to be issued from two separate
+ * settingsStore subscribers, which zustand fires back to back. CommandManager
+ * was not re-entrant then, so the second lost the mutex with "Command already
+ * active" — silently, because nothing caught it — and a lost setMode was never
+ * reapplied, leaving the reader in the mode it was already in.
  *
- * One subscriber now decides both, so this guard is what says whether the mode
- * still needs applying after the settings have gone out.
+ * TRA-1197 removed that failure mode: CommandManager queues, so neither call is
+ * dropped. What survives is ORDERING — the mode change has to see the settings
+ * it depends on — and that is what one subscriber deciding both still buys.
+ * This guard says whether the mode needs applying once the settings have gone
+ * out; it is no longer protecting against a dropped command.
  */
 describe('shouldReapplyModeForTarget (TRA-1121)', () => {
   it('asks for a mode change when the target disappears on the locate tab', () => {
@@ -118,6 +120,26 @@ describe('shouldReapplyModeForTarget (TRA-1121)', () => {
 
   it('stays quiet on any other tab, which does not care about the target', () => {
     expect(shouldReapplyModeForTarget(true, false, 'scan')).toBe(false);
+  });
+});
+
+/**
+ * TRA-1171: the trigger edge closes the locate release gate, and only ever
+ * closes it. The asymmetry is the whole point and is easy to "tidy" away into
+ * `setSearchActive(pressed)`, which would be wrong in both directions.
+ */
+describe('closesLocateGate (TRA-1171)', () => {
+  it('closes the gate on release, without waiting for the reader to leave SCANNING', () => {
+    expect(closesLocateGate(false)).toBe(true);
+  });
+
+  it('does NOT open the gate on a press', () => {
+    // The reader drops a press unless its state is exactly CONNECTED, so a
+    // press is not evidence a scan started. An open gate with no scan behind
+    // it would admit stray reads. READER_STATE_CHANGED -> SCANNING is what
+    // opens it, which also keeps the on-screen scan button working — the
+    // button produces no trigger edge at all.
+    expect(closesLocateGate(true)).toBe(false);
   });
 });
 

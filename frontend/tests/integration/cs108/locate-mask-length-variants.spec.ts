@@ -136,8 +136,14 @@ describe('Locate mask length variants — stripped EPC finds its tag at either w
       } catch {
         try { await harness.setMode(ReaderMode.IDLE); } catch { /* best effort */ }
       }
-      await harness.disconnect();
-      await harness.cleanup();
+      // `cleanup()` in `finally`: it is the only thing that releases the link
+      // for the next spec file, and the worker's own disconnect in front of it
+      // can throw. See the note in locate.spec.ts. TRA-1217.
+      try {
+        await harness.disconnect();
+      } finally {
+        await harness.cleanup();
+      }
     }
   }, 60000);
 
@@ -151,10 +157,16 @@ describe('Locate mask length variants — stripped EPC finds its tag at either w
   const locate = async (targetEPC: string): Promise<string[]> => {
     // Push the same SHAPE the app pushes. DeviceManager's settings
     // subscription sends the whole `rfid` slice of the store, so transmitPower
-    // always rides along — and it has to, because reader.setSettings gates the
-    // entire hardware-apply block on `hasHardwareSettings`, whose list does not
-    // include targetEPC. A targetEPC-only push is silently ignored and the
-    // previous search's mask stays on the reader.
+    // always rides along, and this mirrors that deliberately — fidelity to the
+    // app, which is the only reason it is worth anything as a guard.
+    //
+    // It used to ride along because it HAD to: `hasHardwareSettings` gated the
+    // whole apply block and did not list targetEPC, so a targetEPC-only push
+    // was ignored at every level. That is fixed (TRA-1225) and a bare targetEPC
+    // now applies, so the shape here is a choice rather than a workaround.
+    // Keep it anyway. The point of an integration spec is to push what the app
+    // pushes; narrowing it to the minimum that works would stop it covering
+    // what ships.
     await harness.setSettings({ rfid: { transmitPower: 30, targetEPC } });
     await harness.waitForEvent(WorkerEventType.SETTINGS_UPDATED);
 

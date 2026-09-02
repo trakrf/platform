@@ -22,6 +22,47 @@ import { RFID_FIRMWARE_COMMAND, RFID_POWER_ON } from '../../event.js';
 import { logger } from '../../../utils/logger.js';
 
 /**
+ * How a register write survives one unanswered frame.
+ *
+ * The same schedule RFID_STOP_SEQUENCE carries, and deliberately the same: both
+ * are op code 0x8002, so both are governed by the one measured answer
+ * distribution behind RFID_FIRMWARE_COMMAND's 200ms timeout (p99.9 59.8ms, max
+ * 67.8ms over 4,879 responses). Two schedules for one op code would be two
+ * claims about the same hardware.
+ *
+ * Register writes are answered almost always — 45,226 of 45,228 in the
+ * 2026-09-01 200-rep arm — which is why this was never the headline defect and
+ * why the original framing of TRA-1239 (the mask write as the CAUSE of the 47
+ * unanswered commands) is refuted by that ring: 45 of the 47 were the ABORT,
+ * which already retries. What the two survivors cost is out of proportion to
+ * their rate, and that is the actual argument for this:
+ *
+ *   locateSettingsSequence is ~19 writes and reader.ts splices
+ *   LOCATE_CONFIG_SEQUENCE in front of it, so a single silent frame ends the
+ *   whole run at that step — descriptor registers half written, and INV_CFG,
+ *   the write that puts the Selects to work, never sent at all.
+ *
+ * The retry is worth having because the device ANSWERS one: 44 of the 45
+ * unanswered ABORTs in the same arm were recovered on retry, 0 went un-retried.
+ * That was the open question this change was gated on, and it is the reason a
+ * retry is not just a slower way to fail.
+ *
+ * NOT `toleratesFailure`. Tolerating a mask write continues the sequence with
+ * the descriptor in an unknown state and raises nothing, so Locate searches on
+ * a mask that is part this tag and part the last one — which an operator reads
+ * as the item not being there. A sequence that fails is recoverable; one that
+ * lies is not. Refs TRA-1239.
+ */
+const REGISTER_WRITE_RETRIES = [100, 200, 500, 1000];
+
+/** One WRITE_REGISTER command. */
+const writeRegister = (register: number, value: number): SequenceCommand => ({
+  event: RFID_FIRMWARE_COMMAND,
+  payload: createFirmwareCommand(CommandType.WRITE_REGISTER, { register, value }),
+  retryDelays: REGISTER_WRITE_RETRIES
+});
+
+/**
  * LOCATE Mode Sequence
  * Based on CS108 API Spec Appendix C.5 - Search Tag Example
  *
@@ -35,61 +76,26 @@ import { logger } from '../../../utils/logger.js';
 export const LOCATE_CONFIG_SEQUENCE: CommandSequence = [
   {
     event: RFID_POWER_ON,
-    retryOnError: true  // Power commands may fail initially
+    retryDelays: [100]  // Power commands may fail initially
   },
 
   // Set Inventory Parameters matching vendor app configuration
   // Specify antenna port dwell zero to never cycle between antennas - cs108 only has 1 antenna
-  {
-    event: RFID_FIRMWARE_COMMAND,
-    payload: createFirmwareCommand(CommandType.WRITE_REGISTER, {
-      register: RFID_REGISTERS.ANT_PORT_DWELL,  // 0x0705
-      value: 0x00000000 // 0x00000000 indicates that dwell time should not be used.
-    })
-  },
-  {
-    event: RFID_FIRMWARE_COMMAND,
-    payload: createFirmwareCommand(CommandType.WRITE_REGISTER, {
-      register: RFID_REGISTERS.QUERY_CFG,  // 0x0900
-      value: buildQueryCfg({
-        query_sel: 3,     // 11 (binary) = 3 = SL ✓
-        query_target: 0,  // 0 = A
-        query_session: 0  // 0 = S0
-      })
-    })
-  },
+  // 0x00000000 indicates that dwell time should not be used.
+  writeRegister(RFID_REGISTERS.ANT_PORT_DWELL, 0x00000000),        // 0x0705
+  writeRegister(RFID_REGISTERS.QUERY_CFG, buildQueryCfg({          // 0x0900
+    query_sel: 3,     // 11 (binary) = 3 = SL ✓
+    query_target: 0,  // 0 = A
+    query_session: 0  // 0 = S0
+  })),
 
   // Set Inventory Algorithm - Fixed Q = 5 (vendor app configuration)
-  {
-    event: RFID_FIRMWARE_COMMAND,
-    payload: createFirmwareCommand(CommandType.WRITE_REGISTER, {
-      register: RFID_REGISTERS.INV_SEL,  // 0x0902
-      value: INV_SEL_VALUES.FIXED_Q  // 0x00
-    })
-  },
-  {
-    event: RFID_FIRMWARE_COMMAND,
-    payload: createFirmwareCommand(CommandType.WRITE_REGISTER, {
-      register: RFID_REGISTERS.INV_ALG_PARM_0,  // 0x0903
-      value: 0x05  // Fixed Q = 5 (vendor app uses this for locate)
-    })
-  },
-  {
-    event: RFID_FIRMWARE_COMMAND,
-    payload: createFirmwareCommand(CommandType.WRITE_REGISTER, {
-      register: RFID_REGISTERS.INV_ALG_PARM_2,  // 0x0905
-      value: 0x00000000  // Default for Fixed Q
-    })
-  }
+  writeRegister(RFID_REGISTERS.INV_SEL, INV_SEL_VALUES.FIXED_Q),   // 0x0902, 0x00
+  writeRegister(RFID_REGISTERS.INV_ALG_PARM_0, 0x05),              // 0x0903, Fixed Q = 5
+  writeRegister(RFID_REGISTERS.INV_ALG_PARM_2, 0x00000000)         // 0x0905, default for Fixed Q
 
   // NOTE: Tag mask (TAGMSK_*) and INV_CFG will be set by setSettings() when targetEPC is provided
 ];
-
-/** One WRITE_REGISTER command. */
-const writeRegister = (register: number, value: number): SequenceCommand => ({
-  event: RFID_FIRMWARE_COMMAND,
-  payload: createFirmwareCommand(CommandType.WRITE_REGISTER, { register, value })
-});
 
 /**
  * Configure one Select descriptor to match `paddedEpc` exactly at `maskBitLength`.

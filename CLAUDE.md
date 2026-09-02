@@ -1,51 +1,26 @@
 # CLAUDE.md
 
-## Package Managers
-- **Backend**: `go mod`, `go get`
-- **Frontend**: `pnpm` exclusively (`pnpm dlx` instead of `npx`)
+@AGENTS.md
 
-## Task Runner (Just)
-- **Run everything from the project root** — delegate with `just <workspace> <cmd>` rather than `cd`-ing in
-- Workspaces: `frontend`, `backend`, `cli`, `database` (aliases `fe`, `be`, `db`)
-- Combined across all four: `just lint`, `just test`, `just build`, `just validate`
-- Every workspace justfile sets `fallback := true`, so root recipes still resolve from inside one
-
-## Cluster Ops
-- `just ops <recipe> [args]` forwards to the trakrf/infra justfile; bare `just ops` lists what's available
-- Shortcuts: `just gcp-auth`, `just psql preview`, `just logs prod 1h`
-- Cluster/namespace/pod knowledge stays in infra — never reimplement a kubectl incantation here
-- Infra checkout is `TRAKRF_INFRA_DIR`, else a sibling `infra/`; set it in `.env.local` if yours is elsewhere
-
-## Git Workflow
-- **Never push directly to main** — all changes via PR
-- **Never squash merge** — `gh pr merge --merge`
-- Branch naming: `<type>/tra-NNNN-slug`, e.g. `feat/tra-1065-kitting-capability`, `fix/broken-xyz`, `chore/...`, `docs/...`
-- Conventional commits: `feat:`, `fix:`, `docs:`, `chore:`
-- Prefer incremental commits over amending
-
-## Migrations
-- Adding a migration **requires** `just backend migrate-checksums` — CI fails without it, and applied migrations are immutable
-
-## Testing
-- Playwright e2e **never runs in CI** — green CI does not mean e2e passes; run it against preview yourself
-- **Name specs and tooling for what they do, never for a ticket** — `locate-mask-length-variants.spec.ts`, not `tra-1120-…`. Cite the ticket in the file header. Applies to `describe` blocks, log prefixes and artifact dirs, since those appear in output
-- **Re-used vs merely re-read** — reusable things live in the repo under a behaviour name; point-in-time records go on the ticket, and working notes in `docs/notes/` stay untracked (see `.gitignore`)
-
-## Hardware access
-- **`ble-mcp-test` is test tooling only, never the product path** — the app reaches a CS108 solely via browser `navigator.bluetooth`
-- **One connection at a time**: a *connected client* blocks preview/prod hand-testing — a running bridge daemon does not. It holds the port, not the radio
-- **An idle bridge port does *not* mean the reader is free** — a browser tab holding it appears in no process list. `get_connection_state` answers it in one call; see `docs/ble-hardware-access.md`
-- The bridge is a supervised `systemctl --user` unit, so `pkill` is the wrong tool — it comes back in 5s
-
-## Preview Deployments
-- Opening/updating a PR auto-deploys to `https://app.preview.trakrf.id`
-- See `.github/workflows/sync-preview.yml` for details
+Platform specifics only. Session artifacts go to `docs/superpowers/` and `docs/notes/`.
 
 ## Stack
-- Go backend, React/TypeScript frontend, TimescaleDB, Go CLI, MQTT ingestion (`mqtt-rpc/`)
-- Architecture context: `README.md`, `docs/architecture-decisions.md`, `docs/adr/`, `docs/logical-schema.md`
+Go backend · React/TypeScript frontend · TimescaleDB · Go CLI · MQTT ingestion (`mqtt-rpc/`).
+Architecture: `README.md`, `docs/architecture-decisions.md`, `docs/adr/`, `docs/logical-schema.md`.
 
-## Worktrees
-- Git worktrees live in `.claude/worktrees/` (gitignored) — where the native `EnterWorktree` tool writes
-- **`just bootstrap` first, backgrounded** — generates the gitignored `go:embed` targets; without it `just validate` fails with `pattern frontend/dist: no matching files found`. Idempotent, near-instant warm
-- **An unbootstrapped tree invalidates verifications** — everything fails, so a deliberate-break check proves nothing. Confirm bootstrap ran before believing a failure
+## Tooling
+- Backend `go mod`; frontend `pnpm` only — `pnpm dlx`, never `npx`
+- Run `just` from the project root: `just <workspace> <cmd>`, workspaces `frontend` `backend` `cli` `database` (`fe` `be` `db`)
+- `just ops <recipe>` forwards to trakrf/infra and bare `just ops` lists them; cluster knowledge stays there. Checkout via `TRAKRF_INFRA_DIR`, else sibling `infra/`
+
+## Gotchas
+- A new migration requires `just backend migrate-checksums`; applied migrations are immutable
+- Playwright e2e never runs in CI — run it against preview yourself
+- `just bootstrap` a fresh worktree before validating, or the `go:embed` targets are missing and every check fails for that reason alone
+- Opening a PR auto-deploys to `https://app.preview.trakrf.id` (`.github/workflows/sync-preview.yml`)
+
+## Hardware
+- `ble-mcp-test` is test tooling only; the app reaches a CS108 via browser `navigator.bluetooth`
+- One connection at a time: a connected client blocks hand-testing, a running daemon does not
+- An idle bridge port does not mean the reader is free, and neither does `held: false` — the reader is SHARED with the ble-mcp-test session and changes hands on an explicit message; see `docs/ble-hardware-access.md`
+- The bridge is a supervised `systemctl --user` unit; `pkill` returns in 5s
