@@ -5,7 +5,7 @@
  * Uses discriminated unions for proper TypeScript type narrowing.
  */
 
-import type { ReaderStateType, ReaderModeType, ReaderSettings } from './reader';
+import type { ReaderStateType, ReaderModeType, ReaderSettings, ReaderDetails } from './reader';
 
 /**
  * Event type discriminators
@@ -14,6 +14,7 @@ export enum WorkerEventType {
   // State events
   READER_STATE_CHANGED = 'READER_STATE_CHANGED',
   READER_MODE_CHANGED = 'READER_MODE_CHANGED',
+  READER_DETAILS = 'READER_DETAILS',
   SETTINGS_UPDATED = 'SETTINGS_UPDATED',
 
   // RFID events
@@ -70,6 +71,22 @@ interface ReaderModeChangedEvent extends WorkerEventBase {
   type: WorkerEventType.READER_MODE_CHANGED;
   payload: {
     mode: ReaderModeType | null;
+  };
+}
+
+/**
+ * What the connected reader turned out to be.
+ *
+ * Emitted each time a value arrives rather than once at the end, because the
+ * five reads land at different points — three at connect, two once the radio is
+ * powered — and a screen showing four of them is more use than a screen showing
+ * none until all five are in. Every field is optional and absent means "no
+ * answer yet", never a value.
+ */
+interface ReaderDetailsEvent extends WorkerEventBase {
+  type: WorkerEventType.READER_DETAILS;
+  payload: {
+    details: ReaderDetails;
   };
 }
 
@@ -303,6 +320,7 @@ interface DebugLogEvent extends WorkerEventBase {
 export type WorkerEvent =
   | ReaderStateChangedEvent
   | ReaderModeChangedEvent
+  | ReaderDetailsEvent
   | SettingsUpdatedEvent
   | TagBatchEvent
   | TagReadEvent
