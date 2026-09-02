@@ -167,6 +167,119 @@ describe('CommandManager contract', () => {
   });
 
   // ==========================================================================
+  // TRA-1239 — a send that throws must give the wire back.
+  //
+  // `BaseReader.sendCommand` throws SYNCHRONOUSLY once the port is gone:
+  //
+  //     if (!this.port) throw new Error('Transport port not initialized');
+  //     this.port.postMessage({ type: 'ble:write', data });
+  //
+  // and `disconnect()` sets `this.port = undefined`. dispatchCommand claims the
+  // slot — `inFlight`, the timeout, the quiet window — and sends LAST, inside a
+  // Promise executor. A throw there rejects the promise and skips every
+  // release, so the slot stays claimed by a command that never reached the
+  // wire, and the next dispatch meets `CommandInFlightError` instead.
+  //
+  // That is not hypothetical. In the 2026-09-01 200-rep arm every one of the 26
+  // `Command already active` lines is in reps 137-143, the teardown/wedge
+  // window, and every one is the same shape:
+  //
+  //   WARN  RFID_POWER_OFF (0x8001) went unanswered after 2 attempt(s):
+  //         Command already active - executeCommand called concurrently
+  //   ERROR [setMode] Failed to set Idle mode: CommandInFlightError
+  //           at CommandManager.dispatchCommand (command.ts:219)
+  //           at CommandManager.runSequence (command.ts:591)
+  //
+  // — attempt 1 threw at the send, attempt 2 met the slot it left behind. The
+  // orphaned timeout is what eventually clears it, which is why the reader
+  // recovers rather than staying dead, and why this reads as intermittent.
+  //
+  // The guard at :219 is NOT what these tests are arguing with. It is a real
+  // invariant and it stays loud; the defect is that a failed send violates it.
+  // ==========================================================================
+  describe('a send that throws releases the wire', () => {
+    const portGone = () => { throw new Error('Transport port not initialized'); };
+
+    it('reports the transport failure to the caller, not a timeout', async () => {
+      sendToTransport.mockImplementationOnce(portGone);
+
+      await expect(commandManager.executeCommand(FIRST))
+        .rejects.toThrow('Transport port not initialized');
+    });
+
+    it('leaves nothing in flight', async () => {
+      sendToTransport.mockImplementationOnce(portGone);
+
+      await expect(commandManager.executeCommand(FIRST)).rejects.toThrow();
+
+      expect(commandManager.isIdle()).toBe(true);
+      expect(commandManager.activeCommand).toBeNull();
+    });
+
+    it('lets the NEXT command reach the wire', async () => {
+      sendToTransport.mockImplementationOnce(portGone);
+
+      await expect(commandManager.executeCommand(FIRST)).rejects.toThrow();
+
+      const next = commandManager.executeCommand(SECOND);
+      await wireHandedOver();
+      expect(opCodesSent(sendToTransport)).toEqual([0x0001, 0x0002]);
+
+      commandManager.handleCommandResponse(responseFor(SECOND));
+      await expect(next).resolves.toEqual(new Uint8Array([0x00]));
+    });
+
+    it('retries the step rather than failing it as already active', async () => {
+      // The arm's exact shape: one step, a retry schedule, and a first attempt
+      // that never left the host. Before the fix the retry met the slot attempt
+      // 1 abandoned, and the sequence failed with CommandInFlightError — a
+      // message that blames the caller for a transport fault.
+      sendToTransport.mockImplementationOnce(portGone);
+
+      const sequence = commandManager.executeSequence([
+        { event: FIRST, retryDelays: [100] }
+      ]);
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(opCodesSent(sendToTransport)).toEqual([0x0001, 0x0001]);
+
+      commandManager.handleCommandResponse(responseFor(FIRST));
+      await expect(sequence).resolves.toBeUndefined();
+    });
+
+    it('disarms the timeout the abandoned attempt armed', async () => {
+      // The orphan is what made this look intermittent instead of fatal: it
+      // fires at the command's own timeout and clears the slot, so the damage
+      // is bounded to whatever dispatches inside that window. Bounded is not
+      // fixed, and a timer nobody owns can settle a command it never sent.
+      sendToTransport.mockImplementationOnce(portGone);
+
+      await expect(commandManager.executeCommand(FIRST)).rejects.toThrow();
+
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('does not charge the next command a quiet window it never armed', async () => {
+      // The window says the DEVICE is busy clearing its buffer. A frame that
+      // never left the host leaves it with nothing to clear, so holding the
+      // next dispatch for two seconds is the vendor's ABORT constraint billed
+      // for an ABORT that was never sent.
+      sendToTransport.mockImplementationOnce(portGone);
+
+      await expect(
+        commandManager.executeSequence([{ event: ABORT, quietPeriodAfter: 2000 }])
+      ).rejects.toThrow('Transport port not initialized');
+
+      const next = commandManager.executeCommand(SECOND);
+      await wireHandedOver();
+      expect(opCodesSent(sendToTransport)).toEqual([0x8002, 0x0002]);
+
+      commandManager.handleCommandResponse(responseFor(SECOND));
+      await expect(next).resolves.toEqual(new Uint8Array([0x00]));
+    });
+  });
+
+  // ==========================================================================
   // The state transition callers gate on must happen when work is REQUESTED.
   // ==========================================================================
   describe('BUSY is published at enqueue, not at dequeue', () => {
