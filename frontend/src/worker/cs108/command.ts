@@ -59,14 +59,24 @@ export class SequenceAbortedError extends Error {
  *
  * This used to be a routine outcome — the mutex rejecting a concurrent caller —
  * and `reader.ts` carried two branches treating it as benign, because on the
- * settings path it genuinely was (TRA-1091). Both are gone. Since the queue
- * landed, no reachable path can produce this: `dispatchCommand` runs only from
- * inside `runExclusive`, and `runExclusive` admits one operation at a time.
+ * settings path it genuinely was (TRA-1091). Both are gone. The queue makes it
+ * unreachable from CONCURRENCY: `dispatchCommand` runs only from inside
+ * `runExclusive`, and `runExclusive` admits one operation at a time.
  *
  * It is kept, and kept loud, because "cannot happen" and "is not checked" are
- * different claims. If it ever fires, the queue has been bypassed and the wire
- * has two owners — which is not a condition any caller should absorb as benign.
- * A benign branch for an impossible error is the shape that swallows a real one.
+ * different claims. A benign branch for an impossible error is the shape that
+ * swallows a real one — and this check has now earned its keep once. It used to
+ * say "no reachable path can produce this", and one did: a synchronous throw
+ * from `sendToTransport` left `inFlight` claimed by a command that never
+ * reached the wire, so the next dispatch met this error and reported a
+ * two-owner wire when the real fault was a dead transport (TRA-1239, fixed in
+ * `dispatchCommand`).
+ *
+ * The lesson is the general one, not the specific leak. This fires when the
+ * slot is OCCUPIED, which the queue guarantees only for commands that are
+ * genuinely in flight; anything that claims the slot and then fails to release
+ * it presents here, wearing a message about concurrency. Read it as "the slot
+ * was not free", and go looking for who did not give it back.
  */
 export class CommandInFlightError extends Error {
   constructor(message = 'Command already active - executeCommand called concurrently') {
@@ -239,13 +249,56 @@ export class CommandManager {
       // Arm the quiet window at SEND, not at ack. The vendor requirement is
       // worded "after the ABORT command", so the ack round trip is time the
       // reader has already spent clearing its buffer and counts toward it.
+      const quietUntilBefore = this.quietUntil;
       if (quietPeriodAfter) {
         this.quietUntil = Date.now() + quietPeriodAfter;
       }
 
       // Log and send
       logger.debug(`[CommandManager] Sending command: ${event.name} (0x${event.eventCode.toString(16)})`);
-      this.sendToTransport(packet);
+
+      // A send can fail SYNCHRONOUSLY, and everything above has already been
+      // claimed on behalf of a command that is about to not exist.
+      //
+      // `BaseReader.sendCommand` throws `Transport port not initialized` the
+      // moment `disconnect()` clears the port, and `postMessage` on a closed
+      // MessagePort throws too. Without this catch the executor's throw rejects
+      // `commandPromise` and skips `clearInFlight()` entirely: `inFlight` stays
+      // pointing at a command that never reached the wire, and the next
+      // dispatch — the retry, usually — meets `CommandInFlightError`. The
+      // caller is then told the WIRE HAS TWO OWNERS when what actually happened
+      // is that it has none.
+      //
+      // Every `Command already active` in the 2026-09-01 200-rep arm is this:
+      // 13 occurrences (26 log lines — each raises one WARN from the tolerated
+      // RFID_POWER_OFF and one ERROR from the setMode step behind it), ALL of
+      // them in reps 137-143 and none in the other 193. That window is the
+      // teardown/wedge one, which is the distribution a transport cause
+      // predicts and a caller race does not.
+      //
+      // TRA-1239 pre-registered this as "6 per 200, in reps 5/6/39, where the
+      // device was refusing", inherited from TRA-1143. Both halves are wrong
+      // against the archived per-rep logs, and the location is the half that
+      // mattered: refusals are answered commands, and no refusal is involved.
+      // Refs TRA-1239, TRA-1143.
+      //
+      // The orphaned timeout eventually cleared the slot on its own, so the
+      // reader recovered and this read as intermittent. Recovering from a leak
+      // is not the same as not leaking: until it fired, every command on this
+      // manager failed for a reason that named the wrong culprit.
+      //
+      // The quiet window goes back too. It is a claim about what the DEVICE is
+      // busy doing after receiving something; a frame that never left the host
+      // gives it nothing to be busy with, and a spurious 2s hold on the next
+      // dispatch is the vendor's ABORT window charged for an ABORT that was
+      // never sent.
+      try {
+        this.sendToTransport(packet);
+      } catch (error) {
+        this.quietUntil = quietUntilBefore;
+        this.clearInFlight();
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
     });
 
     this.currentCommandPromise = commandPromise;
