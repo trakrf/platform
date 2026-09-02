@@ -195,11 +195,18 @@ describe('CS108Reader', () => {
    * what it was taken on and flashing destroys the attribution permanently.
    */
   describe('reader identity', () => {
-    /** A REG_RESP as the device sends it: pkt_ver, reserved, addr LE, data LE. */
+    /**
+     * A REG_RESP as the device sends it: pkt_ver, reserved, addr LE, data LE.
+     *
+     * ⚠ On 0x8100, not on the 0x8002 the read was sent on — measured on
+     * hardware 2026-09-02. 0x8002 answers a read with the same one-byte status
+     * a write gets; the value arrives on the RFID processor's uplink data
+     * channel, which it shares with tag reads.
+     */
     function registerResponsePacket(register: number, value: number): CS108Packet {
       return {
-        eventCode: 0x8002,
-        event: { eventCode: 0x8002, name: 'RFID_FIRMWARE_COMMAND', isCommand: true, isNotification: false },
+        eventCode: 0x8100,
+        event: { eventCode: 0x8100, name: 'INVENTORY_TAG', isCommand: false, isNotification: true },
         rawPayload: new Uint8Array([
           0x70, 0x00,
           register & 0xFF, (register >> 8) & 0xFF,
@@ -263,6 +270,42 @@ describe('CS108Reader', () => {
         type: 'READER_DETAILS',
         payload: { details: { rfidFirmware: '2.6.46' } },
       }));
+    });
+
+    /**
+     * ⚠ A register value arrives as an INVENTORY_TAG notification, and
+     * `InventoryParser` cannot read it: `pkt_ver 0x70` hits its unknown-version
+     * branch, byte-slides one byte at a time and charges eight `parseErrors`
+     * per register read. It answers no command in flight either — the 0x8002
+     * status ack already settled the read.
+     *
+     * So it is consumed here. Nothing downstream wants it, and routing it would
+     * quietly pollute a health counter on every connection.
+     */
+    it('consumes a register response instead of routing it to the tag parser', () => {
+      const router = (reader as any).notificationRouter;
+      (packetHandlerMock.processIncomingData as Mock).mockReturnValue([
+        registerResponsePacket(RFID_REGISTERS.MAC_ERROR, 0),
+      ]);
+
+      (reader as any).handleBleData(new Uint8Array([0xA7, 0xB3]));
+
+      expect(router.handleNotification).not.toHaveBeenCalled();
+    });
+
+    /** The other half: an actual tag read on that channel still gets through. */
+    it('still routes an ordinary inventory packet on the same channel', () => {
+      const router = (reader as any).notificationRouter;
+      (packetHandlerMock.processIncomingData as Mock).mockReturnValue([{
+        eventCode: 0x8100,
+        event: { eventCode: 0x8100, name: 'INVENTORY_TAG', isCommand: false, isNotification: true },
+        rawPayload: new Uint8Array([0x04, 0x00, 0x05, 0x80, 0x0A, 0x00, 0x00, 0x00]),
+        payload: undefined,
+      } as unknown as CS108Packet]);
+
+      (reader as any).handleBleData(new Uint8Array([0xA7, 0xB3]));
+
+      expect(router.handleNotification).toHaveBeenCalled();
     });
 
     it('reads the MAC error, including a healthy zero', () => {

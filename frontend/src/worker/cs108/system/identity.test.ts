@@ -18,7 +18,7 @@ import {
   READER_DETAILS_LOG_PREFIX,
 } from './identity';
 import { RFID_REGISTERS } from '../rfid/constant';
-import { RFID_FIRMWARE_COMMAND } from '../event';
+import { RFID_FIRMWARE_COMMAND, INVENTORY_TAG_NOTIFICATION } from '../event';
 import { GET_SILICON_LAB_VERSION, GET_BLUETOOTH_VERSION, GET_SERIAL_NUMBER } from './device-info';
 
 describe('IDENTITY_SEQUENCE', () => {
@@ -107,11 +107,11 @@ describe('applyRegisterResponse', () => {
   });
 
   /**
-   * Every register write this app performs comes back on the same op code, and
-   * TRA-1154 is the defect where any reply could settle any command. The echoed
-   * `reg_addr` is what makes a register read the one self-identifying exchange
-   * on `0x8002` — so an answer about `ANT_PORT_POWER` must not be filed as a
-   * firmware version just because it arrived while we were asking.
+   * TRA-1154 is the defect where any firmware-command reply could settle any
+   * firmware command, because at the op-code level they are indistinguishable.
+   * The echoed `reg_addr` is the one exception the protocol offers — so an
+   * answer about `ANT_PORT_POWER` must not be filed as a firmware version just
+   * because it arrived while we were asking about one.
    */
   it('ignores a response about a register it did not ask for', () => {
     expect(applyRegisterResponse({}, { register: RFID_REGISTERS.ANT_PORT_POWER, value: 300 }))
@@ -158,10 +158,15 @@ describe('applyIdentityPacket', () => {
     })).toBeNull();
   });
 
-  it('decodes a register response arriving on the firmware-command op code', () => {
+  /**
+   * ⚠ On 0x8100, not on the 0x8002 the read was sent on. Measured on hardware
+   * 2026-09-02 — 0x8002 answers a read with the same one-byte status a write
+   * gets, and the value comes back on the RFID processor's uplink data channel.
+   */
+  it('decodes a register response arriving on the RFID uplink channel', () => {
     const raw = (2 << 24) | (6 << 12) | 46;
     expect(applyIdentityPacket({}, {
-      eventCode: RFID_FIRMWARE_COMMAND.eventCode,
+      eventCode: INVENTORY_TAG_NOTIFICATION.eventCode,
       rawPayload: new Uint8Array([
         0x70, 0x00,
         RFID_REGISTERS.FIRMWARE_VER & 0xFF, (RFID_REGISTERS.FIRMWARE_VER >> 8) & 0xFF,
@@ -175,10 +180,22 @@ describe('applyIdentityPacket', () => {
    * with a one-byte status. There are thousands of those per session and none
    * of them says anything about the reader's identity.
    */
-  it('ignores a write acknowledgement on the same op code', () => {
+  it('ignores the command acknowledgement, which carries no value', () => {
     expect(applyIdentityPacket({}, {
       eventCode: RFID_FIRMWARE_COMMAND.eventCode,
       rawPayload: new Uint8Array([0x00]),
+    })).toBeNull();
+  });
+
+  /**
+   * The uplink channel a register value arrives on is the one tag reads arrive
+   * on. There are thousands of those per scanning session; filing one as a
+   * firmware version would be worse than reading nothing.
+   */
+  it('ignores an inventory packet on that same channel', () => {
+    expect(applyIdentityPacket({}, {
+      eventCode: INVENTORY_TAG_NOTIFICATION.eventCode,
+      rawPayload: new Uint8Array([0x04, 0x00, 0x05, 0x80, 0x0A, 0x00, 0x00, 0x00]),
     })).toBeNull();
   });
 

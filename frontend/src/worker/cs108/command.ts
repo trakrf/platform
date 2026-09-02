@@ -360,12 +360,6 @@ export class CommandManager {
     if (packet.event.name === 'ERROR_NOTIFICATION') {
       // ERROR_NOTIFICATION is always a failure
       success = false;
-    } else if (packet.event.isSuccess) {
-      // An op code whose answers come in more than one shape judges its own.
-      // `0x8002` is the case: a one-byte status for a register write and an
-      // 8-byte REG_RESP for a register read, and `successByte` can only ever
-      // describe one of them. See CS108Event.isSuccess. Refs TRA-1232.
-      success = packet.event.isSuccess(packet.rawPayload);
     } else if (packet.event.successByte !== undefined) {
       // Check success byte if specified
       success = packet.rawPayload.length > 0 && packet.rawPayload[0] === packet.event.successByte;

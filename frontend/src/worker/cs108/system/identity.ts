@@ -37,7 +37,7 @@
 
 import type { CommandSequence } from '../type.js';
 import type { ReaderDetails } from '../../types/reader.js';
-import { RFID_FIRMWARE_COMMAND } from '../event.js';
+import { INVENTORY_TAG_NOTIFICATION, RFID_FIRMWARE_COMMAND } from '../event.js';
 import { GET_SILICON_LAB_VERSION, GET_BLUETOOTH_VERSION, GET_SERIAL_NUMBER } from './device-info.js';
 import { createFirmwareCommand, CommandType } from '../rfid/firmware-command.js';
 import { RFID_REGISTERS } from '../rfid/constant.js';
@@ -119,16 +119,48 @@ export function applyRegisterResponse(
 }
 
 /**
+ * Is this the RFID processor answering a register read?
+ *
+ * ⚠ **A register response comes back under `0x8100`, not under the `0x8002`
+ * the read was sent on.** Measured on hardware 2026-09-02 — the first register
+ * read this codebase has ever performed:
+ *
+ * ```
+ * TX  A7 B3 0A C2 82 37 00 00 80 02 70 00 00 00 00 00 00 00   read FIRMWARE_VER
+ * RX  A7 B3 03 C2 82 9E 32 F1 80 02 00                        status ack, on 0x8002
+ * RX  A7 B3 0A C2 02 9E 97 80 81 00 70 00 00 00 29 60 00 02   REG_RESP, on 0x8100
+ * ```
+ *
+ * That is the shape of the protocol rather than a quirk: `0x8002` is the
+ * downlink command channel and acknowledges every firmware command the same
+ * way, while `0x8100` is the RFID processor's uplink DATA channel, discriminated
+ * by the payload's first byte. The vendor library does exactly this — one
+ * dispatch on `pkt_ver`, with `0x70` beside the inventory versions
+ * (`ClassRFID.cs:803`).
+ *
+ * Which means our own `INVENTORY_TAG_NOTIFICATION` is the event a register
+ * value arrives as, and `InventoryParser` cannot read it: `pkt_ver 0x70` hits
+ * its unknown-version branch, byte-slides one at a time and charges eight
+ * `parseErrors` per read. So a register response is CONSUMED by the reader
+ * rather than routed — it settles nothing, the status ack already did that.
+ */
+export function isRegisterResponsePacket(
+  packet: { eventCode: number; rawPayload: Uint8Array }
+): boolean {
+  return packet.eventCode === INVENTORY_TAG_NOTIFICATION.eventCode
+    && isRegisterResponse(packet.rawPayload);
+}
+
+/**
  * Fold whatever a packet tells us about the reader's identity into what we
  * already know, or `null` if it tells us nothing.
  *
- * Reached from the reader's single packet choke point, BEFORE the split into
- * command responses and notifications, and deliberately so: a register response
- * may settle the command that asked for it or arrive a beat later with nothing
- * in flight, depending on whether the device also sends a status byte first.
- * Observing at the choke point is right under either behaviour, which matters
- * because nothing here has ever read a register from this device and the answer
- * is not knowable from the vendor source.
+ * Reached from the reader's single packet choke point, before the split into
+ * command responses and notifications, because the two kinds of answer take
+ * different routes out of it: a board version settles the command that asked
+ * for it and goes on to the command manager, while a register value settles
+ * nothing and is consumed. Observing ahead of that split means one place asks
+ * the question instead of two.
  */
 export function applyIdentityPacket(
   details: ReaderDetails,
@@ -149,8 +181,10 @@ export function applyIdentityPacket(
       return typeof packet.payload === 'string' && packet.payload.length > 0
         ? { ...details, serialNumber: packet.payload }
         : null;
-    case RFID_FIRMWARE_COMMAND.eventCode:
-      return isRegisterResponse(packet.rawPayload)
+    case INVENTORY_TAG_NOTIFICATION.eventCode:
+      // See isRegisterResponsePacket: register values share the RFID uplink
+      // data channel with tag reads, discriminated by the payload's first byte.
+      return isRegisterResponsePacket(packet)
         ? applyRegisterResponse(details, parseRegisterResponse(packet.rawPayload))
         : null;
     default:

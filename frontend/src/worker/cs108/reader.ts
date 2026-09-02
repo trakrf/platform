@@ -42,6 +42,7 @@ import {
   IDENTITY_SEQUENCE,
   RFID_IDENTITY_SEQUENCE,
   applyIdentityPacket,
+  isRegisterResponsePacket,
   formatReaderDetails
 } from './system/identity.js';
 import { INVENTORY_CONFIG_SEQUENCE } from './rfid/inventory/sequences.js';
@@ -356,18 +357,16 @@ class CS108Reader extends BaseReader {
   /**
    * Fold anything a packet says about the reader's identity into what we know.
    *
-   * Called from `handleBleData` BEFORE the split into command responses and
-   * notifications, deliberately. A register response may settle the command
-   * that asked for it, or arrive a beat later with nothing in flight, depending
-   * on whether the device sends a status byte first — and nothing in this
-   * codebase has ever read a register from this device, so that is not
-   * something the vendor source can be read to settle. Observing at the choke
-   * point is correct under either behaviour.
+   * Called from `handleBleData` before the split into command responses and
+   * notifications, because the two kinds of answer leave it by different doors:
+   * a board version settles the command that asked for it and carries on to the
+   * command manager, while a register value settles nothing — the `0x8002`
+   * status ack already did that — and is consumed.
    *
-   * The echoed `reg_addr` is what makes this safe: a register read is the one
-   * self-identifying exchange on `0x8002` (TRA-1154), so a reply is filed
-   * against the register the DEVICE names rather than the one we last asked
-   * about.
+   * The echoed `reg_addr` is what makes the register half safe: a register read
+   * is the one self-identifying exchange the RFID processor performs
+   * (TRA-1154), so a reply is filed against the register the DEVICE names
+   * rather than the one we last asked about.
    */
   private observeReaderIdentity(packet: CS108Packet): void {
     const updated = applyIdentityPacket(this.readerDetails, packet);
@@ -459,11 +458,22 @@ class CS108Reader extends BaseReader {
     for (const packet of packets) {
       logger.debug(`Packet: ${packet.event.name} (0x${packet.eventCode.toString(16)}), isCommand: ${packet.event.isCommand}, isNotification: ${packet.event.isNotification}`);
 
-      // Identity is read by OBSERVATION, ahead of routing and without consuming
-      // anything: a packet that says what the reader is is almost always also
-      // the answer to a command in flight, and it goes on to settle it. See
-      // observeReaderIdentity() for why this cannot wait for the routing split.
+      // Identity is read by OBSERVATION, ahead of routing. A board-version
+      // reply is also the answer to a command in flight and goes on to settle
+      // it; a register value is not, and is consumed here.
       this.observeReaderIdentity(packet);
+
+      // ⚠ A register value arrives on 0x8100 — the RFID processor's uplink DATA
+      // channel, which it shares with tag reads — and NOT on the 0x8002 the
+      // read was sent on. Measured on hardware 2026-09-02; see
+      // isRegisterResponsePacket().
+      //
+      // So it reaches this loop as an INVENTORY_TAG notification, and
+      // InventoryParser cannot read it: `pkt_ver 0x70` hits the unknown-version
+      // branch, byte-slides one at a time and charges eight `parseErrors` per
+      // register read. It answers no command in flight either — the 0x8002
+      // status ack already settled the read. Nothing downstream wants it.
+      if (isRegisterResponsePacket(packet)) continue;
 
       // A rejection is a FAULT, and it is handled before ordinary routing.
       //
