@@ -2,7 +2,7 @@
  * Device Store - Manages device connection state and device information
  */
 import { create } from 'zustand';
-import { ReaderState, type ReaderStateType, type ReaderModeType } from '@/worker/types/reader';
+import { ReaderState, type ReaderStateType, type ReaderModeType, type ReaderDetails } from '@/worker/types/reader';
 import { trackRFIDOperation } from '@/lib/openreplay';
 import { createStoreWithTracking } from './createStore';
 import { DeviceManager } from '@/lib/device/device-manager';
@@ -13,6 +13,15 @@ interface DeviceState {
   readerState: ReaderStateType;
   readerMode: ReaderModeType | null;
   deviceName: string | null;
+  /**
+   * What the connected reader turned out to be — firmware versions, serial,
+   * MAC error. `null` until the reader answers, and null again on disconnect.
+   *
+   * Fields inside it are individually optional for the same reason the object
+   * is nullable: the five values are read at two different moments, and an
+   * absent one means "no answer", never a value. TRA-1232.
+   */
+  readerDetails: ReaderDetails | null;
   batteryPercentage: number | null;
   triggerState: boolean;
 
@@ -27,6 +36,7 @@ interface DeviceState {
   setReaderState: (state: ReaderStateType) => void;
   setReaderMode: (mode: ReaderModeType | null) => void;
   setDeviceName: (name: string | null) => void;
+  setReaderDetails: (details: ReaderDetails | null) => void;
   setBatteryPercentage: (percentage: number | null) => void;
   setTriggerState: (isDown: boolean) => Promise<void>;
 
@@ -43,6 +53,7 @@ export const useDeviceStore = create<DeviceState>(createStoreWithTracking((set, 
   readerState: ReaderState.DISCONNECTED,
   readerMode: null,
   deviceName: null,
+  readerDetails: null,
   batteryPercentage: null,
   triggerState: false,
 
@@ -82,6 +93,7 @@ export const useDeviceStore = create<DeviceState>(createStoreWithTracking((set, 
     return { readerMode: mode };
   }),
   setDeviceName: (name) => set({ deviceName: name }),
+  setReaderDetails: (details) => set({ readerDetails: details }),
   setBatteryPercentage: (percentage) => set({ batteryPercentage: percentage }),
   setTriggerState: async (isDown) => {
     set({ triggerState: isDown });
@@ -156,6 +168,10 @@ export const useDeviceStore = create<DeviceState>(createStoreWithTracking((set, 
         readerState: ReaderState.DISCONNECTED,
         readerMode: null,
         deviceName: null,
+        // These described the reader that just went away. Carrying them would
+        // open the next connection showing the previous device's firmware,
+        // which is worse than showing nothing because it looks read.
+        readerDetails: null,
         batteryPercentage: null,
         triggerState: false,
         isConnected: false,
