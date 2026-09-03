@@ -80,6 +80,7 @@ import { mkdirSync, readFileSync, appendFileSync, rmSync, existsSync, openSync, 
 import { formatRepLine, formatProgressBlock } from './arm-progress.mjs';
 import path from 'node:path';
 import { readSignals, readReadCycles } from './suite-run-signals.mjs';
+import { armCohortPreflight } from './soak-record-preflight.mjs';
 
 // 2 adds `signals` + `outputLog`; schema-1 records carry neither.
 // 3 adds `runner`, and `appPreflight` on e2e records only (TRA-1206).
@@ -179,7 +180,7 @@ export function assertShapeSupported(runner, shape) {
 }
 
 function parseArgs(argv) {
-  const args = { runner: 'vitest', shape: null, reps: 1, target: null, note: null };
+  const args = { runner: 'vitest', shape: null, reps: 1, target: null, note: null, allowPooling: false };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     const value = argv[i + 1];
@@ -189,6 +190,8 @@ function parseArgs(argv) {
       case '--reps': args.reps = Number(value); i += 1; break;
       case '--target': args.target = value; i += 1; break;
       case '--note': args.note = value; i += 1; break;
+      // Consumes no value, and is deliberately not the default — see armCohortPreflight().
+      case '--allow-pooling': args.allowPooling = true; break;
       default:
         throw new Error(`Unknown argument: ${flag}`);
     }
@@ -813,6 +816,11 @@ function appPreflight() {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   mkdirSync(ARTIFACT_DIR, { recursive: true });
+  // Refuse to write this arm's rows into a cohort that already holds another
+  // arm's, and say so when the previous arm's per-rep logs were never archived.
+  // Both questions are asked here because this is the last moment before the
+  // overwrite and the only moment somebody is present — see the module.
+  if (armCohortPreflight({ recordPath: RECORD_PATH, ...args }).blocked) process.exit(1);
   preflight();
   // e2e only, and passed through to every record — see appPreflight's note on
   // why an honest skip still has to be visible in the data.
