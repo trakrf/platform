@@ -14,6 +14,8 @@ import {
   readPlaywrightReport,
   suiteRootFor,
   assertShapeSupported,
+  PLAYWRIGHT_GLOBAL_TIMEOUT_MS,
+  MEASURED_FULL_E2E_SUITE_MS,
 } from '../../scripts/characterise-suite-runs.mjs';
 import { isVoidCapture } from '../../scripts/watch-soak-abort-criteria.mjs';
 import { mkdtempSync, writeFileSync } from 'node:fs';
@@ -127,9 +129,22 @@ describe('the playwright path', () => {
     const { args } = buildRunnerArgs('e2e', 'fixed', 1, null);
     const bound = args.find((a) => a.startsWith('--global-timeout'));
     expect(bound).toBeDefined();
-    // Derived in the source from the spec's own 90s per-test budget; asserted
-    // here so a casual edit to a rounder number has to argue with the derivation.
-    expect(bound).toBe('--global-timeout=660000');
+    expect(bound).toBe(`--global-timeout=${PLAYWRIGHT_GLOBAL_TIMEOUT_MS}`);
+  });
+
+  it('bounds the rep ABOVE the measured whole suite, not below it', () => {
+    // The bound was 660s, derived from one spec's 90s-per-test budget back when
+    // `--shape alone --target inventory.spec.ts` was the only e2e shape anyone
+    // had run. The whole suite measures 1169s and 1183s (2026-09-02), so every
+    // whole-suite rep died at 660.6s having reached 16 of 31 specs, and recorded
+    // a run-level error that WAS the timeout — `exitCode` pinned at 1 whatever
+    // the subject did. An arm like that measures a prefix, not the suite.
+    //
+    // Asserted against the measurement rather than against a literal, so the
+    // next person to touch it has to argue with the number that caused it. A
+    // 1.5x floor keeps this a HANG detector: a bound sized to notice a slow
+    // suite would kill healthy reps, and the soak would measure the driver.
+    expect(PLAYWRIGHT_GLOBAL_TIMEOUT_MS).toBeGreaterThanOrEqual(MEASURED_FULL_E2E_SUITE_MS * 1.5);
   });
 
   it('does not pass --workers, because the config already owns that', () => {

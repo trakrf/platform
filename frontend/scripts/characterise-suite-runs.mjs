@@ -80,6 +80,7 @@ import { mkdirSync, readFileSync, appendFileSync, rmSync, existsSync, openSync, 
 import { formatRepLine, formatProgressBlock } from './arm-progress.mjs';
 import path from 'node:path';
 import { readSignals, readReadCycles } from './suite-run-signals.mjs';
+import { armCohortPreflight } from './soak-record-preflight.mjs';
 
 // 2 adds `signals` + `outputLog`; schema-1 records carry neither.
 // 3 adds `runner`, and `appPreflight` on e2e records only (TRA-1206).
@@ -179,7 +180,7 @@ export function assertShapeSupported(runner, shape) {
 }
 
 function parseArgs(argv) {
-  const args = { runner: 'vitest', shape: null, reps: 1, target: null, note: null };
+  const args = { runner: 'vitest', shape: null, reps: 1, target: null, note: null, allowPooling: false };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     const value = argv[i + 1];
@@ -189,6 +190,8 @@ function parseArgs(argv) {
       case '--reps': args.reps = Number(value); i += 1; break;
       case '--target': args.target = value; i += 1; break;
       case '--note': args.note = value; i += 1; break;
+      // Consumes no value, and is deliberately not the default — see armCohortPreflight().
+      case '--allow-pooling': args.allowPooling = true; break;
       default:
         throw new Error(`Unknown argument: ${flag}`);
     }
@@ -362,31 +365,58 @@ function buildVitestArgs(shape, rep, target) {
  * driver stops appending rows, the watchdog sees a live driver and a healthy
  * bridge, and the night silently produces nothing after 22:15.
  *
- * So the bound the driver owns is --global-timeout, derived from the spec:
+ * So the bound the driver owns is --global-timeout.
  *
- *     beforeAll                          90s   (shared connection + mode change)
- *     5 tests x 90s                     450s   (2 active, 3 skipped — bounded
- *                                               for all five, because TRA-1200
- *                                               owns that spec and may enable
- *                                               them; a bound that breaks when
- *                                               a skip is lifted is a trap)
- *     ------------------------------------------
- *     suite worst case                  540s
- *     browser launch, webServer probe,
- *     teardown, reporter flush          ~120s  (bounded from above; not
- *                                               separately measured)
- *     ------------------------------------------
- *     total                             660s
+ * ## It used to be 660s, derived from ONE spec, and it truncated the suite
  *
- * Resolved toward patience for the same reason the 90s hookTimeout was: being
- * too patient costs wall-clock on a rep that fails anyway, being too impatient
- * kills healthy reps and the soak measures the driver instead of the suite.
+ * The original derivation added up `inventory.spec.ts` — 90s beforeAll plus
+ * five tests at 90s, plus ~120s of browser launch and teardown — and reached
+ * 660s. That is a correct bound for `--shape alone --target <one spec>`, which
+ * is the only e2e shape that had ever been run: the 2026-08-29 TRA-1200 arm did
+ * 150 e2e reps at 24-31s each and never came near the cap.
+ *
+ * The whole suite is a different quantity, and the first whole-suite arm found
+ * out. Measured 2026-09-02 by running the suite's own command with no driver
+ * timeout, twice: **1169s and 1183s**. Against a 660s cap every rep
+ *
+ *   - died at 660.6s having reached 16 of 31 specs — `locations-*`, `log-level`,
+ *     `members`, `org-crud`, `org-invite-*`, `org-members`, `pagination` and
+ *     `share-functionality` never started;
+ *   - recorded a `(run-level error)` that WAS the timeout, pinning `exitCode` at
+ *     1 whatever the subject did.
+ *
+ * That is an instrument bug rather than a slow suite: a rep that fails for a
+ * configuration reason does not become informative by being repeated 200 times
+ * (§3). A `--shape fixed` e2e arm could only ever measure a prefix.
+ *
+ * The `@hardware`-only arm — the one actually worth running, 11 specs reaching
+ * one physical CS108 — projects to ~585-591s, which is ~11% under the old cap.
+ * It would have truncated the same way, silently, on one slow rep.
+ *
+ * ## What it is now, and why it is not tight
+ *
+ * This is a HANG detector, not a performance gate. Its job is to stop a browser
+ * that never launches or a reporter that never closes from silently ending the
+ * night's rows; it is not there to notice a suite getting slower, and a value
+ * chosen to do both does neither. So it is set well clear of the measured worst
+ * case rather than just above it — being too patient costs wall-clock on a rep
+ * that fails anyway, being too impatient kills healthy reps and the soak
+ * measures the driver instead of the suite.
+ *
+ *     measured whole suite            1183s
+ *     headroom for a slow rep,
+ *     a cold browser, a retry         ~617s
+ *     ------------------------------------------
+ *     total                           1800s
  *
  * Deliberately NOT equal to any vitest number here. It bounds a whole
  * invocation; --hookTimeout bounds one hook. They are different quantities over
  * different scopes and must be free to diverge.
+ *
+ * Refs: TRA-1242.
  */
-const PLAYWRIGHT_GLOBAL_TIMEOUT_MS = 660000;
+export const MEASURED_FULL_E2E_SUITE_MS = 1183000;
+export const PLAYWRIGHT_GLOBAL_TIMEOUT_MS = 1800000;
 
 function buildPlaywrightArgs(shape, rep, target) {
   // Same rule as the vitest path: a target narrows any shape, not just `alone`.
@@ -813,6 +843,11 @@ function appPreflight() {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   mkdirSync(ARTIFACT_DIR, { recursive: true });
+  // Refuse to write this arm's rows into a cohort that already holds another
+  // arm's, and say so when the previous arm's per-rep logs were never archived.
+  // Both questions are asked here because this is the last moment before the
+  // overwrite and the only moment somebody is present — see the module.
+  if (armCohortPreflight({ recordPath: RECORD_PATH, ...args }).blocked) process.exit(1);
   preflight();
   // e2e only, and passed through to every record — see appPreflight's note on
   // why an honest skip still has to be visible in the data.
