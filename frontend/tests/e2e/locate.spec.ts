@@ -97,19 +97,27 @@ async function gotoLocateWithEPC(page: Page, epc: string) {
   // So a press arriving while the push is still BUSY is dropped silently, the
   // scan never starts, and the test reports "press should start scanning" —
   // which reads as a broken trigger rather than a press delivered too early.
-  await page
-    .waitForFunction(
-      () => window.__ZUSTAND_STORES__?.deviceStore?.getState()?.readerState === 'Connected',
-      { timeout: 15000 }
-    )
-    .catch(() => {
-      console.warn('[Locate] reader did not settle to Connected; a press here will be ignored');
-    });
+  // No `.catch()` here, deliberately. This used to swallow the timeout into a
+  // console.warn and press anyway — which guaranteed a failure several
+  // assertions downstream instead of at the cause. Across 200 reps on
+  // 2026-09-02 the warning fired ZERO times, so nothing depends on continuing
+  // past it; a reader that genuinely cannot settle in 15s is wedged and this
+  // should say so here (TRA-1245).
+  await page.waitForFunction(
+    () => window.__ZUSTAND_STORES__?.deviceStore?.getState()?.readerState === 'Connected',
+    { timeout: 15000 }
+  );
 
   // Clear the trigger debounce window. `reader.ts` sets `triggerDebounceMs =
   // 100`, so 250 is 2.5x the actual value rather than another round number
   // chosen for comfort. Without it a press issued immediately after this helper
   // can be swallowed as a repeat of whatever the previous test did.
+  //
+  // ⚠ This sleep is why the wait above was never sufficient on its own: the
+  // reader can re-enter BUSY inside these 250ms, and a press landing there is
+  // dropped. The gate that actually protects the press now lives in
+  // `simulateTrigger`, immediately before the injection with nothing in
+  // between. Do not "simplify" by moving it back up here.
   await page.waitForTimeout(250);
 }
 
@@ -258,17 +266,28 @@ test.describe('Locate Functionality Tests @hardware', () => {
 
     // Press must actually start a scan, not merely leave the reader connected.
     const held = await sampleLocateScreen(sharedPage, 3000);
-    // INTERMITTENT, and the flake is the product's, not this test's (TRA-1171).
+    // ⚠ This comment used to read "the flake is the product's, not this test's".
+    // That was measured and is WRONG — corrected under TRA-1245.
     //
-    // `reader.ts` discards a trigger press unless `readerState === CONNECTED` —
-    // `BUSY` is silently dropped with only a `logger.debug`. `gotoLocateWithEPC`
-    // now waits for CONNECTED before returning, which narrows the window but
-    // cannot close it: the state can move back to BUSY between that wait
-    // resolving and this press being delivered.
+    // `reader.ts:229` discards a trigger press unless `readerState ===
+    // CONNECTED`, and that is CORRECT: the edge is dropped and the trigger
+    // LEVEL is reconciled by `convergeToTriggerState()` once the reader
+    // settles. A real thumb is still holding the trigger at that point, so the
+    // scan starts. An INJECTED press is not — the state reverts to false
+    // ~500ms later — so a dropped edge is unrecoverable here and only here.
     //
-    // Deliberately NOT retried here. A retry would make this green while hiding
-    // the exact behaviour TRA-1171 needs to measure — how often a real press
-    // lands on a non-CONNECTED state. A red here is a data point, not noise.
+    // A 200-rep arm on 2026-09-02 put that at 48/200 (24.0%), every failure
+    // showing `readerState: Busy` / `status: Idle` for the whole window, with
+    // the transport and the device clean underneath. The window is now closed
+    // in `simulateTrigger`, which waits for the honouring state immediately
+    // before injecting.
+    //
+    // Still deliberately NOT retried here. The earlier reasoning for that —
+    // preserving a measurement of "how often a real press lands on a
+    // non-CONNECTED state" — does not survive: an injected press is not a real
+    // press, so what it measured was this harness's own timing, and that
+    // number has now been taken properly. The assertion stays because it is a
+    // real assertion; it should simply no longer be intermittent.
     expect(
       held.some((s) => s.readerState === ReaderState.SCANNING),
       'press should start scanning — if this is red, the press was dropped on a ' +
