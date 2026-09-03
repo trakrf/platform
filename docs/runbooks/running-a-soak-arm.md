@@ -27,6 +27,14 @@ and some of these decide whether the arm is worth starting at all.
 - the capture canary is non-zero
 - the bridge daemon does not restart mid-run
 
+### Enforced by the driver (it refuses to start)
+
+- **the record does not already hold this arm's cohort** — `runner` + `note`; see
+  §2, and `--allow-pooling` to override deliberately
+
+It also warns, without refusing, when a previous arm's per-rep logs never reached
+`~/soak-archives/` (§6).
+
 ### Not enforced — yours to check
 
 **The installed artifact in the checkout you are about to run from.**
@@ -71,9 +79,26 @@ commit hours.
 ```bash
 cd frontend
 
-node scripts/characterise-suite-runs.mjs --runner vitest --shape fixed --reps 200 \
-  > .suite-runs/ARM-$(date +%F)-driver.log 2>&1 &
+setsid nohup node scripts/characterise-suite-runs.mjs \
+  --runner vitest --shape fixed --reps 200 --note tra-1239-after \
+  < /dev/null > .suite-runs/ARM-$(date +%F)-driver.log 2>&1 &
 ```
+
+⚠ **`setsid nohup … < /dev/null`, not a plain `&`.** A bare `&` dies with the
+launching shell whenever the arm is started from anything that is not an
+interactive terminal — increasingly the case, because this runbook is executed by
+an agent as often as it is typed. It changes nothing about the run's semantics:
+the reason the watchdog is armed on an explicit pid is precisely that the parent
+does not matter.
+
+**`--note` names the campaign, and it is not optional in practice.**
+`describeCohorts` groups on `runner` + `note`, so two `note=null` vitest arms are
+**one cohort**: the mixed-record banner stays silent while `summarise-suite-runs.mjs`
+pools both into one denominator and every rate comes out roughly halved, looking
+entirely correct. The driver checks the record at launch and **refuses to start**
+rather than leaving that to prose; `--allow-pooling` is the deliberate way past
+it and the only one. The same check reports a previous arm whose per-rep logs
+never reached `~/soak-archives/` — see §6.
 
 Then find the **node** pid — not the shell that launched it:
 
@@ -82,11 +107,11 @@ ps -eo pid=,args= | grep -F "characterise-suite-runs.mjs" | grep -v grep
 ```
 
 ```bash
-node scripts/watch-soak-abort-criteria.mjs \
+setsid nohup node scripts/watch-soak-abort-criteria.mjs \
   --driver-pid <the node pid> \
   --runs .suite-runs/runs.jsonl \
   --identity .suite-runs/ARM-$(date +%F)-RUN-IDENTITY.txt \
-  > .suite-runs/ARM-$(date +%F)-watchdog.log 2>&1 &
+  < /dev/null > .suite-runs/ARM-$(date +%F)-watchdog.log 2>&1 &
 ```
 
 ⚠ **`--driver-pid` is an explicit pid on purpose.** A watchdog armed on the
@@ -99,6 +124,71 @@ previous arm), `shuffle` (seeded reorder), `alone --target <spec>`, `cold`.
 **Duration:** ~131 s per clean rep as of 2026-08-31, so 200 reps ≈ 7.3 h. Failing
 reps are usually *faster*, which biases a failing arm short. Re-derive from
 `durationMs` in `runs.jsonl` rather than trusting this number.
+
+### Launching an arm you are not going to watch
+
+**An arm launched from a session is invisible.** Everything TRA-1240 added — the
+per-rep line, the ten-rep progress block — goes to a **file**. That was fine while
+§2 was typed into a terminal somebody could `tail -f`; it is false when the arm is
+launched from an agent session, where the log is a dead end and the operator sees
+nothing for seven hours. It happened on two consecutive arms.
+
+**A watchdog does not close this.** It aborts on instrument faults; it does not
+report progress. The two are not substitutes, and an arm nobody can see is not
+being watched just because a watchdog is armed.
+
+Three processes, three lifetimes, and the third is a required step:
+
+| | lifetime | job |
+| -- | -- | -- |
+| `characterise-suite-runs.mjs` | ~7 h, detached | **runner** — does the arm |
+| `watch-soak-abort-criteria.mjs` | ~7 h, detached | **watchdog** — aborts on instrument faults |
+| `await-soak-event.mjs` | seconds, disposable | **watcher** — blocks until news, prints it, **exits** |
+
+```bash
+node scripts/await-soak-event.mjs --driver-pid <the node pid> --signal commandInFlight
+```
+
+Run it in a terminal and it blocks, then prints. Background it from a session and
+its **exit** is what re-invokes the model, which reports and re-runs it — a chain
+of one-shots, not a stream. It exits on a new progress block, a new watchdog
+line, the pre-registered signal moving, or the driver disappearing; the last of
+those also prints the §6 capture reminder. Cover every terminal condition or the
+chain stops re-arming, and a dead watcher is indistinguishable from a quiet arm.
+
+⚠ **Notifying is not invoking, and this is where two plausible answers both fail.**
+A `Monitor` wrapping a polling loop is the cheap answer to the wrong question: its
+lines reach the model's *context* and create no *turn*, so in an idle session they
+sit there unread and the operator sees nothing until something else makes the
+model speak. A 15-minute `/loop` is the expensive answer to the right one — ~29
+model turns over a 7.3 h arm to report a number that changed ~20 times.
+
+| | invokes the model? | fires on |
+| -- | -- | -- |
+| `Monitor` | **no** — context only | every stdout line |
+| `CronCreate` / `/loop` | yes | a **clock**, event or not |
+| a backgrounded command | **yes** | its **exit** |
+
+In-REPL delivery always costs one model turn. The only choice is what triggers
+it: a clock, or an event.
+
+**Recovery after a REPL crash is not automatic.** The runner and the watchdog
+survive — they are detached — and the watcher does not, deliberately: the
+expensive unrepeatable thing outlives a crash, the cheap disposable thing does
+not. But nothing re-arms it, so the arm goes back to invisible until a new
+session is told to. Everything needed is already on disk:
+
+```bash
+pid=$(grep -oP 'driver pid\s+\K\d+' frontend/.suite-runs/ARM-<date>-RUN-IDENTITY.txt)
+node scripts/await-soak-event.mjs --driver-pid "$pid"
+```
+
+Check the watcher is alive **by something that cannot match its own argv** (§9) —
+the driver pid in its command line is the distinctive part:
+
+```bash
+pgrep -c -f 'driver-pid <pid>'
+```
 
 ---
 
@@ -238,25 +328,25 @@ The record is an **in-memory ring buffer** (`BLE_MCP_LOG_BUFFER_SIZE`, and
 **process lifetime**. Anything that restarts the bridge destroys it, permanently
 and silently.
 
-Read it over the MCP control socket and page to exhaustion:
-
-```
-op      read_stream
-args    {"cursor": <n>, "limit": <=1000}     <- args MUST be nested under `args`
-page    follow result.next_cursor until entries == []
+```bash
+node scripts/dump-bridge-ring.mjs ~/soak-archives/<arm>/ring.jsonl [--since <ISO8601>]
+node scripts/ring-unanswered-commands.mjs ~/soak-archives/<arm>/ring.jsonl
 ```
 
-⚠ **Three traps, each hit for real:**
+**~37 seconds for a 200-rep arm.** This page used to describe the pagination
+protocol and its traps in prose and expect it hand-driven, which at ~400k records
+is ~400 paginated calls — so the one analysis that can answer *"did the retry
+land?"* simply never got run at arm end. The infeasibility was in driving it by
+hand, not in the work. The traps are the script's problem now: it guards on the
+cursor **advancing** rather than on a short page (a top-level `cursor` was once
+ignored and wrote 27 GB of page 1), refuses an empty dump from a disabled buffer,
+and reports a truncated one instead of handing back a file that reads clean.
 
-1. **A top-level `cursor` is silently ignored**, and the reply still carries
-   `ok: true` with a plausible `next_cursor` that never advances — so a
-   paginating client loops on page 1 forever. This wrote a 27 GB file of the
-   same 200 records before anyone noticed. Fixed on the bridge side by
-   `TRA-1227`; keep the guard regardless.
-2. **`limit` caps at 1000.** The bridge refuses rather than clamping, which is
-   the right behaviour and tells you immediately.
-3. **Guard the loop on the cursor advancing**, not on a short page. A short page
-   is normal; a non-advancing cursor is trap 1.
+**Capacity is not the risk; process lifetime is.** Measured at the 2026-09-02
+arm's end: the ring's oldest entry predated the arm's own start by 16 h with
+nothing evicted, against ~407k packets of arm traffic and a 1,000,000-record
+buffer — ~2.4 arms of headroom, sized deliberately. Revisit that only for a
+materially longer arm, or two arms run with no daemon restart between them.
 
 This capture is not bookkeeping. It is the only observation taken **below** the
 layer under suspicion, and on 2026-08-31 it was the sole reason a device-silence
@@ -272,7 +362,15 @@ derived from and every question nobody has thought to ask yet. They live in
 
 The 2026-08-30 before-arm's 200 logs existed in exactly one place, unarchived,
 and survived only because the next operator happened to notice before launching.
-18.8 MB for 200 reps — there is no cost argument for dropping them.
+It then recurred one arm later: the TRA-1237 after-arm — the arm its ticket was
+**closed on** — had no directory under `~/soak-archives/` at all. 18.8 MB for 200
+reps; there is no cost argument for dropping them.
+
+Twice is a missing guard rather than bad luck, so the driver now says so at the
+next launch: a run present in `runs.jsonl` whose stamp appears nowhere under
+`~/soak-archives/` is named at the one moment somebody is present, and it is the
+last moment before the overwrite. That is a warning, not a refusal — it is the
+previous arm's evidence, and only pooling into it stops this arm from starting.
 
 ### Verify the copy by byte count, not `du`
 
@@ -411,6 +509,17 @@ cautionary decoration.
   Verify copies by file count and summed byte size.
 - **Aborting on any rep-1 failure**, which conditions the arm on a clean first
   contact and deletes first-contact defects with no red state — see §3.
+- **A killed driver leaves its vitest children holding the reader.** Stopping the
+  driver by pid left `npm exec vitest`, its `sh -c`, and two node processes
+  alive, and `get_connection_state` reported the field still held until each was
+  killed individually. This is a different trap from `pkill -f` above. Prefer
+  `touch .suite-runs/STOP` (§5), which lets the current rep finish and releases
+  cleanly. If you do kill, kill the descendants too and **confirm the release
+  with `get_connection_state`** rather than assuming it.
+- **A `--reps` launch into a record that already holds another arm.** Two
+  `note=null` vitest arms are one cohort to `describeCohorts`, so nothing warns
+  and every rate halves — see §2. The driver refuses now; `--allow-pooling` is
+  the only way past.
 
 ---
 
@@ -418,6 +527,12 @@ cautionary decoration.
 
 - `frontend/scripts/watch-soak-abort-criteria.mjs` — the guards, with the
   reasoning for each at its site
+- `frontend/scripts/soak-record-preflight.mjs` — the launch gate: the cohort the
+  arm would pool into, and the previous arm nobody archived
+- `frontend/scripts/await-soak-event.mjs` — the watcher; blocks until news,
+  prints one event, exits
+- `frontend/scripts/dump-bridge-ring.mjs` — the §6 capture, and the input
+  `ring-unanswered-commands.mjs` takes
 - `frontend/scripts/suite-run-signals.mjs` — the needle table; every needle has a
   producer, enforced by `tests/config/every-signal-needle-has-a-producer.test.ts`
 - ADR 0008 — observe a peer through its contract, not its supervisor
