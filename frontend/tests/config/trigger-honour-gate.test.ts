@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   waitForReaderToAcceptTrigger,
+  simulateTriggerPress,
   STATE_THAT_HONOURS,
 } from '../e2e/helpers/trigger-utils';
 
@@ -103,5 +104,52 @@ describe('waitForReaderToAcceptTrigger', () => {
     await expect(
       waitForReaderToAcceptTrigger(page as never, 'press', 50)
     ).rejects.toThrow(/Busy/);
+  });
+});
+
+/**
+ * A `Page` that records whether a packet was injected, and what the reader
+ * state was at the moment it happened.
+ *
+ * `injectTriggerPacket` is the only caller that passes ARGUMENTS to
+ * `page.evaluate`; the state reads pass a function alone. That arity is what
+ * separates them here, without having to imitate the browser.
+ */
+function recordingPage(states: string[]) {
+  const remaining = [...states];
+  let last = states[0];
+  const injectedAt: string[] = [];
+  return {
+    injectedAt,
+    async evaluate(_fn: unknown, args?: unknown): Promise<unknown> {
+      if (args !== undefined) {
+        injectedAt.push(last);
+        return { success: true, message: 'INJECTED', eventReceived: true };
+      }
+      if (remaining.length > 0) last = remaining.shift() as string;
+      return last;
+    },
+    async waitForTimeout(): Promise<void> {},
+  };
+}
+
+describe('simulateTriggerPress refuses to inject into a dropping state', () => {
+  it('does not inject at all while the reader would drop the edge', async () => {
+    // Before TRA-1245 this injected immediately and returned success, because
+    // success meant "the trigger state updated", never "the press was acted on".
+    const page = recordingPage(['Busy']);
+    await expect(
+      simulateTriggerPress(page as never, 1, 50)
+    ).rejects.toThrow(/TRIGGER_NOT_HONOURABLE/);
+    expect(page.injectedAt).toEqual([]);
+  });
+
+  it('injects only once the reader has reached the honouring state', async () => {
+    const page = recordingPage(['Busy', 'Busy', 'Connected']);
+    await simulateTriggerPress(page as never, 1, 2000).catch(() => {
+      // The trigger-state confirmation cannot succeed against a fake store;
+      // ordering is the whole assertion here.
+    });
+    expect(page.injectedAt).toEqual(['Connected']);
   });
 });

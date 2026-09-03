@@ -240,7 +240,8 @@ async function injectTriggerPacket(
 async function simulateTrigger(
   page: Page,
   action: 'press' | 'release',
-  maxRetries: number = 3
+  maxRetries: number = 3,
+  honourTimeoutMs: number = TRIGGER_HONOUR_TIMEOUT_MS
 ): Promise<{ success: boolean; message: string; triggerState: boolean }> {
   const packet = action === 'press' ? cs108TriggerPressPacket : cs108TriggerReleasePacket;
   const desiredState = action === 'press';
@@ -248,6 +249,15 @@ async function simulateTrigger(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     console.log(`[Trigger] ${action} attempt ${attempt}/${maxRetries}`);
+
+    // Immediately before the injection, with nothing between the two.
+    //
+    // A caller that checks the state and THEN sleeps has not gated anything:
+    // `gotoLocateWithEPC` waited for CONNECTED and then slept 250ms for the
+    // trigger debounce, and the reader re-entered BUSY inside that gap in 24%
+    // of reps. The gate has to be the last thing that happens before the
+    // packet goes in, which is why it lives here rather than at the call sites.
+    await waitForReaderToAcceptTrigger(page, action, honourTimeoutMs);
 
     const result = await injectTriggerPacket(page, Array.from(packet), action);
 
@@ -312,9 +322,10 @@ async function simulateTrigger(
  */
 export async function simulateTriggerPress(
   page: Page,
-  maxRetries: number = 3
+  maxRetries: number = 3,
+  honourTimeoutMs: number = TRIGGER_HONOUR_TIMEOUT_MS
 ): Promise<{ success: boolean; message: string; triggerState: boolean }> {
-  return simulateTrigger(page, 'press', maxRetries);
+  return simulateTrigger(page, 'press', maxRetries, honourTimeoutMs);
 }
 
 /**
@@ -325,9 +336,10 @@ export async function simulateTriggerPress(
  */
 export async function simulateTriggerRelease(
   page: Page,
-  maxRetries: number = 3
+  maxRetries: number = 3,
+  honourTimeoutMs: number = TRIGGER_HONOUR_TIMEOUT_MS
 ): Promise<{ success: boolean; message: string; triggerState: boolean }> {
-  return simulateTrigger(page, 'release', maxRetries);
+  return simulateTrigger(page, 'release', maxRetries, honourTimeoutMs);
 }
 
 /**
