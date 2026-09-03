@@ -14,7 +14,11 @@
  */
 
 import type { Page } from '@playwright/test';
-import { ReaderState } from './device-state';
+// Aliased because this module already exports a `getReaderState` of its own that
+// returns a number against a store which holds strings. Importing the
+// device-state one under its own name would shadow-clash with that; renaming or
+// removing the local one is not this ticket's business.
+import { ReaderState, getReaderState as getReaderStateName } from './device-state';
 import { cs108TriggerPressPacket, cs108TriggerReleasePacket } from '../../config/cs108.config';
 
 /**
@@ -25,6 +29,78 @@ import { cs108TriggerPressPacket, cs108TriggerReleasePacket } from '../../config
  * asynchronous (TRA-1153) degrades into a slower pass rather than a hard fail.
  */
 const NOTIFICATION_DELIVERY_TIMEOUT_MS = 1000;
+
+/**
+ * The reader state in which each trigger edge is ACTED ON rather than dropped.
+ *
+ * `reader.ts:229` is the whole of it:
+ *
+ *     if (this.readerState === ReaderState.CONNECTED) { startScanning() }
+ *     else { logger.debug(`Trigger pressed ignored - reader state is ...`) }
+ *
+ * ...with the mirror-image branch requiring SCANNING for a release.
+ *
+ * ⚠ A dropped edge is NOT recoverable in a test, and that asymmetry is the
+ * reason this constant exists. A real thumb survives it: the trigger LEVEL
+ * stays asserted, so `convergeToTriggerState()` reconciles it the moment the
+ * reader settles. An INJECTED press cannot — the state reverts to false ~500ms
+ * later because no physical switch is held, so by the time the reader settles
+ * there is no held trigger left to reconcile and the scan never starts.
+ *
+ * So "press and hope" is a coin flip whose odds are set by whatever the reader
+ * happened to be doing. Measured on 2026-09-02: 48 of 200 reps of
+ * `locate.spec.ts` (24.0%) failed exactly this way, every one of them showing
+ * `readerState: Busy` / `status: Idle` for the full sample window. The product
+ * was correct in all 48. See TRA-1245, and TRA-1080 for the same trap in 2026-07.
+ */
+export const STATE_THAT_HONOURS: Record<'press' | 'release', string> = {
+  press: ReaderState.CONNECTED,
+  release: ReaderState.SCANNING,
+};
+
+/**
+ * How long to wait for the reader to reach the state that honours the edge.
+ *
+ * Matches the 15s `gotoLocateWithEPC` already used for the same question, which
+ * across 200 reps never came close to expiring — the reader settled every time.
+ * It is a wedge detector, not a race margin.
+ */
+export const TRIGGER_HONOUR_TIMEOUT_MS = 15000;
+
+/** How often to re-read the reader state while waiting. */
+const HONOUR_POLL_INTERVAL_MS = 50;
+
+/**
+ * Block until the reader is in a state where `action` will be acted on.
+ *
+ * Throws rather than returning false: injecting into a dropping state produces
+ * a test failure several assertions downstream — "gauge should report dBm" —
+ * which reads as a broken product rather than an edge delivered into the wrong
+ * state. Failing here names the actual cause at the actual moment.
+ */
+export async function waitForReaderToAcceptTrigger(
+  page: Page,
+  action: 'press' | 'release',
+  timeoutMs: number = TRIGGER_HONOUR_TIMEOUT_MS
+): Promise<void> {
+  const wanted = STATE_THAT_HONOURS[action];
+  const deadline = Date.now() + timeoutMs;
+
+  let observed = await getReaderStateName(page);
+  while (observed !== wanted) {
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `TRIGGER_NOT_HONOURABLE: waited ${timeoutMs}ms for the reader to accept a ` +
+          `${action}, and it was still "${observed}" (needs "${wanted}"). ` +
+          'The edge would have been dropped with only a logger.debug, and an ' +
+          'injected trigger cannot hold its level long enough to be reconciled ' +
+          'afterwards — so the scan would never have started. See TRA-1245.'
+      );
+    }
+    await page.waitForTimeout(HONOUR_POLL_INTERVAL_MS);
+    observed = await getReaderStateName(page);
+  }
+}
 
 /** Diagnostics returned from the in-page injection, surfaced on failure. */
 interface InjectionResult {
