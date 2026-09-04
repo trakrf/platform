@@ -48,7 +48,11 @@ test.describe('Trigger hold saturation sweep', () => {
    */
   test.afterAll(async () => {
     if (!page || page.isClosed()) return;
-    await simulateTriggerRelease(page).catch(() => { /* may not be pressed */ });
+    // Best-effort, but not silent — the same empty catch in locate.spec.ts hid
+    // #647's release gate for 101 consecutive reps. TRA-1245.
+    await simulateTriggerRelease(page).catch((error) => {
+      console.warn('[SWEEP] teardown release did not complete:', error);
+    });
     await disconnectDevice(page).catch(() => { /* best effort */ });
     await page.close();
   });

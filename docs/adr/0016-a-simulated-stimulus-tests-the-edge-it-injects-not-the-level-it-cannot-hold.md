@@ -1,6 +1,7 @@
 # ADR 0016 — A simulated stimulus tests the edge it injects, not the level it cannot hold
 
 Date: 2026-09-03
+Amended: 2026-09-04 — see "Amendment: the rule is not symmetric across edges"
 Status: Proposed
 Tracking: TRA-1245 (this change and the arm that paid for it), TRA-1080 (the first time this was diagnosed and then forgotten), TRA-1224 (the e2e failures this is one of)
 
@@ -99,3 +100,55 @@ where it detected that, not hand a doomed run to the next assertion.
 
 **This is a rule about test design, not about the reader.** It applies to any injected
 stimulus standing in for sustained physical state.
+
+## Amendment: the rule is not symmetric across edges
+
+*Added 2026-09-04, after the implementation of the Decision above broke three specs
+within twelve hours of merging.*
+
+The Decision names the trigger's two edges in one breath — `CONNECTED` for a press,
+`SCANNING` for a release — and point 3 says failing to reach that state must throw.
+Implemented literally, that is wrong for the release, and the cost was immediate:
+
+| spec | why `SCANNING` is unreachable |
+|---|---|
+| `connection.spec.ts:130` | asserts trigger-state propagation on the Settings tab and deliberately never starts a scan |
+| `inventory.spec.ts:111` | a `beforeEach` defensive release, run before anything has been pressed |
+| `locate.spec.ts` `afterAll` | releases after `goto('/')`, against a reader that is already `Disconnected` |
+
+The first two failed 2 of 2 reps. The third burned 15s and threw into a `catch` on 101
+of 101 reps, which also skipped the `disconnectDevice()` that followed it — green
+throughout, and defective throughout.
+
+**What the two edges do not share is recoverability.** A dropped press loses work that
+cannot be re-created: the level is already gone, so there is nothing left to reconcile
+and the scan never starts. A dropped release loses nothing, because when no scan is
+running there is nothing to stop; `reader.ts:237` drops it with a `logger.debug` and
+the world is already in the state the release was asking for.
+
+So the amended rule:
+
+**Gate an injected stimulus on the precondition that makes it MEANINGFUL, not on the
+state that would honour it.** Where the two coincide — a press — they are the same
+gate. Where the stimulus is a no-op unless some other work is in flight — a release —
+the precondition is "is that work in flight", and the answer "no" is a pass, not a
+failure. A gate that a caller cannot satisfy by construction is not a strict gate; it
+is a wrong one, and it fails a correct test for a reason that has nothing to do with
+the product.
+
+Two riders, both learned here:
+
+- **A transient state is not an answer.** `BUSY` and `CONNECTING` could still resolve
+  either way, so the gate settles first and then decides. Only a reader that never
+  leaves a transient state still throws — which is the wedge the timeout was always
+  for.
+- **A gate verified through one call site is evidence about that call site.** #647 was
+  measured on `locate.spec.ts` at 0/101 and the result was read as evidence about the
+  shared helper. `locate` is the one spec whose usage satisfies the new precondition
+  by construction, and therefore the one spec structurally incapable of detecting an
+  over-constraint in it. Where a change lands in a shared helper, the arm has to cross
+  the call sites that use it differently.
+
+The Decision's fourth point — put the gate in the shared helper — stands, and this is
+its price rather than an argument against it: one helper reaches six specs, so a gate
+that is wrong for one shape of caller is wrong six times at once.

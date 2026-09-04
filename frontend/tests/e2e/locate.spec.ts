@@ -202,11 +202,23 @@ test.describe('Locate Functionality Tests @hardware', () => {
       .catch(() => false);
     if (!canRelease) return;
 
-    await simulateTriggerRelease(sharedPage).catch(() => { /* may not be pressed */ });
+    // Best-effort, but never silent. This catch was empty — `() => {}` — and
+    // that is how #647's release gate threw here roughly six times a rep for
+    // 101 straight reps without producing so much as a log line. A swallowed
+    // error is invisible to a pass/fail instrument by construction, so the
+    // record read 0/101 while the defect ran on every one. TRA-1245.
+    await simulateTriggerRelease(sharedPage).catch((error) => {
+      console.warn('[Locate] teardown release did not complete:', error);
+    });
     await sharedPage
       .waitForFunction(
-        () =>
-          window.__ZUSTAND_STORES__?.deviceStore?.getState()?.readerState !== 'SCANNING',
+        // ⚠ Passed in rather than written as a literal. This compared against
+        // 'SCANNING' while the store holds 'Scanning', so the predicate was
+        // true on its first evaluation no matter what the reader was doing:
+        // the wait never waited and the warning below could never fire.
+        (scanning) =>
+          window.__ZUSTAND_STORES__?.deviceStore?.getState()?.readerState !== scanning,
+        ReaderState.SCANNING,
         { timeout: 5000 }
       )
       .catch(() => {
@@ -220,7 +232,16 @@ test.describe('Locate Functionality Tests @hardware', () => {
       try {
         await sharedPage.goto('/');
         await sharedPage.waitForTimeout(1000); // Wait for mode change
-        await simulateTriggerRelease(sharedPage);
+        // No trigger release here. `goto('/')` tears the transport down and
+        // leaves the reader Disconnected, so there is no scan to stop and
+        // nothing to release into — and the per-test afterEach above has
+        // already released while the transport still existed.
+        //
+        // It used to release here, and under #647's gate that spent 15s and
+        // threw on every rep. The throw landed in the catch below, which meant
+        // `disconnectDevice()` NEVER RAN: the reader was freed only as a side
+        // effect of `sharedPage.close()`, and the clean disconnect this block
+        // exists for had not executed once since #647 merged. TRA-1245.
         await disconnectDevice(sharedPage);
       } catch (error) {
         console.error('[Locate] Error during disconnect:', error);

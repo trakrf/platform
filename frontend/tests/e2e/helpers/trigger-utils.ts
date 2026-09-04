@@ -40,7 +40,7 @@ const NOTIFICATION_DELIVERY_TIMEOUT_MS = 1000;
  *
  * ...with the mirror-image branch requiring SCANNING for a release.
  *
- * ⚠ A dropped edge is NOT recoverable in a test, and that asymmetry is the
+ * ⚠ A dropped PRESS is not recoverable in a test, and that asymmetry is the
  * reason this constant exists. A real thumb survives it: the trigger LEVEL
  * stays asserted, so `convergeToTriggerState()` reconciles it the moment the
  * reader settles. An INJECTED press cannot — the state reverts to false ~500ms
@@ -52,11 +52,24 @@ const NOTIFICATION_DELIVERY_TIMEOUT_MS = 1000;
  * `locate.spec.ts` (24.0%) failed exactly this way, every one of them showing
  * `readerState: Busy` / `status: Idle` for the full sample window. The product
  * was correct in all 48. See TRA-1245, and TRA-1080 for the same trap in 2026-07.
+ *
+ * ⚠ A dropped RELEASE does not share that shape, and reading this map as though
+ * it did is what #647 got wrong. See `waitForReaderToAcceptTrigger` below: a
+ * release only needs honouring when there is a scan to stop, and this map says
+ * which state that is — not that every release must wait for it.
  */
 export const STATE_THAT_HONOURS: Record<'press' | 'release', string> = {
   press: ReaderState.CONNECTED,
   release: ReaderState.SCANNING,
 };
+
+/**
+ * The states from which the reader is still on its way somewhere.
+ *
+ * The same pair `reader.ts:797` calls transient for its own settle wait. Every
+ * other state is an answer; these two mean "ask again in a moment".
+ */
+const TRANSIENT_STATES: readonly string[] = [ReaderState.BUSY, ReaderState.CONNECTING];
 
 /**
  * How long to wait for the reader to reach the state that honours the edge.
@@ -71,12 +84,58 @@ export const TRIGGER_HONOUR_TIMEOUT_MS = 15000;
 const HONOUR_POLL_INTERVAL_MS = 50;
 
 /**
- * Block until the reader is in a state where `action` will be acted on.
+ * Poll until the reader is out of a transient state, or the budget runs out.
  *
- * Throws rather than returning false: injecting into a dropping state produces
- * a test failure several assertions downstream — "gauge should report dBm" —
- * which reads as a broken product rather than an edge delivered into the wrong
- * state. Failing here names the actual cause at the actual moment.
+ * Resolves with whatever state ended the wait — including a transient one on
+ * timeout — so the caller decides what that means. Mirrors the product's own
+ * `waitForSettledState` (`reader.ts:895`), which resolves rather than throwing
+ * for the same reason: "settled into Disconnected" and "still Busy when time
+ * ran out" are different answers and the caller has to tell them apart.
+ */
+async function waitForSettledReaderState(page: Page, timeoutMs: number): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+
+  let observed = await getReaderStateName(page);
+  while (TRANSIENT_STATES.includes(observed)) {
+    if (Date.now() >= deadline) return observed;
+    await page.waitForTimeout(HONOUR_POLL_INTERVAL_MS);
+    observed = await getReaderStateName(page);
+  }
+  return observed;
+}
+
+/**
+ * Block until injecting `action` now will either be acted on, or provably do
+ * nothing at all. Throw when neither can be established.
+ *
+ * The two actions are NOT symmetric, and #647 shipped them as though they were.
+ *
+ * A PRESS has one honouring state and no recovery: every other state drops the
+ * edge with a `logger.debug`, and an injected level cannot survive to be
+ * reconciled afterwards. So the only sound move is to wait for CONNECTED and
+ * refuse if it never comes. That gate took `locate.spec.ts` from 24.0% to 0/101
+ * and is deliberately untouched here.
+ *
+ * A RELEASE is a no-op whenever no scan is running — `reader.ts:237` drops it
+ * with a `logger.debug` and nothing is left undone, because there was nothing
+ * to stop. Waiting for SCANNING there waits for a state that will never arrive:
+ *
+ *   - `connection.spec.ts:130` and `inventory.spec.ts:111` never start a scan at
+ *     all (Settings tab, mode Idle) and failed 2 of 2 reps on a 15s timeout;
+ *   - `locate.spec.ts`'s `afterAll` releases against a Disconnected reader and
+ *     threw into a `catch` on 101 of 101 reps, skipping `disconnectDevice()`
+ *     entirely and costing 15s a rep — green the whole time.
+ *
+ * So a release waits only for an ANSWER to "is a scan running". BUSY and
+ * CONNECTING are not answers — the reader could still resolve either way, and
+ * injecting before it does is the press bug wearing a different hat. Every
+ * settled state is an answer, and only a reader that never leaves a transient
+ * state is still a failure, which is what the 15s budget was always for.
+ *
+ * Throwing rather than returning false is deliberate: injecting into a dropping
+ * state produces a test failure several assertions downstream — "gauge should
+ * report dBm" — which reads as a broken product rather than an edge delivered
+ * into the wrong state. Failing here names the actual cause at the actual moment.
  */
 export async function waitForReaderToAcceptTrigger(
   page: Page,
@@ -84,6 +143,30 @@ export async function waitForReaderToAcceptTrigger(
   timeoutMs: number = TRIGGER_HONOUR_TIMEOUT_MS
 ): Promise<void> {
   const wanted = STATE_THAT_HONOURS[action];
+
+  if (action === 'release') {
+    const settled = await waitForSettledReaderState(page, timeoutMs);
+    if (TRANSIENT_STATES.includes(settled)) {
+      throw new Error(
+        `TRIGGER_NOT_HONOURABLE: waited ${timeoutMs}ms for the reader to settle ` +
+          `before a release, and it was still "${settled}". A reader that never ` +
+          'leaves a transient state is wedged rather than merely busy, and the ' +
+          'edge would have been dropped with only a logger.debug. See TRA-1245.'
+      );
+    }
+    if (settled !== wanted) {
+      // Not a failure: with no scan running the edge is a no-op by design, and
+      // the injection still carries the trigger-state transition the specs
+      // assert. Said out loud because #647's version of this was a throw that
+      // ran 101 times inside a catch without reaching the pass/fail record.
+      console.log(
+        `[Trigger] release into "${settled}" - no scan to stop, so the edge is a ` +
+          'no-op; injecting for the trigger-state transition only'
+      );
+    }
+    return;
+  }
+
   const deadline = Date.now() + timeoutMs;
 
   let observed = await getReaderStateName(page);
@@ -501,10 +584,24 @@ export async function waitForTriggerReset(page: Page, timeout: number = 10000): 
       };
     });
     
-    // Check if trigger is fully reset and inventory is fully stopped
-    if (!states.triggerState && 
-        !states.inventoryRunning && 
-        states.readerState === ReaderState.IDLE) {
+    // Check if trigger is fully reset and inventory is fully stopped.
+    //
+    // ⚠ This read `ReaderState.IDLE`, and there is no IDLE in ReaderState —
+    // the members are Disconnected/Connecting/Configuring/Connected/Busy/
+    // Scanning/Error. IDLE belongs to ReaderMode, a different enum off a
+    // different store field. So the comparison was `readerState === undefined`,
+    // never true for a connected reader, and this helper could only ever burn
+    // its full timeout and return false however completely the trigger reset.
+    //
+    // CONNECTED is the resting state that was meant: reader.ts documents it as
+    // "Connected and idle, ready for operations" — the "idle" being reached for.
+    //
+    // Nothing called this when it was found, so nothing was failing; it was a
+    // trap armed for the next caller. Same shape as locate.spec.ts comparing
+    // against 'SCANNING' while the store holds 'Scanning'. TRA-1245.
+    if (!states.triggerState &&
+        !states.inventoryRunning &&
+        states.readerState === ReaderState.CONNECTED) {
       console.log('[Trigger] Fully reset and ready');
       return true;
     }
