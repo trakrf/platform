@@ -244,12 +244,23 @@ export const useAuthStore = create<AuthState>()(
             profile: null,
           });
 
-          // Clear all org-scoped data
+          // Clear all org-scoped data.
+          //
+          // 'auth-change': logging out leaves no org, so there is no other org's
+          // data to keep the scan away from. tagStore's logout subscription has
+          // always been written to strip enrichment and KEEP the bare scan —
+          // the strict clear here ran on the same transition and silently
+          // overrode it, so that handler had never once had an effect. Same
+          // two-features-cancelling-out shape as the login defect (TRA-1191).
+          //
+          // Asset and location data is still stripped. Only the EPCs the
+          // antenna actually saw survive, which is the state an anonymous scan
+          // would have left anyway.
           Promise.all([
             import('@/lib/cache/orgScopedCache'),
             import('@/lib/queryClient'),
           ]).then(([{ invalidateAllOrgScopedData }, { queryClient }]) => {
-            invalidateAllOrgScopedData(queryClient);
+            invalidateAllOrgScopedData(queryClient, 'auth-change');
           });
         },
 

@@ -341,4 +341,117 @@ test.describe('Scan tab enrichment after matching assets exist (TRA-1191)', () =
       `expected all ${epcs.length} tags enriched; lookups=${JSON.stringify(lookups)}`
     ).toBe(epcs.length);
   });
+
+  test('logging out keeps the bare scan and drops only the asset data', async ({ page }) => {
+    /*
+     * `tagStore`'s logout subscription has always been written to strip
+     * enrichment and KEEP the scan:
+     *
+     *   // Clear enrichment data when user logs out (true -> false transition)
+     *   useTagStore.getState().clearEnrichment();
+     *
+     * It had never once had an effect. `invalidateAllOrgScopedData` ran on the
+     * same transition and cleared the store outright, so the later write won —
+     * the same two-features-cancelling-out shape as the login defect, on the
+     * sibling transition.
+     *
+     * Needs no enrichment and no hardware to state: seed tags that already
+     * carry asset data, log out, and check what survives.
+     */
+    const testId = uniqueId();
+    const email = `test-logout-${testId}@example.com`;
+    const password = 'TestPassword123!';
+
+    /*
+     * The synchronisation here is load-bearing, and getting it wrong made this
+     * test pass against the unfixed code.
+     *
+     * Logout does two things to the tag store. The auth subscription fires
+     * SYNCHRONOUSLY and strips enrichment; `invalidateAllOrgScopedData` runs
+     * LATER, from a floating promise behind two dynamic imports, and is what
+     * would clear the store outright. Polling for "asset data is gone" is
+     * satisfied by the first of those and returns before the second has landed,
+     * so the tags are still present no matter which behaviour is configured.
+     *
+     * So gate on the invalidation having actually run — it names the method it
+     * called — and only then ask what survived.
+     */
+    const orgCacheLines: string[] = [];
+    page.on('console', (msg) => {
+      const text = msg.text();
+      if (text.includes('[OrgCache] tags:')) orgCacheLines.push(text);
+    });
+
+    await signupTestUser(page, email, password, `Test Org ${testId}`);
+
+    await page.evaluate(() => {
+      const stores = (window as unknown as { __ZUSTAND_STORES__?: any }).__ZUSTAND_STORES__;
+      stores.tagStore.getState().setTags([
+        {
+          epc: 'LOGOUT00000000000000AAAA',
+          count: 2,
+          rssi: -61,
+          source: 'rfid',
+          type: 'asset',
+          timestamp: Date.now(),
+          assetId: 4242,
+          assetName: 'Should Not Survive',
+          assetIdentifier: 'ASSET-4242',
+        },
+      ]);
+    });
+
+    // Signup itself invalidates, so ignore anything logged before this point.
+    const linesBeforeLogout = orgCacheLines.length;
+
+    await page.evaluate(async () => {
+      const stores = (window as unknown as { __ZUSTAND_STORES__?: any }).__ZUSTAND_STORES__;
+      await stores.authStore.getState().logout();
+    });
+
+    // Wait for the org-scoped invalidation triggered BY THE LOGOUT to run.
+    await expect
+      .poll(() => orgCacheLines.length, {
+        message: 'logout never ran the org-scoped invalidation at all',
+        timeout: 5000,
+      })
+      .toBeGreaterThan(linesBeforeLogout);
+
+    const invalidationLine = orgCacheLines[orgCacheLines.length - 1];
+    console.log('[TRA-1191] logout invalidation:', invalidationLine);
+
+    // Named explicitly: this is the line that decides the outcome, and asserting
+    // it means a failure says which method ran rather than only that tags
+    // vanished.
+    expect(
+      invalidationLine,
+      'logout must strip the resolution, not clear the store'
+    ).toContain('clearEnrichment()');
+
+    const afterLogout = await page.evaluate(() => {
+      const stores = (window as unknown as { __ZUSTAND_STORES__?: any }).__ZUSTAND_STORES__;
+      const tags = stores?.tagStore?.getState().tags ?? [];
+      return {
+        isAuthenticated: stores?.authStore?.getState().isAuthenticated,
+        count: tags.length,
+        first: tags[0],
+      };
+    });
+    console.log('[TRA-1191] after logout:', JSON.stringify(afterLogout));
+
+    expect(afterLogout.isAuthenticated, 'the user must actually be logged out').toBe(false);
+
+    // The observation survives, intact.
+    expect(afterLogout.count, 'logging out destroyed the scan').toBe(1);
+    expect(afterLogout.first.epc).toBe('LOGOUT00000000000000AAAA');
+    expect(afterLogout.first.count).toBe(2);
+    expect(afterLogout.first.rssi).toBe(-61);
+
+    // Everything the org resolved it to does not. A logged-out user holds bare
+    // EPCs and no asset data whatsoever.
+    expect(afterLogout.first.type).toBe('unknown');
+    expect(afterLogout.first.assetId).toBeUndefined();
+    expect(afterLogout.first.assetName).toBeUndefined();
+    expect(afterLogout.first.assetIdentifier).toBeUndefined();
+  });
 });

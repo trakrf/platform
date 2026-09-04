@@ -101,7 +101,17 @@ invalidateAllOrgScopedData(queryClient, reason: 'org-switch' | 'auth-change')
 - `'auth-change'` — tags keep the observation and lose the resolution, via
   `clearEnrichment()`. Tags land back on `unknown`, which is what
   `refreshAssetEnrichment()` selects on, so the next lookup re-resolves them
-  unaided.
+  unaided. This covers **login and logout alike**.
+
+**Clearing on an org switch is a simplicity choice, not a safety requirement.**
+The machinery to keep the bare scan and re-enrich it against the new org now
+exists — it is the same `clearEnrichment()` the auth path uses, and it would
+leak nothing, since the resolution is what gets dropped. Switching orgs is
+simply a coarser context change than logging in, the scan rarely means anything
+in the new org, and an empty list is easier to reason about than one that
+re-populates with different names. Recorded so that a future reader does not
+mistake the strict branch for a constraint and try to justify one that isn't
+there. Revisiting it is a product decision, not a bug fix.
 
 **The parameter defaults to `'org-switch'`.** A call site that has not thought
 about this can only over-clear; it can never leak one org's data into another.
@@ -119,17 +129,28 @@ Two supporting rules, because this was as much an observability failure:
    loosening an existing limb, which sweeps in unrelated chatter and shifts
    every count computed from the captured log.
 
+That first rule earned its place immediately. Logout does two things to the tag
+store: the auth subscription fires **synchronously** and strips enrichment,
+while the invalidation runs **later**, from a floating promise behind two
+dynamic imports. A test that polled for "the asset data is gone" was satisfied
+by the first and returned before the second had landed — so it passed against
+the unfixed code, where the store was about to be emptied a moment later. The
+test now waits for the invalidation's own line and asserts the method named in
+it. Without a log line that names what ran, there was nothing to synchronise on.
+
 ## Consequences
 
 - Anonymous scan → log in → enrich works. Hardware-verified over 83 real EPCs:
   `inventory-save.spec.ts` test 2 enriches in 2.2 s where it previously consumed
   the whole 90 s budget.
 - Org switch is unchanged, and test 3 still measures 2 tags before and 0 after.
-- **Logout deliberately keeps the strict behaviour.** `tagStore`'s logout
-  subscription strips enrichment and keeps the scan, which the outright clear
-  still overrides — a pre-existing contradiction, left exactly as it was because
-  no defect is reported against it and changing it is a product question about
-  shared handhelds, not a bug fix.
+- **Logout now keeps the bare scan too.** `tagStore`'s logout subscription was
+  already written to strip enrichment and keep the scan, and had never once had
+  an effect: the strict clear ran on the same transition and overrode it. That
+  handler is now real. A logged-out user holds bare EPCs and no asset data
+  whatsoever — the same state an anonymous scan would have left, which is why
+  the alternative was the surprising one: a user who never logged in kept their
+  scan while one who logged out lost it.
 - Anyone adding a store to `ORG_SCOPED_STORES` now has a second question to
   answer: does this store care why? Most will not, and `authChangeFn` is
   optional so they need do nothing.
