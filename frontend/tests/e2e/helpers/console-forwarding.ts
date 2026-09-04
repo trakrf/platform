@@ -33,6 +33,29 @@
 const BLE_TIMING_PREFIX = '[ble-timing]';
 
 /**
+ * Emitted by `src/stores/tagStore.ts`. Both spellings are live: the auth
+ * subscription logs `[TagStore]`, the stale-enrichment canary logs `[tagStore]`.
+ * Matching only one would drop half the path (TRA-1191).
+ */
+const TAG_STORE_PREFIXES = ['[TagStore]', '[tagStore]'];
+
+/**
+ * Emitted by `src/lib/auth/orgContext.ts`. Every tag lookup awaits
+ * `ensureOrgContext()`, so a token/profile disagreement there is a step on the
+ * enrichment path rather than a separate concern (TRA-1191).
+ */
+const ORG_CONTEXT_PREFIX = '[OrgContext]';
+
+/**
+ * Emitted by `src/lib/cache/orgScopedCache.ts` and `src/stores/authStore.ts`.
+ * The org-scoped invalidation clears the tag store, and the auth store is what
+ * calls it on login — so these lines are not adjacent to the enrichment path,
+ * they are the step that decides whether there is anything left to enrich
+ * (TRA-1191).
+ */
+const ORG_CACHE_PREFIXES = ['[OrgCache]', '[AuthStore]'];
+
+/**
  * Substrings that mark a line as worth keeping.
  *
  * CASE-SENSITIVE, and deliberately so — that is what keeps the list narrow. It
@@ -43,6 +66,9 @@ const BLE_TIMING_PREFIX = '[ble-timing]';
  */
 const KEEP = [
   BLE_TIMING_PREFIX,
+  ...TAG_STORE_PREFIXES,
+  ORG_CONTEXT_PREFIX,
+  ...ORG_CACHE_PREFIXES,
   'Error',
   'Failed',
   'BLE',

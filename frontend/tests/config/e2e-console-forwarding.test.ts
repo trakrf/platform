@@ -147,3 +147,56 @@ describe('the forwarder is still a filter, not a firehose', () => {
     expect(shouldForwardConsoleLine('device disconnect requested', 'log')).toBe(true);
   });
 });
+
+describe('the tag-enrichment path is observable (TRA-1191)', () => {
+  /**
+   * `src/stores/tagStore.ts` narrates the enrichment path with `console.log` and
+   * `console.warn`, and `src/lib/auth/orgContext.ts` narrates the org-context
+   * step every lookup awaits. Under e2e that code runs INSIDE THE BROWSER, so
+   * those lines reach a captured run log only through this predicate.
+   *
+   * None of them matched any existing limb: `Auth subscription: login detected`
+   * contains no `Error`/`Failed`/`BLE`/`Connect`/`WebSocket`/`force`/`cleanup`/
+   * `disconnect`, and `clearing enrichment` is not `cleanup`. Only
+   * `_flushLookupQueue: API error` survived, because it is a `console.error` and
+   * type `error` is kept unconditionally.
+   *
+   * That asymmetry is the trap TRA-1191 hit. The single forwarded line is the
+   * FAILURE line, so a run where the lookup ran and matched nothing was
+   * indistinguishable from a run where the lookup never happened at all — both
+   * print exactly nothing. Telling those two apart is the whole ticket, so the
+   * predicate has to pass the success-path narration too.
+   */
+  const ENRICHMENT_LINES: Array<[string, string]> = [
+    ['[TagStore] Auth subscription: login detected', 'log'],
+    ['[TagStore] Auth subscription: logout detected, clearing enrichment', 'log'],
+    ['[tagStore] Stale enrichment detected - central invalidation may have been bypassed', 'warning'],
+    ['[OrgContext] JWT missing org_id claim, refreshing token', 'warning'],
+    ['[OrgContext] JWT/profile drift detected, refreshing token', 'warning'],
+    // The line that decides whether there is anything left to enrich at all.
+    ['[OrgCache] tags: clearEnrichment()', 'log'],
+    ['[OrgCache] Invalidating all org-scoped data', 'log'],
+    ['[AuthStore] Setting org context org_id: 42', 'log'],
+  ];
+
+  for (const [line, type] of ENRICHMENT_LINES) {
+    it(`forwards ${JSON.stringify(line.slice(0, 32))}…`, () => {
+      expect(shouldForwardConsoleLine(line, type)).toBe(true);
+    });
+  }
+
+  it('widened by prefix, not by loosening a limb', () => {
+    // The hazard the module docstring names: loosening an existing limb (a
+    // case-insensitive `Connect`, say) would sweep in `[vite] connected` and a
+    // great deal of other chatter. These lines talk about stores and orgs but
+    // carry no bracketed prefix, so a prefix-shaped widening leaves them
+    // filtered and a careless one does not.
+    for (const line of [
+      'restoring tagStore from localStorage',
+      'org context ready',
+      'TagStore rehydrated',
+    ]) {
+      expect(shouldForwardConsoleLine(line, 'log'), `should not forward: ${line}`).toBe(false);
+    }
+  });
+});

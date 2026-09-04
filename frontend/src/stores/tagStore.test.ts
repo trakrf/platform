@@ -581,3 +581,111 @@ describe('TagStore - batched addTags (TRA-1150)', () => {
     expect(t.assetIdentifier).toBe('A-7');
   });
 });
+
+describe('TagStore - clearEnrichment (TRA-1191)', () => {
+  /**
+   * An EPC the reader physically observed is not org-scoped data. What that EPC
+   * RESOLVES TO — an asset, a location — is. So a change of org context has to
+   * invalidate the resolution while leaving the observation alone.
+   *
+   * The store was registered in `orgScopedCache`'s ORG_SCOPED_STORES with
+   * `clearTags`, which throws the observation away too. Because that runs on
+   * LOGIN (authStore's setOrgContext invalidates after setCurrentOrg), logging
+   * in destroyed the anonymous scan — and the anonymous-scan-then-log-in-to-
+   * enrich flow is exactly what tagStore's own auth subscription exists to
+   * serve. The two features cancelled out, and the subscription's lookup ran
+   * against an empty tag list.
+   *
+   * An ORG SWITCH still clears outright, per TRA-318; only auth changes take
+   * this softer path. The distinction lives in the registry, not here.
+   */
+  beforeEach(() => {
+    useTagStore.getState().clearTags();
+  });
+
+  it('keeps the scan and drops only what the org resolved it to', () => {
+    useTagStore.getState().setTags([
+      {
+        epc: 'AAAA0001',
+        count: 3,
+        rssi: -55,
+        source: 'rfid',
+        type: 'asset',
+        timestamp: 1_700_000_000,
+        firstSeenTime: 1_700_000_000,
+        lastSeenTime: 1_700_000_009,
+        assetId: 11,
+        assetName: 'Pump A',
+        assetIdentifier: 'ASSET-11',
+      },
+      {
+        epc: 'AAAA0002',
+        count: 1,
+        rssi: -70,
+        source: 'rfid',
+        type: 'location',
+        locationId: 22,
+        locationName: 'Bay 2',
+      },
+    ]);
+
+    useTagStore.getState().clearEnrichment();
+
+    const tags = useTagStore.getState().tags;
+
+    // The observation survives, in full.
+    expect(tags).toHaveLength(2);
+    expect(tags.map(t => t.epc)).toEqual(['AAAA0001', 'AAAA0002']);
+    expect(tags[0].count).toBe(3);
+    expect(tags[0].rssi).toBe(-55);
+    expect(tags[0].firstSeenTime).toBe(1_700_000_000);
+    expect(tags[0].lastSeenTime).toBe(1_700_000_009);
+    expect(tags[1].source).toBe('rfid');
+
+    // The org-scoped resolution does not.
+    for (const t of tags) {
+      expect(t.type).toBe('unknown');
+      expect(t.assetId).toBeUndefined();
+      expect(t.assetName).toBeUndefined();
+      expect(t.assetIdentifier).toBeUndefined();
+      expect(t.locationId).toBeUndefined();
+      expect(t.locationName).toBeUndefined();
+    }
+  });
+
+  it('leaves the tags re-enrichable, which clearTags cannot', async () => {
+    // The point of keeping the scan is that the next lookup has something to
+    // resolve. Asserted through the real queue path rather than by inspecting
+    // fields, because "re-enrichable" is a behaviour, not a shape.
+    useTagStore.getState().setTags([
+      { epc: 'AAAA0003', count: 1, source: 'rfid', type: 'asset', assetId: 99 },
+    ]);
+    useTagStore.getState().clearEnrichment();
+
+    vi.mocked(lookupApi.byTags).mockResolvedValue({
+      data: {
+        data: {
+          AAAA0003: {
+            entity_type: 'asset',
+            entity_id: 7,
+            asset: { id: 7, name: 'Re-resolved', external_key: 'ASSET-7' },
+          },
+        },
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    useAuthStore.setState({ isAuthenticated: true });
+    await useTagStore.getState().refreshAssetEnrichment();
+
+    const tag = useTagStore.getState().tags[0];
+    expect(lookupApi.byTags).toHaveBeenCalledWith({ type: 'rfid', values: ['AAAA0003'] });
+    expect(tag.assetId).toBe(7);
+    expect(tag.assetName).toBe('Re-resolved');
+  });
+
+  it('is a no-op on an empty store rather than throwing', () => {
+    expect(() => useTagStore.getState().clearEnrichment()).not.toThrow();
+    expect(useTagStore.getState().tags).toEqual([]);
+  });
+});

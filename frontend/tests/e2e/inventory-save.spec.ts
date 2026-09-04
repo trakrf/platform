@@ -281,8 +281,15 @@ test.describe('Inventory Save Flow', () => {
       console.log(`[Test] Created asset: ${asset.name} (ID: ${asset.id}, EPC: ${asset.rfidTag})`);
     }
 
-    // Navigate to inventory - tags should still be in localStorage
-    await sharedPage.goto('/#scan');
+    // Reload the Scan tab - tags should still be in localStorage.
+    //
+    // `reload()`, not `goto('/#scan')`. loginTestUser already leaves the page on
+    // `/#scan`, so navigating there again differs only in the fragment: a
+    // same-document navigation that re-mounts nothing and re-runs no module. The
+    // line below claimed to navigate for months and measurably did not, so
+    // nothing here re-triggered enrichment after the assets were created and the
+    // 10 s wait had no path to success (TRA-1191).
+    await sharedPage.reload();
     await sharedPage.waitForTimeout(1000);
 
     // Wait for enrichment to happen
@@ -471,7 +478,24 @@ test.describe('Inventory Save Flow', () => {
   // invalidation wipes the tag store on every switch. Real users rescan after
   // switching; there is nothing to verify in a "carry-over" path.
 
-  test('4. anonymous user clicking Save redirects to login', async () => {
+  test('4. anonymous user cannot save, and is offered a trial instead', async () => {
+    /*
+     * Rewritten (TRA-1191). This test asserted that an anonymous user could
+     * CLICK Save and be redirected to `#login`, storing `redirectAfterLogin`.
+     * That flow no longer exists and should not: saving an asset's location is
+     * firmly behind the paywall. An anonymous user may read tags and locate,
+     * but has no access to asset data at all, and so none to asset-location
+     * data either. A Save control they can press is the wrong affordance.
+     *
+     * TRA-948 replaced it with `<PaidGate>`: the control renders grayed and
+     * inert, and a click-capturing overlay opens a value-led upsell whose CTA
+     * goes to `#signup`, not `#login`.
+     *
+     * The old assertion had not run in a long time — test 2 failed first and
+     * serial mode skipped everything after it — so it sat green-by-absence
+     * while asserting a design that had been deliberately removed. Verified
+     * against main's source that its failure predates this branch.
+     */
     // Clear auth state
     await clearAuthState(sharedPage);
     await sharedPage.reload({ waitUntil: 'networkidle' });
@@ -502,21 +526,35 @@ test.describe('Inventory Save Flow', () => {
 
     await sharedPage.waitForTimeout(500);
 
-    // Find Save button - should be enabled for anonymous users with scanned tags
-    const saveButton = sharedPage.locator('button:has-text("Save")');
-    await expect(saveButton).toBeVisible();
-
-    // Click Save
-    await saveButton.click();
-
-    // Should redirect to login
-    await sharedPage.waitForURL(/#login/, { timeout: 5000 });
-    console.log('[Test] Redirected to login as expected');
-
-    // Verify redirect was stored
-    const redirectPath = await sharedPage.evaluate(() => {
-      return sessionStorage.getItem('redirectAfterLogin');
+    // The tag is in the store, so the list is not empty — the Save control is
+    // disabled because the user is anonymous, not because there is nothing to
+    // save. Asserted so a future empty-list bug cannot pass this test.
+    const tagCount = await sharedPage.evaluate(() => {
+      const stores = (window as any).__ZUSTAND_STORES__;
+      return stores?.tagStore?.getState().tags.length ?? 0;
     });
-    expect(redirectPath).toBe('scan');
+    expect(tagCount, 'the injected tag must be in the store').toBeGreaterThan(0);
+
+    // Save is present but inert, and says why.
+    const saveButton = sharedPage.locator('button:has-text("Save")').last();
+    await expect(saveButton).toBeVisible();
+    await expect(saveButton).toBeDisabled();
+    await expect(saveButton).toHaveAttribute('title', 'Log in to save scans');
+
+    // The affordance an anonymous user actually gets is the paid-gate overlay.
+    const overlay = sharedPage.locator('[data-testid="paid-gate-overlay"]').last();
+    await expect(overlay).toBeVisible();
+    await overlay.click();
+
+    // A value-led prompt, not a navigation.
+    const upsell = sharedPage.locator('[role="dialog"]').filter({ hasText: 'free trial' });
+    await expect(upsell).toBeVisible();
+    expect(sharedPage.url()).toContain('#scan');
+
+    // And its CTA offers a trial — #signup, not #login. The paywall is the
+    // point: there is no logged-out path to saving asset-location data.
+    await upsell.getByRole('button', { name: 'Start free trial' }).click();
+    await sharedPage.waitForURL(/#signup/, { timeout: 5000 });
+    console.log('[Test] Anonymous save offered a trial and routed to signup');
   });
 });

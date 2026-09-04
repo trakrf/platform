@@ -85,6 +85,7 @@ interface TagState {
   addTags: (tags: Partial<TagInfo>[]) => void;  // Add a batch of tags in one store write
   addTag: (tag: Partial<TagInfo>) => void;  // Add single tag
   clearTags: () => void;
+  clearEnrichment: () => void;  // Drop org-resolved fields, keep the scan (TRA-1191)
   selectTag: (tag: TagInfo | null) => void;
   setDisplayFormat: (format: 'hex' | 'decimal') => void;
   mergeReconciliationTags: (items: ReconciliationItem[]) => void;
@@ -163,6 +164,30 @@ export const useTagStore = create<TagState>()(
     });
   },
   clearTags: () => set({ tags: [], totalPages: 1, currentPage: 1 }),
+
+  /**
+   * Drop everything the current org resolved these tags to, and keep the scan.
+   *
+   * An EPC the reader physically observed belongs to no org — it is a fact about
+   * what was in front of the antenna. The asset or location it maps to is
+   * org-scoped, and must not survive a change of org context. Those are two
+   * different lifetimes, and `clearTags` collapsed them into one (TRA-1191).
+   *
+   * Tags land back on `unknown`, which is what `refreshAssetEnrichment` selects
+   * on, so the next lookup picks them up on its own.
+   */
+  clearEnrichment: () => set((state) => ({
+    tags: state.tags.map(tag => ({
+      ...tag,
+      type: 'unknown' as const,
+      assetId: undefined,
+      assetName: undefined,
+      assetIdentifier: undefined,
+      locationId: undefined,
+      locationName: undefined,
+    })),
+  })),
+
   selectTag: (tag) => set({ selectedTag: tag }),
   setDisplayFormat: (format) => set({ displayFormat: format }),
   setSortConfig: (column, direction) => set({ sortColumn: column, sortDirection: direction }),
@@ -394,6 +419,11 @@ export const useTagStore = create<TagState>()(
       .map(t => t.epc)
       .filter(Boolean);
 
+    console.log('[TagStore] refreshAssetEnrichment', {
+      total: state.tags.length,
+      unenriched: unenriched.length,
+    });
+
     if (unenriched.length === 0) return;
 
     // Add to queue and flush immediately
@@ -425,6 +455,9 @@ export const useTagStore = create<TagState>()(
     // Skip API call for anonymous users - keep queue intact for later
     const isAuthenticated = useAuthStore.getState().isAuthenticated;
     if (!isAuthenticated) {
+      console.log('[TagStore] _flushLookupQueue: skipped, anonymous', {
+        queued: get()._lookupQueue.size,
+      });
       return;
     }
 
@@ -432,6 +465,10 @@ export const useTagStore = create<TagState>()(
 
     // Don't run if already in progress or queue is empty
     if (state._isLookupInProgress || state._lookupQueue.size === 0) {
+      console.log('[TagStore] _flushLookupQueue: skipped', {
+        inProgress: state._isLookupInProgress,
+        queued: state._lookupQueue.size,
+      });
       return;
     }
 
@@ -546,18 +583,10 @@ useAuthStore.subscribe((state, prevState) => {
   // Clear enrichment data when user logs out (true -> false transition)
   if (!state.isAuthenticated && prevState.isAuthenticated) {
     console.log('[TagStore] Auth subscription: logout detected, clearing enrichment');
-    const tagStore = useTagStore.getState();
-    tagStore.setTags(
-      tagStore.tags.map(tag => ({
-        ...tag,
-        type: 'unknown' as const,
-        assetId: undefined,
-        assetName: undefined,
-        assetIdentifier: undefined,
-        locationId: undefined,
-        locationName: undefined,
-      }))
-    );
+    // Shares the store action with the org-scoped invalidation rather than
+    // repeating the field list. Two hand-rolled copies of "strip the org-scoped
+    // fields" is how one of them silently stops matching TagInfo (TRA-1191).
+    useTagStore.getState().clearEnrichment();
   }
 });
 

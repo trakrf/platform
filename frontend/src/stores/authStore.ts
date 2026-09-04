@@ -60,10 +60,14 @@ export const useAuthStore = create<AuthState>()(
               refreshToken: orgResponse.data.refresh_token,
             });
 
-            // INVALIDATE: After setCurrentOrg() returns with org_id token
+            // INVALIDATE: After setCurrentOrg() returns with org_id token.
+            // 'auth-change': this runs only from Login and Signup, where there
+            // is no previous org whose data could follow the user across. The
+            // strict form deleted the anonymous scan the login was about to
+            // enrich (TRA-1191).
             const { invalidateAllOrgScopedData } = await import('@/lib/cache/orgScopedCache');
             const { queryClient } = await import('@/lib/queryClient');
-            await invalidateAllOrgScopedData(queryClient);
+            await invalidateAllOrgScopedData(queryClient, 'auth-change');
           } catch (err) {
             if (attempt < 2) {
               console.warn('[AuthStore] setCurrentOrg failed, retrying...', err);
@@ -240,12 +244,23 @@ export const useAuthStore = create<AuthState>()(
             profile: null,
           });
 
-          // Clear all org-scoped data
+          // Clear all org-scoped data.
+          //
+          // 'auth-change': logging out leaves no org, so there is no other org's
+          // data to keep the scan away from. tagStore's logout subscription has
+          // always been written to strip enrichment and KEEP the bare scan —
+          // the strict clear here ran on the same transition and silently
+          // overrode it, so that handler had never once had an effect. Same
+          // two-features-cancelling-out shape as the login defect (TRA-1191).
+          //
+          // Asset and location data is still stripped. Only the EPCs the
+          // antenna actually saw survive, which is the state an anonymous scan
+          // would have left anyway.
           Promise.all([
             import('@/lib/cache/orgScopedCache'),
             import('@/lib/queryClient'),
           ]).then(([{ invalidateAllOrgScopedData }, { queryClient }]) => {
-            invalidateAllOrgScopedData(queryClient);
+            invalidateAllOrgScopedData(queryClient, 'auth-change');
           });
         },
 
