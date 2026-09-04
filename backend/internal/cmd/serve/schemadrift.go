@@ -20,10 +20,16 @@ import (
 // identical e2e failures, twice, both triaged as test rot before anyone thought
 // to check the schema version.
 //
-// Best-effort by design. Every failure path here is silent: a database that
-// cannot be read is the storage layer's problem to report, and a boot-time
-// check that can itself fail loudly would add a second confusing message to a
-// situation that already has one.
+// Best-effort about the database's own availability: if the pool is down, that
+// is the storage layer's problem to report and a second message here would only
+// crowd it.
+//
+// Not silent about being unable to read the LEDGER, though — that path used to
+// return without a word, and it is the path preview and prod took on every boot
+// for a month while `trakrf-app` had no SELECT on trakrf.schema_migrations. The
+// drift check was inert in both, and the logs said as little about it as
+// /health did (TRA-1218). A check that cannot run has to say that it could not
+// run, or it is indistinguishable from a check that ran and found nothing.
 func logSchemaDrift(ctx context.Context, log *zerolog.Logger, store *storage.Storage) {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
@@ -34,6 +40,16 @@ func logSchemaDrift(ctx context.Context, log *zerolog.Logger, store *storage.Sto
 		QueryRow(ctx, `SELECT version, dirty FROM trakrf.schema_migrations LIMIT 1`).
 		Scan(&applied, &dirty)
 	if err != nil {
+		// Warn, not Error: the schema may well be fine. What is definitely not
+		// fine is that nothing here can tell, and every subsequent /health will
+		// report readable:false for the same reason.
+		log.Warn().
+			Err(err).
+			Str("ledger", "trakrf.schema_migrations").
+			Str("effect", "the schema drift check is inert; /health cannot report a version").
+			Str("fix", "GRANT SELECT ON trakrf.schema_migrations TO the app role").
+			Msg("CANNOT READ THE MIGRATION LEDGER — a schema behind this binary " +
+				"will not be detected or reported")
 		return
 	}
 

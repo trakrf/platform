@@ -2,7 +2,7 @@
 
 Date: 2026-08-29
 Status: Accepted
-Tracking: TRA-1190 (this record), TRA-1075 (the role split that drifted), TRA-1069 / TRA-1104 (ADR 0003, the migration half)
+Tracking: TRA-1190 (this record), TRA-1075 (the role split that drifted), TRA-1069 / TRA-1104 (ADR 0003, the migration half), TRA-1218 (the amendment below — the /health claim was true only on local dev)
 
 ## Context
 
@@ -100,7 +100,17 @@ migrating — so migrating the wrong one is no longer silent success.
 migrations — is the window this ticket lived in.
 
 **`/health` returns 503 when the schema is behind, naming the unapplied
-migrations. `/healthz` and `/readyz` deliberately do not follow it.** They are the
+migrations — provided the role the backend connects as can read
+`trakrf.schema_migrations`.** That proviso is not decorative: it was false in
+preview and prod from the day this was written until TRA-1218. The app role had
+no SELECT on the ledger there, so every read errored, and the check reported
+nothing at all while the paragraph above said it reported 503. The grant is now
+issued by name in `database/sql/03-grants.sql` and in the init-grants Job in
+`trakrf/infra`, and an unreadable ledger is reported as `readable: false` with a
+reason rather than by omitting the block — so the next time this is untrue, the
+payload says so instead of impersonating a healthy backend.
+
+**`/healthz` and `/readyz` deliberately do not follow it.** They are the
 k8s liveness and readiness probes, and the repair for a behind schema is a
 migration: a pod that has been killed or pulled from the load balancer cannot
 serve while that runs. A pod *ahead* of its schema is a normal rolling deploy, not

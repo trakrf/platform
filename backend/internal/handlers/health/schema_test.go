@@ -46,6 +46,16 @@ func get(t *testing.T, h *Handler) *httptest.ResponseRecorder {
 	return rec
 }
 
+// deref fails the test rather than panicking, so a version that went missing
+// reports as the assertion it broke instead of a nil dereference three frames up.
+func deref(t *testing.T, label string, v *uint) uint {
+	t.Helper()
+	if v == nil {
+		t.Fatalf("%s is absent, want a version", label)
+	}
+	return *v
+}
+
 func TestHealth_SchemaBehindFails(t *testing.T) {
 	latest, err := migrations.Latest()
 	if err != nil {
@@ -70,9 +80,13 @@ func TestHealth_SchemaBehindFails(t *testing.T) {
 	if resp.Schema == nil {
 		t.Fatal("schema block missing — the versions are the actionable part")
 	}
-	if resp.Schema.Applied != latest-2 || resp.Schema.Expected != latest {
-		t.Errorf("schema = %d/%d, want %d/%d",
-			resp.Schema.Applied, resp.Schema.Expected, latest-2, latest)
+	if !resp.Schema.Readable {
+		t.Error("readable = false, want true — the ledger was read successfully")
+	}
+	applied := deref(t, "applied", resp.Schema.Applied)
+	expected := deref(t, "expected", resp.Schema.Expected)
+	if applied != latest-2 || expected != latest {
+		t.Errorf("schema = %d/%d, want %d/%d", applied, expected, latest-2, latest)
 	}
 	// Naming the pending migrations is deliberate. "38 vs 40" makes the reader
 	// go and look up what 39 and 40 were, and nobody did.
@@ -99,11 +113,20 @@ func TestHealth_SchemaCurrentPasses(t *testing.T) {
 	if resp.Status != "ok" {
 		t.Errorf("status = %q, want ok", resp.Status)
 	}
-	if resp.Schema == nil || resp.Schema.Applied != latest {
-		t.Errorf("schema = %+v, want applied=%d", resp.Schema, latest)
+	if resp.Schema == nil {
+		t.Fatalf("schema block missing, want applied=%d", latest)
+	}
+	if !resp.Schema.Readable {
+		t.Error("readable = false, want true")
+	}
+	if applied := deref(t, "applied", resp.Schema.Applied); applied != latest {
+		t.Errorf("applied = %d, want %d", applied, latest)
 	}
 	if len(resp.Schema.Pending) != 0 {
 		t.Errorf("pending = %v, want empty", resp.Schema.Pending)
+	}
+	if resp.Schema.Reason != "" {
+		t.Errorf("reason = %q, want empty on a healthy read", resp.Schema.Reason)
 	}
 }
 
@@ -153,18 +176,31 @@ func TestHealth_DirtyLedgerFails(t *testing.T) {
 	if resp.Schema == nil || !resp.Schema.Dirty {
 		t.Errorf("schema = %+v, want dirty=true", resp.Schema)
 	}
+	if !resp.Schema.Readable {
+		t.Error("readable = false, want true — a dirty ledger is one that WAS read")
+	}
 }
 
 // Not being able to READ the ledger is not evidence that the schema is behind,
 // and must not be reported as though it were — that would turn every transient
 // database blip into a false "run your migrations". The database field already
 // carries connectivity.
-func TestHealth_UnreadableLedgerDoesNotClaimBehind(t *testing.T) {
+//
+// But it must still be SAID. Omitting the block made "I cannot tell" byte-for-byte
+// identical to "everything is fine", and that is how TRA-1190's check ran inert in
+// preview and prod for a month: `trakrf-app` had no SELECT on
+// `trakrf.schema_migrations`, every read errored, and /health answered 200 with no
+// schema key — exactly what a healthy backend answers (TRA-1218). The 200 was right;
+// the silence was not.
+func TestHealth_UnreadableLedgerIsReportedNotOmitted(t *testing.T) {
 	h := newTestHandler(t, func(context.Context) (uint, bool, error) {
-		return 0, false, errors.New("relation \"trakrf.schema_migrations\" does not exist")
+		// The error preview and prod actually produced, not a stand-in.
+		return 0, false, errors.New(
+			`ERROR: permission denied for table schema_migrations (SQLSTATE 42501)`)
 	})
 	rec := get(t, h)
 
+	// Still 200: an unreadable ledger is not evidence of drift.
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200", rec.Code)
 	}
@@ -172,13 +208,35 @@ func TestHealth_UnreadableLedgerDoesNotClaimBehind(t *testing.T) {
 	if resp.Status == "schema_behind" {
 		t.Error("an unreadable ledger was reported as schema_behind")
 	}
-	if resp.Schema != nil {
-		t.Errorf("schema = %+v, want omitted when it cannot be read", resp.Schema)
+
+	// The assertion that would have caught TRA-1218. Everything above this line
+	// passed while the check was inert.
+	if resp.Schema == nil {
+		t.Fatal("schema block omitted — that is indistinguishable from a healthy " +
+			"response, which is the whole defect")
+	}
+	if resp.Schema.Readable {
+		t.Error("readable = true, want false")
+	}
+	if resp.Schema.Reason == "" {
+		t.Error("reason is empty — \"readable: false\" alone does not say whether the " +
+			"ledger is missing or the grant is")
+	}
+	// No invented versions. A zero here would read as "applied 0 of N", which is a
+	// claim about the database rather than an admission about the read.
+	if resp.Schema.Applied != nil || resp.Schema.Expected != nil {
+		t.Errorf("applied/expected = %v/%v, want both absent when the ledger was not read",
+			resp.Schema.Applied, resp.Schema.Expected)
 	}
 }
 
 // The unit-test path: no pool at all. Must not panic and must not invent a
 // verdict about a database it never spoke to.
+//
+// This one keeps omitting the block rather than reporting readable:false, and the
+// distinction is the point: there is no database here to be unable to read, so
+// "the ledger is unreadable" would be a claim about a read that was never
+// attempted. A real server always passes a live pool.
 func TestHealth_NoPoolOmitsSchema(t *testing.T) {
 	h := NewHandler(nil, buildinfo.Info{Version: "test"}, time.Now())
 	rec := get(t, h)

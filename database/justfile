@@ -62,8 +62,23 @@ init:
         -v app_role={{app_role}} -v migrate_role={{migrate_role}} \
         -v obfuscation_key={{obfuscation_key}} \
         < sql/02-schema.sql
-    run_sql -d {{db_name}} -v app_role={{app_role}} < sql/03-grants.sql
+    just grants
     echo "✅ {{db_name}}: owned by {{migrate_role}}, served by {{app_role}} (no superuser, no BYPASSRLS)"
+
+# Apply 03-grants.sql on its own — the objects-that-already-exist half of the
+# bootstrap.
+#
+# Split out of `init` because it is the half that has to run AFTER migrations,
+# and `init` runs before them (TRA-1218). The migration ledger is the case that
+# forced this: `just database up` creates the database and grants on it while
+# `trakrf.schema_migrations` does not yet exist, so the statements naming the
+# ledger are a no-op on that pass. `just dev` runs this again once
+# `just backend migrate` has created it.
+#
+# Idempotent, so running it whenever you are unsure costs nothing.
+grants:
+    docker compose exec -T timescaledb psql -U postgres -v ON_ERROR_STOP=1 -q \
+        -d {{db_name}} -v app_role={{app_role}} < sql/03-grants.sql
 
 # Stop database container
 down:

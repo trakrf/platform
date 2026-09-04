@@ -30,8 +30,10 @@ type Response struct {
 	// tooling watches for deploy-lag detection.
 	SpecRefreshedAt string `json:"spec_refreshed_at"`
 	// Schema compares the migration version the database has applied against
-	// the set embedded in this binary (TRA-1190). Omitted when there is no
-	// pool or the ledger cannot be read — "unknown" is not "behind".
+	// the set embedded in this binary (TRA-1190). "Unknown" is still not
+	// "behind" — an unreadable ledger keeps the 200 — but it is now reported as
+	// `readable: false` with a reason rather than by dropping the key
+	// (TRA-1218). Omitted only when there is no pool to ask.
 	Schema *SchemaInfo `json:"schema,omitempty"`
 }
 
