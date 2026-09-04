@@ -408,7 +408,15 @@ export default function InventoryScreen() {
           hasItems={filteredTags.length > 0}
           readerState={readerState}
           onSave={handleSave}
-          isSaveDisabled={isAuthenticated ? (!resolvedLocation || saveableCount === 0 || isSaving) : displayableTags.length === 0}
+          // Saving an asset's location is firmly behind the paywall: an
+          // anonymous user may read tags and locate, but has no access to asset
+          // data at all and so none to asset-location data either. Disabled
+          // unconditionally when logged out, rather than only when the list
+          // happens to be empty — the old form left the control enabled for an
+          // anonymous user with tags, and read as though a save were possible.
+          // `PaidGate` already renders it inert; this states the rule where the
+          // rule lives instead of leaving it to the wrapper (TRA-948).
+          isSaveDisabled={!isAuthenticated || !resolvedLocation || saveableCount === 0 || isSaving}
           isSaving={isSaving}
           saveableCount={saveableCount}
           saveTitle={saveTitle}
