@@ -158,18 +158,49 @@ test.describe('Authentication', () => {
     });
 
     test('should handle signup failure with proper error message', async ({ page }) => {
+      /*
+       * Two separate reasons this could not pass, both fixed here (TRA-1246).
+       *
+       * 1. It filled email, password and orgName only. TRA-970/971 made name,
+       *    website, phone and the non-prod acknowledgement required too, so the
+       *    form failed client-side validation and never submitted — no request,
+       *    no server error, nothing for the assertions below to find.
+       *    org.fixture.ts carries a comment about exactly this happening to
+       *    `signupTestUser`; the same rot sat undetected one file over.
+       *
+       * 2. It then asserted the transient "Creating account..." label, which
+       *    SignupScreen renders only while `isLoading`. That assertion failed
+       *    first and hid reason 1 for as long as it stood. It is gone: a label
+       *    that exists for one round trip cannot be observed reliably from
+       *    outside the app, and it is not what this test is named for.
+       *
+       * The duplicate is now created by this test rather than assumed to be in
+       * the database, so the failure it asserts on is the one it arranges.
+       */
+      const takenEmail = `duplicate-${Date.now()}@example.com`;
+      const fillSignupForm = async (email: string, orgName: string) => {
+        await page.locator('input#email').fill(email);
+        await page.locator('input#name').fill('E2E Test User');
+        await page.locator('input#orgName').fill(orgName);
+        await page.locator('input#website').fill('example.com');
+        await page.locator('input#phone').fill('+1 555 123 4567');
+        await page.locator('input#password').fill('password123');
+        const ack = page.locator('input#ackNonProd');
+        if (await ack.count()) await ack.check();
+      };
+
+      // Claim the address with a signup that succeeds.
       await page.goto('/#signup');
-
-      // Fill in credentials with existing email (should fail)
-      await page.locator('input#email').fill('existing@example.com');
-      await page.locator('input#password').fill('password123');
-      await page.locator('input#orgName').fill('Test Organization');
-
-      // Submit form
+      await fillSignupForm(takenEmail, `Dup Test Org ${Date.now()}`);
       await page.locator('button[type="submit"]').click();
+      await page.waitForURL(/#scan/, { timeout: 10000 });
 
-      // Should show loading state
-      await expect(page.locator('button[type="submit"]')).toContainText('Creating account...');
+      // Now sign up again with the same address, from a clean session.
+      await page.evaluate(() => localStorage.clear());
+      await page.goto('/#signup');
+      await page.reload({ waitUntil: 'networkidle' });
+      await fillSignupForm(takenEmail, `Dup Test Org 2 ${Date.now()}`);
+      await page.locator('button[type="submit"]').click();
 
       // Wait for error (backend should return RFC 7807 error)
       // The error should be displayed as text, not as an object

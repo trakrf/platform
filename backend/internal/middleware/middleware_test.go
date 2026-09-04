@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -645,13 +646,85 @@ func TestCORS_EnabledOriginShortCircuitsOptions(t *testing.T) {
 	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "https://app.example.com" {
 		t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, "https://app.example.com")
 	}
-	// TRA-866: ACAM must match the actual route table — HEAD is valid on every
-	// GET route (chi auto-serves it), and no route uses PUT. Advertising PUT
-	// was a stale generic default; omitting HEAD understated coverage.
-	if got, want := w.Header().Get("Access-Control-Allow-Methods"), "GET, HEAD, POST, PATCH, DELETE, OPTIONS"; got != want {
+	// ACAM must match the actual route table. HEAD is valid on every GET route
+	// (chi auto-serves it), which TRA-866 correctly added. It also dropped PUT
+	// on the stated grounds that "no route uses PUT" — see TRA-1246, and
+	// TestCORS_AdvertisedMethodsCoverEveryRoutedMethod below, which derives the
+	// set from the generated spec rather than restating it.
+	if got, want := w.Header().Get("Access-Control-Allow-Methods"), "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS"; got != want {
 		t.Errorf("Access-Control-Allow-Methods = %q, want %q", got, want)
 	}
-	if strings.Contains(w.Header().Get("Access-Control-Allow-Methods"), "PUT") {
-		t.Errorf("Access-Control-Allow-Methods must not advertise PUT — no route uses it")
+}
+
+// A method the router serves but CORS does not advertise is unreachable from
+// any cross-origin browser client: the preflight succeeds, the browser reads
+// the header, and the real request is never sent. The page sees a bare
+// "Network Error" with no status and no body, which reads as the backend being
+// down rather than as a policy refusal.
+//
+// TRA-866 removed PUT from the advertised set with the comment "no route uses
+// PUT". Six did, including PUT /api/v1/orgs/{id} (rename an organisation),
+// PUT /api/v1/auth/password (change password) and
+// PUT /api/v1/orgs/{id}/members/{userId} (change a member's role). It went
+// unnoticed because the deployed SPA is same-origin with the API and so never
+// preflights; it surfaced only in e2e, where the dev server on :5173 and the
+// backend on :8080 are different origins (TRA-1246).
+//
+// The lesson is that the previous assertion restated the constant instead of
+// checking it against anything, so it could only ever confirm whatever the
+// middleware already said. This one derives the expectation from the generated
+// OpenAPI spec — regenerated from the route table on every build, see
+// `just backend api-spec` — so removing the last PUT route makes it fail too,
+// asking for the narrower list rather than silently permitting a stale one.
+func TestCORS_AdvertisedMethodsCoverEveryRoutedMethod(t *testing.T) {
+	// Read by path rather than through swaggerspec's embed: the bytes are
+	// unexported, and a test in the middleware package has no business
+	// importing a handler package to reach them.
+	const specPath = "../handlers/swaggerspec/openapi.internal.json"
+	raw, err := os.ReadFile(specPath)
+	if err != nil {
+		// The spec is generated, not committed (it is gitignored and embedded).
+		// A tree that has never been built does not have it.
+		t.Fatalf("read %s: %v\nGenerate it with `just backend api-spec`, or bootstrap the worktree.", specPath, err)
+	}
+	var spec struct {
+		Paths map[string]map[string]json.RawMessage `json:"paths"`
+	}
+	if err := json.Unmarshal(raw, &spec); err != nil {
+		t.Fatalf("parse %s: %v", specPath, err)
+	}
+	if len(spec.Paths) == 0 {
+		t.Fatalf("%s declares no paths — the spec is empty, so this test proves nothing", specPath)
+	}
+
+	routed := map[string]bool{}
+	for _, ops := range spec.Paths {
+		for op := range ops {
+			switch m := strings.ToUpper(op); m {
+			case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut,
+				http.MethodPatch, http.MethodDelete:
+				routed[m] = true
+			}
+		}
+	}
+	if !routed[http.MethodPut] {
+		t.Fatalf("the spec no longer routes PUT — narrow Access-Control-Allow-Methods to match, and update this test")
+	}
+
+	t.Setenv("BACKEND_CORS_ORIGIN", "https://app.example.com")
+	h := CORS(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodOptions, "/x", nil))
+
+	advertised := map[string]bool{}
+	for _, m := range strings.Split(w.Header().Get("Access-Control-Allow-Methods"), ",") {
+		advertised[strings.TrimSpace(m)] = true
+	}
+	for m := range routed {
+		if !advertised[m] {
+			t.Errorf("%s is routed but not advertised in Access-Control-Allow-Methods (%q) — "+
+				"every cross-origin browser call to a %s route fails preflight with a bare Network Error",
+				m, w.Header().Get("Access-Control-Allow-Methods"), m)
+		}
 	}
 }

@@ -148,6 +148,25 @@ test.describe('Locations After Login (TRA-318)', () => {
     }
 
     console.log(`[LocationsAfterLogin] Setup complete: ${testLocations.length} locations created`);
+
+    /*
+     * Reload before any test looks at the UI, because the three locations above
+     * were created behind the app's back.
+     *
+     * The signup already resolved the locations query — to nothing, correctly,
+     * since the org was seconds old — and `page.request.post` does not go
+     * through the app, so nothing invalidated that cache. Clicking the Locations
+     * menu item does not remount anything either, so test 1 read 0 while the API
+     * held 3, and the four tests after it were skipped as a serial-mode
+     * consequence (TRA-1246).
+     *
+     * The reload belongs HERE and not in `navigateToLocations`. Test 3 is the
+     * TRA-318 regression test: it asserts that a logout → login cycle
+     * invalidates org-scoped data *without* a reload. Putting a reload in the
+     * shared navigation helper would make that test pass unconditionally and
+     * stop testing the bug it is named for.
+     */
+    await sharedPage.reload({ waitUntil: 'networkidle' });
   });
 
   test.afterAll(async () => {
@@ -289,6 +308,16 @@ test.describe('Locations After Fresh Browser Session (TRA-318)', () => {
       },
     });
     expect(response.ok()).toBe(true);
+
+    // Same out-of-band creation as the suite above: the location was written
+    // through page.request, so the app's cache still holds the empty result it
+    // resolved at signup. Reload so the first assertion is about rendering,
+    // not about a cache nothing asked to invalidate (TRA-1246).
+    //
+    // Only here. The second half of this test clears auth state and logs in
+    // again, and must reach its assertion WITHOUT a reload — that half is the
+    // TRA-318 regression check.
+    await page.reload({ waitUntil: 'networkidle' });
 
     // Navigate to locations - should show the location
     await page.locator('button[data-testid="menu-item-locations"]').click();
