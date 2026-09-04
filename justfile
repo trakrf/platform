@@ -178,6 +178,8 @@ dev:
     @sleep 3
     @echo "🔄 Running migrations (before the backend serves)..."
     @just backend migrate
+    @echo "🔐 Re-applying grants (the migration ledger only exists now)..."
+    @just database grants
     @echo "🚀 Starting backend..."
     @docker compose up -d backend
     @echo "✅ Development environment ready"

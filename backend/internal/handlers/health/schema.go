@@ -38,17 +38,38 @@ const ledgerQuery = `SELECT version, dirty FROM trakrf.schema_migrations LIMIT 1
 // about what the handler DOES with a version, not about reading one.
 type SchemaReader func(ctx context.Context) (applied uint, dirty bool, err error)
 
-// SchemaInfo is the schema block on the /health payload. Omitted entirely when
-// the ledger cannot be read, because "we do not know" and "you are behind" are
-// different claims and only one of them is actionable.
+// SchemaInfo is the schema block on the /health payload.
+//
+// It is present whenever there is a database to ask, including when the ledger
+// could not be read — that case is reported as `readable: false` with a reason
+// rather than by omitting the block (TRA-1218). Omitting it made "I cannot tell"
+// byte-for-byte identical to "everything is fine", which is how the TRA-1190
+// check ran inert in preview and prod for a month: the app role had no SELECT on
+// trakrf.schema_migrations, every read errored, and /health answered a clean 200
+// with no schema key at all.
+//
+// ADR 0018 is the general rule: a check reports met, unmet, and
+// could-not-evaluate, and the third never shares an encoding with the first.
 type SchemaInfo struct {
-	Applied  uint `json:"applied"`
-	Expected uint `json:"expected"`
-	Dirty    bool `json:"dirty,omitempty"`
+	// Readable says whether the ledger was actually read. It is the field that
+	// makes an unknown state a state rather than an absence, so it carries no
+	// omitempty — a missing `readable` would put the ambiguity straight back.
+	Readable bool `json:"readable"`
+	// Applied and Expected are pointers so an unread ledger reports no version at
+	// all. A zero here would read as "applied 0 of 41", which is a claim about
+	// the database rather than an admission about the read.
+	Applied  *uint `json:"applied,omitempty"`
+	Expected *uint `json:"expected,omitempty"`
+	Dirty    bool  `json:"dirty,omitempty"`
 	// Pending names the unapplied migrations rather than leaving the reader to
 	// diff two numbers against the migrations directory. "38 vs 40" is a puzzle;
 	// "000040_users_must_change_password is unapplied" is an answer.
 	Pending []string `json:"pending,omitempty"`
+	// Reason carries why a version is missing, and is the difference between a
+	// legible payload and a shrug. "readable: false" alone does not say whether
+	// the ledger is absent, the grant is, or the database is simply slow — and
+	// those have three different repairs.
+	Reason string `json:"reason,omitempty"`
 }
 
 // poolSchemaReader reads the ledger over a live pool.
@@ -66,10 +87,11 @@ func poolSchemaReader(db *pgxpool.Pool) SchemaReader {
 // schemaState is the verdict: the block to report, the status string, and
 // whether the response should refuse to look healthy.
 //
-// nil SchemaInfo means "not known" — no pool, or the ledger could not be read.
-// That is never reported as drift: a transient database blip would otherwise
-// present as "run your migrations", sending an operator to do something that is
-// not the problem.
+// A nil SchemaInfo now means only one thing — there is no pool, so no read was
+// attempted. Everything else reports a block. An unknown version stays a 200,
+// because not being able to read the ledger is still not evidence of drift and a
+// transient database blip must not present as "run your migrations"; but it says
+// so out loud instead of looking like a healthy response (TRA-1218).
 func (h *Handler) schemaState(ctx context.Context) (*SchemaInfo, string, bool) {
 	if h.readSchema == nil {
 		return nil, "ok", true
@@ -83,15 +105,34 @@ func (h *Handler) schemaState(ctx context.Context) (*SchemaInfo, string, bool) {
 
 	applied, dirty, err := h.readSchema(ctx)
 	if err != nil {
-		return nil, "ok", true
+		// The error text is the actionable part. "permission denied for table
+		// schema_migrations" and "relation does not exist" are the same
+		// readable:false but different repairs — a grant versus a migration.
+		return &SchemaInfo{
+			Readable: false,
+			Reason:   "could not read trakrf.schema_migrations: " + err.Error(),
+		}, "ok", true
 	}
 
 	expected, err := migrations.Latest()
 	if err != nil {
-		return nil, "ok", true
+		// The ledger read fine; it is this binary's own embedded migration set
+		// that could not be enumerated, so there is nothing to compare against.
+		// Report the version we do have rather than discarding it.
+		return &SchemaInfo{
+			Readable: true,
+			Applied:  &applied,
+			Dirty:    dirty,
+			Reason:   "could not read the embedded migration set: " + err.Error(),
+		}, "ok", true
 	}
 
-	info := &SchemaInfo{Applied: applied, Expected: expected, Dirty: dirty}
+	info := &SchemaInfo{
+		Readable: true,
+		Applied:  &applied,
+		Expected: &expected,
+		Dirty:    dirty,
+	}
 
 	switch {
 	case dirty:

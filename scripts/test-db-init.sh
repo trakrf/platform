@@ -152,6 +152,26 @@ sql_has "app role gets table CRUD"     "$grants_sql" "GRANT SELECT, INSERT, UPDA
 sql_has "app role gets sequence usage" "$grants_sql" "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA trakrf TO %I', *:'app_role'"
 sql_has "app role gets function execute" "$grants_sql" "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA trakrf TO %I', *:'app_role'"
 
+# The migration ledger, by name (TRA-1218). `ON ALL TABLES` above does not reach
+# it on a database whose ledger predates the ADR 0003 pin: that ledger was
+# created in `public` and relocated with ALTER TABLE ... SET SCHEMA, which
+# carries the source ACL — empty — into trakrf, and no GRANT has run since.
+# Preview and prod were both in that state, which left /health's schema check
+# reading "unknown" and reporting nothing at all.
+#
+# This is the assertion that would have caught it: it fails if the ledger stops
+# being named here, which is the only way the app role loses read on it again.
+sql_has "app role gets read on the migration ledger" "$grants_sql" \
+    "GRANT SELECT ON trakrf.schema_migrations TO %I', *:'app_role'"
+
+# SELECT only. The ledger is bookkeeping, not org-scoped data, so there is no
+# RLS consideration — but the default privileges in 02-schema.sql hand out
+# INSERT/UPDATE/DELETE on everything the migrate role creates, and a locally
+# bootstrapped database really does give the app role write on its own ledger.
+# The revoke is what makes "read the version" the whole of the permission.
+sql_has "app role gets no write on the migration ledger" "$grants_sql" \
+    "REVOKE INSERT, UPDATE, DELETE ON trakrf.schema_migrations FROM %I', *:'app_role'"
+
 # TRUNCATE is not DELETE: it is not filtered by RLS policies, so granting it
 # would hand the app role a policy-free way to empty another org's rows. Checked
 # across all three files — nothing in the bootstrap may hand these out.

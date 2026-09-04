@@ -68,10 +68,12 @@ interface HealthPayload {
   status?: string;
   version?: string;
   schema?: {
+    readable?: boolean;
     applied?: number;
     expected?: number;
     dirty?: boolean;
     pending?: string[];
+    reason?: string;
   };
 }
 
@@ -153,8 +155,25 @@ export default async function assertPreconditions(): Promise<void> {
 
   const schema = payload.schema;
   const version = payload.version ?? 'unknown';
-  console.log(
-    `[preflight] backend ${version} reachable at ${url}` +
-      (schema ? `, schema ${schema.applied}/${schema.expected}` : '')
-  );
+
+  // A backend that cannot read its own ledger has not passed precondition 2 —
+  // it has failed to evaluate it. Not fatal: the schema may be perfectly
+  // current, and refusing to run the suite over a grant would be a worse trade
+  // than running it. But it must be said, because for a month this state was
+  // reported as an ordinary healthy backend and the check it disabled was the
+  // one that catches the 89-identical-failures shape (TRA-1218).
+  if (schema && schema.readable === false) {
+    console.warn(
+      `[preflight] WARNING: the backend cannot read its migration ledger, so the\n` +
+        `            schema-drift precondition was NOT checked. A schema behind the\n` +
+        `            backend will present as unexplained failures, not as this message.\n` +
+        `            reason: ${schema.reason ?? 'not given'}\n` +
+        `            fix:    GRANT SELECT ON trakrf.schema_migrations TO the app role\n` +
+        `                    (locally: just database grants)`
+    );
+  }
+
+  const schemaNote =
+    schema && schema.readable !== false ? `, schema ${schema.applied}/${schema.expected}` : '';
+  console.log(`[preflight] backend ${version} reachable at ${url}${schemaNote}`);
 }
