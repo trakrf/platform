@@ -47,6 +47,9 @@ type SchemaReader func(ctx context.Context) (applied uint, dirty bool, err error
 // check ran inert in preview and prod for a month: the app role had no SELECT on
 // trakrf.schema_migrations, every read errored, and /health answered a clean 200
 // with no schema key at all.
+//
+// ADR 0018 is the general rule: a check reports met, unmet, and
+// could-not-evaluate, and the third never shares an encoding with the first.
 type SchemaInfo struct {
 	// Readable says whether the ledger was actually read. It is the field that
 	// makes an unknown state a state rather than an absence, so it carries no

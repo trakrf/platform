@@ -108,7 +108,8 @@ nothing at all while the paragraph above said it reported 503. The grant is now
 issued by name in `database/sql/03-grants.sql` and in the init-grants Job in
 `trakrf/infra`, and an unreadable ledger is reported as `readable: false` with a
 reason rather than by omitting the block — so the next time this is untrue, the
-payload says so instead of impersonating a healthy backend.
+payload says so instead of impersonating a healthy backend. ADR 0018 generalises
+that second half; the corollary above is what it extends.
 
 **`/healthz` and `/readyz` deliberately do not follow it.** They are the
 k8s liveness and readiness probes, and the repair for a behind schema is a
