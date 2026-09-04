@@ -10,7 +10,7 @@ vi.mock('@/stores/locations/locationStore', () => ({
   useLocationStore: { getState: () => ({ invalidateCache: vi.fn() }) },
 }));
 vi.mock('@/stores/tagStore', () => ({
-  useTagStore: { getState: () => ({ clearTags: vi.fn() }) },
+  useTagStore: { getState: () => ({ clearEnrichment: vi.fn() }) },
 }));
 vi.mock('@/stores/barcodeStore', () => ({
   useBarcodeStore: { getState: () => ({ clearBarcodes: vi.fn() }) },
@@ -111,8 +111,12 @@ describe('orgScopedCache', () => {
       const locationStore = storeConfigs.find((s) => s.name === 'locations');
       expect(locationStore?.clearFn).toBe('invalidateCache');
 
+      // clearEnrichment, not clearTags: the scan is not org-scoped, only what
+      // it resolves to is. Clearing the whole store here deleted the anonymous
+      // scan on login, which is the one moment it most needed to survive
+      // (TRA-1191).
       const tagStore = storeConfigs.find((s) => s.name === 'tags');
-      expect(tagStore?.clearFn).toBe('clearTags');
+      expect(tagStore?.clearFn).toBe('clearEnrichment');
 
       const barcodeStore = storeConfigs.find((s) => s.name === 'barcodes');
       expect(barcodeStore?.clearFn).toBe('clearBarcodes');

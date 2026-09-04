@@ -16,9 +16,21 @@ const ORG_SCOPED_STORES = [
     clearFn: 'invalidateCache',
   },
   {
+    /*
+     * `clearEnrichment`, NOT `clearTags` (TRA-1191).
+     *
+     * A scanned EPC is an observation about what was physically in front of the
+     * antenna; it belongs to no org. Only what that EPC resolves to — an asset,
+     * a location — is org-scoped. Clearing the whole store here threw the
+     * observation away along with the resolution, and because this invalidation
+     * runs on LOGIN as well as on org switch, it deleted the anonymous scan at
+     * the exact moment the app was supposed to enrich it. That silently defeated
+     * tagStore's login subscription, whose entire purpose is to resolve tags
+     * scanned while logged out.
+     */
     name: 'tags',
     getStore: () => import('@/stores/tagStore').then((m) => m.useTagStore),
-    clearFn: 'clearTags',
+    clearFn: 'clearEnrichment',
   },
   {
     name: 'barcodes',
@@ -53,7 +65,11 @@ export async function invalidateAllOrgScopedData(queryClient: QueryClient): Prom
       const fn = (store.getState() as any)[clearFn];
       if (typeof fn === 'function') {
         fn();
-        console.log(`[OrgCache] Cleared ${name} store`);
+        // Names the action, not "cleared". The stores do materially different
+        // things here — tags keep their scan and drop only its org resolution —
+        // and a log that says "Cleared tags store" either way is how a reader
+        // concludes the scan was discarded when it was not (TRA-1191).
+        console.log(`[OrgCache] ${name}: ${clearFn}()`);
       }
     } catch (e) {
       console.error(`[OrgCache] Failed to clear ${name} store:`, e);

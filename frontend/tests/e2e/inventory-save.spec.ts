@@ -281,8 +281,15 @@ test.describe('Inventory Save Flow', () => {
       console.log(`[Test] Created asset: ${asset.name} (ID: ${asset.id}, EPC: ${asset.rfidTag})`);
     }
 
-    // Navigate to inventory - tags should still be in localStorage
-    await sharedPage.goto('/#scan');
+    // Reload the Scan tab - tags should still be in localStorage.
+    //
+    // `reload()`, not `goto('/#scan')`. loginTestUser already leaves the page on
+    // `/#scan`, so navigating there again differs only in the fragment: a
+    // same-document navigation that re-mounts nothing and re-runs no module. The
+    // line below claimed to navigate for months and measurably did not, so
+    // nothing here re-triggered enrichment after the assets were created and the
+    // 10 s wait had no path to success (TRA-1191).
+    await sharedPage.reload();
     await sharedPage.waitForTimeout(1000);
 
     // Wait for enrichment to happen

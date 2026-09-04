@@ -41,7 +41,7 @@ describe('orgScopedCache registry integration', () => {
       expect(clearFns).toEqual([
         'invalidateCache', // assetStore
         'invalidateCache', // locationStore
-        'clearTags', // tagStore
+        'clearEnrichment', // tagStore — the scan survives, its org resolution does not (TRA-1191)
         'clearBarcodes', // barcodeStore
       ]);
     });
