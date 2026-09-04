@@ -3,6 +3,7 @@ import {
   waitForReaderToAcceptTrigger,
   simulateTriggerPress,
   simulateTriggerRelease,
+  waitForTriggerReset,
   STATE_THAT_HONOURS,
 } from '../e2e/helpers/trigger-utils';
 
@@ -285,5 +286,61 @@ describe('waitForReaderToAcceptTrigger, release side', () => {
     await expect(
       waitForReaderToAcceptTrigger(page as never, 'release', 2000)
     ).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * `waitForTriggerReset` compared the reader state against `ReaderState.IDLE`.
+ *
+ * **There is no `IDLE` in `ReaderState`.** The members are `Disconnected`,
+ * `Connecting`, `Configuring`, `Connected`, `Busy`, `Scanning`, `Error` —
+ * `IDLE` belongs to `ReaderMode`, a different enum read from a different store
+ * field. So the comparison was `readerState === undefined`, which is never true
+ * for a connected reader: the helper could only ever burn its full timeout and
+ * return false, no matter how completely the trigger had reset.
+ *
+ * The resting state it meant is `CONNECTED` — `reader.ts` documents it as
+ * "Connected and idle, ready for operations", which is the "idle" the original
+ * author was reaching for.
+ *
+ * It had no callers when this was found, so nothing was failing — it was a trap
+ * armed for the next caller. Same shape as `locate.spec.ts`'s `'SCANNING'` vs
+ * `'Scanning'` comparison: a condition that cannot be satisfied, in a helper
+ * whose whole job is to wait for it. TRA-1245.
+ */
+function resetPage(states: Array<{ triggerState: boolean; readerState: string; inventoryRunning: boolean }>) {
+  const remaining = [...states];
+  let last = states[0];
+  return {
+    async evaluate(): Promise<unknown> {
+      if (remaining.length > 0) last = remaining.shift()!;
+      return last;
+    },
+    async waitForTimeout(): Promise<void> {},
+  };
+}
+
+describe('waitForTriggerReset', () => {
+  it('reports a reset once the reader is back at Connected', async () => {
+    const page = resetPage([
+      { triggerState: true, readerState: 'Scanning', inventoryRunning: true },
+      { triggerState: false, readerState: 'Busy', inventoryRunning: false },
+      { triggerState: false, readerState: 'Connected', inventoryRunning: false },
+    ]);
+    await expect(waitForTriggerReset(page as never, 2000)).resolves.toBe(true);
+  });
+
+  it('does not report a reset while a scan is still running', async () => {
+    const page = resetPage([
+      { triggerState: true, readerState: 'Scanning', inventoryRunning: true },
+    ]);
+    await expect(waitForTriggerReset(page as never, 50)).resolves.toBe(false);
+  });
+
+  it('does not report a reset while the trigger is still held', async () => {
+    const page = resetPage([
+      { triggerState: true, readerState: 'Connected', inventoryRunning: false },
+    ]);
+    await expect(waitForTriggerReset(page as never, 50)).resolves.toBe(false);
   });
 });

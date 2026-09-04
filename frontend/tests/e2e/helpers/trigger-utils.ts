@@ -584,10 +584,24 @@ export async function waitForTriggerReset(page: Page, timeout: number = 10000): 
       };
     });
     
-    // Check if trigger is fully reset and inventory is fully stopped
-    if (!states.triggerState && 
-        !states.inventoryRunning && 
-        states.readerState === ReaderState.IDLE) {
+    // Check if trigger is fully reset and inventory is fully stopped.
+    //
+    // ⚠ This read `ReaderState.IDLE`, and there is no IDLE in ReaderState —
+    // the members are Disconnected/Connecting/Configuring/Connected/Busy/
+    // Scanning/Error. IDLE belongs to ReaderMode, a different enum off a
+    // different store field. So the comparison was `readerState === undefined`,
+    // never true for a connected reader, and this helper could only ever burn
+    // its full timeout and return false however completely the trigger reset.
+    //
+    // CONNECTED is the resting state that was meant: reader.ts documents it as
+    // "Connected and idle, ready for operations" — the "idle" being reached for.
+    //
+    // Nothing called this when it was found, so nothing was failing; it was a
+    // trap armed for the next caller. Same shape as locate.spec.ts comparing
+    // against 'SCANNING' while the store holds 'Scanning'. TRA-1245.
+    if (!states.triggerState &&
+        !states.inventoryRunning &&
+        states.readerState === ReaderState.CONNECTED) {
       console.log('[Trigger] Fully reset and ready');
       return true;
     }
