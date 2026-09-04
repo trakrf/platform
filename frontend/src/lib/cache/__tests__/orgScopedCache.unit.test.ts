@@ -9,8 +9,11 @@ vi.mock('@/stores/assets/assetStore', () => ({
 vi.mock('@/stores/locations/locationStore', () => ({
   useLocationStore: { getState: () => ({ invalidateCache: vi.fn() }) },
 }));
+// Stable spies, so which one was called can actually be asserted. A fresh
+// vi.fn() per getState() call records nothing a test can read back.
+const tagSpies = vi.hoisted(() => ({ clearTags: vi.fn(), clearEnrichment: vi.fn() }));
 vi.mock('@/stores/tagStore', () => ({
-  useTagStore: { getState: () => ({ clearEnrichment: vi.fn() }) },
+  useTagStore: { getState: () => tagSpies },
 }));
 vi.mock('@/stores/barcodeStore', () => ({
   useBarcodeStore: { getState: () => ({ clearBarcodes: vi.fn() }) },
@@ -31,11 +34,60 @@ describe('orgScopedCache', () => {
     consoleLogSpy.mockRestore();
   });
 
+  describe('the tag store is treated differently by reason (TRA-1191/TRA-318)', () => {
+    /**
+     * Leaving org A for org B and simply logging in are not the same event, and
+     * the tag store is the one place the difference is observable.
+     *
+     * An org switch must take everything: TRA-318 requires that tag context
+     * never crosses an org boundary, and inventory-save.spec.ts test 3 asserts
+     * the store goes to zero. A login has no previous org to protect against,
+     * and clearing there deleted the anonymous scan the login existed to enrich.
+     */
+    it('an org switch still clears the store outright', async () => {
+      await invalidateAllOrgScopedData(queryClient, 'org-switch');
+
+      expect(tagSpies.clearTags).toHaveBeenCalled();
+      expect(tagSpies.clearEnrichment).not.toHaveBeenCalled();
+    });
+
+    it('a login or logout keeps the scan and drops only its org resolution', async () => {
+      await invalidateAllOrgScopedData(queryClient, 'auth-change');
+
+      expect(tagSpies.clearEnrichment).toHaveBeenCalled();
+      expect(tagSpies.clearTags).not.toHaveBeenCalled();
+    });
+
+    it('defaults to the strict behaviour when no reason is given', async () => {
+      // A new call site that has not thought about this must be able to
+      // over-clear, never to leak one org's data into another.
+      await invalidateAllOrgScopedData(queryClient);
+
+      expect(tagSpies.clearTags).toHaveBeenCalled();
+      expect(tagSpies.clearEnrichment).not.toHaveBeenCalled();
+    });
+
+    it('leaves stores with no authChangeFn on their single clear function', async () => {
+      // Only tags declare a per-reason variant; the caches either side of it
+      // behave identically whatever the reason.
+      for (const store of _testExports.ORG_SCOPED_STORES) {
+        if (store.name !== 'tags') {
+          expect(store.authChangeFn, `${store.name} should not vary by reason`).toBeUndefined();
+        }
+      }
+    });
+  });
+
   describe('invalidateAllOrgScopedData', () => {
     it('should log that invalidation is starting', async () => {
       await invalidateAllOrgScopedData(queryClient);
 
-      expect(consoleLogSpy).toHaveBeenCalledWith('[OrgCache] Invalidating all org-scoped data');
+      // The reason is part of the line: the same invalidation now behaves
+      // differently depending on it, so a log that omitted it would leave a
+      // reader unable to tell which of the two runs they were looking at.
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        '[OrgCache] Invalidating all org-scoped data (org-switch)'
+      );
     });
 
     it('should cancel in-flight queries for all org-scoped prefixes', async () => {
@@ -111,12 +163,13 @@ describe('orgScopedCache', () => {
       const locationStore = storeConfigs.find((s) => s.name === 'locations');
       expect(locationStore?.clearFn).toBe('invalidateCache');
 
-      // clearEnrichment, not clearTags: the scan is not org-scoped, only what
-      // it resolves to is. Clearing the whole store here deleted the anonymous
-      // scan on login, which is the one moment it most needed to survive
-      // (TRA-1191).
+      // Tags keep the strict clearTags for an ORG SWITCH — TRA-318 requires
+      // that tag context never crosses an org boundary — and take the lenient
+      // clearEnrichment only on an auth change, where there is no previous org
+      // to protect against (TRA-1191).
       const tagStore = storeConfigs.find((s) => s.name === 'tags');
-      expect(tagStore?.clearFn).toBe('clearEnrichment');
+      expect(tagStore?.clearFn).toBe('clearTags');
+      expect(tagStore?.authChangeFn).toBe('clearEnrichment');
 
       const barcodeStore = storeConfigs.find((s) => s.name === 'barcodes');
       expect(barcodeStore?.clearFn).toBe('clearBarcodes');

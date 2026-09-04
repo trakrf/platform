@@ -60,10 +60,14 @@ export const useAuthStore = create<AuthState>()(
               refreshToken: orgResponse.data.refresh_token,
             });
 
-            // INVALIDATE: After setCurrentOrg() returns with org_id token
+            // INVALIDATE: After setCurrentOrg() returns with org_id token.
+            // 'auth-change': this runs only from Login and Signup, where there
+            // is no previous org whose data could follow the user across. The
+            // strict form deleted the anonymous scan the login was about to
+            // enrich (TRA-1191).
             const { invalidateAllOrgScopedData } = await import('@/lib/cache/orgScopedCache');
             const { queryClient } = await import('@/lib/queryClient');
-            await invalidateAllOrgScopedData(queryClient);
+            await invalidateAllOrgScopedData(queryClient, 'auth-change');
           } catch (err) {
             if (attempt < 2) {
               console.warn('[AuthStore] setCurrentOrg failed, retrying...', err);

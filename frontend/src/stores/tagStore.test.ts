@@ -595,6 +595,9 @@ describe('TagStore - clearEnrichment (TRA-1191)', () => {
    * enrich flow is exactly what tagStore's own auth subscription exists to
    * serve. The two features cancelled out, and the subscription's lookup ran
    * against an empty tag list.
+   *
+   * An ORG SWITCH still clears outright, per TRA-318; only auth changes take
+   * this softer path. The distinction lives in the registry, not here.
    */
   beforeEach(() => {
     useTagStore.getState().clearTags();
