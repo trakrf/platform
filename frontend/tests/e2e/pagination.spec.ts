@@ -5,7 +5,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
-import type { WindowWithStores } from './types';
+import { seedTags, clearSeededTags } from './helpers/dev-stores';
 
 // Generate test data directly (browser-compatible)
 const generateTestTags = (count: number) => {
@@ -35,8 +35,21 @@ test.describe('Pagination', () => {
   test.beforeAll(async ({ browser }) => {
     sharedPage = await browser.newPage();
     await sharedPage.goto('/');
-    // Navigate to inventory tab once
-    await sharedPage.click('text="Inventory"');
+    /*
+     * The tag list lives on the SCAN tab, not on an "Inventory" one.
+     *
+     * This used to click `text="Inventory"`. There is no such nav entry — the
+     * nav reads Scan, Locate, Assets, Locations, Reports, Settings, Help — and
+     * the component that renders the table is InventoryScreen, wired as the
+     * `scan` route in App.tsx. The tab was renamed and the file kept its name,
+     * so the click waited out the entire 30s beforeAll budget, failed the first
+     * test with a bare hook timeout and skipped the other four (TRA-1246).
+     *
+     * `/` already lands on scan, so this is a no-op today. It stays as an
+     * explicit assertion of where the table is: if the default route moves, the
+     * failure should name the tab rather than time out.
+     */
+    await sharedPage.locator('[data-testid="menu-item-scan"]').click();
     await sharedPage.waitForTimeout(500);
   });
 
@@ -49,25 +62,16 @@ test.describe('Pagination', () => {
   test.beforeEach(async () => {
     console.log(`[Test] Starting: ${test.info().title}`);
     // Clear tags before each test
-    await sharedPage.evaluate(() => {
-      const tagStore = (window as WindowWithStores).__ZUSTAND_STORES__?.tagStore;
-      tagStore?.getState().clearTags();
-    });
+    await clearSeededTags(sharedPage);
   });
 
   test('should paginate large datasets correctly', async () => {
-    // Inject test data directly into store (requires DEV-only __ZUSTAND_STORES__)
-    const testTags = generateTestTags(150);
-    const injected = await sharedPage.evaluate((tags) => {
-      const tagStore = (window as WindowWithStores).__ZUSTAND_STORES__?.tagStore;
-      if (!tagStore) return false;
-      tags.forEach(tag => tagStore.getState().addTag(tag));
-      return true;
-    }, testTags);
-
-    // __ZUSTAND_STORES__ is only exposed under import.meta.env.DEV (frontend/src/main.tsx),
-    // so this test can't seed tags on production/preview builds.
-    test.skip(!injected, 'requires DEV-mode __ZUSTAND_STORES__ to seed tags');
+    // Seed through the DEV-only store handles. `seedTags` waits for
+    // __ZUSTAND_STORES__ to exist and reads the count back afterwards; the
+    // previous form guarded on `if (!tagStore) return false` and then
+    // `test.skip`'d, which turned "the async import in main.tsx has not landed
+    // yet" into a silent pass (TRA-1246).
+    await seedTags(sharedPage, generateTestTags(150));
 
     // Wait for UI to update
     await sharedPage.waitForTimeout(500);
@@ -166,12 +170,7 @@ test.describe('Pagination', () => {
   test('should maintain selection across pages', async () => {
     // Inject test data
     const testTags = generateTestTags(60);
-    await sharedPage.evaluate((tags) => {
-      const tagStore = (window as WindowWithStores).__ZUSTAND_STORES__?.tagStore;
-      if (tagStore) {
-        tags.forEach(tag => tagStore.getState().addTag(tag));
-      }
-    }, testTags);
+    await seedTags(sharedPage, testTags);
     
     await sharedPage.waitForTimeout(500);
     
@@ -214,12 +213,7 @@ test.describe('Pagination', () => {
     // Inject test data
     const totalTags = 75;
     const testTags = generateTestTags(totalTags);
-    await sharedPage.evaluate((tags) => {
-      const tagStore = (window as WindowWithStores).__ZUSTAND_STORES__?.tagStore;
-      if (tagStore) {
-        tags.forEach(tag => tagStore.getState().addTag(tag));
-      }
-    }, testTags);
+    await seedTags(sharedPage, testTags);
     
     await sharedPage.waitForTimeout(500);
     
@@ -281,10 +275,7 @@ test.describe('Pagination', () => {
 
   test('should handle empty state correctly', async () => {
     // Clear any existing tags
-    await sharedPage.evaluate(() => {
-      const tagStore = (window as WindowWithStores).__ZUSTAND_STORES__?.tagStore;
-      tagStore?.getState().clearTags();
-    });
+    await clearSeededTags(sharedPage);
     
     await sharedPage.waitForTimeout(500);
     
@@ -329,12 +320,7 @@ test.describe('Pagination', () => {
   test('should handle page size changes', async () => {
     // Inject test data
     const testTags = generateTestTags(100);
-    await sharedPage.evaluate((tags) => {
-      const tagStore = (window as WindowWithStores).__ZUSTAND_STORES__?.tagStore;
-      if (tagStore) {
-        tags.forEach(tag => tagStore.getState().addTag(tag));
-      }
-    }, testTags);
+    await seedTags(sharedPage, testTags);
     
     await sharedPage.waitForTimeout(500);
     

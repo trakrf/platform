@@ -81,10 +81,20 @@ func CORS(next http.Handler) http.Handler {
 		corsEnabled := origin != "disabled"
 		if corsEnabled {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			// TRA-866: match the actual route table — HEAD is valid on every GET
-			// route (chi auto-serves it) and no route uses PUT. The prior list
-			// was a stale generic default that advertised PUT and omitted HEAD.
-			w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, POST, PATCH, DELETE, OPTIONS")
+			// Match the actual route table. TRA-866 added HEAD, which is right —
+			// chi auto-serves it on every GET route. It also dropped PUT as "a
+			// stale generic default"; six routes use PUT, so that removed the
+			// only thing standing between a cross-origin browser and
+			// `PUT /api/v1/orgs/{id}` (rename an org),
+			// `PUT /api/v1/auth/password` (change password) and four others.
+			// A method missing here is not a 405 — the browser never sends the
+			// request at all, and the caller sees a bare "Network Error" that
+			// looks like the backend is down (TRA-1246).
+			//
+			// Do not hand-edit this list from memory of the routes. It is
+			// checked against the generated OpenAPI spec by
+			// TestCORS_AdvertisedMethodsCoverEveryRoutedMethod.
+			w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
 			w.Header().Set("Access-Control-Max-Age", "3600")
 

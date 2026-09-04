@@ -23,8 +23,16 @@ export function ShareButton({ onFormatSelect, disabled = false, className = '', 
 
   return (
     <Menu as="div" className="relative inline-block text-left">
-      <Menu.Button 
+      {/*
+        InventoryHeader renders this twice — a compact icon in the `md:hidden`
+        block and a labelled one in the desktop block — so "the Share button" is
+        two elements, only one of them visible at a given width. Distinct
+        testids let a test address the one it means instead of matching on text
+        or icon and hoping the responsive breakpoints do not move (TRA-1246).
+      */}
+      <Menu.Button
         disabled={disabled}
+        data-testid={iconOnly ? 'share-button-compact' : 'share-button'}
         className={`${baseButtonClass} ${className}`}
         title={iconOnly ? "Share" : undefined}
       >

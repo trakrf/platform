@@ -109,3 +109,54 @@ deployment:
 ```
 PLAYWRIGHT_BASE_URL=https://gke.trakrf.app pnpm exec playwright test --grep-invert "@hardware"
 ```
+## Data created out of band needs a reload, not a navigation
+
+A spec that creates rows through `page.request` and then *navigates* is
+asserting against a cache the app has no reason to have invalidated. The query
+already resolved — correctly, and usually to nothing, because the org was
+seconds old — and an HTTP call made outside the app cannot tell it otherwise.
+
+Neither of the obvious next steps is a remount:
+
+- clicking a nav item swaps a React component; it refetches nothing
+- `goto('/#scan')` from a page already on `/#scan` is a same-document fragment
+  navigation, which reloads nothing either
+
+Three specs have now been fixed for exactly this, so treat it as a pattern
+rather than a coincidence: `inventory-save.spec.ts` (TRA-1191),
+`locations-after-login.spec.ts` and its fresh-session sibling (TRA-1246). Each
+was reported as a UI or selector failure, and in each case the data was present
+in the API the whole time.
+
+**The fix is `await page.reload()` immediately after the out-of-band write.**
+
+**Put it at the creation site, not in a shared navigation helper.** In
+`locations-after-login.spec.ts` the whole point of test 3 is that a
+logout → login cycle invalidates org-scoped data *without* a reload — that is
+the TRA-318 regression. A reload inside `navigateToLocations` would have made
+every test in the file green while quietly retiring the one that mattered.
+
+If you are unsure whether a failure is this or a real defect, measure it the
+cheap way before reading any component source: scrape the count with no reload,
+scrape it again after `page.reload()`, and compare both against the API. `0 / 3
+/ 3` names the cache; `0 / 0 / 3` names the rendering; `0 / 0 / 0` names the
+fixture.
+
+## The stores are not on `window` when `goto()` resolves
+
+`window.__ZUSTAND_STORES__` is assigned inside `import('./stores').then(...)` in
+`src/main.tsx` — a dynamic import, so it lands some time after `page.goto()`
+has already returned, and only under `import.meta.env.DEV` or a non-prod
+environment label.
+
+Reading it straight after a `goto` and guarding with `if (tagStore)` or
+`tagStore?.` turns "not yet" into "nothing to do", silently. In
+`share-functionality.spec.ts` that seeded zero tags, which rendered the Share
+control `disabled` — still visible, so an `isVisible()` guard passed — and the
+click then waited for an element that would never become enabled, failing 30s
+later as `locator.click: Target page, context or browser has been closed`
+(TRA-1246). Nothing in that message mentions a store.
+
+Use `helpers/dev-stores.ts` (`seedTags`, `clearSeededTags`, `waitForDevStores`).
+It waits for the handle, reads the count back afterwards, and throws naming the
+cause when the handle never arrives.

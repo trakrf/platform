@@ -76,11 +76,18 @@ test.describe('Members Screen (TRA-181)', () => {
       // Loading might have already finished, that's ok
     });
 
-    // Either list or empty state should be visible (but not an error)
-    const hasList = await membersList.isVisible();
-    const hasEmptyState = await emptyState.isVisible().catch(() => false);
-
-    expect(hasList || hasEmptyState).toBeTruthy();
+    /*
+     * Retry this, rather than sampling both locators once.
+     *
+     * `isVisible()` is a point-in-time read with no retry, and the heading this
+     * test waits for above renders before the members query resolves. So the
+     * table could still be in flight when both samples were taken, which made
+     * the assertion fail against a page that rendered the list correctly a beat
+     * later — the failure screenshot showed the populated table. Found while
+     * auditing specs adjacent to TRA-1246; it is not one of the nine, and it
+     * fails only sometimes, which is exactly why it had never been chased.
+     */
+    await expect(membersList.or(emptyState).first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should render invitations section without null crash', async ({ page }) => {
