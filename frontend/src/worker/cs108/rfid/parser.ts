@@ -19,6 +19,7 @@
 
 import { RingBuffer, type BufferMetrics } from './ring-buffer';
 import { logger } from '../../utils/logger.js';
+import { toHex } from '../../utils/hex.js';
 
 export interface ParsedTag {
   epc: string;              // Hex string EPC
@@ -36,16 +37,6 @@ export interface ParsedTag {
   // both, and does not distinguish them.
   tid?: string;             // Hex string, first bank (DATA1)
   userData?: string;        // Hex string, second bank (DATA2)
-}
-
-/**
- * Uppercase hex, the form every tag identifier is compared and displayed in.
- */
-function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('')
-    .toUpperCase();
 }
 
 export interface ParserState {
