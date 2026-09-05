@@ -119,6 +119,27 @@ describe('CS108 tag data capture (TRA-1251)', () => {
       console.log(`    EPC=${tag.epc} PC=0x${(tag.pc ?? 0).toString(16)} TID=${tag.tid ?? '(none)'} USER=${tag.userData ?? '(none)'}`);
     }
 
+    // EPC-width coverage, reported every run.
+    //
+    // Bank offsets are derived from the PC word, so a 128-bit EPC puts DATA1
+    // four bytes further along than a 96-bit one. Get that wrong and the TID
+    // comes back the right length, the right shape, and wrong — there is no
+    // downstream check that would catch it. A run that only ever saw 96-bit
+    // tags has not tested the arithmetic, and without this line it looks
+    // identical to one that did.
+    const widths = new Map<number, number>();
+    for (const tag of tags) {
+      widths.set(tag.epc.length * 4, (widths.get(tag.epc.length * 4) ?? 0) + 1);
+    }
+    const coverage = [...widths.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([bits, n]) => `${bits}-bit x${n}`)
+      .join(', ');
+    console.log(`    EPC width coverage: ${coverage}`);
+    if (!widths.has(128)) {
+      console.log('    ⚠ NO 128-bit EPC in this run — the wide-EPC offset path is untested here');
+    }
+
     // Fail loudly on an empty field. Every assertion below is vacuously true
     // when nothing was read, so this is the one that keeps the rest honest.
     expect(tags.length, 'no tags were read at all — this run proved nothing').toBeGreaterThan(0);
