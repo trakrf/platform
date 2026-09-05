@@ -153,13 +153,28 @@ export class CommandManager {
   // State context for managing reader state transitions
   private stateContext: StateContext | null = null;
 
+  /**
+   * @param packetHandler - THE handler for this link, not a private one.
+   *
+   * This class needs a handler to build commands, and that half works with any
+   * instance because `buildCommand()` touches none of the reassembly state.
+   * The other half does not: `getDebugReport()` prints the inbound ring
+   * buffer, and only `processIncomingData()` ever fills it. A handler that has
+   * only built commands reports `Recent BLE packets (0 captured)` and always
+   * will, so the caller that feeds the inbound bytes must pass the same
+   * instance. TRA-1250.
+   *
+   * The default exists for tests and standalone use, where nothing is being
+   * reassembled and the report is meaningless anyway.
+   */
   constructor(
     sendToTransport: (data: Uint8Array) => void,
     notificationHandler?: (packet: CS108Packet) => void,
-    stateContext?: StateContext
+    stateContext?: StateContext,
+    packetHandler: PacketHandler = new PacketHandler()
   ) {
     this.sendToTransport = sendToTransport;
-    this.packetHandler = new PacketHandler();
+    this.packetHandler = packetHandler;
     this.notificationHandler = notificationHandler || null;
     this.stateContext = stateContext || null;
   }
