@@ -17,11 +17,25 @@ export function generateSimpleExcel(
 ): ExportResult {
   const separator = '\t'; // Tab separator works better with Excel
   const headers = ['Tag ID', 'RSSI (dBm)', 'Count', 'Last Seen'];
-  
+
+  // Memory-bank columns appear only when the scan actually captured any, which
+  // keeps an ordinary inventory export exactly as wide as it was (TRA-1251).
+  // Hoisted out of the row loop rather than re-scanning every tag per row.
+  const hasBankData = tags.some(t => t.tid || t.userData);
+  const hasPc = tags.some(t => t.pc != null);
+
+  if (hasPc) {
+    headers.push('PC');
+  }
+
+  if (hasBankData) {
+    headers.push('TID', 'User Data');
+  }
+
   if (reconciliationList) {
     headers.push('Status');
   }
-  
+
   if (tags.some(t => t.description)) {
     headers.push('Description');
   }
@@ -42,7 +56,15 @@ export function generateSimpleExcel(
       tag.count.toString(),
       tag.timestamp ? new Date(tag.timestamp).toLocaleString() : 'N/A'
     ];
-    
+
+    if (hasPc) {
+      row.push(tag.pc != null ? `0x${tag.pc.toString(16).toUpperCase().padStart(4, '0')}` : '');
+    }
+
+    if (hasBankData) {
+      row.push(tag.tid || '', tag.userData || '');
+    }
+
     if (reconciliationList) {
       const status = tag.reconciled === true ? 'Found' : 
                      tag.reconciled === false ? 'Missing' : 

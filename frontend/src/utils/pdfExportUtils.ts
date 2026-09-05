@@ -42,6 +42,11 @@ export function generateInventoryPDF(
   // Reset text color
   doc.setTextColor(0);
   
+  // Whether this scan captured any memory-bank data (TRA-1251). Decided once
+  // over the whole set so the header and every row agree on the column count.
+  const hasBankData = tags.some(t => t.tid || t.userData);
+  const hasPc = tags.some(t => t.pc != null);
+
   // Prepare table data
   const tableData = tags.map(tag => {
     const row = [
@@ -50,7 +55,17 @@ export function generateInventoryPDF(
       tag.count.toString(),
       tag.timestamp ? new Date(tag.timestamp).toLocaleTimeString() : 'N/A'
     ];
-    
+
+    // Memory-bank columns, present only when the scan captured any (TRA-1251).
+    // Conditioned on the whole tag set rather than the individual tag, so every
+    // row has the same number of cells as the header.
+    if (hasPc) {
+      row.push(tag.pc != null ? `0x${tag.pc.toString(16).toUpperCase().padStart(4, '0')}` : '');
+    }
+    if (hasBankData) {
+      row.push(tag.tid || '', tag.userData || '');
+    }
+
     // Add reconciliation status if available
     if (reconciliationList) {
       const status = tag.reconciled === true ? 'Found' : 
@@ -69,6 +84,12 @@ export function generateInventoryPDF(
   
   // Prepare headers
   const headers = ['Tag ID', 'RSSI (dBm)', 'Count', 'Last Seen'];
+  if (hasPc) {
+    headers.push('PC');
+  }
+  if (hasBankData) {
+    headers.push('TID', 'User Data');
+  }
   if (reconciliationList) {
     headers.push('Status');
   }
@@ -94,12 +115,15 @@ export function generateInventoryPDF(
       fillColor: [245, 245, 245] // gray-100
     },
     columnStyles: {
+      // Only the first four positions are fixed. Which column lands at index 4
+      // and beyond now depends on whether PC, the bank columns, a
+      // reconciliation status or a description are present, so those are left
+      // to autoTable rather than pinned to widths that would be applied to
+      // whichever column happened to shift into the slot.
       0: { cellWidth: 'auto' }, // Tag ID
       1: { cellWidth: 25, halign: 'right' }, // RSSI
       2: { cellWidth: 20, halign: 'center' }, // Count
-      3: { cellWidth: 30 }, // Last Seen
-      4: { cellWidth: 25 }, // Status (if present)
-      5: { cellWidth: 'auto' } // Description (if present)
+      3: { cellWidth: 30 } // Last Seen
     }
   });
   

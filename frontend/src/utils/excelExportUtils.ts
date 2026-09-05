@@ -131,7 +131,13 @@ export function generateInventoryCSV(
   tags: TagInfo[],
   _reconciliationList: string[] | null
 ): ExportResult {
-  const headers = ['Asset ID', 'Name', 'Description', 'Location', 'Tag ID', 'RSSI (dBm)', 'Count', 'Last Seen'];
+  const headers = [
+    'Asset ID', 'Name', 'Description', 'Location', 'Tag ID',
+    // PC, TID and User Data come from a "capture all tag data" scan and are
+    // blank otherwise (TRA-1251).
+    'PC', 'TID', 'User Data',
+    'RSSI (dBm)', 'Count', 'Last Seen'
+  ];
 
   let csvContent = headers.join(',') + '\n';
 
@@ -139,10 +145,20 @@ export function generateInventoryCSV(
     const escapeCSV = (val: string) => val ? `"${val.replace(/"/g, '""')}"` : '';
     const row = [
       escapeCSV(tag.assetIdentifier || ''),
-      escapeCSV(tag.assetName || tag.description || ''),
-      '',
+      // Name no longer falls back to description. That fallback existed only
+      // because the Description column below was a hardcoded empty string, so
+      // an asset's description never reached the CSV at all — while the Excel
+      // and PDF exports carried it. Both halves are fixed together; keeping the
+      // fallback would now duplicate the value across two columns.
+      escapeCSV(tag.assetName || ''),
+      escapeCSV(tag.description || ''),
       escapeCSV(tag.locationName || tag.location || ''),
       `"${tag.displayEpc || tag.epc}"`,
+      // Hex, because that is the form the value is reasoned about in: 0x3000
+      // is a 96-bit EPC and 0x4000 a 128-bit one. "12288" answers nothing.
+      tag.pc != null ? `0x${tag.pc.toString(16).toUpperCase().padStart(4, '0')}` : '',
+      escapeCSV(tag.tid || ''),
+      escapeCSV(tag.userData || ''),
       tag.rssi != null ? String(tag.rssi) : '',
       String(tag.count),
       tag.timestamp ? `"${new Date(tag.timestamp).toLocaleString()}"` : '',
