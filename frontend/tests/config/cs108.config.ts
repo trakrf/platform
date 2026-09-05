@@ -12,7 +12,11 @@
 
 import { bytesToHex } from './utils.config';
 import { buildNotification } from './cs108-packet-builder';
-import { TRIGGER_PRESSED_NOTIFICATION, TRIGGER_RELEASED_NOTIFICATION } from '@/worker/cs108/event';
+import {
+  TRIGGER_PRESSED_NOTIFICATION,
+  TRIGGER_RELEASED_NOTIFICATION,
+  ERROR_NOTIFICATION
+} from '@/worker/cs108/event';
 
 // Bootstrap packets - kept as raw bytes for minimal dependencies during connectivity testing
 // Test command - GET_TRIGGER_STATE (works with CS108, but this is just testing connectivity)
@@ -22,6 +26,24 @@ export const cs108TestResponse = new Uint8Array([0xA7, 0xB3, 0x03, 0xD9, 0x82, 0
 // CS108 trigger notification packets - using structured approach with CS108Event
 export const cs108TriggerPressPacket = buildNotification(TRIGGER_PRESSED_NOTIFICATION);
 export const cs108TriggerReleasePacket = buildNotification(TRIGGER_RELEASED_NOTIFICATION);
+
+/**
+ * A device rejection: `0xA101` carrying error code `0x0000`.
+ *
+ * This is the frame the CS108 actually sent on 2026-09-04 when a connect
+ * failed — the only way it reports a refusal, since a rejection comes back
+ * under `0xA101` and never under the op code being rejected. Injecting it
+ * fails whatever command is in flight while leaving the transport untouched,
+ * which is the condition that matters: killing the link instead would trip
+ * `TRANSPORT_DISCONNECTED` and take a different recovery path entirely.
+ *
+ * The code is `0x0000`, "Wrong header prefix", which the device uses for
+ * refusals generally rather than literally — see ADR 0013 and TRA-1229.
+ */
+export const cs108CommandRejectedPacket = buildNotification(
+  ERROR_NOTIFICATION,
+  new Uint8Array([0x00, 0x00])
+);
 
 /**
  * Validate GET_TRIGGER_STATE response structure
