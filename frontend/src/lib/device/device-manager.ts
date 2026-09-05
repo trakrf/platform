@@ -213,9 +213,45 @@ export class DeviceManager {
     // This allows us to set up event handlers before any events are emitted
     DeviceManager.instance = new DeviceManager(transport, worker);
 
+    // Everything from here on can still fail, and the singleton is already
+    // assigned — so every one of those failures has to clear it again.
+    //
+    // It did not, and the guard at the top of this method then refused every
+    // retry with `Device already connected. Call destroy() first.` until the
+    // page was reloaded. TRANSPORT_DISCONNECTED already destroys the singleton
+    // for exactly this reason; construction was the path that did not.
+    // TRA-1250.
+    try {
+      return await DeviceManager.buildInstance(DeviceManager.instance, transport, worker, port);
+    } catch (error) {
+      // `destroy()` is safe on a half-built manager: every unsubscribe is
+      // guarded, and its `finally` clears the singleton even when the worker
+      // or the transport throws on the way down.
+      await DeviceManager.instance?.destroy().catch((cleanupError: unknown) => {
+        // Swallowed on purpose. A cleanup failure must not replace the reason
+        // the connect failed — that is what the operator needs to see.
+        console.error('[DeviceManager] Cleanup after a failed create() also failed:', cleanupError);
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * The part of `create()` that runs with the singleton already assigned.
+   *
+   * Split out so the failure path above is one `catch` rather than a cleanup
+   * call duplicated at every `throw` — which is how the original was written,
+   * and how three of the four exits came to have none at all.
+   */
+  private static async buildInstance(
+    instance: DeviceManager,
+    transport: Transport,
+    worker: CS108WorkerAPI,
+    port: MessagePort
+  ): Promise<DeviceManager> {
     // Set up event callback BEFORE initializing worker
     // This ensures we capture all events during initialization
-    DeviceManager.instance.setupEventCallback();
+    instance.setupEventCallback();
 
     // NOW initialize worker with transport port - use Comlink.transfer for MessagePort
     // Initializing worker with transport
@@ -227,13 +263,13 @@ export class DeviceManager {
     const linkProfile = transport.isNetworked() ? 'networked' : 'native';
     const success = await worker.initialize(Comlink.transfer(port, [port]), { linkProfile });
     if (!success) {
-      await transport.disconnect();
-      // ComlinkWorker cleanup is handled by the plugin
+      // No cleanup here: the caller's catch owns it, and doing it twice was
+      // the shape that made three sibling exits look like they had handled it.
       throw new Error('Worker failed to initialize with transport');
     }
 
     // Set up settings subscription for live updates
-    await DeviceManager.instance.setupSettingsSubscription();
+    await instance.setupSettingsSubscription();
 
     // Push initial settings to worker so it starts with current UI values
     // Pushing initial settings to worker
@@ -254,7 +290,7 @@ export class DeviceManager {
 
     // Set up activeTab subscription for automatic mode switching
     // Setting up activeTab subscription
-    await DeviceManager.instance.setupActiveTabSubscription();
+    await instance.setupActiveTabSubscription();
 
     // Now that we're connected, set the mode based on current activeTab
     const { useUIStore } = await import('../../stores/uiStore');
@@ -273,7 +309,7 @@ export class DeviceManager {
       getKitsScanMode(useKitStore.getState()),
       hasLocateTarget(currentSettings.rfid)
     );
-    await DeviceManager.instance.setMode(mode, {
+    await instance.setMode(mode, {
       rfid: currentSettings.rfid,
       barcode: currentSettings.barcode,
       system: currentSettings.system
@@ -281,11 +317,11 @@ export class DeviceManager {
 
     // Expose for E2E testing
     if (typeof window !== 'undefined' && import.meta.env.MODE === 'test') {
-      window.__DEVICE_MANAGER__ = DeviceManager.instance;
+      window.__DEVICE_MANAGER__ = instance;
     }
 
     console.info('[DeviceManager] Device manager created successfully');
-    return DeviceManager.instance;
+    return instance;
   }
 
   /**

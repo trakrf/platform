@@ -585,6 +585,43 @@ describe('CommandManager contract', () => {
       );
     });
 
+    /**
+     * The reassembly diagnostic must read the handler that saw the bytes.
+     *
+     * `CommandManager` used to build its own `PacketHandler`, and used it only
+     * for `buildCommand()` — the outbound direction. Inbound bytes go through
+     * the reader's handler, which is the only thing that ever calls
+     * `debugBuffer.add()`. So the report printed on a `0x0000` rejection came
+     * from a ring buffer nothing feeds, and `Recent BLE packets (0 captured)`
+     * was structural rather than unlucky: it could never have said anything
+     * else. Seen for real on preview 2026-09-04, at the one moment it existed
+     * to serve. TRA-1250.
+     */
+    it('asks the handler it was GIVEN for the packet history on a 0x0000', async () => {
+      const linkHandler = { buildCommand: vi.fn(() => new Uint8Array([0xA7, 0xB3, 0, 0, 0, 1])),
+                            getDebugReport: vi.fn(() => 'packets from the link') };
+      const manager = new CommandManager(
+        sendToTransport,
+        notificationHandler,
+        { getReaderState: () => readerState, setReaderState: () => {} } as never,
+        linkHandler as never
+      );
+
+      const pending = manager.executeCommand(FIRST);
+      await wireHandedOver();
+
+      // `0xA101` with code 0x0000 — the frame that triggers the report.
+      manager.handleCommandResponse({
+        eventCode: 0xA101,
+        event: event(0xA101, 'ERROR_NOTIFICATION'),
+        rawPayload: new Uint8Array([0x00, 0x00]),
+        payload: undefined
+      } as unknown as CS108Packet);
+      await expect(pending).rejects.toThrow(/Command rejected/);
+
+      expect(linkHandler.getDebugReport).toHaveBeenCalled();
+    });
+
     it('does not forward an ordinary command ack', async () => {
       // The other half. Forwarding everything would push acks at the stores and
       // make the assertion above pass for the wrong reason.

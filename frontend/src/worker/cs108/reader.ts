@@ -141,10 +141,17 @@ class CS108Reader extends BaseReader {
     };
 
     // Initialize command manager with transport callback, notification handler, and state context
+    //
+    // The packet handler is THIS one, deliberately. The reader is what feeds it
+    // inbound bytes (`handleBleData`), and it is the only thing that fills the
+    // debug ring buffer the CommandManager prints on a reassembly error — give
+    // it a handler of its own and that report is empty by construction.
+    // TRA-1250.
     this.commandManager = new CommandManager(
       this.sendCommand.bind(this),
       this.notificationRouter.handleNotification.bind(this.notificationRouter),
-      stateContext
+      stateContext,
+      this.packetHandler
     );
 
     // Apply initial log level from settings if provided

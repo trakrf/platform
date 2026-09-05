@@ -1628,6 +1628,26 @@ describe('CS108Reader', () => {
    * the event whatever the reader state — is in
    * `notification/system.test.ts`.
    */
+  /**
+   * The reassembly diagnostic is only as good as the handler it reads.
+   *
+   * `CommandManager` prints the inbound packet ring buffer when a `0x0000`
+   * rejection arrives, and only `PacketHandler.processIncomingData()` fills
+   * it — which is the reader's job, through `handleBleData`. Give the command
+   * manager a handler of its own and the report says
+   * `Recent BLE packets (0 captured)` for ever. TRA-1250.
+   *
+   * Asserted on identity rather than behaviour because that is the whole
+   * defect: two correct-looking objects, one of them never fed.
+   */
+  it('hands the CommandManager the packet handler it feeds, not a second one', () => {
+    const fresh = new CS108Reader();
+
+    const constructedWith = (CommandManager as unknown as Mock).mock.calls.at(-1);
+    expect(constructedWith?.[3], 'CommandManager must be given a packet handler').toBeDefined();
+    expect(constructedWith?.[3]).toBe((fresh as any).packetHandler);
+  });
+
   describe('a trigger notification arriving while BUSY', () => {
     /** See the convergence block above: the backstop needs several macrotasks. */
     const settleConvergence = async () => {
