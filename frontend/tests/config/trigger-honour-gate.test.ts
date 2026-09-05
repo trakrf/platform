@@ -18,16 +18,13 @@ import {
  *
  * A real finger survives that drop, because the trigger LEVEL stays asserted
  * and `convergeToTriggerState()` reconciles it when the reader settles. An
- * injected press does not survive it, so by the time the reader settles there
- * is no held trigger left to reconcile and the scan never starts. Measured at
- * 48/200 reps (24.0%) on 2026-09-02.
+ * injected press does not survive a MODE CHANGE: every mode carries
+ * `IDLE_SEQUENCE`, whose `GET_TRIGGER_STATE` poll the device answers in ~22ms
+ * with the real switch position, and that answer overwrites the latch. So by
+ * the time the reader settles there is no held trigger left to reconcile and
+ * the scan never starts. Measured at 48/200 reps (24.0%) on 2026-09-02.
  *
- * ⚠ The mechanism was misdescribed as "the state reverts to false ~500ms
- * later"; corrected under TRA-1247. Time revokes nothing. What revokes an
- * injected level is the MODE CHANGE's own `GET_TRIGGER_STATE` poll — every mode
- * carries `IDLE_SEQUENCE`, the device answers 0xA001 in ~22ms with the real
- * switch position, and that answer overwrites the latch. See ADR 0016's second
- * amendment and `tests/e2e/trigger-level-is-reread-on-mode-change.spec.ts`.
+ * See ADR 0016 and `tests/e2e/trigger-level-is-reread-on-mode-change.spec.ts`.
  *
  * So the helper must not inject into a state that will drop the edge. These
  * tests live in `tests/config/` rather than beside the helper because

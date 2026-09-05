@@ -124,11 +124,10 @@ export const GET_TRIGGER_STATE: CS108Event<ScalarPayload> = {
 // 0xA102/0xA103 edges.
 //
 // Said here because the obvious reading of an unsent command is "somebody
-// forgot 0xA008", and TRA-1247 nearly filed exactly that. Adding a call site
-// reverses ADR 0019; read it first, including its firmware-scoped revisit
-// condition.
+// forgot 0xA008". Adding a call site reverses ADR 0019; read it first,
+// including its firmware-scoped revisit condition.
 //
-// ⚠ Three traps for anyone who does revisit it, found 2026-09-05:
+// ⚠ Three traps for anyone who does revisit it:
 //
 //   1. **The auto-reports come back under the QUERY op code.** There is no
 //      uplink event code for them — the vendor spec's uplink table (§10.2) has
@@ -145,8 +144,7 @@ export const GET_TRIGGER_STATE: CS108Event<ScalarPayload> = {
 //      declares one. Left as-is deliberately rather than quietly corrected: a
 //      definition nobody has exercised should not be made to LOOK verified.
 //
-// The historical observation behind the decision, recorded contemporaneously in
-// the predecessor handheld codebase rather than recovered from memory:
+// The observations behind the decision, as recorded when they were made:
 // 0xA008 "documented in spec v1.43+ but doesn't respond", STOP_BATTERY_REPORTING
 // "causes 5000ms timeout", STOP_TRIGGER_REPORTING "has firmware bug", "both
 // disabled in production code".

@@ -554,13 +554,13 @@ describe('CommandManager contract', () => {
      * `handleCommandResponse` forwards them to the notification handler as well
      * as settling the command. Everything else settles the command only.
      *
-     * This is the link two sessions have now misread in opposite directions —
-     * once as "the poll's answer is relied on" (from the comment above the
-     * command), once as "the answer is consumed as a command response and never
-     * reaches the level" (from the routing in `reader.handleBleData`, which
-     * only tells half the story). It is load-bearing: it is what makes a mode
-     * change re-read the physical trigger and overwrite the host latch, which
-     * is the whole mechanism behind ADR 0016.
+     * Pinned because `reader.handleBleData` tells only half the story: it
+     * routes a command-class packet that settles a command in flight to the
+     * CommandManager and not to the notification router, which reads as though
+     * the poll's answer can never reach the level. This forwarding is the other
+     * half, and it is load-bearing — it is what makes a mode change re-read the
+     * physical trigger and overwrite the host latch, the mechanism ADR 0016
+     * turns on.
      */
     const TRIGGER_STATE = event(0xA001, 'GET_TRIGGER_STATE');
     const BATTERY = event(0xA000, 'GET_BATTERY_VOLTAGE');

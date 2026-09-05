@@ -294,14 +294,10 @@ test.describe('Locate Functionality Tests @hardware', () => {
     // CONNECTED`, and that is CORRECT: the edge is dropped and the trigger
     // LEVEL is reconciled by `convergeToTriggerState()` once the reader
     // settles. A real finger is still holding the trigger at that point, so the
-    // scan starts. An INJECTED press is not, so a dropped edge is unrecoverable
-    // here and only here.
-    //
-    // ⚠ The mechanism was misdescribed as "the state reverts to false ~500ms
-    // later"; corrected under TRA-1247. Nothing revokes a latched level with
-    // time. What revokes it is the LOCATE mode change's own GET_TRIGGER_STATE
-    // poll, which the device answers truthfully — see ADR 0016's second
-    // amendment. Same conclusion, and now the right reason.
+    // scan starts. An INJECTED press is not: the LOCATE mode change's own
+    // GET_TRIGGER_STATE poll re-reads the switch and the device truthfully says
+    // "released", so the level is revoked and there is nothing to converge to.
+    // A dropped edge is unrecoverable here and only here. See ADR 0016.
     //
     // A 200-rep arm on 2026-09-02 put that at 48/200 (24.0%), every failure
     // showing `readerState: Busy` / `status: Idle` for the whole window, with

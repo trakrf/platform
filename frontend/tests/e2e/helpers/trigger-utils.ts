@@ -43,28 +43,19 @@ const NOTIFICATION_DELIVERY_TIMEOUT_MS = 1000;
  * ⚠ A dropped PRESS is not recoverable when the BUSY is a MODE CHANGE, and that
  * asymmetry is the reason this constant exists. A real finger survives the drop:
  * the LEVEL stays asserted and `convergeToTriggerState()` reconciles it the
- * moment the reader settles. An injected press does not survive a mode change —
- * but NOT for the reason this docblock used to give.
+ * moment the reader settles. An injected press does not, because a mode change
+ * REVOKES the level it dropped:
  *
- * ⚠ Mechanism corrected under TRA-1247, having been wrong twice. It is not a
- * ~500ms timer, and it is not "the device's own notifications winning" — the
- * device pushes nothing (ADR 0019). It is OUR OWN poll: `buildModeSequences()`
- * prefixes `IDLE_SEQUENCE` to every mode, `IDLE_SEQUENCE` sends
- * `GET_TRIGGER_STATE` (0xA001), the device answers in ~22ms with the real
- * switch position, and `CommandManager` forwards that answer to the notification
- * handler, which overwrites the latch at `reader.ts:179`. For an injected press
- * the honest answer is "released", so the level is revoked.
+ *   `buildModeSequences()` prefixes `IDLE_SEQUENCE` to every mode, that sequence
+ *   sends `GET_TRIGGER_STATE` (0xA001), the device answers in ~22ms with the
+ *   real switch position, and `CommandManager` forwards that answer to the
+ *   notification handler, which overwrites the latch at `reader.ts:179`. For an
+ *   injected press the honest answer is "released".
  *
- * Consequences worth knowing before writing a trigger test:
- *
- *   - across TIME, an injected level holds indefinitely — nothing decays it;
- *   - across a non-mode-change BUSY (a settings push, a start sequence), it
- *     also holds, because no poll runs;
- *   - across a MODE CHANGE it is revoked, every time.
- *
- * Measured, not asserted: `tests/e2e/trigger-level-is-reread-on-mode-change.spec.ts`.
- * The ~500ms in the old text was almost certainly this file's own confirmation
- * window read back as a property of the device.
+ * Nothing else revokes it — no timer, and no unsolicited device report (ADR
+ * 0019). So an injected level holds across time, and across any BUSY that is
+ * not a mode change, and is lost across every mode change. Measured in
+ * `tests/e2e/trigger-level-is-reread-on-mode-change.spec.ts`; see ADR 0016.
  *
  * The gate is what removes the coin flip: 48 of 200 reps of `locate.spec.ts`
  * (24.0%) failed on 2026-09-02, every one showing `readerState: Busy` /
@@ -155,8 +146,6 @@ async function waitForSettledReaderState(page: Page, timeoutMs: number): Promise
  * the level, so `convergeToTriggerState()` finds nothing held. So the only
  * sound move is to wait for CONNECTED and refuse if it never comes. That gate
  * took `locate.spec.ts` from 24.0% to 0/101 and is deliberately untouched here.
- * (Its original justification was right; only the mechanism was misdescribed —
- * see `STATE_THAT_HONOURS` above.)
  *
  * A RELEASE is a no-op whenever no scan is running — `reader.ts:237` drops it
  * with a `logger.debug` and nothing is left undone, because there was nothing

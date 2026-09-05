@@ -29,10 +29,9 @@ export const BATTERY_VOLTAGE_SEQUENCE: CommandSequence = [
  * takes one battery reading. `buildModeSequences()` prefixes it to EVERY mode,
  * so every one of these runs on every mode change.
  *
- * ⚠ It used to say "and enables basic reporting". It enables nothing, and never
- * has — the device's own reporting is deliberately off (ADR 0019). Corrected
- * under TRA-1247, where the old wording sent a session looking for a reporting
- * path that does not exist.
+ * ⚠ It enables no reporting, despite the name this sequence shares with the
+ * device's auto-reporting commands. The device's own reporting is deliberately
+ * off (ADR 0019), so there is no reporting path here to go looking for.
  */
 export const IDLE_SEQUENCE: CommandSequence = [
   {
@@ -69,10 +68,9 @@ export const IDLE_SEQUENCE: CommandSequence = [
   {
     // Check if the trigger is already held, and re-read it on every mode change.
     //
-    // Measured on the wire 2026-09-05 (TRA-1247), because this step had twice
-    // been written off as dead: the device answers 0xA001 in ~22ms, every time,
-    // with 0=released / 1=pushed exactly as the vendor byte-stream API §10.1
-    // specifies. The answer is not thrown away either — it settles the command
+    // The device answers 0xA001 in ~22ms, every time, with 0=released /
+    // 1=pushed exactly as the vendor byte-stream API §10.1 specifies — measured
+    // on the wire. The answer is not thrown away either: it settles the command
     // in flight AND is forwarded to the notification handler, because 0xA000
     // and 0xA001 are on `CommandManager`'s data-emission list (`command.ts`).
     // So it reaches `TriggerStateHandler`, emits TRIGGER_STATE_CHANGED, and
@@ -81,19 +79,17 @@ export const IDLE_SEQUENCE: CommandSequence = [
     // Two consequences, both load-bearing and both easy to lose:
     //
     //   - The "operator already squeezing the trigger as the reader connects"
-    //     case IS covered, by this step. It is the only thing that covers it:
-    //     there is no edge to observe when the trigger went down before the
-    //     link came up.
+    //     case IS covered, by this step, and only by this step: there is no
+    //     edge to observe when the trigger went down before the link came up.
     //   - Because `buildModeSequences()` prefixes IDLE_SEQUENCE to EVERY mode,
     //     every mode change re-reads the physical trigger and the device's
-    //     answer wins. That is what revokes a SIMULATED press — not a timer,
-    //     which is what ADR 0016 used to say. Proven on hardware by
-    //     `tests/e2e/trigger-level-is-reread-on-mode-change.spec.ts`.
+    //     answer wins. That is what revokes a SIMULATED press — see ADR 0016
+    //     and `tests/e2e/trigger-level-is-reread-on-mode-change.spec.ts`.
     //
-    // What was actually abandoned is the AUTO-REPORTING (0xA008/0xA009), which
-    // is a different command and is unsent by decision — see ADR 0019 and the
-    // note above the reporting commands in `event.ts`. Do not read "the trigger
-    // poll does not work" as being about this line.
+    // ⚠ Do not confuse this with the AUTO-REPORTING (0xA008/0xA009), which is a
+    // different command, does not work on this firmware, and is unsent by
+    // decision — ADR 0019, and the note above the reporting commands in
+    // `event.ts`. "The trigger poll does not work" is about those, not this.
     event: GET_TRIGGER_STATE
   },
   ...BATTERY_VOLTAGE_SEQUENCE,

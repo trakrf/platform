@@ -2,9 +2,7 @@
  * The trigger LEVEL is re-read from the device on every mode change, and the
  * device's answer wins over whatever the host was holding.
  *
- * This is the mechanism ADR 0016 is really about, and it was never measured —
- * the ADR attributed the revocation to a ~500ms timer and "the device's own
- * notifications", neither of which exists. What actually happens:
+ * This is the mechanism ADR 0016 turns on:
  *
  *   1. `buildModeSequences()` prefixes `IDLE_SEQUENCE` to EVERY mode.
  *   2. `IDLE_SEQUENCE` sends `GET_TRIGGER_STATE` (0xA001). The device answers
@@ -70,8 +68,8 @@ test.describe('the trigger level is re-read on every mode change @hardware', () 
     expect(await getTriggerState(page), 'the injected press must latch').toBe(true);
 
     // Half of the assertion: time alone does not revoke it. Well past the
-    // ~500ms ADR 0016 named, and past this helper's own confirmation window,
-    // which is where that number almost certainly came from.
+    // helper's own confirmation window, so a level that merely looked latched
+    // for a moment would have lapsed by now.
     await page.waitForTimeout(3000);
     expect(
       await getTriggerState(page),
