@@ -40,29 +40,37 @@ const NOTIFICATION_DELIVERY_TIMEOUT_MS = 1000;
  *
  * ...with the mirror-image branch requiring SCANNING for a release.
  *
- * ⚠ A dropped PRESS costs a test far more than a dropped RELEASE, and that
- * asymmetry is the reason this constant exists. A dropped press starts no scan
- * NOW: the edge is discarded and only `convergeToTriggerState()` can start one,
- * once the reader settles — which for Locate is up to ~3.7s away (TRA-1225).
- * Waiting for the honouring state first removes that wait from every rep.
+ * ⚠ A dropped PRESS is not recoverable when the BUSY is a MODE CHANGE, and that
+ * asymmetry is the reason this constant exists. A real finger survives the drop:
+ * the LEVEL stays asserted and `convergeToTriggerState()` reconciles it the
+ * moment the reader settles. An injected press does not survive a mode change —
+ * but NOT for the reason this docblock used to give.
  *
- * ⚠ This docblock used to say something stronger and WRONG, corrected under
- * TRA-1247: that an injected press "reverts to false ~500ms later because no
- * physical switch is held", so a dropped edge could never be reconciled. There
- * is no such mechanism. `triggerState` is a host-side latch written at
- * `reader.ts:179` and on disconnect, with no timer between them, and the device
- * pushes nothing unbidden (ADR 0019). An injected level is exactly as durable
- * as a physical one. See `a trigger notification arriving while BUSY` in
- * `src/worker/cs108/reader.test.ts`, which holds a latched level past 750ms and
- * watches convergence act on it. The ~500ms was almost certainly this file's
- * own confirmation window read back as a property of the device.
+ * ⚠ Mechanism corrected under TRA-1247, having been wrong twice. It is not a
+ * ~500ms timer, and it is not "the device's own notifications winning" — the
+ * device pushes nothing (ADR 0019). It is OUR OWN poll: `buildModeSequences()`
+ * prefixes `IDLE_SEQUENCE` to every mode, `IDLE_SEQUENCE` sends
+ * `GET_TRIGGER_STATE` (0xA001), the device answers in ~22ms with the real
+ * switch position, and `CommandManager` forwards that answer to the notification
+ * handler, which overwrites the latch at `reader.ts:179`. For an injected press
+ * the honest answer is "released", so the level is revoked.
  *
- * The gate stays regardless, on its measurement rather than on that story:
- * 48 of 200 reps of `locate.spec.ts` (24.0%) failed on 2026-09-02, every one
- * showing `readerState: Busy` / `status: Idle` for the full sample window, and
- * the gate took that to 0/101. What those reps were short of was the
- * convergence that arrives at the END of bring-up, after the sample window has
- * closed. The product was correct in all 48. See TRA-1245, and TRA-1080 for the
+ * Consequences worth knowing before writing a trigger test:
+ *
+ *   - across TIME, an injected level holds indefinitely — nothing decays it;
+ *   - across a non-mode-change BUSY (a settings push, a start sequence), it
+ *     also holds, because no poll runs;
+ *   - across a MODE CHANGE it is revoked, every time.
+ *
+ * Measured, not asserted: `tests/e2e/trigger-level-is-reread-on-mode-change.spec.ts`.
+ * The ~500ms in the old text was almost certainly this file's own confirmation
+ * window read back as a property of the device.
+ *
+ * The gate is what removes the coin flip: 48 of 200 reps of `locate.spec.ts`
+ * (24.0%) failed on 2026-09-02, every one showing `readerState: Busy` /
+ * `status: Idle` for the full sample window — Busy from the LOCATE mode change,
+ * whose poll revoked the press it had just dropped. The gate took that to
+ * 0/101. The product was correct in all 48. See TRA-1245, and TRA-1080 for the
  * same trap in 2026-07.
  *
  * ⚠ A dropped RELEASE does not share that shape, and reading this map as though
@@ -141,15 +149,14 @@ async function waitForSettledReaderState(page: Page, timeoutMs: number): Promise
  *
  * The two actions are NOT symmetric, and #647 shipped them as though they were.
  *
- * A PRESS has one honouring state: every other state drops the edge with a
- * `logger.debug` and leaves the scan to `convergeToTriggerState()`, which runs
- * only once bring-up finishes — up to ~3.7s later for Locate (TRA-1225), which
- * is longer than the windows the specs then sample. So the sound move is to
- * wait for CONNECTED and refuse if it never comes. That gate took
- * `locate.spec.ts` from 24.0% to 0/101 and is deliberately untouched here.
- * (Its original justification — that an injected level could not survive to be
- * reconciled — was wrong; see `STATE_THAT_HONOURS` above. The gate is kept on
- * its measurement, not on that story.)
+ * A PRESS has one honouring state and, in the case that bites, no recovery:
+ * every other state drops the edge with a `logger.debug`, and when that state
+ * is a MODE CHANGE the same mode change's `GET_TRIGGER_STATE` poll then revokes
+ * the level, so `convergeToTriggerState()` finds nothing held. So the only
+ * sound move is to wait for CONNECTED and refuse if it never comes. That gate
+ * took `locate.spec.ts` from 24.0% to 0/101 and is deliberately untouched here.
+ * (Its original justification was right; only the mechanism was misdescribed —
+ * see `STATE_THAT_HONOURS` above.)
  *
  * A RELEASE is a no-op whenever no scan is running — `reader.ts:237` drops it
  * with a `logger.debug` and nothing is left undone, because there was nothing
@@ -386,10 +393,11 @@ function describeConfirmationTimeout(
     return (
       `BRING_UP_INCOMPLETE: bring-up did not complete within ${timeoutMs}ms — ` +
       `the reader was still "${readerState}" after the ${action} was delivered. ` +
-      'The trigger LEVEL is latched regardless, so the press is not lost; what ' +
-      'exceeded the budget is the config sequence the reader is still running. ' +
-      'A sequence this long is a product defect worth surfacing, not a flaky ' +
-      'test. See TRA-1247 and TRA-1225.'
+      'What exceeded the budget is the config sequence the reader is still ' +
+      'running, and a sequence this long is a product defect worth surfacing, ' +
+      'not a flaky test. Note that if that sequence is a MODE CHANGE, its ' +
+      'GET_TRIGGER_STATE poll will also have revoked the injected level. ' +
+      'See TRA-1247 and TRA-1225.'
     );
   }
   return (

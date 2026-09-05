@@ -2,9 +2,9 @@
 
 Date: 2026-09-03
 Amended: 2026-09-04 — see "Amendment: the rule is not symmetric across edges"
-Amended: 2026-09-05 — see "Amendment: the level the HOST holds is simulatable after all"
+Amended: 2026-09-05 — see "Amendment: the revocation is real, but it is ours and it is a mode change"
 Status: Proposed
-Tracking: TRA-1245 (this change and the arm that paid for it), TRA-1080 (the first time this was diagnosed and then forgotten), TRA-1224 (the e2e failures this is one of), TRA-1247 (the second amendment, which narrows the claim below)
+Tracking: TRA-1245 (this change and the arm that paid for it), TRA-1080 (the first time this was diagnosed and then forgotten), TRA-1224 (the e2e failures this is one of), TRA-1247 (the second amendment, which corrects the mechanism below)
 
 ## Context
 
@@ -24,11 +24,12 @@ From which a limitation follows **by construction rather than by observation**:
 The injected trigger state reverts to `false` roughly 500ms later, because no physical
 switch is held and the device's own notifications win.
 
-> ⚠ **That sentence and the "no" in the table above are wrong for the HOST-side level,
-> and were narrowed on 2026-09-05.** No mechanism for the reversion survives inspection.
-> See "Amendment: the level the HOST holds is simulatable after all" at the end. The
-> Decision and its consequences are unaffected; what changes is the reason given for
-> them, and what remains untestable.
+> ⚠ **The revocation is real, but that sentence names the wrong cause, and the
+> ~500ms is wrong too — corrected 2026-09-05.** Nothing decays a level with time, and
+> the device pushes nothing. What revokes an injected level is OUR OWN `GET_TRIGGER_STATE`
+> poll at the head of every mode sequence, which the device answers truthfully. See the
+> second amendment at the end. The Decision and the gate are unaffected; the "no" in the
+> table above narrows to *across a mode change*.
 
 This matters because the product deliberately relies on the level. `reader.ts:229`
 acts on a trigger edge only when the reader is in the state that can act on it —
@@ -96,9 +97,9 @@ Concretely, for the trigger:
 makes the remaining reds worth the hardware time to chase.
 
 **Some behaviour is not testable here, and that is the honest outcome.** Anything
-requiring a trigger genuinely held across a state transition — ⚠ narrowed 2026-09-05:
-the HOST-side level is simulatable, see the second amendment; what follows is now only
-the device half — including the device's
+requiring a trigger genuinely held across a MODE CHANGE — ⚠ narrowed 2026-09-05: across
+time, or across any other BUSY, an injected level does hold and IS testable; see the
+second amendment — and anything requiring the device's
 own firmware reaction to a real release, which never reaches the host at all — needs a
 real finger on a real trigger. A test that appears to cover it is worse than no test,
 because it reports a result. Where that matters, say so on the ticket rather than approximating it.
@@ -162,52 +163,88 @@ The Decision's fourth point — put the gate in the shared helper — stands, an
 its price rather than an argument against it: one helper reaches six specs, so a gate
 that is wrong for one shape of caller is wrong six times at once.
 
-## Amendment: the level the HOST holds is simulatable after all
+## Amendment: the revocation is real, but it is ours and it is a mode change
 
 *Added 2026-09-05 under TRA-1247, which went looking for the mechanism behind the
-"reverts to `false` roughly 500ms later" claim and could not find one.*
+"reverts to `false` roughly 500ms later" claim, wrongly concluded there was none, and
+then measured it.*
 
-The Context above gives a mechanism for the reversion: "no physical switch is held and
-the device's own notifications win". **The device sends no such notifications.**
+**The Decision and both riders stand. What changes is the mechanism, and with it the
+scope of what "not testable" covers.**
 
-- Device auto-reporting is off by decision, not by accident — ADR 0019. The four
-  reporting commands (`0xA002`, `0xA003`, `0xA008`, `0xA009`) are defined, mapped, and
-  never sent.
-- The one poll that could report a level, `GET_TRIGGER_STATE` (`0xA001`) at the head of
-  `IDLE_SEQUENCE`, does not answer on the firmware in hand. That is the whole reason
-  the level is carried by edges.
-- `triggerState` is a host-side latch. It is written in exactly two places: at
-  `reader.ts:179` from a `TRIGGER_STATE_CHANGED` event, and to `false` on disconnect.
-  There is no timer between them, and the harness injects no release —
-  `cs108TriggerReleasePacket` is used only when the caller asks for one.
+### What the Context above gets wrong
 
-So nothing revokes an injected level with the passage of time, and the `~500ms` is
-almost certainly the confirmation window inside `simulateTrigger` — which polled for
-exactly 500ms and then reported `STATE_NOT_UPDATED` — read back as a property of the
-device. A measurement of the harness, presented as a mechanism.
+Two things, and they matter because each sent a session down a wrong path:
 
-Tested rather than asserted: `a trigger notification arriving while BUSY` in
-`frontend/src/worker/cs108/reader.test.ts` latches a level through a BUSY reader, holds
-it past 750ms, and watches `convergeToTriggerState()` act on it when the reader settles.
-`notification/system.test.ts` covers the routing half — nothing between the packet and
-the latch consults `readerState`.
+- **"the device's own notifications win".** The device pushes nothing. Auto-reporting
+  (`0xA002`, `0xA003`, `0xA008`, `0xA009`) is off by decision — ADR 0019 — and those
+  four commands are defined, mapped and never sent.
+- **"roughly 500ms".** Nothing is on a timer. `triggerState` is written in exactly two
+  places: `reader.ts:179`, from a `TRIGGER_STATE_CHANGED` event, and to `false` on
+  disconnect. The number is almost certainly the confirmation window inside
+  `simulateTrigger`, which polled for exactly 500ms and then reported
+  `STATE_NOT_UPDATED` — a measurement of the harness, written up as a property of the
+  device.
 
-**What this narrows.** The table's Level row is "no" only for state the HOST cannot
-observe. Host-side, an injected level is exactly as durable as a physical one, and
-behaviour that depends on it — convergence after bring-up, a level cycled during BUSY —
-is testable. What stays untestable by construction is the device's own firmware reaction
-to a physical trigger, which never reaches the host at all: the `0xA004` abort-on-release
-is the standing example, and no injected packet can produce it.
+### What actually revokes it
 
-**What this does NOT change.** The Decision stands, and so does the gate in
-`trigger-utils.ts` — but on its measurement rather than on the story that justified it.
-A press injected into a BUSY reader is not lost; it simply starts no scan until
-convergence runs at the end of bring-up, which for Locate is up to ~3.7s later
-(TRA-1225) — longer than the windows the specs then sample. That is enough to have
-produced 48/200 (24.0%) on its own, and waiting for the honouring state still removes it.
+**Our own poll, at the head of every mode sequence.**
 
-**Still unsettled, and it needs hardware.** Whether `0xA001` ever answers is the one
-remaining path that could revert a level, and it is a device fact no amount of reading
-settles. The experiment is on `system/sequences.ts`: send `0xA008` during bring-up, then
-`0xA001`. Until that runs, cite this amendment for the host-side level and not for the
-device.
+1. `buildModeSequences()` prefixes `IDLE_SEQUENCE` to EVERY mode.
+2. `IDLE_SEQUENCE` sends `GET_TRIGGER_STATE` (`0xA001`). **The device answers, in
+   ~22ms, every time** — measured on the wire 2026-09-05, and specified in the vendor
+   byte-stream API §10.1 as `0 = Released; 1 = Pushed`. Two earlier sessions wrote this
+   command off as unanswered; it is the *auto-reporting* (`0xA008`) that was tried and
+   abandoned, which is a different command.
+3. `CommandManager.handleCommandResponse()` forwards `0xA000` and `0xA001` replies to
+   the notification handler as well as settling the command (`command.ts:374-386`), so
+   the answer reaches `TriggerStateHandler`.
+4. That emits `TRIGGER_STATE_CHANGED`, and `reader.ts:179` overwrites the host latch
+   with what the device just said — which, for an injected press, is "released".
+
+So the ADR's conclusion was right and its reason was wrong, which is the more dangerous
+combination: the reason is what people reuse.
+
+### The narrowing this earns
+
+| | holds? |
+|---|---|
+| an injected level across **time** | **yes** — nothing decays it |
+| an injected level across a **non-mode-change BUSY** (settings push, start sequence) | **yes** — no poll runs |
+| an injected level across a **mode change** | **no** — the poll re-reads the device and the device wins |
+| the **device's own** firmware reaction to a physical trigger (e.g. `0xA004` abort-on-release) | **no, and not even partially** — it never reaches the host |
+
+The first two rows are new, and they are testable. `reader.test.ts`, under `a trigger
+notification arriving while BUSY`, holds a latched level past 750ms through a BUSY
+reader and watches `convergeToTriggerState()` act on it when the reader settles.
+
+The third row is measured rather than asserted, by
+`tests/e2e/trigger-level-is-reread-on-mode-change.spec.ts`: it injects a press, holds it
+for three seconds to show time does not revoke it, then changes tab and asserts the
+level goes false with **no release injected**. Green on hardware 2026-09-05.
+
+### What this does NOT change
+
+**The gate in `trigger-utils.ts` keeps its original justification, which turns out to
+have been right.** A press injected into the BUSY of a mode change really is
+unrecoverable: the level is revoked by that same mode change's poll, so
+`convergeToTriggerState()` finds nothing held when the reader settles. That is a
+sufficient account of 48/200 (24.0%) on its own, and it is why waiting for the
+honouring state immediately before injecting fixed it.
+
+**The Decision's general form is untouched.** "A simulated stimulus may be used to
+assert behaviour that depends only on the edge it injects; where the behaviour depends
+on a level the simulation cannot sustain, establish the precondition and fail loudly."
+All that has changed is which levels the simulation cannot sustain — and the answer is
+narrower and sharper than "all of them".
+
+### A note on how this was got wrong twice
+
+The first session read `sequences.ts:63`'s comment and concluded the poll covered the
+already-held case; that was retracted as "reading the label instead of the thing". The
+retraction then asserted the opposite — that the poll does not answer — on the same kind
+of evidence, and this ADR's amendment was first drafted saying no revocation mechanism
+existed at all. Both directions were settled in minutes by reading the wire and the
+forwarding list in `command.ts`. **A claim about what the device does is settled by the
+device, and a claim about what our code does with the answer is settled by following the
+answer, not by reading the comment above the command.**

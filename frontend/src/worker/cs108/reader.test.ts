@@ -1692,14 +1692,19 @@ describe('CS108Reader', () => {
     });
 
     /**
-     * The mechanism claim ADR 0016 rests on, tested rather than asserted.
+     * Half of ADR 0016's mechanism claim, isolated: TIME revokes nothing.
      *
-     * 0016 says an injected press "reverts to `false` roughly 500ms later,
+     * 0016 said an injected press "reverts to `false` roughly 500ms later,
      * because no physical switch is held and the device's own notifications
-     * win". Nothing host-side does that: `triggerState` moves at reader.ts:179
-     * and on disconnect, and there is no timer between them. Time alone does
-     * not revoke a latched level, so the level an injected press asserts is
-     * exactly as durable as the level a physical one asserts.
+     * win". Both halves of that are wrong. `triggerState` moves at
+     * `reader.ts:179` and on disconnect, with no timer between them, and the
+     * device pushes nothing (ADR 0019).
+     *
+     * What DOES revoke it is a mode change, whose `IDLE_SEQUENCE` re-reads the
+     * real switch position with `GET_TRIGGER_STATE`. That half needs the device
+     * and is measured in
+     * `tests/e2e/trigger-level-is-reread-on-mode-change.spec.ts`. This test is
+     * the control for it: no mode change here, so the level must hold.
      */
     it('keeps the level latched while the reader stays BUSY — no timer revokes it', async () => {
       const finishBringUp = holdBusy();

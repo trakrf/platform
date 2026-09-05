@@ -67,30 +67,33 @@ export const IDLE_SEQUENCE: CommandSequence = [
     retryDelays: [100]  // Barcode module may need retry
   },
   {
-    // ⚠ Its answer is NOT relied on, and this comment used to claim it was:
-    // "Check if trigger is already pressed on connect". That states intent and
-    // reads as observed behaviour. Per Mike the polled trigger notification
-    // does not work as advertised on the firmware in hand (SiLabs 1.0.15 /
-    // BT 1.0.17 / RFID 2.6.41) and was tried and abandoned; the trigger level
-    // is carried by the 0xA102/0xA103 edges instead. Corrected under TRA-1247.
+    // Check if the trigger is already held, and re-read it on every mode change.
     //
-    // Two things follow, neither settled here because both need hardware:
+    // Measured on the wire 2026-09-05 (TRA-1247), because this step had twice
+    // been written off as dead: the device answers 0xA001 in ~22ms, every time,
+    // with 0=released / 1=pushed exactly as the vendor byte-stream API §10.1
+    // specifies. The answer is not thrown away either — it settles the command
+    // in flight AND is forwarded to the notification handler, because 0xA000
+    // and 0xA001 are on `CommandManager`'s data-emission list (`command.ts`).
+    // So it reaches `TriggerStateHandler`, emits TRIGGER_STATE_CHANGED, and
+    // overwrites the host latch at `reader.ts:179`.
     //
-    //   - If 0xA001 never answers, the "operator already squeezing the trigger
-    //     as the reader connects" case is a GAP, not coverage. Nothing else
-    //     catches it: with no edge to observe, `triggerState` stays false until
-    //     they let go and press again.
-    //   - This step sits at position 3 of 4 in the idle prefix, so even a
-    //     working answer would describe the trigger at the START of bring-up,
-    //     while convergence consumes it only after the firmware config, power
-    //     on, transmit power, identity reads and mask write.
+    // Two consequences, both load-bearing and both easy to lose:
     //
-    // The experiment that decides whether this command stays: send 0xA008
-    // (START_TRIGGER_REPORTING) once during bring-up, then 0xA001. An answer
-    // makes the already-held case fixable with one command; silence makes this
-    // step dead weight on every mode change and it should come out with this
-    // comment. Adding 0xA008 permanently would reverse ADR 0019, so treat that
-    // as an experiment, not a fix.
+    //   - The "operator already squeezing the trigger as the reader connects"
+    //     case IS covered, by this step. It is the only thing that covers it:
+    //     there is no edge to observe when the trigger went down before the
+    //     link came up.
+    //   - Because `buildModeSequences()` prefixes IDLE_SEQUENCE to EVERY mode,
+    //     every mode change re-reads the physical trigger and the device's
+    //     answer wins. That is what revokes a SIMULATED press — not a timer,
+    //     which is what ADR 0016 used to say. Proven on hardware by
+    //     `tests/e2e/trigger-level-is-reread-on-mode-change.spec.ts`.
+    //
+    // What was actually abandoned is the AUTO-REPORTING (0xA008/0xA009), which
+    // is a different command and is unsent by decision — see ADR 0019 and the
+    // note above the reporting commands in `event.ts`. Do not read "the trigger
+    // poll does not work" as being about this line.
     event: GET_TRIGGER_STATE
   },
   ...BATTERY_VOLTAGE_SEQUENCE,
