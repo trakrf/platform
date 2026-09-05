@@ -22,12 +22,38 @@ v1.3.0 and v1.4.0 (TRA-1126, `docs/adr/0004-declared-platform-version.md`).
       the set of migrations added since the last release:
       `ls backend/migrations/ | tail -20`.
 - [ ] **Confirm the CNPG backup to GCS is current for prod, and take a fresh
-      verified one.** This is the only real undo. `just ops db-status prod`.
+      verified one.** This is the only real undo.
+
+      `just ops db-status prod` reports cluster and pod health but **says
+      nothing about backups** — it is not the check this box is asking for.
+      Take a fresh base backup with:
+
+      ```bash
+      YES=1 just ops db-pitr-trigger-base prod     # prod-mutating: see the YES=1 note
+      ```
+
+      It refuses a non-tty outright, so from a script `YES=1` is the only way
+      to run it — the recorded decision that you intend to touch prod, not a
+      quiet flag. It prints the Backup name it created and returns
+      immediately; the backup is still `running` at that point.
+
+      **An undo you have not watched finish is not an undo**, so confirm it
+      reaches `completed` before promoting. There is currently no `just ops`
+      recipe that reports backup state, which is why this step reads as vague
+      — closing that gap belongs in **trakrf/infra**, and the incantation is
+      deliberately not restated here (see the note at the foot of this file).
+
 - [ ] **Read prod's current state rather than trusting a recent note:**
 
       ```bash
-      curl -s https://app.trakrf.id/health | jq '{version, commit, built}'
+      curl -s -H 'Cache-Control: no-cache' \
+        "https://app.trakrf.id/health?cb=$RANDOM" | jq '{version, commit, built}'
       ```
+
+      The cache-bust is load-bearing — see step 5. `app.trakrf.id` is behind
+      Cloudflare, and a plain `curl` here can hand you a cached version string,
+      which is precisely the "recent note" this step exists to stop you
+      trusting.
 
 - [ ] **Read prod's migration ledger, immediately before you migrate** — not
       days earlier:
@@ -310,9 +336,27 @@ not a corrupted schema.
       `/health` alone cannot see that.
 
       ```bash
-      curl -s https://app.trakrf.id/health       | jq '{version, commit, built}'
-      curl -s https://app.trakrf.id/version.json
+      curl -s -H 'Cache-Control: no-cache' \
+        "https://app.trakrf.id/health?cb=$RANDOM"       | jq '{version, commit, built}'
+      curl -s -H 'Cache-Control: no-cache' \
+        "https://app.trakrf.id/version.json?cb=$RANDOM"
       ```
+
+      > **Do not drop the cache-bust, and do not read a stale answer as a
+      > failed promote.** `app.trakrf.id` is behind Cloudflare, and for a
+      > period after a *correct* deploy a plain `curl` returns the **previous**
+      > release from cache — on v1.5.0 both endpoints reported `v1.4.1` after a
+      > successful rollout, with the migration already applied and the new pod
+      > serving. The response carries `server: cloudflare` and
+      > `cf-cache-status`, which is how you tell this apart from a real
+      > problem.
+      >
+      > This is **not** the stale-bundle case below. A stale bundle is a
+      > *disagreement* — the UI says one thing, `version.json` another. A
+      > Cloudflare cache hit is an *agreement on the wrong answer*: both
+      > endpoints report the old version and match each other perfectly. That
+      > is the dangerous shape, because it looks exactly like a promote that
+      > did nothing and invites the second promote step 3 warns against.
 
       Third surface is the UI itself: the version sits in the **sidebar header**
       under "Handheld Tag Reader" (`TabNavigation.tsx:174`) and on Settings

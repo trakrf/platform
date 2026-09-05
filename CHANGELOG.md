@@ -32,7 +32,7 @@ internal half of this release is larger than the visible half.
 Migration `000040` adds `trakrf.users.must_change_password` as
 `NOT NULL DEFAULT FALSE`. **The default is load-bearing** — every account
 predating this migration is one an operator has no reason to force, and a
-default of `TRUE` would gate all 49 production users behind the
+default of `TRUE` would gate all 45 production users behind the
 change-password screen at once. No existing user is asked to rotate anything.
 
 ### Security
