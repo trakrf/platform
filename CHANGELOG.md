@@ -7,6 +7,192 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-04
+
+Three weeks of `main`, 294 commits across 74 pull requests, one migration
+(`000040`). Prod moves from `v1.4.1` (schema version 39) to schema version 40.
+
+The headline is the Locate screen. It is the second step of every demo — scan
+tags, follow the link, pull the trigger, walk — and this release closes every
+way it was known to mislead an operator: a previous search's signal presented as
+this one's, a gauge and a buzzer that ran on after the trigger was released, a
+target filter that never reached the radio, and a mask that matched at only one
+tag width. Locate also gains barcode acquisition, so a target can be taken off a
+cut sheet rather than typed.
+
+Underneath that, a long run of work on the reader link itself. A reader that had
+been failing silently now says so: refusals are counted rather than discarded, a
+retry that succeeds no longer reports an error it recovered from, and a command
+that never reached the wire no longer poisons the one after it. Much of this was
+found by a soak harness built during the same three weeks, which is why the
+internal half of this release is larger than the visible half.
+
+### Upgrading
+
+Migration `000040` adds `trakrf.users.must_change_password` as
+`NOT NULL DEFAULT FALSE`. **The default is load-bearing** — every account
+predating this migration is one an operator has no reason to force, and a
+default of `TRUE` would gate all 49 production users behind the
+change-password screen at once. No existing user is asked to rotate anything.
+
+### Security
+
+- **Operator-provisioned accounts must rotate their bootstrap password**
+  (TRA-1135, `000040`). Onsite onboarding is synchronous and every
+  account-creation flow we own is asynchronous — an org invite expires in
+  7 days and a password reset in 72 hours, but both require the user to
+  receive mail, which is no use inside a two-hour onsite session. So an
+  operator sets a password in the room, and that is a supported flow only if
+  the account cannot stay on it. The app is now gated behind the
+  change-password screen until the user sets their own. The flag is cleared by
+  any password write, so the authenticated change path (TRA-1130) and the
+  token reset path both satisfy it without knowing it exists.
+
+### Added
+
+- **Acquire a Locate target by barcode scan** (TRA-1121), not just by typing a
+  24- or 32-character hex EPC. The workflow this serves is not "scan the tag
+  you are standing next to" — it is an operator working from a cut sheet, pick
+  list or work order that carries the barcode of the item they have been sent
+  to find. Scan the paperwork, then go find the thing. It also removes the
+  hand-typing that was the entry point for the mask-width gap below.
+- **Settings shows what the connected reader actually is** (TRA-1232) — Silicon
+  Labs, Bluetooth and RFID-processor firmware versions, the serial number, and
+  the RFID error register. Until now a support conversation had no way to
+  establish which firmware a reader in the field was running. The same values
+  ride the diagnostic payload.
+
+### Changed
+
+- **Asset scan history is recorded at minute granularity** (TRA-1118).
+  Timestamps truncate to the minute and the upsert is asymmetric on conflict,
+  which cuts scan writes roughly 40x at the cost of a movement event being
+  visible up to 60s later. Code-only; no migration.
+- **The release version is a declared property of the commit** (TRA-1126). The
+  `VERSION` file is now the source and the git tag is an output of CI rather
+  than the thing that drives it (ADR 0004). Follow-ups in TRA-1127 add
+  App-token permission, hotfix `release/*` line support, and correct the
+  `sha-` immutability wording.
+- **`ops psql` no longer connects as a superuser** (TRA-1105). It silently
+  generated objects owned by a role migrations cannot alter, which is what
+  wedged preview on `000039` — the damage was invisible until the next
+  migration ran.
+
+### Fixed
+
+#### Locate
+
+- **Locate could report a previous search's signal** (TRA-1123), so a failed
+  locate looked like a successful one. Five mechanisms, of which two mattered
+  most: the hardware tag mask was never rewritten when the target changed
+  mid-search, and `LOCATE_UPDATE`'s EPC was discarded entirely, so there was no
+  target filter at all. Readouts now decay to **No signal** rather than
+  freezing. Bench-verified twice, including an 87-tag turntable run with ~350
+  reads and no strays.
+- **The gauge and the audio ran on after the trigger was released**
+  (TRA-1171). The UI was not told about the release until the stop round-trip
+  completed, and tag reads genuinely arriving after the abort were passed
+  through by every staleness defence on the screen, because they were fresh. On
+  release the audio now stops and the gauge freezes at the reading the operator
+  let go on — deliberately different treatments, because blanking the gauge at
+  that instant destroys the result the operator pulled the trigger to read. A
+  follow-up fixed the boundary case: a search that ended hearing nothing holds
+  **No signal** rather than reviving the last value it heard.
+- **A new target could be silently discarded before it reached the radio**
+  (TRA-1225). A settings push arriving while the reader was mid-transition was
+  dropped without a log line at any visible level, so the tag mask — the only
+  EPC filter in the path — was left to be written inside the timed scan window
+  instead, where its 18 commands could consume the entire trigger hold and no
+  inventory ever started. The push now waits out the transition rather than
+  being dropped, and a target that fails to reach the radio is reported loudly.
+- **A leading-zero-stripped EPC matched at only one tag width** (TRA-1120).
+  Locate now ORs two mask descriptors so a stored short-form value matches at
+  both 96 and 128 bits. This completes the 128-bit work started in 1.4.0
+  (TRA-1108): that release fixed the deep link and the mask width, this one
+  fixes the registry values that were already stored stripped.
+
+#### The reader link
+
+- **A retry that succeeded still reported an error** (TRA-1237). A failed
+  attempt published `ERROR` from inside the retry loop, before the retry
+  schedule had been walked, so a command that recovered about two seconds later
+  had already announced the hardware was in an unknown condition. Anything
+  waiting for the reader to settle read that as a final state — which is how a
+  settings push came to drop the target it was carrying.
+- **The reader's refusals were being discarded** (TRA-1229). The CS108 answers
+  a command it will not honour with an error notification rather than with the
+  op code being rejected, and those frames were dropped on a stale comment
+  calling them spurious. An 86-minute fault storm therefore presented as a
+  silent device. Refusals are now named, counted and allowed to settle the
+  command they answer, and the error-code table they are decoded against —
+  which was numbered one off the specification throughout — is now a single
+  shared table.
+- **Any command-class packet could settle the wrong command** (TRA-1154,
+  TRA-1197). The command layer matched no op code, so the first response of the
+  right *class* settled whatever was pending. It now matches by op code, queues
+  rather than throwing when a command is already in flight, and owns the quiet
+  window the device requires after an abort.
+- **A send that failed never released the wire** (TRA-1239). A synchronous
+  transport failure claimed the in-flight slot and then skipped clearing it, so
+  the next command — usually the retry — was told the wire was busy by a command
+  that had never reached it. The Locate register writes, which had no retry at
+  all, now have one.
+- **A mode change no longer fails because one op code went unanswered**
+  (TRA-1217). Every mode sequence opens with an RFID power-off, so a reader that
+  stopped acknowledging that single command failed every mode change and left
+  the reader in `Error` for the rest of the session. That step now tolerates
+  failure after its own retries are spent — the command is still sent, still
+  retried, and its silence still logged.
+
+#### Elsewhere
+
+- **Scanning tags before logging in, then logging in, discarded them**
+  (TRA-1191). Tags scanned while signed out are meant to be enriched with asset
+  details at login; the login transition cleared the tag store first, so the
+  enrichment ran against an empty list. The workflow could not have worked at
+  any point. Logging in now keeps the observations and drops only their
+  resolution; switching organizations still clears everything, as it must.
+- **BLE write failures were invisible to the worker** (TRA-1173 consumer half),
+  so a write that never reached the reader looked indistinguishable from one
+  that did.
+- **BLE fragment reassembly could drop a command ACK** behind a stale partial
+  on a networked link (TRA-1148), one of five defects hardened in the transport
+  and its e2e suite.
+- **A dense tag burst starved the main thread** (ADR 0006, toward TRA-1150).
+  Tag-store writes are now batched — one update per `TAG_READ` packet rather
+  than one per tag — and lookups queue in bulk. Releasing the trigger after a
+  burst over a dense field could intermittently fail to stop, leaving the
+  reader in `Error` and returning zero reads until reconnect. **This does not
+  close TRA-1150**; the underlying wedge is still under investigation.
+- **A dead device-name search** was removed. Web Bluetooth ORs its filter
+  array, so a second `{ name }` filter widened the match rather than narrowing
+  it — the opposite of what it read as.
+
+### Internal
+
+No runtime behaviour, and the larger half of the release by volume.
+
+The BLE test path was revived against the Python bridge and its consumption
+surface reworked (TRA-1179, TRA-1177, TRA-1187), including moving the bridge off
+the backend's port — they had both bound `:8080`, which made the `@hardware`
+suite unrunnable by construction on a co-located host.
+
+On top of that, a soak harness able to run the hardware suite for hundreds of
+repetitions and report per-op failure rates (TRA-1200, TRA-1203, TRA-1206,
+TRA-1209, TRA-1226, TRA-1240, TRA-1242), with the instruments that made the
+reader-link fixes above findable rather than guessable: counted error
+notifications (TRA-1231), wedge visibility (TRA-1230), unanswered-command
+measurement (TRA-1239), and a bridge instance id that survives a restart
+(TRA-1205). `ble-mcp-test` moved 0.12.0 → 0.16.0 over the same period
+(TRA-1189, TRA-1216).
+
+Also: a schema-drift check that reports an unreadable ledger instead of omitting
+it (TRA-1218, ADR 0018), local dev database drift detection (TRA-1190),
+`just bootstrap` as one idempotent recipe for a fresh worktree (TRA-1172), a
+`CONTRIBUTING.md` quickstart that can actually succeed plus a checker that keeps
+it honest (TRA-1219), and e2e release-gate repairs (TRA-1245, TRA-1246,
+TRA-1247).
+
 ## [1.4.1] - 2026-08-13
 
 A single-purpose hotfix. No migrations; prod stays at schema version 39.
