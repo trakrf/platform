@@ -159,9 +159,11 @@ describe('tagReadToStoreTags (TRA-1150)', () => {
       { epc: 'BBB', rssi: -62, pc: 0, antennaPort: 1, timestamp: 222 },
     ]);
 
+    // pc joined the mapped shape in TRA-1251. tid and userData are on every
+    // record too, but undefined, and toEqual ignores undefined-valued keys.
     expect(mapped).toEqual([
-      { epc: 'AAA', rssi: -60, count: 1, antenna: 2, timestamp: 111, source: 'rfid' },
-      { epc: 'BBB', rssi: -62, count: 1, antenna: 1, timestamp: 222, source: 'rfid' },
+      { epc: 'AAA', rssi: -60, pc: 0, count: 1, antenna: 2, timestamp: 111, source: 'rfid' },
+      { epc: 'BBB', rssi: -62, pc: 0, count: 1, antenna: 1, timestamp: 222, source: 'rfid' },
     ]);
   });
 
@@ -185,6 +187,37 @@ describe('tagReadToStoreTags (TRA-1150)', () => {
     ]);
 
     expect(mapped, 'deduplicating here would undercount reads').toHaveLength(2);
+  });
+
+  it('carries the PC word and any memory-bank data into the store record', () => {
+    // PC is captured today and exported nowhere. It carries the EPC length,
+    // the toggle bit and AFI — all plausible things for a third-party reader
+    // to match on, and the only unambiguous way to tell a 96-bit EPC (0x3000)
+    // from a 128-bit one (0x4000) without counting hex characters.
+    const [mapped] = tagReadToStoreTags([
+      {
+        epc: 'AAA',
+        rssi: -44,
+        pc: 0x3000,
+        antennaPort: 1,
+        timestamp: 1,
+        tid: 'E2801160600002071D3C0B9A',
+        userData: 'DEADBEEF12345678'
+      }
+    ]);
+
+    expect(mapped.pc).toBe(0x3000);
+    expect(mapped.tid).toBe('E2801160600002071D3C0B9A');
+    expect(mapped.userData).toBe('DEADBEEF12345678');
+  });
+
+  it('leaves bank fields undefined when the reader returned none', () => {
+    const [mapped] = tagReadToStoreTags([
+      { epc: 'AAA', rssi: -60, pc: 0x3000, timestamp: 1 }
+    ]);
+
+    expect(mapped.tid).toBeUndefined();
+    expect(mapped.userData).toBeUndefined();
   });
 
   it('lands a whole packet in the store as a single write', () => {

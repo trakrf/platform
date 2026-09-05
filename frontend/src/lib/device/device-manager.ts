@@ -68,17 +68,31 @@ export function tagReadToStoreTags(
   tags: ReadonlyArray<{
     epc: string;
     rssi?: number;
+    pc?: number;
     antennaPort?: number;
     timestamp?: number;
+    tid?: string;
+    userData?: string;
   }>,
   now: number = Date.now()
 ): Array<Partial<TagInfo>> {
   return tags.map(tag => ({
     epc: tag.epc,
     rssi: tag.rssi,
+    // PC has always been parsed and never carried anywhere. It holds the EPC
+    // length, the toggle bit and AFI, and it is the only unambiguous way to
+    // tell a 96-bit EPC (0x3000) from a 128-bit one (0x4000) without counting
+    // hex characters off a display (TRA-1251).
+    pc: tag.pc,
     count: 1,
     antenna: tag.antennaPort ?? 1,
     timestamp: tag.timestamp ?? now,
+    // Present only when a bank read was requested and the tag answered. These
+    // keys exist on every record, undefined included — addTags relies on that
+    // being harmless, which is why it merges them explicitly rather than by
+    // spread.
+    tid: tag.tid,
+    userData: tag.userData,
     source: 'rfid' as const
   }));
 }

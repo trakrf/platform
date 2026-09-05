@@ -38,6 +38,13 @@ export interface TagInfo {
 
   description?: string;
   location?: string;
+
+  // Memory-bank data, when "capture all tag data" was on for the scan that
+  // produced this record (TRA-1251). Undefined means the bank was not read or
+  // the tag refused the read; the reader does not distinguish the two.
+  tid?: string;
+  userData?: string;
+
   source: 'scan' | 'reconciliation' | 'rfid' | 'barcode';
 
   // Tag classification (TRA-312)
@@ -334,6 +341,14 @@ export const useTagStore = create<TagState>()(
             assetIdentifier: existing.assetIdentifier ?? tag.assetIdentifier,
             description: existing.description ?? tag.description,
             location: existing.location ?? tag.location,
+            // Bank data is sticky, and deliberately not left to the spread
+            // above. Every mapped record carries tid and userData as keys —
+            // undefined when the read was refused — so a spread would let one
+            // refused re-read erase a value an earlier round had successfully
+            // obtained, with nothing to show that it happened. A bank read
+            // that succeeded once is the result we want (TRA-1251).
+            tid: tag.tid ?? existing.tid,
+            userData: tag.userData ?? existing.userData,
             // Promote stub to scanned tag
             epc: isReconStub ? epc : existing.epc,
             displayEpc,

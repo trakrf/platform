@@ -689,3 +689,59 @@ describe('TagStore - clearEnrichment (TRA-1191)', () => {
     expect(useTagStore.getState().tags).toEqual([]);
   });
 });
+
+describe('memory-bank data survives repeated reads (TRA-1251)', () => {
+  beforeEach(() => {
+    useTagStore.setState({ tags: [], _lookupQueue: new Set(), _lookupTimer: null });
+  });
+
+  const EPC = '000105000F0E01001901007D';
+
+  it('stores tid and userData from a read that carried them', () => {
+    useTagStore.getState().addTags([
+      { epc: EPC, rssi: -44, count: 1, source: 'rfid', tid: 'E28011606000', userData: 'DEADBEEF' }
+    ]);
+
+    const [tag] = useTagStore.getState().tags;
+    expect(tag.tid).toBe('E28011606000');
+    expect(tag.userData).toBe('DEADBEEF');
+  });
+
+  it('does not let a later read without bank data erase an earlier one that had it', () => {
+    // This is the point of the whole task. A bank read can succeed on one
+    // inventory round and be refused on the next — the tag moves, the round
+    // trip gets noisier, the chip declines. addTags merges with
+    // { ...existing, ...tag }, so an incoming record whose tid is undefined
+    // overwrites a good value with nothing, and nobody ever learns that a
+    // successful read was thrown away.
+    //
+    // ⚠ The keys below are written out as `undefined` DELIBERATELY. Omitting
+    // them entirely makes this test pass against the unfixed code, because a
+    // spread skips absent keys — and that is not the shape the product
+    // produces. tagReadToStoreTags maps `tid: tag.tid`, which always creates
+    // the key, undefined value and all. Reproducing the real shape is the only
+    // version of this test that means anything.
+    useTagStore.getState().addTags([
+      { epc: EPC, rssi: -44, count: 1, source: 'rfid', tid: 'E28011606000', userData: 'DEADBEEF' }
+    ]);
+    useTagStore.getState().addTags([
+      { epc: EPC, rssi: -46, count: 1, source: 'rfid', tid: undefined, userData: undefined }
+    ]);
+
+    const [tag] = useTagStore.getState().tags;
+    expect(tag.tid, 'a refused re-read must not erase a good one').toBe('E28011606000');
+    expect(tag.userData).toBe('DEADBEEF');
+    expect(tag.count, 'the read itself still counts').toBe(2);
+  });
+
+  it('lets a later read fill in bank data the first read lacked', () => {
+    useTagStore.getState().addTags([
+      { epc: EPC, rssi: -44, count: 1, source: 'rfid' }
+    ]);
+    useTagStore.getState().addTags([
+      { epc: EPC, rssi: -46, count: 1, source: 'rfid', tid: 'E28011606000' }
+    ]);
+
+    expect(useTagStore.getState().tags[0].tid).toBe('E28011606000');
+  });
+});
