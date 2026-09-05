@@ -21,10 +21,18 @@ export function generateInventoryExcel(
   const inventoryData = tags.map(tag => {
     const row: Record<string, string | number> = {
       'Asset ID': tag.assetIdentifier || '',
-      'Name': tag.assetName || tag.description || '',
-      'Description': '',
+      // Name no longer falls back to the description — see the Description
+      // column below, which used to be a hardcoded empty string.
+      'Name': tag.assetName || '',
+      'Description': tag.description || '',
       'Location': tag.locationName || tag.location || '',
       'Tag ID': tag.displayEpc || tag.epc,
+      // Capture columns (TRA-1251). Always present, blank when the scan did not
+      // capture any, so a column that is empty and a column that is missing
+      // cannot be confused for one another.
+      'PC': tag.pc != null ? `0x${tag.pc.toString(16).toUpperCase().padStart(4, '0')}` : '',
+      'TID': tag.tid || '',
+      'User Data': tag.userData || '',
       'RSSI (dBm)': tag.rssi ?? 'N/A',
       'Count': tag.count,
       'Last Seen': tag.timestamp ? new Date(tag.timestamp).toLocaleString() : 'N/A',
@@ -43,6 +51,9 @@ export function generateInventoryExcel(
     { wch: 20 }, // Description
     { wch: 20 }, // Location
     { wch: 30 }, // Tag ID
+    { wch: 8 },  // PC
+    { wch: 28 }, // TID — 6 words is 24 hex characters
+    { wch: 28 }, // User Data
     { wch: 12 }, // RSSI
     { wch: 8 },  // Count
     { wch: 20 }, // Last Seen

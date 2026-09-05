@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { generateInventoryCSV } from './excelExportUtils';
+import * as XLSX from 'xlsx';
+import { generateInventoryCSV, generateInventoryExcel } from './excelExportUtils';
 import type { TagInfo } from '../stores/tagStore';
 
 // Mock shareUtils
@@ -145,5 +146,82 @@ describe('generateInventoryCSV', () => {
       expect(fields[6]).toBe('');
       expect(fields[7]).toBe('');
     });
+  });
+});
+
+/**
+ * The xlsx download path.
+ *
+ * ⚠ This is a SEPARATE function from generateInventoryCSV, in the same file,
+ * and it carried its own copy of the same two defects — a hardcoded empty
+ * Description and a Name column falling back to the description to compensate.
+ * The CSV half was fixed first and the Excel half was missed entirely, which is
+ * exactly what an export of real scan data then showed: eight columns, no bank
+ * data. ShareModal routes 'xlsx' downloads here and only CSV to the other
+ * function, so testing one proves nothing about the other.
+ */
+describe('generateInventoryExcel', () => {
+  /**
+   * Read the Inventory sheet back out of the generated workbook.
+   *
+   * Goes through FileReader rather than Blob.arrayBuffer() because jsdom's Blob
+   * does not implement the latter usefully — it yields an empty buffer, which
+   * parses into a workbook with no rows and makes every assertion below fail
+   * with "cannot read properties of undefined" no matter what the export does.
+   */
+  async function readInventorySheet(blob: Blob): Promise<Record<string, unknown>[]> {
+    const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(blob);
+    });
+    const wb = XLSX.read(new Uint8Array(buffer), { type: 'array' });
+    return XLSX.utils.sheet_to_json(wb.Sheets['Inventory'], { defval: '' });
+  }
+
+  it('exports PC, TID and User Data', async () => {
+    const tag = makeTag({
+      pc: 0x3000,
+      tid: 'E2801160600002071D3C0B9A',
+      userData: 'DEADBEEF12345678',
+    });
+
+    const rows = await readInventorySheet(generateInventoryExcel([tag], null).blob);
+
+    expect(Object.keys(rows[0])).toEqual([
+      'Asset ID', 'Name', 'Description', 'Location', 'Tag ID',
+      'PC', 'TID', 'User Data',
+      'RSSI (dBm)', 'Count', 'Last Seen'
+    ]);
+    expect(rows[0]['PC']).toBe('0x3000');
+    expect(rows[0]['TID']).toBe('E2801160600002071D3C0B9A');
+    expect(rows[0]['User Data']).toBe('DEADBEEF12345678');
+  });
+
+  it('puts the description in the Description column, not the Name column', async () => {
+    const tag = makeTag({ assetName: undefined, description: 'From CSV' });
+
+    const rows = await readInventorySheet(generateInventoryExcel([tag], null).blob);
+
+    expect(rows[0]['Name'], 'Name must not borrow the description').toBe('');
+    expect(rows[0]['Description']).toBe('From CSV');
+  });
+
+  it('keeps Name and Description independent when both are set', async () => {
+    const tag = makeTag({ assetName: 'Laptop', description: 'Dev laptop' });
+
+    const rows = await readInventorySheet(generateInventoryExcel([tag], null).blob);
+
+    expect(rows[0]['Name']).toBe('Laptop');
+    expect(rows[0]['Description']).toBe('Dev laptop');
+  });
+
+  it('leaves the capture columns blank for a scan without them', async () => {
+    const rows = await readInventorySheet(generateInventoryExcel([makeTag()], null).blob);
+
+    expect(rows[0]['PC']).toBe('');
+    expect(rows[0]['TID']).toBe('');
+    expect(rows[0]['User Data']).toBe('');
   });
 });
