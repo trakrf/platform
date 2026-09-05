@@ -3,6 +3,7 @@ import {
   resolveModeForTab,
   hasLocateTarget,
   shouldReapplyModeForTarget,
+  shouldReapplyModeForCapture,
   tagReadToStoreTags,
   closesLocateGate,
 } from './device-manager';
@@ -120,6 +121,53 @@ describe('shouldReapplyModeForTarget (TRA-1121)', () => {
 
   it('stays quiet on any other tab, which does not care about the target', () => {
     expect(shouldReapplyModeForTarget(true, false, 'scan')).toBe(false);
+  });
+});
+
+/**
+ * TRA-1251: the capture registers are written by the INVENTORY mode-entry
+ * sequence and at no other time.
+ *
+ * Pushing settings to the worker updates readerSettings but runs no sequence,
+ * so ticking "capture all tag data" while already sitting on the Scan tab
+ * would leave INV_CFG and the TAGACC registers exactly as the last mode change
+ * left them. The setting would read as on, the scan would run, and no bank
+ * data would come back — indistinguishable from tags that have none.
+ */
+describe('shouldReapplyModeForCapture (TRA-1251)', () => {
+  const off = { captureAllTagData: false, tidWords: 6, userOffset: 0, userWords: 4 };
+
+  it('reapplies when capture is switched on', () => {
+    expect(shouldReapplyModeForCapture(off, { ...off, captureAllTagData: true })).toBe(true);
+  });
+
+  it('reapplies when capture is switched off, so the registers go back', () => {
+    expect(shouldReapplyModeForCapture({ ...off, captureAllTagData: true }, off)).toBe(true);
+  });
+
+  it.each([
+    ['tidWords', { tidWords: 2 }],
+    ['userOffset', { userOffset: 8 }],
+    ['userWords', { userWords: 0 }],
+  ])('reapplies when %s changes while capture is on', (_name, change) => {
+    const on = { ...off, captureAllTagData: true };
+    expect(shouldReapplyModeForCapture(on, { ...on, ...change })).toBe(true);
+  });
+
+  it('does not reapply when a length changes while capture is off', () => {
+    // Nothing is written in that state, so churning the reader through a mode
+    // change would cost a scan interruption for no effect.
+    expect(shouldReapplyModeForCapture(off, { ...off, tidWords: 2 })).toBe(false);
+  });
+
+  it('does not reapply when nothing capture-related moved', () => {
+    expect(shouldReapplyModeForCapture(off, { ...off })).toBe(false);
+    expect(shouldReapplyModeForCapture(off, { ...off, transmitPower: 20 })).toBe(false);
+  });
+
+  it('treats undefined settings as capture off rather than throwing', () => {
+    expect(shouldReapplyModeForCapture(undefined, undefined)).toBe(false);
+    expect(shouldReapplyModeForCapture(undefined, { captureAllTagData: true })).toBe(true);
   });
 });
 

@@ -183,6 +183,64 @@ describe('CS108 tag data capture (TRA-1251)', () => {
     expect(harness.getReaderMode()).toBe(ReaderMode.INVENTORY);
   });
 
+  it('needs a real mode change to pick up a capture toggle', { timeout: 90000 }, async () => {
+    // Pins the reason DeviceManager.reapplyModeForCapture bounces through IDLE.
+    //
+    // The capture registers are written by the mode-entry sequence, and
+    // Reader.setMode early-exits when the requested mode already equals its
+    // target. So turning capture on while already in INVENTORY and re-requesting
+    // INVENTORY writes nothing at all. This asserts that directly, because the
+    // alternative is trusting a code reading — and a no-op fix here looks
+    // exactly like a working one from the outside.
+
+    // Start clean, capture off, in INVENTORY.
+    await harness.setSettings({ rfid: { transmitPower: 30, targetEPC: '', captureAllTagData: false } });
+    await harness.waitForEvent(WorkerEventType.SETTINGS_UPDATED);
+    await harness.setMode(ReaderMode.IDLE);
+    const enter = harness.setMode(ReaderMode.INVENTORY);
+    await harness.waitForEvent(WorkerEventType.READER_STATE_CHANGED,
+      e => e.payload.readerState === ReaderState.CONNECTED);
+    await enter;
+
+    // Turn capture on and re-request the SAME mode — the early-exit path.
+    await harness.setSettings({
+      rfid: { transmitPower: 30, targetEPC: '', captureAllTagData: true, tidWords: 6, userWords: 0 }
+    });
+    await harness.waitForEvent(WorkerEventType.SETTINGS_UPDATED);
+    await harness.setMode(ReaderMode.INVENTORY);
+
+    harness.clearEvents();
+    await harness.simulateTriggerPress();
+    await harness.waitForEvent(WorkerEventType.TRIGGER_STATE_CHANGED,
+      e => e.payload.pressed === true, 8000);
+    await new Promise(r => setTimeout(r, 2000));
+    await harness.simulateTriggerRelease();
+    await harness.waitForEvent(WorkerEventType.TRIGGER_STATE_CHANGED,
+      e => e.payload.pressed === false, 8000);
+
+    const withoutBounce = (harness.getEventsByType(WorkerEventType.TAG_READ)
+      .flatMap(e => (e.payload?.tags || [])) as ScannedTag[]).filter(t => t.tid);
+    console.log(`    Re-requesting the same mode: ${withoutBounce.length} tags carried TID`);
+
+    // Now bounce through IDLE, exactly as reapplyModeForCapture does.
+    const afterBounce = await scanWith({
+      captureAllTagData: true, tidWords: 6, userOffset: 0, userWords: 0
+    });
+    const withBounce = afterBounce.filter(t => t.tid);
+    console.log(`    After bouncing through IDLE: ${withBounce.length} tags carried TID`);
+
+    expect(
+      withBounce.length,
+      'the IDLE bounce must actually deliver bank data, or this test proves nothing'
+    ).toBeGreaterThan(0);
+
+    expect(
+      withoutBounce.length,
+      'setMode early-exits on an unchanged mode, so re-requesting it must write no capture registers — ' +
+      'if this ever returns data, the bounce in reapplyModeForCapture is no longer needed'
+    ).toBe(0);
+  });
+
   it('still reads tags with capture off, unchanged', { timeout: 60000 }, async () => {
     // The other half of "off means byte-for-byte unchanged": compact mode must
     // still work after the capture path has been exercised, and must carry no
