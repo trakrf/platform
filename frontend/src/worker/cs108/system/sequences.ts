@@ -25,7 +25,14 @@ export const BATTERY_VOLTAGE_SEQUENCE: CommandSequence = [
 /**
  * IDLE Mode Sequence
  *
- * Powers down modules and enables basic reporting
+ * Powers down the RFID and barcode modules, queries the trigger position, and
+ * takes one battery reading. `buildModeSequences()` prefixes it to EVERY mode,
+ * so every one of these runs on every mode change.
+ *
+ * ⚠ It used to say "and enables basic reporting". It enables nothing, and never
+ * has — the device's own reporting is deliberately off (ADR 0019). Corrected
+ * under TRA-1247, where the old wording sent a session looking for a reporting
+ * path that does not exist.
  */
 export const IDLE_SEQUENCE: CommandSequence = [
   {
@@ -60,7 +67,31 @@ export const IDLE_SEQUENCE: CommandSequence = [
     retryDelays: [100]  // Barcode module may need retry
   },
   {
-    event: GET_TRIGGER_STATE  // Check if trigger is already pressed on connect
+    // ⚠ Its answer is NOT relied on, and this comment used to claim it was:
+    // "Check if trigger is already pressed on connect". That states intent and
+    // reads as observed behaviour. Per Mike the polled trigger notification
+    // does not work as advertised on the firmware in hand (SiLabs 1.0.15 /
+    // BT 1.0.17 / RFID 2.6.41) and was tried and abandoned; the trigger level
+    // is carried by the 0xA102/0xA103 edges instead. Corrected under TRA-1247.
+    //
+    // Two things follow, neither settled here because both need hardware:
+    //
+    //   - If 0xA001 never answers, the "operator already squeezing the trigger
+    //     as the reader connects" case is a GAP, not coverage. Nothing else
+    //     catches it: with no edge to observe, `triggerState` stays false until
+    //     they let go and press again.
+    //   - This step sits at position 3 of 4 in the idle prefix, so even a
+    //     working answer would describe the trigger at the START of bring-up,
+    //     while convergence consumes it only after the firmware config, power
+    //     on, transmit power, identity reads and mask write.
+    //
+    // The experiment that decides whether this command stays: send 0xA008
+    // (START_TRIGGER_REPORTING) once during bring-up, then 0xA001. An answer
+    // makes the already-held case fixable with one command; silence makes this
+    // step dead weight on every mode change and it should come out with this
+    // comment. Adding 0xA008 permanently would reverse ADR 0019, so treat that
+    // as an experiment, not a fix.
+    event: GET_TRIGGER_STATE
   },
   ...BATTERY_VOLTAGE_SEQUENCE,
   // TODO: replace automated battery reporting with internal timer based GET_BATTERY_VOLTAGE updates

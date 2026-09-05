@@ -111,6 +111,21 @@ export const GET_TRIGGER_STATE: CS108Event<ScalarPayload> = {
   description: 'Get trigger state (0=released, 1=pressed)'
 };
 
+// =============================================================================
+// DEVICE AUTO-REPORTING — DEFINED, MAPPED, AND DELIBERATELY NEVER SENT
+// =============================================================================
+//
+// The four commands below (0xA002, 0xA003, 0xA008, 0xA009) have no call site
+// anywhere in the worker. That is a DECISION, recorded in
+// `docs/adr/0019-periodic-device-state-is-polled-by-the-host-not-pushed-by-the-device.md`,
+// not an omission — periodic device state is polled by the host. Battery is
+// read on a host timer (`reader.ts` + `BATTERY_VOLTAGE_SEQUENCE`) and the
+// trigger is carried by the 0xA102/0xA103 edges.
+//
+// Said here because the obvious reading of an unsent command is "somebody
+// forgot 0xA008", and TRA-1247 nearly filed exactly that. Adding a call site
+// reverses ADR 0019; read it first, including its firmware-scoped revisit
+// condition.
 export const START_BATTERY_REPORTING: CS108Event = {
   name: 'START_BATTERY_REPORTING',
   eventCode: 0xA002,

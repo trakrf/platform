@@ -40,18 +40,30 @@ const NOTIFICATION_DELIVERY_TIMEOUT_MS = 1000;
  *
  * ...with the mirror-image branch requiring SCANNING for a release.
  *
- * ⚠ A dropped PRESS is not recoverable in a test, and that asymmetry is the
- * reason this constant exists. A real thumb survives it: the trigger LEVEL
- * stays asserted, so `convergeToTriggerState()` reconciles it the moment the
- * reader settles. An INJECTED press cannot — the state reverts to false ~500ms
- * later because no physical switch is held, so by the time the reader settles
- * there is no held trigger left to reconcile and the scan never starts.
+ * ⚠ A dropped PRESS costs a test far more than a dropped RELEASE, and that
+ * asymmetry is the reason this constant exists. A dropped press starts no scan
+ * NOW: the edge is discarded and only `convergeToTriggerState()` can start one,
+ * once the reader settles — which for Locate is up to ~3.7s away (TRA-1225).
+ * Waiting for the honouring state first removes that wait from every rep.
  *
- * So "press and hope" is a coin flip whose odds are set by whatever the reader
- * happened to be doing. Measured on 2026-09-02: 48 of 200 reps of
- * `locate.spec.ts` (24.0%) failed exactly this way, every one of them showing
- * `readerState: Busy` / `status: Idle` for the full sample window. The product
- * was correct in all 48. See TRA-1245, and TRA-1080 for the same trap in 2026-07.
+ * ⚠ This docblock used to say something stronger and WRONG, corrected under
+ * TRA-1247: that an injected press "reverts to false ~500ms later because no
+ * physical switch is held", so a dropped edge could never be reconciled. There
+ * is no such mechanism. `triggerState` is a host-side latch written at
+ * `reader.ts:179` and on disconnect, with no timer between them, and the device
+ * pushes nothing unbidden (ADR 0019). An injected level is exactly as durable
+ * as a physical one. See `a trigger notification arriving while BUSY` in
+ * `src/worker/cs108/reader.test.ts`, which holds a latched level past 750ms and
+ * watches convergence act on it. The ~500ms was almost certainly this file's
+ * own confirmation window read back as a property of the device.
+ *
+ * The gate stays regardless, on its measurement rather than on that story:
+ * 48 of 200 reps of `locate.spec.ts` (24.0%) failed on 2026-09-02, every one
+ * showing `readerState: Busy` / `status: Idle` for the full sample window, and
+ * the gate took that to 0/101. What those reps were short of was the
+ * convergence that arrives at the END of bring-up, after the sample window has
+ * closed. The product was correct in all 48. See TRA-1245, and TRA-1080 for the
+ * same trap in 2026-07.
  *
  * ⚠ A dropped RELEASE does not share that shape, and reading this map as though
  * it did is what #647 got wrong. See `waitForReaderToAcceptTrigger` below: a
@@ -79,6 +91,25 @@ const TRANSIENT_STATES: readonly string[] = [ReaderState.BUSY, ReaderState.CONNE
  * It is a wedge detector, not a race margin.
  */
 export const TRIGGER_HONOUR_TIMEOUT_MS = 15000;
+
+/**
+ * How long to wait for the device store to reflect an injected trigger packet.
+ *
+ * Was 500ms, and 500ms could not cover what this ticket is about: a press that
+ * lands during bring-up is acted on by `convergeToTriggerState()` only once the
+ * reader settles, and the Locate mask write alone measured ~3.7s (TRA-1225).
+ *
+ * 5000 rather than the 15s of `TRIGGER_HONOUR_TIMEOUT_MS`, deliberately, so the
+ * bound carries a product requirement — Mike, on TRA-1247:
+ *
+ *     "if a config sequence is taking 5 seconds that's gonna frustrate users
+ *      and that's something we would want to surface as a defect"
+ *
+ * A 15s bound would quietly absorb exactly that. Expect this to fire: at ~3.7s
+ * Locate has barely a second of headroom, and the first thing it surfaces will
+ * probably be the mask write. That is the defect, not a flaky new test.
+ */
+export const TRIGGER_CONFIRMATION_TIMEOUT_MS = 5000;
 
 /** How often to re-read the reader state while waiting. */
 const HONOUR_POLL_INTERVAL_MS = 50;
@@ -110,11 +141,15 @@ async function waitForSettledReaderState(page: Page, timeoutMs: number): Promise
  *
  * The two actions are NOT symmetric, and #647 shipped them as though they were.
  *
- * A PRESS has one honouring state and no recovery: every other state drops the
- * edge with a `logger.debug`, and an injected level cannot survive to be
- * reconciled afterwards. So the only sound move is to wait for CONNECTED and
- * refuse if it never comes. That gate took `locate.spec.ts` from 24.0% to 0/101
- * and is deliberately untouched here.
+ * A PRESS has one honouring state: every other state drops the edge with a
+ * `logger.debug` and leaves the scan to `convergeToTriggerState()`, which runs
+ * only once bring-up finishes — up to ~3.7s later for Locate (TRA-1225), which
+ * is longer than the windows the specs then sample. So the sound move is to
+ * wait for CONNECTED and refuse if it never comes. That gate took
+ * `locate.spec.ts` from 24.0% to 0/101 and is deliberately untouched here.
+ * (Its original justification — that an injected level could not survive to be
+ * reconciled — was wrong; see `STATE_THAT_HONOURS` above. The gate is kept on
+ * its measurement, not on that story.)
  *
  * A RELEASE is a no-op whenever no scan is running — `reader.ts:237` drops it
  * with a `logger.debug` and nothing is left undone, because there was nothing
@@ -175,9 +210,10 @@ export async function waitForReaderToAcceptTrigger(
       throw new Error(
         `TRIGGER_NOT_HONOURABLE: waited ${timeoutMs}ms for the reader to accept a ` +
           `${action}, and it was still "${observed}" (needs "${wanted}"). ` +
-          'The edge would have been dropped with only a logger.debug, and an ' +
-          'injected trigger cannot hold its level long enough to be reconciled ' +
-          'afterwards — so the scan would never have started. See TRA-1245.'
+          'The edge would have been dropped with only a logger.debug, leaving ' +
+          'the scan to start whenever convergence next runs rather than now. ' +
+          'A reader that never reaches the honouring state is wedged. ' +
+          'See TRA-1245.'
       );
     }
     await page.waitForTimeout(HONOUR_POLL_INTERVAL_MS);
@@ -313,22 +349,78 @@ async function injectTriggerPacket(
 }
 
 /**
+ * Poll the device store until the trigger level matches, or the budget expires.
+ *
+ * A condition rather than a duration: the old form ran a fixed 500ms wall and
+ * then read the state once more, so a level that landed at 501ms was reported
+ * as never having landed at all.
+ */
+async function waitForTriggerLevel(
+  page: Page,
+  desiredState: boolean,
+  timeoutMs: number
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if ((await getTriggerState(page)) === desiredState) return true;
+    if (Date.now() >= deadline) return false;
+    await page.waitForTimeout(HONOUR_POLL_INTERVAL_MS);
+  }
+}
+
+/**
+ * Say what actually ran out, given where the reader was when it did.
+ *
+ * A timeout that misreports what it measured is how TRA-1247's whole detour
+ * started: `STATE_NOT_UPDATED` named the store, when the thing that had not
+ * finished was the reader's bring-up.
+ */
+function describeConfirmationTimeout(
+  action: 'press' | 'release',
+  readerState: string,
+  timeoutMs: number,
+  initialState: boolean,
+  desiredState: boolean
+): string {
+  if (TRANSIENT_STATES.includes(readerState)) {
+    return (
+      `BRING_UP_INCOMPLETE: bring-up did not complete within ${timeoutMs}ms — ` +
+      `the reader was still "${readerState}" after the ${action} was delivered. ` +
+      'The trigger LEVEL is latched regardless, so the press is not lost; what ' +
+      'exceeded the budget is the config sequence the reader is still running. ' +
+      'A sequence this long is a product defect worth surfacing, not a flaky ' +
+      'test. See TRA-1247 and TRA-1225.'
+    );
+  }
+  return (
+    `STATE_NOT_UPDATED: the store did not move from ${initialState} to ` +
+    `${desiredState} within ${timeoutMs}ms, with the reader settled at ` +
+    `"${readerState}". The packet reached the transport, so the break is ` +
+    'between the worker notification handler and deviceStore.'
+  );
+}
+
+/**
  * Drive one trigger transition to completion: inject, confirm the packet
  * reached the transport, then wait for the device store to reflect it.
  *
  * @param page - Playwright page
  * @param action - Which transition to simulate
  * @param maxRetries - Maximum number of retry attempts (default 3)
+ * @param honourTimeoutMs - How long to wait for a state that will act on the edge
+ * @param confirmTimeoutMs - How long to wait for the store to reflect the packet
  */
 async function simulateTrigger(
   page: Page,
   action: 'press' | 'release',
   maxRetries: number = 3,
-  honourTimeoutMs: number = TRIGGER_HONOUR_TIMEOUT_MS
+  honourTimeoutMs: number = TRIGGER_HONOUR_TIMEOUT_MS,
+  confirmTimeoutMs: number = TRIGGER_CONFIRMATION_TIMEOUT_MS
 ): Promise<{ success: boolean; message: string; triggerState: boolean }> {
   const packet = action === 'press' ? cs108TriggerPressPacket : cs108TriggerReleasePacket;
   const desiredState = action === 'press';
   const initialState = await getTriggerState(page);
+  let lastTimeoutReason = '';
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     console.log(`[Trigger] ${action} attempt ${attempt}/${maxRetries}`);
@@ -364,24 +456,23 @@ async function simulateTrigger(
 
     console.log('[Trigger] Event dispatch verified - data reached transport layer');
 
-    // Wait up to 500ms for the store to catch up with the injected packet.
-    const startTime = Date.now();
-    while (Date.now() - startTime < 500) {
-      const triggerState = await getTriggerState(page);
-      if (triggerState === desiredState) {
-        console.log(`[Trigger] ${action} confirmed - state changed from`, initialState, 'to', triggerState);
-        return {
-          success: true,
-          message: `STATE_UPDATED: Trigger ${action} successful and state confirmed`,
-          triggerState: desiredState
-        };
-      }
-      await page.waitForTimeout(50);
+    if (await waitForTriggerLevel(page, desiredState, confirmTimeoutMs)) {
+      console.log(`[Trigger] ${action} confirmed - state changed from`, initialState, 'to', desiredState);
+      return {
+        success: true,
+        message: `STATE_UPDATED: Trigger ${action} successful and state confirmed`,
+        triggerState: desiredState
+      };
     }
 
-    const finalState = await getTriggerState(page);
-    console.warn(`[Trigger] State did not update on attempt ${attempt}/${maxRetries}`);
-    console.warn('[Trigger] Initial state:', initialState, '| Final state:', finalState);
+    lastTimeoutReason = describeConfirmationTimeout(
+      action,
+      await getReaderStateName(page),
+      confirmTimeoutMs,
+      initialState,
+      desiredState
+    );
+    console.warn(`[Trigger] attempt ${attempt}/${maxRetries}: ${lastTimeoutReason}`);
 
     if (attempt < maxRetries) {
       console.log(`[Trigger] Retrying ${action} simulation...`);
@@ -392,7 +483,7 @@ async function simulateTrigger(
   const finalState = await getTriggerState(page);
   return {
     success: false,
-    message: `STATE_NOT_UPDATED: All ${maxRetries} attempts failed. Trigger state did not change from ${initialState} to ${desiredState}. Check deviceManager notification handler.`,
+    message: `All ${maxRetries} attempts failed. ${lastTimeoutReason}`,
     triggerState: finalState
   };
 }
@@ -406,9 +497,10 @@ async function simulateTrigger(
 export async function simulateTriggerPress(
   page: Page,
   maxRetries: number = 3,
-  honourTimeoutMs: number = TRIGGER_HONOUR_TIMEOUT_MS
+  honourTimeoutMs: number = TRIGGER_HONOUR_TIMEOUT_MS,
+  confirmTimeoutMs: number = TRIGGER_CONFIRMATION_TIMEOUT_MS
 ): Promise<{ success: boolean; message: string; triggerState: boolean }> {
-  return simulateTrigger(page, 'press', maxRetries, honourTimeoutMs);
+  return simulateTrigger(page, 'press', maxRetries, honourTimeoutMs, confirmTimeoutMs);
 }
 
 /**
@@ -420,9 +512,10 @@ export async function simulateTriggerPress(
 export async function simulateTriggerRelease(
   page: Page,
   maxRetries: number = 3,
-  honourTimeoutMs: number = TRIGGER_HONOUR_TIMEOUT_MS
+  honourTimeoutMs: number = TRIGGER_HONOUR_TIMEOUT_MS,
+  confirmTimeoutMs: number = TRIGGER_CONFIRMATION_TIMEOUT_MS
 ): Promise<{ success: boolean; message: string; triggerState: boolean }> {
-  return simulateTrigger(page, 'release', maxRetries, honourTimeoutMs);
+  return simulateTrigger(page, 'release', maxRetries, honourTimeoutMs, confirmTimeoutMs);
 }
 
 /**

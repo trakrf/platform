@@ -55,7 +55,15 @@ vi.mock('./command.js', async (importOriginal) => ({
       runExclusive: vi.fn(async (body: (run: unknown) => Promise<unknown>) => body({
         command: (...args: unknown[]) => mockManager.executeCommand(...args),
         sequence: (...args: unknown[]) => mockManager.executeSequence(...args)
-      }))
+      })),
+
+      // The reader's own state choke point, handed back so a test can put the
+      // reader in a state and hold it there. Reaching it any other way means
+      // assigning `readerState` directly, which bypasses the CONNECTED branch
+      // that schedules `convergeToTriggerState()` — so a test written that way
+      // can observe a level being latched but never the convergence that acts
+      // on it. TRA-1247.
+      __stateContext: stateContext
     };
     return mockManager;
   }),
@@ -1599,6 +1607,117 @@ describe('CS108Reader', () => {
       const starts = (commandManagerMock.executeSequence as Mock).mock.calls
         .filter(call => call[0] === RFID_START_SEQUENCE);
       expect(starts).toHaveLength(1);
+    });
+  });
+
+  /**
+   * TRA-1247's discriminator, and the reason it had to be settled before the
+   * e2e harness timeout was touched.
+   *
+   * The convergence tests above assign `triggerState` directly, so they assume
+   * the level is recorded while the reader is BUSY without ever showing it.
+   * Two readings of the 2026-09-02 arm (48/200 reps failing with
+   * `readerState: Busy` / `status: Idle`) were open on that assumption:
+   *
+   *   - the level IS recorded, only the edge is dropped — the press was never
+   *     lost, and the harness gave up before convergence could act on it;
+   *   - the notification does not reach the worker during BUSY at all — in
+   *     which case no harness timeout helps and the fix is elsewhere.
+   *
+   * These tests answer it. The routing half — that `NotificationRouter` emits
+   * the event whatever the reader state — is in
+   * `notification/system.test.ts`.
+   */
+  describe('a trigger notification arriving while BUSY', () => {
+    /** See the convergence block above: the backstop needs several macrotasks. */
+    const settleConvergence = async () => {
+      for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0));
+    };
+
+    beforeEach(async () => {
+      await reader.connect();
+      await reader.setMode(ReaderMode.INVENTORY);
+      postMessageSpy.mockClear();
+    });
+
+    /**
+     * Hold the reader BUSY through the same choke point the product uses, and
+     * hand back the function that lets bring-up finish.
+     */
+    const holdBusy = (): (() => void) => {
+      const stateContext = (commandManagerMock as unknown as {
+        __stateContext: { setReaderState: (state: string) => void };
+      }).__stateContext;
+      stateContext.setReaderState(ReaderState.BUSY);
+      return () => stateContext.setReaderState(ReaderState.CONNECTED);
+    };
+
+    it('records the level and tells the UI, without starting a scan', async () => {
+      const finishBringUp = holdBusy();
+      expect(reader.getState()).toBe(ReaderState.BUSY);
+      (commandManagerMock.executeSequence as Mock).mockClear();
+
+      await (reader as any).handleNotificationEvent({
+        type: 'TRIGGER_STATE_CHANGED',
+        payload: { pressed: true }
+      });
+
+      // The level is latched even though the edge was dropped. This is the
+      // limb the discriminator was asking about: the press is not lost.
+      expect((reader as any).triggerState).toBe(true);
+      // And the store learns immediately, which is what the e2e helper polls.
+      expect(postMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'TRIGGER_STATE_CHANGED',
+        payload: { pressed: true }
+      }));
+      // The edge itself does nothing, by design.
+      expect(commandManagerMock.executeSequence).not.toHaveBeenCalled();
+
+      finishBringUp();
+    });
+
+    it('starts the scan when the reader settles, not when the press arrives', async () => {
+      const finishBringUp = holdBusy();
+
+      await (reader as any).handleNotificationEvent({
+        type: 'TRIGGER_STATE_CHANGED',
+        payload: { pressed: true }
+      });
+      expect(reader.getState()).toBe(ReaderState.BUSY);
+
+      finishBringUp();
+      await settleConvergence();
+
+      expect(reader.getState()).toBe(ReaderState.SCANNING);
+    });
+
+    /**
+     * The mechanism claim ADR 0016 rests on, tested rather than asserted.
+     *
+     * 0016 says an injected press "reverts to `false` roughly 500ms later,
+     * because no physical switch is held and the device's own notifications
+     * win". Nothing host-side does that: `triggerState` moves at reader.ts:179
+     * and on disconnect, and there is no timer between them. Time alone does
+     * not revoke a latched level, so the level an injected press asserts is
+     * exactly as durable as the level a physical one asserts.
+     */
+    it('keeps the level latched while the reader stays BUSY — no timer revokes it', async () => {
+      const finishBringUp = holdBusy();
+
+      await (reader as any).handleNotificationEvent({
+        type: 'TRIGGER_STATE_CHANGED',
+        payload: { pressed: true }
+      });
+
+      // Well past the ~500ms the ADR named.
+      await new Promise(resolve => setTimeout(resolve, 750));
+
+      expect((reader as any).triggerState).toBe(true);
+      expect(reader.getState()).toBe(ReaderState.BUSY);
+
+      finishBringUp();
+      await settleConvergence();
+      expect(reader.getState()).toBe(ReaderState.SCANNING);
     });
   });
 
