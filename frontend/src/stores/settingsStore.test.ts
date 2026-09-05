@@ -14,6 +14,13 @@ describe('SettingsStore', () => {
         transmitPower: 30,
         session: 1,
         targetEPC: '',
+        // Mirrors the store's own initial state (TRA-1251). This block resets
+        // rfid wholesale, so a field missing here reads as undefined no matter
+        // what the store defaults to.
+        captureAllTagData: false,
+        tidWords: 6,
+        userOffset: 0,
+        userWords: 4,
       },
       system: {
         batteryCheckInterval: 60,
@@ -171,6 +178,69 @@ describe('SettingsStore', () => {
 
       // The updateSettings would be called via the dynamic import
       // In a real test with proper mocking, we'd verify this
+    });
+  });
+
+  describe('tag data capture (TRA-1251)', () => {
+    it('is off by default, so ordinary scanning is unaffected', () => {
+      // Capture drops inventory out of compact mode and into normal mode with
+      // a tag_delay of 30. That is a real throughput cost, so nobody gets it
+      // without asking.
+      expect(useSettingsStore.getState().rfid?.captureAllTagData).toBeFalsy();
+    });
+
+    it('persists the switch', () => {
+      useSettingsStore.getState().setCaptureAllTagData(true);
+
+      expect(useSettingsStore.getState().rfid?.captureAllTagData).toBe(true);
+      expect(localStorage.getItem('rfid_capture_all_tag_data')).toBe('true');
+    });
+
+    it('defaults the bank read to 6 words of TID and 4 of USER', () => {
+      useSettingsStore.getState().setCaptureAllTagData(true);
+
+      expect(useSettingsStore.getState().rfid?.tidWords).toBe(6);
+      expect(useSettingsStore.getState().rfid?.userWords).toBe(4);
+      expect(useSettingsStore.getState().rfid?.userOffset).toBe(0);
+    });
+
+    it('accepts 0 USER words, which means read TID only', () => {
+      // This is the escape hatch for a chip with no USER bank. It must survive
+      // any clamping, because clamping it up to 1 would restore the two-bank
+      // read that was failing in the first place.
+      useSettingsStore.getState().setUserWords(0);
+      expect(useSettingsStore.getState().rfid?.userWords).toBe(0);
+    });
+
+    it('clamps the word counts to what the register can hold', () => {
+      // TAGACC_CNT gives each length 8 bits, and the spec caps a read at 255
+      // words. A wider value would be masked, silently reading a different
+      // number of words than the operator asked for.
+      useSettingsStore.getState().setTidWords(9999);
+      expect(useSettingsStore.getState().rfid?.tidWords).toBe(255);
+
+      useSettingsStore.getState().setTidWords(0);
+      expect(
+        useSettingsStore.getState().rfid?.tidWords,
+        'zero words of TID is not a read at all'
+      ).toBe(1);
+
+      useSettingsStore.getState().setUserWords(9999);
+      expect(useSettingsStore.getState().rfid?.userWords).toBe(255);
+    });
+
+    it('clamps the USER offset to the 16 bits ptr2 gives it', () => {
+      useSettingsStore.getState().setUserOffset(99999);
+      expect(useSettingsStore.getState().rfid?.userOffset).toBe(65535);
+
+      useSettingsStore.getState().setUserOffset(-5);
+      expect(useSettingsStore.getState().rfid?.userOffset).toBe(0);
+    });
+
+    it('ignores a non-numeric word count rather than writing NaN to a register', () => {
+      useSettingsStore.getState().setTidWords(6);
+      useSettingsStore.getState().setTidWords(Number.NaN);
+      expect(useSettingsStore.getState().rfid?.tidWords).toBe(6);
     });
   });
 });

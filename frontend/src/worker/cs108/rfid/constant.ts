@@ -101,6 +101,77 @@ export enum TAG_MEMORY_BANK {
   TID = 0x02,
   USER = 0x03
 }
+
+/**
+ * Build TAGACC_BANK (0x0A02) — which memory bank each tag access reads.
+ *
+ * `bank2` is only meaningful when INV_CFG's `tag_read` is 2. The vendor spec
+ * says it "must be set to 0" otherwise, which is why it defaults to Reserved
+ * rather than being left to the caller to remember.
+ *
+ * @param bank - First bank (bits 1:0)
+ * @param bank2 - Second bank (bits 3:2), tag_read = 2 only
+ */
+export function buildTagaccBank({
+  bank = TAG_MEMORY_BANK.RESERVED,
+  bank2 = TAG_MEMORY_BANK.RESERVED
+}: {
+  bank?: number;
+  bank2?: number;
+} = {}): number {
+  return (
+    (bank & 0x03) |            // bits 1:0
+    ((bank2 & 0x03) << 2)      // bits 3:2
+  ) >>> 0;
+}
+
+/**
+ * Build TAGACC_PTR (0x0A03) — word offset into each bank.
+ *
+ * ⚠ This register changes shape with INV_CFG's `tag_read`. At `tag_read` 0 it
+ * is a flat 32-bit offset; at 1 or 2 it splits into two 16-bit halves. This
+ * builder packs the SPLIT form, so it is only correct on the tag_read path.
+ *
+ * @param ptr - First bank offset (bits 15:0)
+ * @param ptr2 - Second bank offset (bits 31:16)
+ */
+export function buildTagaccPtr({
+  ptr = 0,
+  ptr2 = 0
+}: {
+  ptr?: number;
+  ptr2?: number;
+} = {}): number {
+  return (
+    (ptr & 0xFFFF) |             // bits 15:0
+    ((ptr2 & 0xFFFF) << 16)      // bits 31:16
+  ) >>> 0;
+}
+
+/**
+ * Build TAGACC_CNT (0x0A04) — how many 16-bit words to read from each bank.
+ *
+ * Read length maxes at 255 words per the spec, and zero is explicitly NOT
+ * supported as a "whole bank" shorthand — a zero first length means no read.
+ * Each field is masked to 8 bits so an over-long count cannot bleed into its
+ * neighbour and silently read the wrong number of words from the wrong bank.
+ *
+ * @param length - Words from the first bank (bits 7:0)
+ * @param length2 - Words from the second bank (bits 15:8), tag_read = 2 only
+ */
+export function buildTagaccCnt({
+  length = 0,
+  length2 = 0
+}: {
+  length?: number;
+  length2?: number;
+} = {}): number {
+  return (
+    (length & 0xFF) |            // bits 7:0
+    ((length2 & 0xFF) << 8)      // bits 15:8
+  ) >>> 0;
+}
+
 /**
  * TAGMSK_DESC_CFG values (from vendor spec C.5)
  */

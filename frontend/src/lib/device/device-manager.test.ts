@@ -3,6 +3,7 @@ import {
   resolveModeForTab,
   hasLocateTarget,
   shouldReapplyModeForTarget,
+  shouldReapplyModeForCapture,
   tagReadToStoreTags,
   closesLocateGate,
 } from './device-manager';
@@ -124,6 +125,53 @@ describe('shouldReapplyModeForTarget (TRA-1121)', () => {
 });
 
 /**
+ * TRA-1251: the capture registers are written by the INVENTORY mode-entry
+ * sequence and at no other time.
+ *
+ * Pushing settings to the worker updates readerSettings but runs no sequence,
+ * so ticking "capture all tag data" while already sitting on the Scan tab
+ * would leave INV_CFG and the TAGACC registers exactly as the last mode change
+ * left them. The setting would read as on, the scan would run, and no bank
+ * data would come back — indistinguishable from tags that have none.
+ */
+describe('shouldReapplyModeForCapture (TRA-1251)', () => {
+  const off = { captureAllTagData: false, tidWords: 6, userOffset: 0, userWords: 4 };
+
+  it('reapplies when capture is switched on', () => {
+    expect(shouldReapplyModeForCapture(off, { ...off, captureAllTagData: true })).toBe(true);
+  });
+
+  it('reapplies when capture is switched off, so the registers go back', () => {
+    expect(shouldReapplyModeForCapture({ ...off, captureAllTagData: true }, off)).toBe(true);
+  });
+
+  it.each([
+    ['tidWords', { tidWords: 2 }],
+    ['userOffset', { userOffset: 8 }],
+    ['userWords', { userWords: 0 }],
+  ])('reapplies when %s changes while capture is on', (_name, change) => {
+    const on = { ...off, captureAllTagData: true };
+    expect(shouldReapplyModeForCapture(on, { ...on, ...change })).toBe(true);
+  });
+
+  it('does not reapply when a length changes while capture is off', () => {
+    // Nothing is written in that state, so churning the reader through a mode
+    // change would cost a scan interruption for no effect.
+    expect(shouldReapplyModeForCapture(off, { ...off, tidWords: 2 })).toBe(false);
+  });
+
+  it('does not reapply when nothing capture-related moved', () => {
+    expect(shouldReapplyModeForCapture(off, { ...off })).toBe(false);
+    expect(shouldReapplyModeForCapture(off, { ...off, transmitPower: 20 })).toBe(false);
+  });
+
+  it('treats undefined settings as capture off rather than throwing', () => {
+    expect(shouldReapplyModeForCapture(undefined, undefined)).toBe(false);
+    expect(shouldReapplyModeForCapture(undefined, { captureAllTagData: true })).toBe(true);
+  });
+});
+
+/**
  * TRA-1171: the trigger edge closes the locate release gate, and only ever
  * closes it. The asymmetry is the whole point and is easy to "tidy" away into
  * `setSearchActive(pressed)`, which would be wrong in both directions.
@@ -159,9 +207,11 @@ describe('tagReadToStoreTags (TRA-1150)', () => {
       { epc: 'BBB', rssi: -62, pc: 0, antennaPort: 1, timestamp: 222 },
     ]);
 
+    // pc joined the mapped shape in TRA-1251. tid and userData are on every
+    // record too, but undefined, and toEqual ignores undefined-valued keys.
     expect(mapped).toEqual([
-      { epc: 'AAA', rssi: -60, count: 1, antenna: 2, timestamp: 111, source: 'rfid' },
-      { epc: 'BBB', rssi: -62, count: 1, antenna: 1, timestamp: 222, source: 'rfid' },
+      { epc: 'AAA', rssi: -60, pc: 0, count: 1, antenna: 2, timestamp: 111, source: 'rfid' },
+      { epc: 'BBB', rssi: -62, pc: 0, count: 1, antenna: 1, timestamp: 222, source: 'rfid' },
     ]);
   });
 
@@ -185,6 +235,37 @@ describe('tagReadToStoreTags (TRA-1150)', () => {
     ]);
 
     expect(mapped, 'deduplicating here would undercount reads').toHaveLength(2);
+  });
+
+  it('carries the PC word and any memory-bank data into the store record', () => {
+    // PC is captured today and exported nowhere. It carries the EPC length,
+    // the toggle bit and AFI — all plausible things for a third-party reader
+    // to match on, and the only unambiguous way to tell a 96-bit EPC (0x3000)
+    // from a 128-bit one (0x4000) without counting hex characters.
+    const [mapped] = tagReadToStoreTags([
+      {
+        epc: 'AAA',
+        rssi: -44,
+        pc: 0x3000,
+        antennaPort: 1,
+        timestamp: 1,
+        tid: 'E2801160600002071D3C0B9A',
+        userData: 'DEADBEEF12345678'
+      }
+    ]);
+
+    expect(mapped.pc).toBe(0x3000);
+    expect(mapped.tid).toBe('E2801160600002071D3C0B9A');
+    expect(mapped.userData).toBe('DEADBEEF12345678');
+  });
+
+  it('leaves bank fields undefined when the reader returned none', () => {
+    const [mapped] = tagReadToStoreTags([
+      { epc: 'AAA', rssi: -60, pc: 0x3000, timestamp: 1 }
+    ]);
+
+    expect(mapped.tid).toBeUndefined();
+    expect(mapped.userData).toBeUndefined();
   });
 
   it('lands a whole packet in the store as a single write', () => {

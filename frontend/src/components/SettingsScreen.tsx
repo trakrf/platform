@@ -34,8 +34,23 @@ export default function SettingsScreen() {
   const [workerLogLevel, setLocalWorkerLogLevel] = useState(useSettingsStore.getState().system?.workerLogLevel || 'info');
   const [batteryCheckInterval, setLocalBatteryCheckInterval] = useState(useSettingsStore.getState().system?.batteryCheckInterval || 60);
 
+  // Tag data capture (TRA-1251). userWords uses ?? rather than || because 0 is
+  // a meaningful value here — it means read TID only.
+  const [captureAllTagData, setLocalCaptureAllTagData] = useState(useSettingsStore.getState().rfid?.captureAllTagData ?? false);
+  const [tidWords, setLocalTidWords] = useState(useSettingsStore.getState().rfid?.tidWords ?? 6);
+  const [userOffset, setLocalUserOffset] = useState(useSettingsStore.getState().rfid?.userOffset ?? 0);
+  const [userWords, setLocalUserWords] = useState(useSettingsStore.getState().rfid?.userWords ?? 4);
+
   // Get setter functions from stores
-  const { setTransmitPower, setWorkerLogLevel, setBatteryCheckInterval } = useSettingsStore.getState();
+  const {
+    setTransmitPower,
+    setWorkerLogLevel,
+    setBatteryCheckInterval,
+    setCaptureAllTagData,
+    setTidWords,
+    setUserOffset,
+    setUserWords
+  } = useSettingsStore.getState();
   const { connect, disconnect } = useDeviceStore.getState();
   // Removed inventoryRunning - using readerState === ReaderState.SCANNING instead
   
@@ -54,6 +69,10 @@ export default function SettingsScreen() {
       setLocalRfPower(state.rfid?.transmitPower ?? 30);
       setLocalWorkerLogLevel(state.system?.workerLogLevel || 'info');
       setLocalBatteryCheckInterval(state.system?.batteryCheckInterval || 60);
+      setLocalCaptureAllTagData(state.rfid?.captureAllTagData ?? false);
+      setLocalTidWords(state.rfid?.tidWords ?? 6);
+      setLocalUserOffset(state.rfid?.userOffset ?? 0);
+      setLocalUserWords(state.rfid?.userWords ?? 4);
     });
     
     // Cleanup subscriptions
@@ -327,6 +346,100 @@ export default function SettingsScreen() {
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                 How often to check battery level when idle. Set to 0 to disable. Frequency doubles when battery is below 20%.
               </p>
+            </div>
+
+            {/* Capture all tag data (TRA-1251) */}
+            <div>
+              <label className="flex items-start cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={captureAllTagData}
+                  onChange={(e) => setCaptureAllTagData(e.target.checked)}
+                  className="mt-1 w-4 h-4 text-blue-600 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500"
+                />
+                <span className="ml-3">
+                  <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                    Capture all tag data
+                  </span>
+                  <span className="block text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Also read each tag&apos;s TID and USER memory during a scan, and include
+                    them in the export. Measured against a dense stack, this finds roughly
+                    60% as many tags in the same time — nothing is lost, it just accumulates
+                    slower, so hold the trigger longer or make several passes. Leave it off
+                    for ordinary inventory.
+                  </span>
+                </span>
+              </label>
+
+              {captureAllTagData && (
+                <div className="mt-4 pl-7 space-y-4">
+                  <div>
+                    <label
+                      htmlFor="tid-words"
+                      className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2"
+                    >
+                      TID words
+                    </label>
+                    <input
+                      id="tid-words"
+                      type="number"
+                      min="1"
+                      max="255"
+                      value={tidWords}
+                      onChange={(e) => setTidWords(parseInt(e.target.value, 10))}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                      16-bit words of TID to read. 6 covers a chip serial; reduce it to 2 if
+                      reads come back empty, since not every chip carries more than that.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="user-offset"
+                      className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2"
+                    >
+                      USER offset
+                    </label>
+                    <input
+                      id="user-offset"
+                      type="number"
+                      min="0"
+                      max="65535"
+                      value={userOffset}
+                      onChange={(e) => setUserOffset(parseInt(e.target.value, 10))}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                      Word offset to start reading USER memory from.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="user-words"
+                      className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2"
+                    >
+                      USER words
+                    </label>
+                    <input
+                      id="user-words"
+                      type="number"
+                      min="0"
+                      max="255"
+                      value={userWords}
+                      onChange={(e) => setUserWords(parseInt(e.target.value, 10))}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                      Words of USER memory to read. <strong>Set this to 0 to read TID
+                      only</strong> — a two-bank read fails as a unit against a chip that
+                      has no USER memory, and this is the way past that.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* RF Power Guidelines */}

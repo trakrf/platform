@@ -21,10 +21,18 @@ export function generateInventoryExcel(
   const inventoryData = tags.map(tag => {
     const row: Record<string, string | number> = {
       'Asset ID': tag.assetIdentifier || '',
-      'Name': tag.assetName || tag.description || '',
-      'Description': '',
+      // Name no longer falls back to the description — see the Description
+      // column below, which used to be a hardcoded empty string.
+      'Name': tag.assetName || '',
+      'Description': tag.description || '',
       'Location': tag.locationName || tag.location || '',
       'Tag ID': tag.displayEpc || tag.epc,
+      // Capture columns (TRA-1251). Always present, blank when the scan did not
+      // capture any, so a column that is empty and a column that is missing
+      // cannot be confused for one another.
+      'PC': tag.pc != null ? `0x${tag.pc.toString(16).toUpperCase().padStart(4, '0')}` : '',
+      'TID': tag.tid || '',
+      'User Data': tag.userData || '',
       'RSSI (dBm)': tag.rssi ?? 'N/A',
       'Count': tag.count,
       'Last Seen': tag.timestamp ? new Date(tag.timestamp).toLocaleString() : 'N/A',
@@ -43,6 +51,9 @@ export function generateInventoryExcel(
     { wch: 20 }, // Description
     { wch: 20 }, // Location
     { wch: 30 }, // Tag ID
+    { wch: 8 },  // PC
+    { wch: 28 }, // TID — 6 words is 24 hex characters
+    { wch: 28 }, // User Data
     { wch: 12 }, // RSSI
     { wch: 8 },  // Count
     { wch: 20 }, // Last Seen
@@ -131,7 +142,13 @@ export function generateInventoryCSV(
   tags: TagInfo[],
   _reconciliationList: string[] | null
 ): ExportResult {
-  const headers = ['Asset ID', 'Name', 'Description', 'Location', 'Tag ID', 'RSSI (dBm)', 'Count', 'Last Seen'];
+  const headers = [
+    'Asset ID', 'Name', 'Description', 'Location', 'Tag ID',
+    // PC, TID and User Data come from a "capture all tag data" scan and are
+    // blank otherwise (TRA-1251).
+    'PC', 'TID', 'User Data',
+    'RSSI (dBm)', 'Count', 'Last Seen'
+  ];
 
   let csvContent = headers.join(',') + '\n';
 
@@ -139,10 +156,20 @@ export function generateInventoryCSV(
     const escapeCSV = (val: string) => val ? `"${val.replace(/"/g, '""')}"` : '';
     const row = [
       escapeCSV(tag.assetIdentifier || ''),
-      escapeCSV(tag.assetName || tag.description || ''),
-      '',
+      // Name no longer falls back to description. That fallback existed only
+      // because the Description column below was a hardcoded empty string, so
+      // an asset's description never reached the CSV at all — while the Excel
+      // and PDF exports carried it. Both halves are fixed together; keeping the
+      // fallback would now duplicate the value across two columns.
+      escapeCSV(tag.assetName || ''),
+      escapeCSV(tag.description || ''),
       escapeCSV(tag.locationName || tag.location || ''),
       `"${tag.displayEpc || tag.epc}"`,
+      // Hex, because that is the form the value is reasoned about in: 0x3000
+      // is a 96-bit EPC and 0x4000 a 128-bit one. "12288" answers nothing.
+      tag.pc != null ? `0x${tag.pc.toString(16).toUpperCase().padStart(4, '0')}` : '',
+      escapeCSV(tag.tid || ''),
+      escapeCSV(tag.userData || ''),
       tag.rssi != null ? String(tag.rssi) : '',
       String(tag.count),
       tag.timestamp ? `"${new Date(tag.timestamp).toLocaleString()}"` : '',

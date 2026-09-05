@@ -68,17 +68,31 @@ export function tagReadToStoreTags(
   tags: ReadonlyArray<{
     epc: string;
     rssi?: number;
+    pc?: number;
     antennaPort?: number;
     timestamp?: number;
+    tid?: string;
+    userData?: string;
   }>,
   now: number = Date.now()
 ): Array<Partial<TagInfo>> {
   return tags.map(tag => ({
     epc: tag.epc,
     rssi: tag.rssi,
+    // PC has always been parsed and never carried anywhere. It holds the EPC
+    // length, the toggle bit and AFI, and it is the only unambiguous way to
+    // tell a 96-bit EPC (0x3000) from a 128-bit one (0x4000) without counting
+    // hex characters off a display (TRA-1251).
+    pc: tag.pc,
     count: 1,
     antenna: tag.antennaPort ?? 1,
     timestamp: tag.timestamp ?? now,
+    // Present only when a bank read was requested and the tag answered. These
+    // keys exist on every record, undefined included — addTags relies on that
+    // being harmless, which is why it merges them explicitly rather than by
+    // spread.
+    tid: tag.tid,
+    userData: tag.userData,
     source: 'rfid' as const
   }));
 }
@@ -102,6 +116,41 @@ export function shouldReapplyModeForTarget(
   tab: string
 ): boolean {
   return tab === 'locate' && previousHasTarget !== nextHasTarget;
+}
+
+/**
+ * Whether a settings change needs the INVENTORY sequence re-run for tag capture
+ * (TRA-1251).
+ *
+ * The capture registers — INV_CFG's tag_read and inv_mode, and the three
+ * TAGACC_* registers — are written by the mode-entry sequence and at no other
+ * time. Pushing settings to the worker updates readerSettings but runs no
+ * sequence, so toggling the switch while already on the Scan tab would leave
+ * the radio configured exactly as the last mode change left it: the setting
+ * reads as on, the scan runs, and no bank data comes back. That is
+ * indistinguishable from tags that genuinely have none, which is the worst
+ * possible failure for a feature whose entire job is telling those apart.
+ *
+ * A length change only matters while capture is on; off, nothing is written and
+ * a mode change would interrupt a scan for no effect.
+ */
+export function shouldReapplyModeForCapture(
+  previous?: ReaderSettings['rfid'],
+  next?: ReaderSettings['rfid']
+): boolean {
+  const wasOn = Boolean(previous?.captureAllTagData);
+  const isOn = Boolean(next?.captureAllTagData);
+
+  // Switching either way rewrites registers — on to configure the read, off to
+  // put compact mode back.
+  if (wasOn !== isOn) return true;
+  if (!isOn) return false;
+
+  return (
+    previous?.tidWords !== next?.tidWords ||
+    previous?.userOffset !== next?.userOffset ||
+    previous?.userWords !== next?.userWords
+  );
 }
 
 /**
@@ -165,6 +214,9 @@ export class DeviceManager {
   private previousScanMode: ScanTabMode = 'rfid';
   private previousKitsMode: ScanTabMode = 'rfid';
   private previousHasTarget = true;
+  // Snapshot of the capture settings as the reader was last configured for
+  // them, so a change can be detected and the mode sequence re-run (TRA-1251).
+  private previousCaptureSettings?: ReaderSettings['rfid'];
   // Every worker command goes through here. The worker's CommandManager is not
   // re-entrant, and four independent store subscriptions drive it.
   private commands = new CommandQueue();
@@ -519,6 +571,11 @@ export class DeviceManager {
     this.previousScanMode = useUIStore.getState().scanTabMode;
     this.previousKitsMode = getKitsScanMode(useKitStore.getState());
     this.previousHasTarget = hasLocateTarget(useSettingsStore.getState().rfid);
+    // Seeded from the same state the initial setSettings push carries, so the
+    // first subscription callback compares against what the reader was actually
+    // configured with rather than against undefined — which would read as a
+    // change and churn a mode sequence on the first unrelated settings edit.
+    this.previousCaptureSettings = { ...useSettingsStore.getState().rfid };
 
     this.activeTabUnsubscribe = useUIStore.subscribe(
       async (state) => {
@@ -570,6 +627,38 @@ export class DeviceManager {
   };
 
   /**
+   * Re-run the current mode's sequence after a tag-capture settings change
+   * (TRA-1251).
+   *
+   * ⚠ IDLE first, and it is load-bearing. `Reader.setMode` early-exits when the
+   * requested mode already equals its target — so asking for INVENTORY while
+   * already in INVENTORY returns immediately and writes no registers at all.
+   * The locate-target path never hits that because gaining or losing a target
+   * genuinely changes the mode; a capture toggle does not, and calling
+   * applyResolvedMode() alone here would be a silent no-op that looks exactly
+   * like a working fix.
+   *
+   * The bounce is what makes the second request a real mode change.
+   *
+   * Why not apply the registers live from setSettings, as transmit power does?
+   * Because `Reader.setSettings` gates its live-apply block on
+   * `hasHardwareSettings`, which is another enumeration — transmitPower,
+   * session, algorithm, inventoryMode, targetEPC, barcode — and the capture
+   * keys are not in it. A push carrying only a capture change matches nothing
+   * and applies nothing. Adding them there means adding an apply branch too,
+   * including one that restores compact mode when capture is switched off, and
+   * that is a larger change than this needs.
+   *
+   * What makes the bounce safe is that `setSettings` updates `readerSettings`
+   * unconditionally, before any of that gating. The values are always present
+   * for the mode sequence to read; only the live-apply path is gated.
+   */
+  private reapplyModeForCapture = async (): Promise<void> => {
+    await this.setMode(ReaderMode.IDLE);
+    await this.applyResolvedMode();
+  };
+
+  /**
    * Set up subscription to settings store for live updates
    * Simple dumb pipe - just pass ALL settings through to worker
    * The worker has all the logic to filter based on mode and state
@@ -599,12 +688,21 @@ export class DeviceManager {
         // conclusion with it. The ordering is still load-bearing; the mutex is
         // not the thing enforcing it.
         const nextHasTarget = hasLocateTarget(state.rfid);
-        const modeNeedsReapplying = shouldReapplyModeForTarget(
+        const targetNeedsMode = shouldReapplyModeForTarget(
           this.previousHasTarget,
           nextHasTarget,
           this.previousTab
         );
+        // Handled separately from the target case rather than OR'd into it,
+        // because the two need different mechanisms: a target change genuinely
+        // changes the mode, while a capture change does not and would be
+        // swallowed by setMode's early exit (TRA-1251).
+        const captureNeedsMode = shouldReapplyModeForCapture(
+          this.previousCaptureSettings,
+          state.rfid
+        );
         this.previousHasTarget = nextHasTarget;
+        this.previousCaptureSettings = { ...state.rfid };
 
         try {
           // Extract only the ReaderSettings portion (exclude functions)
@@ -621,9 +719,13 @@ export class DeviceManager {
           // Worker rejected settings
         }
 
-        if (!modeNeedsReapplying) return;
+        if (!targetNeedsMode && !captureNeedsMode) return;
         try {
-          await this.applyResolvedMode();
+          // The capture path bounces through IDLE, so it subsumes the target
+          // case when both fire at once.
+          await (captureNeedsMode
+            ? this.reapplyModeForCapture()
+            : this.applyResolvedMode());
         } catch (error) {
           // Never swallow this one silently: an unapplied mode change is why
           // a cleared Locate target left the reader still hunting the old EPC.

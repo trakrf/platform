@@ -19,6 +19,7 @@
 
 import { RingBuffer, type BufferMetrics } from './ring-buffer';
 import { logger } from '../../utils/logger.js';
+import { toHex } from '../../utils/hex.js';
 
 export interface ParsedTag {
   epc: string;              // Hex string EPC
@@ -29,6 +30,13 @@ export interface ParsedTag {
   mode?: 'compact' | 'normal'; // Which mode it came from
   phase?: number;           // Phase angle (0-180 degrees) for location smoothing
   wbRssi?: number;          // Wideband RSSI (raw value) for normal mode
+
+  // Memory-bank data, present only when INV_CFG's tag_read was set and the tag
+  // actually answered (TRA-1251). Undefined means no read was requested OR the
+  // tag refused one — the reader reports a returned word count of zero for
+  // both, and does not distinguish them.
+  tid?: string;             // Hex string, first bank (DATA1)
+  userData?: string;        // Hex string, second bank (DATA2)
 }
 
 export interface ParserState {
@@ -246,10 +254,7 @@ export class InventoryParser {
       const epcBytes = data.subarray(offset + 2, offset + 2 + epcLengthBytes);
 
       // Convert EPC to hex string
-      const epc = Array.from(epcBytes)
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('')
-        .toUpperCase();
+      const epc = toHex(epcBytes);
 
       // Extract and convert NB_RSSI (Narrowband RSSI)
       const nbRssi = data[offset + 2 + epcLengthBytes];
@@ -366,8 +371,10 @@ export class InventoryParser {
     // Byte 13: nb_rssi (Narrowband RSSI)
     // Byte 14: phase
     // Byte 15: channel index
+    // Byte 16: data1_count — 16-bit words returned from the first bank
+    // Byte 17: data2_count — 16-bit words returned from the second bank
     // Byte 19:18: antenna port
-    // Byte 20+: inv_data (PC + EPC + CRC16)
+    // Byte 20+: inv_data (PC + EPC [+ DATA1] [+ DATA2] + CRC16)
 
     if (fullPacket.length < 20) {
       return null; // Too short
@@ -428,10 +435,29 @@ export class InventoryParser {
 
     // Extract EPC
     const epcBytes = invData.subarray(2, 2 + epcLengthBytes);
-    const epc = Array.from(epcBytes)
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('')
-      .toUpperCase();
+    const epc = toHex(epcBytes);
+
+    // Memory-bank data, when INV_CFG's tag_read asked for any (TRA-1251).
+    //
+    // The word counts come from the PACKET, not from what we requested. A bank
+    // that refused the read reports zero, and a chip that returned fewer words
+    // than asked reports the smaller number — so slicing on the request would
+    // read into the next field and hand downstream a plausible-looking value
+    // built from the CRC, or from whatever followed in the ring buffer.
+    //
+    // subarray clamps to the array end, so a count that overstates the packet
+    // yields short data rather than reading out of bounds.
+    const data1Bytes = fullPacket[16] * 2;
+    const data2Bytes = fullPacket[17] * 2;
+
+    let cursor = 2 + epcLengthBytes;
+    const tid = data1Bytes > 0
+      ? toHex(invData.subarray(cursor, cursor + data1Bytes))
+      : undefined;
+    cursor += data1Bytes;
+    const userData = data2Bytes > 0
+      ? toHex(invData.subarray(cursor, cursor + data2Bytes))
+      : undefined;
 
     return {
       epc,
@@ -441,7 +467,9 @@ export class InventoryParser {
       timestamp: Date.now(),
       mode: 'normal',
       phase,
-      wbRssi
+      wbRssi,
+      tid,
+      userData
     };
   }
 }

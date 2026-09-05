@@ -3,6 +3,7 @@
  */
 
 import type { CommandSequence } from '../../type.js';
+import type { ReaderSettings } from '../../../types/reader.js';
 import { createFirmwareCommand, CommandType } from '../firmware-command.js';
 import {
   RFID_REGISTERS,
@@ -13,9 +14,27 @@ import {
   ALG_PARM_VALUES,
   TAG_MEMORY_BANK,
   REG_DEFAULT,
-  buildInvCfg
+  buildInvCfg,
+  buildTagaccBank,
+  buildTagaccPtr,
+  buildTagaccCnt
 } from '../constant.js';
 import { RFID_POWER_ON, RFID_FIRMWARE_COMMAND } from '../../event.js';
+
+/**
+ * Defaults for the capture settings, applied when the flag is on but a field
+ * was never set.
+ *
+ * 6 words of TID covers an extended TID carrying a 48-bit serial. Some chips
+ * only carry 2, which is exactly why this is a setting and not a constant —
+ * an over-long read is refused by the tag, and the operator needs to be able
+ * to shorten it without a code change.
+ */
+const CAPTURE_DEFAULTS = {
+  tidWords: 6,
+  userOffset: 0,
+  userWords: 4
+} as const;
 
 /**
  * INVENTORY Mode Sequence
@@ -123,3 +142,95 @@ export const INVENTORY_CONFIG_SEQUENCE: CommandSequence = [
 
   // Note: START_INVENTORY (0xF000 = 0x0F) is called separately when scanning starts
 ];
+
+/**
+ * Switch inventory into a tag-data capture read (TRA-1251).
+ *
+ * ## Why this is a mode change, not an extra register
+ *
+ * Compact mode's response payload is documented as PC + EPC + NB_RSSI. There is
+ * no field in it for bank data — none, at any setting. Bank data rides only the
+ * NORMAL mode inventory response, where inv_data becomes
+ * `PC + EPC + DATA1 [+ DATA2] + CRC16`. So capturing TID or USER means leaving
+ * compact mode, which costs throughput: the vendor puts tag_delay at 30 for
+ * Bluetooth normal mode against 0-7 for compact.
+ *
+ * That is why this is opt-in rather than always-on.
+ *
+ * ## Ordering
+ *
+ * Returns an EMPTY sequence when capture is off, and is spliced in AFTER
+ * `INVENTORY_CONFIG_SEQUENCE` — which writes these same four registers to their
+ * no-capture values. Later writes win, so the disabled path stays byte-for-byte
+ * identical to what shipped before this existed, without a branch in the shared
+ * sequence.
+ *
+ * ## The userWords: 0 path
+ *
+ * Reading two banks fails as a unit on a chip that has no USER bank, and the
+ * operator may be standing in front of the only reader that matters when they
+ * find that out. Setting userWords to 0 drops to a single-bank TID read, with
+ * acc_bank2, ptr2 and length2 all zeroed as the spec requires when tag_read is
+ * not 2. One field changes instead of a code change.
+ */
+export function tagCaptureSequence(
+  rfid?: ReaderSettings['rfid']
+): CommandSequence {
+  if (!rfid?.captureAllTagData) {
+    return [];
+  }
+
+  const tidWords = rfid.tidWords ?? CAPTURE_DEFAULTS.tidWords;
+  const userOffset = rfid.userOffset ?? CAPTURE_DEFAULTS.userOffset;
+  const userWords = rfid.userWords ?? CAPTURE_DEFAULTS.userWords;
+
+  // Asking for zero words of a bank is not a read of that bank — the spec is
+  // explicit that zero is not a "whole bank" shorthand.
+  const readsUserBank = userWords > 0;
+
+  return [
+    // Normal mode, reading one or two banks after each inventory round
+    {
+      event: RFID_FIRMWARE_COMMAND,
+      payload: createFirmwareCommand(CommandType.WRITE_REGISTER, {
+        register: RFID_REGISTERS.INV_CFG,
+        value: buildInvCfg({
+          inv_algo: 3,                        // matches INVENTORY_CONFIG_SEQUENCE
+          tag_delay: 30,                      // vendor guidance for BT normal mode
+          inv_mode: 0,                        // normal mode — compact carries no bank data
+          tag_read: readsUserBank ? 2 : 1
+        })
+      })
+    },
+    {
+      event: RFID_FIRMWARE_COMMAND,
+      payload: createFirmwareCommand(CommandType.WRITE_REGISTER, {
+        register: RFID_REGISTERS.TAGACC_BANK,
+        value: buildTagaccBank({
+          bank: TAG_MEMORY_BANK.TID,
+          bank2: readsUserBank ? TAG_MEMORY_BANK.USER : TAG_MEMORY_BANK.RESERVED
+        })
+      })
+    },
+    {
+      event: RFID_FIRMWARE_COMMAND,
+      payload: createFirmwareCommand(CommandType.WRITE_REGISTER, {
+        register: RFID_REGISTERS.TAGACC_PTR,
+        value: buildTagaccPtr({
+          ptr: 0,                             // TID is read from word 0
+          ptr2: readsUserBank ? userOffset : 0
+        })
+      })
+    },
+    {
+      event: RFID_FIRMWARE_COMMAND,
+      payload: createFirmwareCommand(CommandType.WRITE_REGISTER, {
+        register: RFID_REGISTERS.TAGACC_CNT,
+        value: buildTagaccCnt({
+          length: tidWords,
+          length2: readsUserBank ? userWords : 0
+        })
+      })
+    }
+  ];
+}

@@ -45,7 +45,7 @@ import {
   isRegisterResponsePacket,
   formatReaderDetails
 } from './system/identity.js';
-import { INVENTORY_CONFIG_SEQUENCE } from './rfid/inventory/sequences.js';
+import { INVENTORY_CONFIG_SEQUENCE, tagCaptureSequence } from './rfid/inventory/sequences.js';
 import { BARCODE_CONFIG_SEQUENCE, BARCODE_START_SEQUENCE, BARCODE_STOP_SEQUENCE } from './barcode/sequences.js';
 import { applyRfidSettings, type RfidSettings } from './rfid/firmware-command.js';
 import { LOCATE_CONFIG_SEQUENCE, locateSettingsSequence } from './rfid/locate/sequences.js';
@@ -701,6 +701,12 @@ class CS108Reader extends BaseReader {
         return [
           ...IDLE_SEQUENCE,
           ...INVENTORY_CONFIG_SEQUENCE,
+          // AFTER the config sequence, deliberately. Both write INV_CFG and the
+          // TAGACC_* registers, and the later write wins — which is what keeps
+          // the capture-off path byte-for-byte identical to what shipped
+          // before, with no branch inside the shared sequence. Empty when the
+          // setting is off (TRA-1251).
+          ...tagCaptureSequence(this.readerSettings.rfid),
           ...transmitPowerSequence(this.readerSettings.rfid?.transmitPower),
           ...this.rfidIdentityReads()
         ];

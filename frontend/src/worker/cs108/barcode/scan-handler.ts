@@ -10,6 +10,7 @@ import type {
   NotificationContext,
 } from '../notification/types';
 import { logger } from '../../utils/logger.js';
+import { toHex } from '../../utils/hex.js';
 import type { CS108Packet } from '../type';
 import { ReaderMode, ReaderState } from '../../types/reader';
 import { postWorkerEvent, WorkerEventType } from '../../types/events';
@@ -77,9 +78,10 @@ export class BarcodeDataHandler implements NotificationHandler {
         payload: {
           barcode: parsed.data,
           symbology: parsed.symbology,
-          rawData: parsed.rawData
-            ? Array.from(parsed.rawData).map(b => b.toString(16).padStart(2, '0')).join('')
-            : undefined,
+          // Uppercase since TRA-1251 unified the three inlined copies of this
+          // conversion. Nothing consumes rawData on the main thread, and no
+          // test pins its casing.
+          rawData: parsed.rawData ? toHex(parsed.rawData) : undefined,
           timestamp: now,
         },
       });

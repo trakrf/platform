@@ -137,6 +137,10 @@ interface TagReadEvent extends WorkerEventBase {
       timestamp: number;
       mode?: 'compact' | 'normal';
       phase?: number;
+      // Memory-bank data from a tag_read inventory (TRA-1251). Only ever
+      // present on normal-mode reads — compact mode has no field for it.
+      tid?: string;
+      userData?: string;
     }>;
     timestamp: number;
   };

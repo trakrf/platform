@@ -147,6 +147,19 @@ export interface ReaderSettings {
     algorithm?: 'fixed' | 'dynamic'; // Algorithm selection for tag singulation
     inventoryMode?: 'compact' | 'normal'; // Inventory mode selection
     targetEPC?: string;               // EPC filter for LOCATE mode
+
+    // Tag data capture (TRA-1251). Off, inventory runs in compact mode and
+    // returns PC + EPC + RSSI, which is all it has ever returned. On, it drops
+    // to normal mode with INV_CFG tag_read set, and each inventory response
+    // additionally carries the requested memory banks.
+    //
+    // Normal mode is slower — the vendor puts tag_delay at 30 for Bluetooth
+    // normal mode against 0-7 for compact — so this is a deliberate mode, not
+    // something to leave on for ordinary scanning.
+    captureAllTagData?: boolean;      // Master switch for the two settings below
+    tidWords?: number;                // 16-bit words of TID to read, 1-255
+    userOffset?: number;              // Word offset into USER, 0-65535
+    userWords?: number;               // Words of USER to read; 0 means TID only
   };
   
   barcode?: {
@@ -174,7 +187,18 @@ export const MODE_SETTINGS = {
     system: ['batteryCheckInterval', 'workerLogLevel']
   },
   INVENTORY: {
-    rfid: ['transmitPower'],  // Add more settings in future Advanced Settings implementation
+    // ⚠ This is an allowlist. A setting absent from here is dropped in silence
+    // — no error, no log line — and the symptom is indistinguishable from the
+    // hardware refusing the request. reader.test.ts names every key by hand for
+    // exactly that reason; scoping by exclusion is the only thing that catches
+    // an omission here.
+    rfid: [
+      'transmitPower',
+      'captureAllTagData',
+      'tidWords',
+      'userOffset',
+      'userWords'
+    ],
     barcode: []
   },
   LOCATE: {
