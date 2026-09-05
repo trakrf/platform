@@ -157,6 +157,54 @@ describe('Notification System Integration', () => {
         timestamp: expect.any(Number)
       }));
     });
+
+    /**
+     * TRA-1247, the discriminator this ticket asked to answer before touching
+     * the harness timeout: when a press arrives while the reader is BUSY, does
+     * the trigger level reach the host at all?
+     *
+     * Two readings were open. Either the level is recorded and only the EDGE is
+     * dropped — in which case the press was never lost and the harness simply
+     * gave up before convergence could act on it — or the packet does not reach
+     * the worker during BUSY at all, in which case no timeout helps.
+     *
+     * This is the routing half of the answer. `NotificationRouter` takes
+     * `readerState` only to pass it to handlers as context; no handler for
+     * `0xA102`/`0xA103` reads it, and nothing in the router gates on it. So the
+     * event is emitted whatever the reader is doing. The reader half — that the
+     * level survives and convergence applies it — is in `reader.test.ts` under
+     * "a trigger notification arriving while BUSY".
+     */
+    it.each([
+      ReaderState.BUSY,
+      ReaderState.CONNECTING,
+      ReaderState.SCANNING,
+    ])('emits the pressed level from state %s, not just from CONNECTED', (state) => {
+      currentState = state;
+
+      const packet: CS108Packet = {
+        event: {
+          name: 'TRIGGER_PRESSED',
+          eventCode: 0xA102,
+          module: 0xD9,
+          isCommand: false,
+          isNotification: true,
+        } as CS108Event,
+        payload: undefined,
+        rawData: new Uint8Array([]),
+        timestamp: Date.now(),
+      };
+
+      router.handleNotification(packet);
+
+      expect(postMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'TRIGGER_STATE_CHANGED',
+        payload: {
+          pressed: true,
+        },
+        timestamp: expect.any(Number)
+      }));
+    });
   });
 
   describe('error notifications', () => {

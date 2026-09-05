@@ -544,4 +544,57 @@ describe('CommandManager contract', () => {
       await second;
     });
   });
+
+  // ==========================================================================
+  // TRA-1247 — a command response can ALSO be data, and two op codes are.
+  // ==========================================================================
+  describe('command responses that carry state, not just an ack', () => {
+    /**
+     * `0xA000` and `0xA001` answer a command AND report device state, so
+     * `handleCommandResponse` forwards them to the notification handler as well
+     * as settling the command. Everything else settles the command only.
+     *
+     * Pinned because `reader.handleBleData` tells only half the story: it
+     * routes a command-class packet that settles a command in flight to the
+     * CommandManager and not to the notification router, which reads as though
+     * the poll's answer can never reach the level. This forwarding is the other
+     * half, and it is load-bearing — it is what makes a mode change re-read the
+     * physical trigger and overwrite the host latch, the mechanism ADR 0016
+     * turns on.
+     */
+    const TRIGGER_STATE = event(0xA001, 'GET_TRIGGER_STATE');
+    const BATTERY = event(0xA000, 'GET_BATTERY_VOLTAGE');
+
+    /** A response carrying a parsed payload, as the packet handler delivers it. */
+    function dataResponseFor(sent: CS108Event, payload: unknown): CS108Packet {
+      return { ...responseFor(sent), payload } as unknown as CS108Packet;
+    }
+
+    it.each([
+      ['GET_TRIGGER_STATE', TRIGGER_STATE, 1],
+      ['GET_BATTERY_VOLTAGE', BATTERY, 58],
+    ])('forwards a %s reply to the notification handler as well', async (_name, sent, payload) => {
+      const pending = commandManager.executeCommand(sent as CS108Event);
+      await wireHandedOver();
+
+      commandManager.handleCommandResponse(dataResponseFor(sent as CS108Event, payload));
+      await pending;
+
+      expect(notificationHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ eventCode: (sent as CS108Event).eventCode, payload })
+      );
+    });
+
+    it('does not forward an ordinary command ack', async () => {
+      // The other half. Forwarding everything would push acks at the stores and
+      // make the assertion above pass for the wrong reason.
+      const pending = commandManager.executeCommand(FIRST);
+      await wireHandedOver();
+
+      commandManager.handleCommandResponse(dataResponseFor(FIRST, 0));
+      await pending;
+
+      expect(notificationHandler).not.toHaveBeenCalled();
+    });
+  });
 });

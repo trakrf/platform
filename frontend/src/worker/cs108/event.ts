@@ -111,6 +111,43 @@ export const GET_TRIGGER_STATE: CS108Event<ScalarPayload> = {
   description: 'Get trigger state (0=released, 1=pressed)'
 };
 
+// =============================================================================
+// DEVICE AUTO-REPORTING — DEFINED, MAPPED, AND DELIBERATELY NEVER SENT
+// =============================================================================
+//
+// The four commands below (0xA002, 0xA003, 0xA008, 0xA009) have no call site
+// anywhere in the worker. That is a DECISION, recorded in
+// `docs/adr/0019-periodic-device-state-is-polled-by-the-host-not-pushed-by-the-device.md`,
+// not an omission — periodic device state is polled by the host. Battery is
+// read on a host timer (`reader.ts` + `BATTERY_VOLTAGE_SEQUENCE`), and the
+// trigger is read by `GET_TRIGGER_STATE` in `IDLE_SEQUENCE` plus the
+// 0xA102/0xA103 edges.
+//
+// Said here because the obvious reading of an unsent command is "somebody
+// forgot 0xA008". Adding a call site reverses ADR 0019; read it first,
+// including its firmware-scoped revisit condition.
+//
+// ⚠ Three traps for anyone who does revisit it:
+//
+//   1. **The auto-reports come back under the QUERY op code.** There is no
+//      uplink event code for them — the vendor spec's uplink table (§10.2) has
+//      only 0xA100-0xA103. Battery already handles this: GET_BATTERY_VOLTAGE
+//      (0xA000) carries `isNotification: true` and says so. GET_TRIGGER_STATE
+//      (0xA001) does NOT, so an unsolicited 0xA001 answers no command in flight
+//      and is not a notification either — `reader.handleBleData` drops it as
+//      unroutable. Enable 0xA008 without fixing that and the reports cannot
+//      reach a handler, which is indistinguishable from a silent device.
+//   2. **0xA008's payload is an interval in seconds, not an enable flag.** The
+//      spec reads "1 byte value = interval in second"; the `[0x01]` below is a
+//      one-second interval and the comment on it is wrong.
+//   3. **0xA002 takes ZERO data bytes per the spec**, and the definition below
+//      declares one. Left as-is deliberately rather than quietly corrected: a
+//      definition nobody has exercised should not be made to LOOK verified.
+//
+// The observations behind the decision, as recorded when they were made:
+// 0xA008 "documented in spec v1.43+ but doesn't respond", STOP_BATTERY_REPORTING
+// "causes 5000ms timeout", STOP_TRIGGER_REPORTING "has firmware bug", "both
+// disabled in production code".
 export const START_BATTERY_REPORTING: CS108Event = {
   name: 'START_BATTERY_REPORTING',
   eventCode: 0xA002,

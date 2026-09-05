@@ -5,6 +5,8 @@ import {
   simulateTriggerRelease,
   waitForTriggerReset,
   STATE_THAT_HONOURS,
+  TRIGGER_CONFIRMATION_TIMEOUT_MS,
+  TRIGGER_HONOUR_TIMEOUT_MS,
 } from '../e2e/helpers/trigger-utils';
 
 /**
@@ -14,17 +16,33 @@ import {
  *     if (this.readerState === ReaderState.CONNECTED) { startScanning() }
  *     else { logger.debug(`Trigger pressed ignored - reader state is ...`) }
  *
- * A real thumb survives that drop, because the trigger LEVEL stays asserted and
- * `convergeToTriggerState()` reconciles it when the reader settles. An injected
- * press cannot: the state reverts to false ~500ms later, so by the time the
- * reader settles there is no held trigger left to reconcile, and the scan never
- * starts. Measured at 48/200 reps (24.0%) on 2026-09-02.
+ * A real finger survives that drop, because the trigger LEVEL stays asserted
+ * and `convergeToTriggerState()` reconciles it when the reader settles. An
+ * injected press does not survive a MODE CHANGE: every mode carries
+ * `IDLE_SEQUENCE`, whose `GET_TRIGGER_STATE` poll the device answers in ~22ms
+ * with the real switch position, and that answer overwrites the latch. So by
+ * the time the reader settles there is no held trigger left to reconcile and
+ * the scan never starts. Measured at 48/200 reps (24.0%) on 2026-09-02.
+ *
+ * See ADR 0016 and `tests/e2e/trigger-level-is-reread-on-mode-change.spec.ts`.
  *
  * So the helper must not inject into a state that will drop the edge. These
  * tests live in `tests/config/` rather than beside the helper because
  * `vitest.config.ts` excludes `**\/tests\/e2e\/**` — a test next to the helper
  * would never run, which is the failure mode this ticket is already about.
  */
+
+/**
+ * Confirmation budget for the tests that only care about the GATE.
+ *
+ * A scripted page has no store to move, so the confirmation after an injection
+ * can never succeed and always runs its budget out. The real budget is 5s
+ * (`TRIGGER_CONFIRMATION_TIMEOUT_MS`), and the scripted `waitForTimeout` is a
+ * no-op, so leaving it at the default spends five seconds of tight polling per
+ * test to prove something these tests are not asking about. The tests that ARE
+ * about the budget name it explicitly.
+ */
+const CONFIRM_BUDGET_MS = 50;
 
 type ScriptedPage = {
   evaluate: (fn: unknown) => Promise<unknown>;
@@ -158,7 +176,7 @@ describe('simulateTriggerPress refuses to inject into a dropping state', () => {
 
   it('injects only once the reader has reached the honouring state', async () => {
     const page = recordingPage(['Busy', 'Busy', 'Connected']);
-    await simulateTriggerPress(page as never, 1, 2000).catch(() => {
+    await simulateTriggerPress(page as never, 1, 2000, CONFIRM_BUDGET_MS).catch(() => {
       // The trigger-state confirmation cannot succeed against a fake store;
       // ordering is the whole assertion here.
     });
@@ -185,7 +203,7 @@ describe('a release is gated only when there is a scan to stop', () => {
     // connection.spec.ts:130 and inventory.spec.ts:111. The reader is Connected
     // for the whole test by design; SCANNING is unreachable.
     const page = recordingPage(['Connected', 'Connected']);
-    await simulateTriggerRelease(page as never, 1, 2000).catch(() => {
+    await simulateTriggerRelease(page as never, 1, 2000, CONFIRM_BUDGET_MS).catch(() => {
       // The store confirmation cannot succeed against a fake store; what is
       // under test is that the injection happened at all.
     });
@@ -196,7 +214,7 @@ describe('a release is gated only when there is a scan to stop', () => {
     // locate.spec.ts's afterAll, after goto('/') tore the transport down. This
     // is the 101/101 swallowed throw.
     const page = recordingPage(['Disconnected', 'Disconnected']);
-    await simulateTriggerRelease(page as never, 1, 2000).catch(() => {});
+    await simulateTriggerRelease(page as never, 1, 2000, CONFIRM_BUDGET_MS).catch(() => {});
     expect(page.injectedAt).toEqual(['Disconnected']);
   });
 
@@ -204,7 +222,7 @@ describe('a release is gated only when there is a scan to stop', () => {
     // The cost half of the defect: 15s burned per hit, ~6 hits per locate rep.
     // One read to answer "is a scan running", and no polling after it.
     const page = recordingPage(['Connected', 'Connected']);
-    await simulateTriggerRelease(page as never, 1, 2000).catch(() => {});
+    await simulateTriggerRelease(page as never, 1, 2000, CONFIRM_BUDGET_MS).catch(() => {});
     // One read for the helper's own initial trigger state, one for the gate.
     // The lower bound matters as much as the upper one: a release that threw
     // before injecting never sets this at all, and would sail past a bare
@@ -215,7 +233,7 @@ describe('a release is gated only when there is a scan to stop', () => {
 
   it('still injects while the reader is Scanning', async () => {
     const page = recordingPage(['Scanning', 'Scanning']);
-    await simulateTriggerRelease(page as never, 1, 2000).catch(() => {});
+    await simulateTriggerRelease(page as never, 1, 2000, CONFIRM_BUDGET_MS).catch(() => {});
     expect(page.injectedAt).toEqual(['Scanning']);
   });
 
@@ -224,13 +242,13 @@ describe('a release is gated only when there is a scan to stop', () => {
     // SCANNING or on its way out of it, and injecting before it settles is the
     // press bug wearing a different hat. Settle first, then decide.
     const page = recordingPage(['Busy', 'Busy', 'Busy', 'Connected']);
-    await simulateTriggerRelease(page as never, 1, 2000).catch(() => {});
+    await simulateTriggerRelease(page as never, 1, 2000, CONFIRM_BUDGET_MS).catch(() => {});
     expect(page.injectedAt).toEqual(['Connected']);
   });
 
   it('injects once a transient state settles into Scanning', async () => {
     const page = recordingPage(['Busy', 'Busy', 'Scanning']);
-    await simulateTriggerRelease(page as never, 1, 2000).catch(() => {});
+    await simulateTriggerRelease(page as never, 1, 2000, CONFIRM_BUDGET_MS).catch(() => {});
     expect(page.injectedAt).toEqual(['Scanning']);
   });
 
@@ -342,5 +360,54 @@ describe('waitForTriggerReset', () => {
       { triggerState: true, readerState: 'Connected', inventoryRunning: false },
     ]);
     await expect(waitForTriggerReset(page as never, 50)).resolves.toBe(false);
+  });
+});
+
+/**
+ * TRA-1247. The confirmation that follows an injection used to run a fixed
+ * 500ms wall and then report `STATE_NOT_UPDATED` — naming the store, when the
+ * thing that had not finished was usually the reader's bring-up.
+ *
+ * The discriminator that decided this shape is answered in
+ * `src/worker/cs108/reader.test.ts` under "a trigger notification arriving
+ * while BUSY": the level IS latched while the reader is BUSY, so the press is
+ * never lost, and what a confirmation can be short of is the convergence that
+ * runs when bring-up ends. 500ms could not cover that — the Locate mask write
+ * alone measured ~3.7s (TRA-1225).
+ *
+ * A timeout that misreports what it measured is what kept TRA-1080's follow-up
+ * looking at the trigger path for a month.
+ */
+describe('the confirmation timeout names what actually ran out', () => {
+  it('is 5s, not the 15s the honour gate uses', () => {
+    // The bound carries a product requirement: a config sequence taking five
+    // seconds is a defect worth surfacing, and a 15s bound would absorb it.
+    expect(TRIGGER_CONFIRMATION_TIMEOUT_MS).toBe(5000);
+    expect(TRIGGER_CONFIRMATION_TIMEOUT_MS).toBeLessThan(TRIGGER_HONOUR_TIMEOUT_MS);
+  });
+
+  it('blames bring-up when the reader is still transient', async () => {
+    // One read for the helper's own initial trigger state, one for the gate,
+    // and from there the reader is Busy running its config sequence — the
+    // shape this ticket is about.
+    const page = recordingPage(['Connected', 'Connected', 'Busy']);
+    const result = await simulateTriggerPress(page as never, 1, 2000, CONFIRM_BUDGET_MS);
+
+    expect(page.injectedAt).toEqual(['Connected']);
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/BRING_UP_INCOMPLETE/);
+    expect(result.message).toMatch(/Busy/);
+    expect(result.message).toMatch(new RegExp(`${CONFIRM_BUDGET_MS}ms`));
+  });
+
+  it('blames the store only when the reader has settled', async () => {
+    // Reader settled and the level still not reflected: now it really is the
+    // path between the worker handler and deviceStore.
+    const page = recordingPage(['Connected']);
+    const result = await simulateTriggerPress(page as never, 1, 2000, CONFIRM_BUDGET_MS);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/STATE_NOT_UPDATED/);
+    expect(result.message).not.toMatch(/BRING_UP_INCOMPLETE/);
   });
 });
