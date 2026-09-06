@@ -199,15 +199,59 @@ public Result StartOperation(Operation opertion) {
 ```
 
 `StopOperation()` sends the ABORT and returns. `StartOperation()` issues register
-reads and writes immediately. There is no sleep, no delay and no state gate in
-the library or in any of its ~20 call sites across the app.
+reads and writes immediately.
 
 **So the sentence in Appendix C is not a rule the vendor's own software follows.**
-Taken with the placement (worked examples, where the ABORT ends the flow and no
-restart is ever shown) and with 0xA004 — whose default makes the host's ABORT
-arrive inside the firmware abort's own window — the weight of evidence is that
-"another command" is guidance for those examples rather than a bus-level
-prohibition.
+Taken with the placement — worked examples, where the ABORT ends the flow and no
+restart is ever shown — the weight of evidence is that "another command" is
+guidance for those examples rather than a bus-level prohibition.
+
+> ### ⚠ Corrected 2026-09-06 — four supporting statements, one of them inverted
+>
+> The conclusion above survives. Four of the statements that were used to reach
+> it do not, and they were checked against the vendor library and the capture
+> rather than re-read. Recorded here rather than silently edited, because the
+> original reasoning is what a future reader would otherwise inherit.
+> Refs TRA-1214, TRA-1215.
+>
+> **1. "No sleep, no delay and no state gate in the library" — refuted.** Both
+> exist: `_packetDelayTimeout` (`BTSend.cs:379-401`) and the
+> `_NeedCommandResponseType` / `BLEBusy` gate (`BTSend.cs:426-429`). What is
+> absent is a delay *specifically after ABORT*. That is **stronger** support for
+> this ADR, not weaker: they had the hook and chose not to use it there.
+>
+> **2. "~20 call sites" — the count is 57.** The claim holds; the number did
+> not.
+>
+> **3. "Returns immediately" — true of the caller, false of the pipeline.**
+> CSL's post-ABORT protection is **response-gated, not time-gated**: nothing
+> leaves `_sendBuffer` until the ABORT is answered, or ~42 s of retries are
+> spent. On the wire, every abort-to-abort interval carries 8-54 downlinks —
+> except the two intervals following an *unanswered* ABORT, which carry **zero**
+> for 80 and 83 packets respectively.
+>
+> **4. "CSL wires abort to the physical trigger (0xA004) so a stop cannot be
+> lost" — motive unsupported.** Zero hits for `A004` across all 281 `.cs` files.
+> The firmware default is real, but the vendor's software never sets or reads
+> it, so it cannot be their reason for anything. Latency is the sufficient
+> explanation — and the capture shows they do **not** tolerate a lost abort:
+> they block and re-send.
+>
+> ### Knock-on for `ignoresQuietPeriod`
+>
+> The claim below that exempting a same-mode inventory restart leaves us
+> "strictly more conservative than the vendor" is **wrong about the mechanism**.
+> CSL holds the restart until the abort is answered; we send regardless. Against
+> a *lost* abort we are therefore less protected than CSL, not more.
+>
+> The practical conclusion still matches vendor behaviour — neither of us
+> imposes a fixed post-ABORT delay — but the stated reason for it does not.
+> Read the paragraph below as "we drop a time window the vendor also does not
+> have", never as "we are ahead of the vendor here".
+>
+> The follow-on this implies — replacing `POST_ABORT_QUIET_MS` with a response
+> barrier, which is CSL's actual design — is separate work and is deliberately
+> **not** decided here.
 
 **The decision is narrowed rather than reversed.** The window is kept for
 commands that power or reconfigure the module, and a same-mode inventory restart
