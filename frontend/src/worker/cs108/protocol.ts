@@ -21,13 +21,28 @@
 import type { CS108Packet } from './type.js';
 import { logger } from '../utils/logger.js';
 import type { CS108PayloadType } from './payload-types.js';
-import { CS108_EVENT_MAP } from './event.js';
+import { CS108_EVENT_MAP, INVENTORY_TAG_NOTIFICATION } from './event.js';
 
 // CS108 Protocol Constants
 export const PACKET_CONSTANTS = {
   // Fixed header byte values
   PREFIX_BYTE: 0xA7,         // Byte 0: Always 0xA7
-  RESERVE_BYTE: 0x82,        // Byte 4: Always 0x82
+
+  /**
+   * Byte 4 on every event code EXCEPT uplink 0x8100, where it is a running,
+   * wrapping sequence number rather than a reserved constant (TRA-1213).
+   *
+   * Measured against tests/data/vendor-app-packet-cap: 0x8100 carries 256
+   * distinct values across 1054 packets — the full range of a counter — and
+   * matches 0x82 in 5 of them, 0.5%. Every other code carries exactly one
+   * distinct value, 0x82, across 600 packets in both directions.
+   *
+   * CS108 tag packets span BLE frames and reassemble in a ring buffer, so this
+   * counter is how a dropped frame becomes detectable: CSL records the skip
+   * count on a discontinuity and calls ClearBuffer (CSLibrary.cs:245-258). We
+   * parse it into packet.reserve and do not yet check continuity.
+   */
+  RESERVE_BYTE: 0x82,
   DOWNLINK_DIRECTION: 0x37,  // Byte 5: Commands (downlink)
   UPLINK_DIRECTION: 0x9E,    // Byte 5: Responses/notifications (uplink)
 
@@ -54,9 +69,28 @@ export const PACKET_CONSTANTS = {
 };
 
 /**
- * Parse a CS108 packet from raw bytes
- * Returns CS108Packet or null if incomplete
- * Throws on unknown event codes (fail-fast)
+ * Parse a CS108 packet from raw bytes.
+ *
+ * Returns CS108Packet, or null if incomplete or malformed.
+ * Throws on unknown event codes (fail-fast).
+ *
+ * ⚠ This validates BUILT packets, not received ones (TRA-1215).
+ *
+ * It has no production callers. The live receive path is packet.ts, which
+ * reassembles across BLE frames and reads data[4] without validating it. All
+ * 17 call sites are tests, in two files:
+ *
+ *   src/worker/cs108/packet.test.ts            8   header/field parsing
+ *   tests/config/cs108-packet-builder.test.ts  9   builder round-trip
+ *
+ * That second file is the reason this function is kept rather than deleted: the
+ * builder emits a packet and this parses it back, so the two are checked
+ * against each other. Deleting the "dead" parser would delete that check too.
+ *
+ * Stated here because the alternative reading is the one that caused the
+ * problem — these assertions look like coverage of the receive path and are
+ * not. Nothing here has ever run against a real tag packet, which is why a
+ * guard that would have rejected 99.5% of them survived unnoticed.
  */
 export function parsePacket(data: Uint8Array): CS108Packet | null {
   // Need at least header + event code
@@ -78,7 +112,15 @@ export function parsePacket(data: Uint8Array): CS108Packet | null {
     return null; // Invalid packet
   }
 
-  if (reserve !== PACKET_CONSTANTS.RESERVE_BYTE) {
+  // Byte 4 is a constant everywhere except uplink tag data, where it is a
+  // wrapping sequence number (TRA-1213). Read the event code early — bytes 8
+  // and 9 are guaranteed present by the length check above — so the guard can
+  // tell the two cases apart. Enforcing 0x82 unconditionally would reject
+  // 99.5% of real tag packets.
+  const declaredEventCode = (data[8] << 8) | data[9];
+  const carriesSequenceNumber = declaredEventCode === INVENTORY_TAG_NOTIFICATION.eventCode;
+
+  if (!carriesSequenceNumber && reserve !== PACKET_CONSTANTS.RESERVE_BYTE) {
     return null; // Invalid packet
   }
 
@@ -108,8 +150,9 @@ export function parsePacket(data: Uint8Array): CS108Packet | null {
     return null;
   }
 
-  // Parse event code (big-endian)
-  const eventCode = (data[8] << 8) | data[9];
+  // Parse event code (big-endian) — read above as declaredEventCode for the
+  // byte-4 guard, and re-stated here as the value the packet actually carries.
+  const eventCode = declaredEventCode;
 
   // Look up event - MUST exist (fail-fast)
   const event = CS108_EVENT_MAP.get(eventCode);
