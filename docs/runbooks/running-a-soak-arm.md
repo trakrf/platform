@@ -87,12 +87,21 @@ setsid nohup ./node_modules/.bin/ble-radio-lock --label platform-soak -- \
 
 ⚠ **Hold the radio for the whole arm, and wrap the driver rather than the reps.**
 An arm is one operation lasting hours; the reader must not become available
-between rep 47 and rep 48. Wrapping each rep would release in every gap, which is
-the 2026-08-31 defect at a different scale — and a rep that lost the race would
-exit **75** without running, landing in the record as a suite failure and
-corrupting the very rate the arm exists to measure. Wrapping the driver holds the
-lock for exactly as long as the driver lives and returns it when the driver dies
-by any means, `setsid`/`nohup` included.
+between rep 47 and rep 48. Wrapping each rep would release it in every one of
+those gaps, which is the 2026-08-31 defect at a different scale. Wrapping the
+driver holds the lock for exactly as long as the driver lives and returns it when
+the driver dies by any means, `setsid`/`nohup` included.
+
+**A refused rep is misclassified, not miscounted** — worth knowing precisely,
+because the tempting version of this warning is wrong. Every rate in
+`summarise-suite-runs.mjs` is derived by walking a record's `files`, and a rep
+that exits 75 wrote no JSON report, so its `files` is empty and it increments
+**neither numerator nor denominator**. It cannot inflate a failure rate, skew the
+predecessor attribution, or move the position-in-run table. What it does instead
+is land as `**REPORT MISSING**` with `exit` 75 beside it, under a contamination
+note reading *"recorded failures of the run, not passes"* — correct for a run that
+happened and produced no report, wrong for one that never started. The reader has
+to decode the 75 to overturn prose actively telling them it failed.
 
 Do **not** use `ble-radio-lock hold` here: it opens an interactive shell, and a
 detached arm outlives the shell that launched it. Exiting that shell would release
