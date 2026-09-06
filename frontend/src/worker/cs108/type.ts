@@ -67,7 +67,8 @@ export interface CS108Packet {
   transport: number;   // Byte 1: 0xB3 (BT) or 0xE6 (USB)
   length: number;      // Byte 2: Payload length (1-120)
   module: number;      // Byte 3: Module identifier
-  reserve: number;     // Byte 4: Always 0x82
+  reserve: number;     // Byte 4: 0x82, except on uplink 0x8100 where it is a
+                       // wrapping sequence number (TRA-1213)
   direction: number;   // Byte 5: 0x37 (down) or 0x9E (up)
   crc: number;         // Bytes 6-7: CRC-16 (little-endian)
 

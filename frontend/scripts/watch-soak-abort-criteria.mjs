@@ -36,6 +36,7 @@
 import net from 'net';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { appendFileSync, existsSync, readFileSync } from 'fs';
 import { spawnSync } from 'child_process';
 import dotenv from 'dotenv';
@@ -199,7 +200,14 @@ export function restartVerdict({
  * of a comparison — the campaign's own rule, applied to the campaign's tooling.
  */
 export function expectedSessionId() {
-  dotenv.config({ path: '.env.local' });
+  // Repo-root .env.local (TRA-1195). This was CWD-relative, so BLE_SESSION_ID
+  // never came from the file — only from direnv, or not at all. Getting that
+  // wrong here is worse than elsewhere: the fallback below is a *valid-looking*
+  // session id, so a miss produced a plausible wrong identity rather than an
+  // error, and the bridge would report it in get_connection_state.session.
+  dotenv.config({
+    path: path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '.env.local')
+  });
   return process.env.BLE_SESSION_ID || `trakrf-platform-dev-${os.hostname()}`;
 }
 

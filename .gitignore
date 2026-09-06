@@ -165,9 +165,28 @@ tmp/
 *.db
 *.sqlite
 *.sqlite3
-data/
+# Anchored to the repo root deliberately (TRA-1215). A bare `data/` matches a
+# directory of that name at ANY depth, and the only one in this tree is
+# frontend/tests/data — so this rule silently kept 2.2MB of hardware captures
+# and their loader modules out of version control for as long as it has existed,
+# including the only capture we hold of the vendor app's dispatch engine.
+# Nothing else in the repo is named `data`, so anchoring costs nothing.
+/data/
 postgres-data/
 timescaledb-data/
+# The one file in frontend/tests/data that is deliberately NOT tracked: a 2.1MB
+# photograph of the bench setup, which no analysis references. A binary that
+# size cannot be removed from history later without a rewrite, so it is kept out
+# on purpose rather than by accident — see that directory's README.
+frontend/tests/data/cs108-barcode-test-setup.jpg
+
+# ...and the exception that has to be spelled out, for the same reason the
+# `data/` rule needed anchoring: `*.log` (line ~115) is aimed at run output, but
+# a raw Android BLE snoop is a CAPTURE, and the only one we hold. It is 233KB,
+# it cannot be regenerated without the handset and the vendor app, and every
+# correction on TRA-1215 was recoverable only because it survived. A broad rule
+# swallowing an irreplaceable artefact is exactly the failure this ticket found.
+!frontend/tests/data/*.log
 # Docker volumes (defensive - named volumes don't create local directories,
 # but this protects against someone switching to bind mounts)
 timescale_data/

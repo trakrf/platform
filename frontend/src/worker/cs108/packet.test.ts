@@ -39,6 +39,66 @@ describe('parsePacket', () => {
     expect(packet?.isComplete).toBe(true);
   });
 
+  /**
+   * Byte 4 is not a constant (TRA-1213, folded into TRA-1215).
+   *
+   * `RESERVE_BYTE: 0x82` was declared "Byte 4: Always 0x82" and enforced for
+   * every event code. Measured against the vendor's own traffic in
+   * tests/data/vendor-app-packet-cap, that holds for every code except uplink
+   * 0x8100, where byte 4 is a running sequence number:
+   *
+   *   uplink 0x8100 (tag data)   n=1054   byte4==0x82:   5 (0.5%)   256 distinct
+   *   uplink, other codes        n= 358   byte4==0x82: 358 (100%)     1 distinct
+   *   downlink, other codes      n= 242   byte4==0x82: 242 (100%)     1 distinct
+   *
+   * 256 distinct values on 0x8100 is the whole range of a wrapping counter, and
+   * one distinct value everywhere else. That is positive evidence of a sequence
+   * number rather than a constant that happens to be corrupted on tag packets.
+   *
+   * The guard was never live — parsePacket has no production callers, and the
+   * receive path in packet.ts reads data[4] without validating — so this never
+   * dropped a real tag read. It would have rejected 99.5% of them the moment
+   * anyone wired it up.
+   */
+  describe('byte 4 semantics', () => {
+    it('accepts a tag-data packet whose byte 4 is a sequence number', () => {
+      const handler = new PacketHandler();
+      const data = handler.buildResponse(INVENTORY_TAG_NOTIFICATION, new Uint8Array([0x01, 0x02]));
+
+      // A mid-sequence value the old guard would have rejected outright.
+      data[4] = 0x17;
+
+      const packet = parsePacket(data);
+
+      expect(packet).not.toBeNull();
+      expect(packet?.eventCode).toBe(0x8100);
+      expect(packet?.reserve).toBe(0x17);
+    });
+
+    it('accepts every value of the counter on tag data, including the wrap', () => {
+      const handler = new PacketHandler();
+
+      for (const value of [0x00, 0x01, 0x7f, 0x82, 0xfe, 0xff]) {
+        const data = handler.buildResponse(INVENTORY_TAG_NOTIFICATION, new Uint8Array([0x01, 0x02]));
+        data[4] = value;
+
+        const packet = parsePacket(data);
+        expect(packet, `byte4=0x${value.toString(16)}`).not.toBeNull();
+        expect(packet?.reserve).toBe(value);
+      }
+    });
+
+    it('still rejects a wrong byte 4 on every other event code', () => {
+      // The guard is correct about all 600 non-tag packets in the vendor
+      // capture, so scoping it must not become deleting it.
+      const handler = new PacketHandler();
+      const data = handler.buildResponse(RFID_POWER_OFF, new Uint8Array([0x00]));
+      data[4] = 0x17;
+
+      expect(parsePacket(data)).toBeNull();
+    });
+  });
+
   it('should return null for incomplete packet', () => {
     // Only header, no event code - use raw bytes for invalid packet test
     const data = new Uint8Array([

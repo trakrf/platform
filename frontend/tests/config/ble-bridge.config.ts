@@ -15,15 +15,15 @@
 
 import os from 'os';
 import { resolveBridgePort } from './resolve-bridge-port';
-import * as dotenv from 'dotenv';
+import { loadRootEnv } from './load-root-env';
 import {
   CS108_BLE_SERVICE_UUID,
   CS108_BLE_WRITE_UUID,
   CS108_BLE_NOTIFY_UUID
 } from '../../src/lib/device/transport/cs108-ble-transport';
 
-// Load environment variables once
-dotenv.config({ path: '.env.local' });
+// Load environment variables once, from the repo root (TRA-1195).
+loadRootEnv();
 
 // System hostname for unique session IDs
 const systemHostname = os.hostname();

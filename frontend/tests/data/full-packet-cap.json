@@ -1,0 +1,4895 @@
+[
+  {
+    "type": "command",
+    "data": "a7 b3 02 c2 82 37 00 00 80 01",
+    "description": "RFID Power Off to module 0xc2",
+    "length": 2,
+    "timestamp": 1749304239997
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 18 99 80 01 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304240056
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 18 99 80 01 00",
+    "description": "RFID Power OFF Response",
+    "length": 3,
+    "timestamp": 1749304240056
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 c2 82 37 00 00 80 00",
+    "description": "RFID Power On to module 0xc2",
+    "length": 2,
+    "timestamp": 1749304240557
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 01 41 80 00 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304240596
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 01 41 80 00 00",
+    "description": "RFID Power ON Response",
+    "length": 3,
+    "timestamp": 1749304240596
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 00",
+    "description": "Get Battery Voltage to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304240597
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 04 d9 82 9e 59 8f a0 00 0f eb",
+    "description": "Raw notification packet",
+    "length": 4,
+    "timestamp": 1749304240656
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 04 d9 82 9e 59 8f a0 00 0f eb",
+    "description": "Battery: 4075mV (4.08V)",
+    "length": 4,
+    "timestamp": 1749304240656
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 02",
+    "description": "Start Battery Reporting to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304240659
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 5e 5f a0 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304240716
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304240717
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 74 37 a0 01 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304240798
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 d9 82 9e 74 37 a0 01 00",
+    "description": "Trigger state: UP",
+    "length": 3,
+    "timestamp": 1749304240798
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 04 d9 82 9e 59 8f a0 00 0f eb",
+    "description": "Raw notification packet",
+    "length": 4,
+    "timestamp": 1749304243266
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 04 d9 82 9e 59 8f a0 00 0f eb",
+    "description": "Battery: 4075mV (4.08V)",
+    "length": 4,
+    "timestamp": 1749304243266
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 02 d9 82 9e a7 6f a1 02",
+    "description": "Raw notification packet",
+    "length": 2,
+    "timestamp": 1749304243834
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 02 d9 82 9e a7 6f a1 02",
+    "description": "Trigger DOWN event",
+    "length": 2,
+    "timestamp": 1749304243834
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 01 07 00 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304243835
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304243894
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304243894
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304243894
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 06 07 2c 01 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304243894
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304243935
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304243954
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304243954
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304243954
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 02 09 03 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304243954
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244014
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Trigger state: DOWN",
+    "length": 3,
+    "timestamp": 1749304244014
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244075
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304244075
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304244075
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 03 09 f7 40 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304244075
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304244116
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244137
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304244137
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304244137
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 00 09 00 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304244138
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244195
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Trigger state: DOWN",
+    "length": 3,
+    "timestamp": 1749304244195
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244255
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304244255
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304244255
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 60 0b 01 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304244256
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304244297
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244317
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304244317
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304244318
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 00 f0 06 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304244318
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244361
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Trigger state: DOWN",
+    "length": 3,
+    "timestamp": 1749304244361
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244391
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304244391
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304244391
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 08 09 10 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304244391
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 22 c2 86 9e ba 20 81 00 02 00 00 80 02 00 00 00 06 00 00 00 cb 0d 00 00 02 00 01 80 02 00 00 00 cb 0d 00 00 00 00 00 00",
+    "description": "Raw notification packet",
+    "length": 34,
+    "timestamp": 1749304244457
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 22 c2 86 9e ba 20 81 00 02 00 00 80 02 00 00 00 06 00 00 00 cb 0d 00 00 02 00 01 80 02 00 00 00 cb 0d 00 00 00 00 00 00",
+    "description": "RFID BEGIN",
+    "length": 34,
+    "timestamp": 1749304244457
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244457
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304244457
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304244457
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 01 09 03 00 04 04",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304244457
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304244464
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244480
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304244480
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304244480
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 02 0a 00 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304244480
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244511
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Trigger state: DOWN",
+    "length": 3,
+    "timestamp": 1749304244511
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244542
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304244542
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304244542
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 03 0a 00 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304244542
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244570
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304244570
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304244570
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 04 0a 00 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304244570
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244602
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304244602
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304244602
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 00 06 07 00 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304244602
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304244613
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244635
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304244635
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304244635
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 00 f0 19 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304244635
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 0a c2 87 9e 83 91 81 00 70 00 06 07 2c 01 00 00",
+    "description": "Raw notification packet",
+    "length": 10,
+    "timestamp": 1749304244636
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 0a c2 87 9e 83 91 81 00 70 00 06 07 2c 01 00 00",
+    "description": "RFID REGISTER_ACCESS",
+    "length": 10,
+    "timestamp": 1749304244636
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244659
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Trigger state: DOWN",
+    "length": 3,
+    "timestamp": 1749304244659
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244689
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304244689
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304244689
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 00 06 07 00 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304244689
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 12 c2 88 9e 52 9b 81 00 02 00 00 80 02 00 00 00 19 00 00 00 f7 0e 00 00",
+    "description": "Raw notification packet",
+    "length": 18,
+    "timestamp": 1749304244706
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 12 c2 88 9e 52 9b 81 00 02 00 00 80 02 00 00 00 19 00 00 00 f7 0e 00 00",
+    "description": "RFID BEGIN",
+    "length": 18,
+    "timestamp": 1749304244706
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 12 c2 89 9e d7 24 81 00 02 00 01 80 02 00 00 00 fa 0e 00 00 00 00 00 00",
+    "description": "Raw notification packet",
+    "length": 18,
+    "timestamp": 1749304244735
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 12 c2 89 9e d7 24 81 00 02 00 01 80 02 00 00 00 fa 0e 00 00 00 00 00 00",
+    "description": "RFID END",
+    "length": 18,
+    "timestamp": 1749304244735
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244735
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304244735
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304244735
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 00 f0 0f 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304244736
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304244762
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 0a c2 8a 9e 09 5e 81 00 70 00 06 07 2c 01 00 00",
+    "description": "Raw notification packet",
+    "length": 10,
+    "timestamp": 1749304244763
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 0a c2 8a 9e 09 5e 81 00 70 00 06 07 2c 01 00 00",
+    "description": "RFID REGISTER_ACCESS",
+    "length": 10,
+    "timestamp": 1749304244763
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244766
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304244766
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304244766
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 12 c2 8b 9e 60 84 81 00 02 01 00 80 02 00 00 00 0f 00 00 00 42 0f 00 00",
+    "description": "Raw notification packet",
+    "length": 18,
+    "timestamp": 1749304244783
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 12 c2 8b 9e 60 84 81 00 02 01 00 80 02 00 00 00 0f 00 00 00 42 0f 00 00",
+    "description": "RFID BEGIN",
+    "length": 18,
+    "timestamp": 1749304244783
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244798
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Trigger state: DOWN",
+    "length": 3,
+    "timestamp": 1749304244798
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 8c 9e 16 ea 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 54 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4c 30 00 00 00 00 00 00 00 00 00 00 00 00 09 5a 30 00 00 00 00 00 00 00 00 00 00 00 00 13 50",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304244832
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 8c 9e 16 ea 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 54 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4c 30 00 00 00 00 00 00 00 00 00 00 00 00 09 5a 30 00 00 00 00 00 00 00 00 00 00 00 00 13 50",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304244832
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304244900
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 8d 9e 61 d2 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4c 30 00 00 00 00 00 00 00 00 00 00 00 00 09 58 30 00 00 00 00 00 00 00 00 00 00 00 00 10 53 30 00 00 00 00 00 00 00 00 00 00 00 00 13 50",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304244901
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 8d 9e 61 d2 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4c 30 00 00 00 00 00 00 00 00 00 00 00 00 09 58 30 00 00 00 00 00 00 00 00 00 00 00 00 10 53 30 00 00 00 00 00 00 00 00 00 00 00 00 13 50",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304244901
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 8e 9e 75 73 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 50 30 00 00 00 00 00 00 00 00 00 00 00 00 09 58 30 00 00 00 00 00 00 00 00 00 00 00 00 10 57 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4c",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304244936
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 8e 9e 75 73 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 50 30 00 00 00 00 00 00 00 00 00 00 00 00 09 58 30 00 00 00 00 00 00 00 00 00 00 00 00 10 57 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4c",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304244936
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304244937
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Trigger state: DOWN",
+    "length": 3,
+    "timestamp": 1749304244937
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 8f 9e 17 98 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 49 30 00 00 00 00 00 00 00 00 00 00 00 00 10 54 30 00 00 00 00 00 00 00 00 00 00 00 00 13 52 30 00 00 00 00 00 00 00 00 00 00 00 00 09 59",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304244982
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 8f 9e 17 98 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 49 30 00 00 00 00 00 00 00 00 00 00 00 00 10 54 30 00 00 00 00 00 00 00 00 00 00 00 00 13 52 30 00 00 00 00 00 00 00 00 00 00 00 00 09 59",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304244982
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 90 9e 5c f5 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4b 30 00 00 00 00 00 00 00 00 00 00 00 00 13 4e 30 00 00 00 00 00 00 00 00 00 00 00 00 10 55 30 00 00 00 00 00 00 00 00 00 00 00 00 09 58",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304245016
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 90 9e 5c f5 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4b 30 00 00 00 00 00 00 00 00 00 00 00 00 13 4e 30 00 00 00 00 00 00 00 00 00 00 00 00 10 55 30 00 00 00 00 00 00 00 00 00 00 00 00 09 58",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304245016
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304245038
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 91 9e 45 16 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 58 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4d 30 00 00 00 00 00 00 00 00 00 00 00 00 10 53 30 00 00 00 00 00 00 00 00 00 00 00 00 13 51",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304245083
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 91 9e 45 16 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 58 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4d 30 00 00 00 00 00 00 00 00 00 00 00 00 10 53 30 00 00 00 00 00 00 00 00 00 00 00 00 13 51",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304245083
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304245085
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Trigger state: DOWN",
+    "length": 3,
+    "timestamp": 1749304245085
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 92 9e 28 28 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 56 30 00 00 00 00 00 00 00 00 00 00 00 00 13 4d 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4e 30 00 00 00 00 00 00 00 00 00 00 00 00 09 59",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304245100
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 92 9e 28 28 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 56 30 00 00 00 00 00 00 00 00 00 00 00 00 13 4d 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4e 30 00 00 00 00 00 00 00 00 00 00 00 00 09 59",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304245100
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 93 9e 0b 89 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 59 30 00 00 00 00 00 00 00 00 00 00 00 00 10 55 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4e 30 00 00 00 00 00 00 00 00 00 00 00 00 13 4c",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304245150
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 93 9e 0b 89 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 59 30 00 00 00 00 00 00 00 00 00 00 00 00 10 55 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4e 30 00 00 00 00 00 00 00 00 00 00 00 00 13 4c",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304245150
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304245186
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 94 9e 38 38 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4d 30 00 00 00 00 00 00 00 00 00 00 00 00 10 53 30 00 00 00 00 00 00 00 00 00 00 00 00 09 59 30 00 00 00 00 00 00 00 00 00 00 00 00 13 50",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304245199
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 94 9e 38 38 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4d 30 00 00 00 00 00 00 00 00 00 00 00 00 10 53 30 00 00 00 00 00 00 00 00 00 00 00 00 09 59 30 00 00 00 00 00 00 00 00 00 00 00 00 13 50",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304245199
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304245215
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Trigger state: DOWN",
+    "length": 3,
+    "timestamp": 1749304245215
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 95 9e d4 f5 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 59 30 00 00 00 00 00 00 00 00 00 00 00 00 09 5d 30 00 00 00 00 00 00 00 00 00 00 00 00 13 51 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4a",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304245249
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 95 9e d4 f5 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 59 30 00 00 00 00 00 00 00 00 00 00 00 00 09 5d 30 00 00 00 00 00 00 00 00 00 00 00 00 13 51 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4a",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304245249
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 96 9e 30 ee 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 5d 30 00 00 00 00 00 00 00 00 00 00 00 00 13 4e 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4b 30 00 00 00 00 00 00 00 00 00 00 00 00 10 59",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304245283
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 96 9e 30 ee 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 5d 30 00 00 00 00 00 00 00 00 00 00 00 00 13 4e 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4b 30 00 00 00 00 00 00 00 00 00 00 00 00 10 59",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304245283
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304245316
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 97 9e c5 67 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 4f 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4d 30 00 00 00 00 00 00 00 00 00 00 00 00 09 5a 30 00 00 00 00 00 00 00 00 00 00 00 00 10 59",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304245353
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 97 9e c5 67 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 4f 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4d 30 00 00 00 00 00 00 00 00 00 00 00 00 09 5a 30 00 00 00 00 00 00 00 00 00 00 00 00 10 59",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304245353
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 98 9e 33 ea 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 5a 30 00 00 00 00 00 00 00 00 00 00 00 00 13 50 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4d 30 00 00 00 00 00 00 00 00 00 00 00 00 09 5d",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304245365
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 98 9e 33 ea 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 5a 30 00 00 00 00 00 00 00 00 00 00 00 00 13 50 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4d 30 00 00 00 00 00 00 00 00 00 00 00 00 09 5d",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304245365
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 99 9e e8 66 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4e 30 00 00 00 00 00 00 00 00 00 00 00 00 09 5c 30 00 00 00 00 00 00 00 00 00 00 00 00 10 5a 30 00 00 00 00 00 00 00 00 00 00 00 00 13 4f",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304245434
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 99 9e e8 66 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4e 30 00 00 00 00 00 00 00 00 00 00 00 00 09 5c 30 00 00 00 00 00 00 00 00 00 00 00 00 10 5a 30 00 00 00 00 00 00 00 00 00 00 00 00 13 4f",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304245434
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 9a 9e 6f 3a 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 57 30 00 00 00 00 00 00 00 00 00 00 00 00 09 5c 30 00 00 00 00 00 00 00 00 00 00 00 00 13 51 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4c",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304245499
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 9a 9e 6f 3a 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 57 30 00 00 00 00 00 00 00 00 00 00 00 00 09 5c 30 00 00 00 00 00 00 00 00 00 00 00 00 13 51 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4c",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304245499
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 02 d9 82 9e b6 e6 a1 03",
+    "description": "Raw notification packet",
+    "length": 2,
+    "timestamp": 1749304245499
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 02 d9 82 9e b6 e6 a1 03",
+    "description": "Trigger UP event",
+    "length": 2,
+    "timestamp": 1749304245499
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 9b 9e 98 8d 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4d 30 00 00 00 00 00 00 00 00 00 00 00 00 13 51 30 00 00 00 00 00 00 00 00 00 00 00 00 10 58 30 00 00 00 00 00 00 00 00 00 00 00 00 09 5b",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304245516
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 9b 9e 98 8d 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4d 30 00 00 00 00 00 00 00 00 00 00 00 00 13 51 30 00 00 00 00 00 00 00 00 00 00 00 00 10 58 30 00 00 00 00 00 00 00 00 00 00 00 00 09 5b",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304245516
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 19 c2 9c 9e c0 8b 81 00 04 00 05 80 0f 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 49",
+    "description": "Raw notification packet",
+    "length": 25,
+    "timestamp": 1749304245533
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 19 c2 9c 9e c0 8b 81 00 04 00 05 80 0f 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 49",
+    "description": "RFID INVENTORY",
+    "length": 25,
+    "timestamp": 1749304245533
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 9d 9e 92 c5 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 51 30 00 00 00 00 00 00 00 00 00 00 00 00 10 58 30 00 00 00 00 00 00 00 00 00 00 00 00 09 5a 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4c",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304245566
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 9d 9e 92 c5 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 51 30 00 00 00 00 00 00 00 00 00 00 00 00 10 58 30 00 00 00 00 00 00 00 00 00 00 00 00 09 5a 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4c",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304245566
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 19 c2 9e 9e 9c ec 81 00 04 00 05 80 0f 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 46",
+    "description": "Raw notification packet",
+    "length": 25,
+    "timestamp": 1749304245582
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 19 c2 9e 9e 9c ec 81 00 04 00 05 80 0f 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 46",
+    "description": "RFID INVENTORY",
+    "length": 25,
+    "timestamp": 1749304245582
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304245600
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 9f 9e 8e da 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 4a 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4a 30 00 00 00 00 00 00 00 00 00 00 00 00 09 54 30 00 00 00 00 00 00 00 00 00 00 00 00 10 51",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304245649
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 9f 9e 8e da 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 4a 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4a 30 00 00 00 00 00 00 00 00 00 00 00 00 09 54 30 00 00 00 00 00 00 00 00 00 00 00 00 10 51",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304245649
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 74 37 a0 01 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304245649
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 d9 82 9e 74 37 a0 01 00",
+    "description": "Trigger state: UP",
+    "length": 3,
+    "timestamp": 1749304245649
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 c2 82 37 00 00 40 03",
+    "description": "Abort Command to module 0xc2",
+    "length": 2,
+    "timestamp": 1749304245651
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 a0 9e c4 54 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4d 30 00 00 00 00 00 00 00 00 00 00 00 00 10 51 30 00 00 00 00 00 00 00 00 00 00 00 00 09 52 30 00 00 00 00 00 00 00 00 00 00 00 00 13 51",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749304245667
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 a0 9e c4 54 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 4d 30 00 00 00 00 00 00 00 00 00 00 00 00 10 51 30 00 00 00 00 00 00 00 00 00 00 00 00 09 52 30 00 00 00 00 00 00 00 00 00 00 00 00 13 51",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749304245667
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304245753
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 74 37 a0 01 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304245787
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 d9 82 9e 74 37 a0 01 00",
+    "description": "Trigger state: UP",
+    "length": 3,
+    "timestamp": 1749304245787
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 02 d9 82 9e b6 e6 a1 03",
+    "description": "Raw notification packet",
+    "length": 2,
+    "timestamp": 1749304246029
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 02 d9 82 9e b6 e6 a1 03",
+    "description": "Trigger UP event",
+    "length": 2,
+    "timestamp": 1749304246029
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304246077
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304246077
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304246077
+  },
+  {
+    "type": "response",
+    "data": "",
+    "description": "TIMEOUT: Abort Command after 800ms",
+    "length": 0,
+    "timestamp": 1749304246454
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 c2 82 37 00 00 80 01",
+    "description": "RFID Power Off to module 0xc2",
+    "length": 2,
+    "timestamp": 1749304246455
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 18 99 80 01 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304246490
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 18 99 80 01 00",
+    "description": "RFID Power OFF Response",
+    "length": 3,
+    "timestamp": 1749304246490
+  },
+  {
+    "type": "response",
+    "data": "",
+    "description": "TIMEOUT: Get Trigger State after 1000ms",
+    "length": 0,
+    "timestamp": 1749304246755
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 c2 82 37 00 00 80 00",
+    "description": "RFID Power On to module 0xc2",
+    "length": 2,
+    "timestamp": 1749304246991
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 01 41 80 00 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304247016
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 01 41 80 00 00",
+    "description": "RFID Power ON Response",
+    "length": 3,
+    "timestamp": 1749304247016
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 02 d9 82 9e a7 6f a1 02",
+    "description": "Raw notification packet",
+    "length": 2,
+    "timestamp": 1749304251470
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 02 d9 82 9e a7 6f a1 02",
+    "description": "Trigger DOWN event",
+    "length": 2,
+    "timestamp": 1749304251471
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 06 07 2c 01 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304251474
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304251503
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304251503
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304251503
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 02 09 00 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304251503
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304251532
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304251532
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304251532
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 03 09 00 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304251532
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304251559
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304251559
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304251559
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 01 08 09 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304251559
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304251572
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304251591
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304251591
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304251591
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 02 08 01 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304251591
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304251620
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Trigger state: DOWN",
+    "length": 3,
+    "timestamp": 1749304251620
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304251650
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304251650
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304251650
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 03 08 20 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304251650
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304251680
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304251680
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304251680
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 04 08 60 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304251680
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304251711
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304251711
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304251711
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 05 08 00 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304251711
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304251723
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304251740
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304251740
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304251740
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 06 08 00 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304251740
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304251772
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Trigger state: DOWN",
+    "length": 3,
+    "timestamp": 1749304251772
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304251800
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304251800
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304251800
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 07 08 10 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304251800
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304251830
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304251830
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304251830
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 01 09 00 00 40 40",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304251830
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304251862
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304251862
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304251862
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 60 0b 01 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304251862
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304251874
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304251897
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304251897
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304251897
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 00 f0 19 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304251897
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304251922
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Trigger state: DOWN",
+    "length": 3,
+    "timestamp": 1749304251922
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304251951
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304251951
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304251951
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 0a c2 82 37 00 00 80 02 70 01 00 f0 0f 00 00 00",
+    "description": "RFID Firmware Command to module 0xc2",
+    "length": 10,
+    "timestamp": 1749304251951
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 12 c2 00 9e 19 2f 81 00 02 00 00 80 02 00 00 00 19 00 00 00 30 12 00 00",
+    "description": "Raw notification packet",
+    "length": 18,
+    "timestamp": 1749304251996
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 12 c2 00 9e 19 2f 81 00 02 00 00 80 02 00 00 00 19 00 00 00 30 12 00 00",
+    "description": "RFID BEGIN",
+    "length": 18,
+    "timestamp": 1749304251996
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 12 c2 01 9e 4a 13 81 00 02 00 01 80 02 00 00 00 34 12 00 00 00 00 00 00",
+    "description": "Raw notification packet",
+    "length": 18,
+    "timestamp": 1749304251996
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 12 c2 01 9e 4a 13 81 00 02 00 01 80 02 00 00 00 34 12 00 00 00 00 00 00",
+    "description": "RFID END",
+    "length": 18,
+    "timestamp": 1749304251996
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304251996
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304251996
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304251997
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304252026
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 12 c2 02 9e 24 2e 81 00 02 01 00 80 02 00 00 00 0f 00 00 00 51 12 00 00",
+    "description": "Raw notification packet",
+    "length": 18,
+    "timestamp": 1749304252026
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 12 c2 02 9e 24 2e 81 00 02 01 00 80 02 00 00 00 0f 00 00 00 51 12 00 00",
+    "description": "RFID BEGIN",
+    "length": 18,
+    "timestamp": 1749304252026
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 03 9e c6 4a 81 00 03 12 05 80 07 00 00 00 62 12 00 00 72 50 6b 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252026
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 03 9e c6 4a 81 00 03 12 05 80 07 00 00 00 62 12 00 00 72 50 6b 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252026
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 04 9e 1b 01 81 00 03 12 05 80 07 00 00 00 6a 12 00 00 73 55 69 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252049
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 04 9e 1b 01 81 00 03 12 05 80 07 00 00 00 6a 12 00 00 73 55 69 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252049
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 05 9e a3 7d 81 00 03 12 05 80 07 00 00 00 79 12 00 00 78 58 1a 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252068
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 05 9e a3 7d 81 00 03 12 05 80 07 00 00 00 79 12 00 00 78 58 1a 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252068
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 06 9e 23 ed 81 00 03 12 05 80 07 00 00 00 81 12 00 00 74 4b 41 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252069
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 06 9e 23 ed 81 00 03 12 05 80 07 00 00 00 81 12 00 00 74 4b 41 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252069
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 07 9e ab 81 81 00 03 12 05 80 07 00 00 00 8c 12 00 00 73 4f 27 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252070
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 07 9e ab 81 81 00 03 12 05 80 07 00 00 00 8c 12 00 00 73 4f 27 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252071
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 08 9e 75 5b 81 00 03 12 05 80 07 00 00 00 96 12 00 00 70 4b 3d 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252083
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 08 9e 75 5b 81 00 03 12 05 80 07 00 00 00 96 12 00 00 70 4b 3d 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252083
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304252084
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 d9 82 9e 65 be a0 01 01",
+    "description": "Trigger state: DOWN",
+    "length": 3,
+    "timestamp": 1749304252084
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 09 9e 67 83 81 00 03 12 05 80 07 00 00 00 a0 12 00 00 72 54 69 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252100
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 09 9e 67 83 81 00 03 12 05 80 07 00 00 00 a0 12 00 00 72 54 69 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252100
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 0a 9e 82 ed 81 00 03 12 05 80 07 00 00 00 ac 12 00 00 79 58 57 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252101
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 0a 9e 82 ed 81 00 03 12 05 80 07 00 00 00 ac 12 00 00 79 58 57 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252101
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 0b 9e b8 60 81 00 03 12 05 80 07 00 00 00 ba 12 00 00 72 50 68 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252117
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 0b 9e b8 60 81 00 03 12 05 80 07 00 00 00 ba 12 00 00 72 50 68 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252117
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 0c 9e bc 91 81 00 03 12 05 80 07 00 00 00 c2 12 00 00 6d 4d 3d 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252117
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 0c 9e bc 91 81 00 03 12 05 80 07 00 00 00 c2 12 00 00 6d 4d 3d 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252117
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 0d 9e a6 7e 81 00 03 12 05 80 07 00 00 00 ca 12 00 00 71 55 2b 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252134
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 0d 9e a6 7e 81 00 03 12 05 80 07 00 00 00 ca 12 00 00 71 55 2b 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252134
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 0e 9e 43 48 81 00 03 12 05 80 07 00 00 00 d6 12 00 00 7b 59 59 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252134
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 0e 9e 43 48 81 00 03 12 05 80 07 00 00 00 d6 12 00 00 7b 59 59 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252134
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 0f 9e 4e 30 81 00 03 12 05 80 07 00 00 00 e1 12 00 00 75 57 58 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252149
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 0f 9e 4e 30 81 00 03 12 05 80 07 00 00 00 e1 12 00 00 75 57 58 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252149
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 10 9e 05 ca 81 00 03 12 05 80 07 00 00 00 e9 12 00 00 73 50 69 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252150
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 10 9e 05 ca 81 00 03 12 05 80 07 00 00 00 e9 12 00 00 73 50 69 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252150
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 11 9e bf 83 81 00 03 12 05 80 07 00 00 00 f3 12 00 00 73 55 2b 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252167
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 11 9e bf 83 81 00 03 12 05 80 07 00 00 00 f3 12 00 00 73 55 2b 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252167
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 12 9e ca 7a 81 00 03 12 05 80 07 00 00 00 ff 12 00 00 6e 4c 44 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252184
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 12 9e ca 7a 81 00 03 12 05 80 07 00 00 00 ff 12 00 00 6e 4c 44 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252184
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304252184
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 13 9e 05 76 81 00 03 12 05 80 07 00 00 00 0a 13 00 00 70 53 6b 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252184
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 13 9e 05 76 81 00 03 12 05 80 07 00 00 00 0a 13 00 00 70 53 6b 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252185
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 14 9e 73 81 81 00 03 12 05 80 07 00 00 00 18 13 00 00 67 4f 3d 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252203
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 14 9e 73 81 81 00 03 12 05 80 07 00 00 00 18 13 00 00 67 4f 3d 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252203
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 15 9e 94 3a 81 00 03 12 05 80 07 00 00 00 20 13 00 00 76 59 5a 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252218
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 15 9e 94 3a 81 00 03 12 05 80 07 00 00 00 20 13 00 00 76 59 5a 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252218
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 16 9e 0b 22 81 00 03 12 05 80 07 00 00 00 2b 13 00 00 75 58 59 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252218
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 16 9e 0b 22 81 00 03 12 05 80 07 00 00 00 2b 13 00 00 75 58 59 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252218
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 17 9e 48 ba 81 00 03 12 05 80 07 00 00 00 36 13 00 00 77 4d 25 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252235
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 17 9e 48 ba 81 00 03 12 05 80 07 00 00 00 36 13 00 00 77 4d 25 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252235
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 18 9e da 71 81 00 03 12 05 80 07 00 00 00 3e 13 00 00 71 51 29 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252251
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 18 9e da 71 81 00 03 12 05 80 07 00 00 00 3e 13 00 00 71 51 29 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252251
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 19 9e 54 cd 81 00 03 12 05 80 07 00 00 00 4e 13 00 00 70 4c 43 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252270
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 19 9e 54 cd 81 00 03 12 05 80 07 00 00 00 4e 13 00 00 70 4c 43 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252270
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 1a 9e 21 2f 81 00 03 12 05 80 07 00 00 00 5a 13 00 00 78 57 19 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252284
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 1a 9e 21 2f 81 00 03 12 05 80 07 00 00 00 5a 13 00 00 78 57 19 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252284
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 1b 9e 3e 3f 81 00 03 12 05 80 07 00 00 00 63 13 00 00 73 57 6b 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252285
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 1b 9e 3e 3f 81 00 03 12 05 80 07 00 00 00 63 13 00 00 73 57 6b 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252285
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 1c 9e 29 61 81 00 03 12 05 80 07 00 00 00 76 13 00 00 77 56 17 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252286
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 1c 9e 29 61 81 00 03 12 05 80 07 00 00 00 76 13 00 00 77 56 17 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252286
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 1d 9e 20 16 81 00 03 12 05 80 07 00 00 00 80 13 00 00 73 4b 27 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252317
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 1d 9e 20 16 81 00 03 12 05 80 07 00 00 00 80 13 00 00 73 4b 27 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252317
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 1e 9e 2c 3a 81 00 03 12 05 80 07 00 00 00 88 13 00 00 71 55 2a 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252318
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 1e 9e 2c 3a 81 00 03 12 05 80 07 00 00 00 88 13 00 00 71 55 2a 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252318
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 1f 9e 26 18 81 00 03 12 05 80 07 00 00 00 93 13 00 00 71 56 6a 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252334
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 1f 9e 26 18 81 00 03 12 05 80 07 00 00 00 93 13 00 00 71 56 6a 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252334
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 20 9e e1 51 81 00 03 12 05 80 07 00 00 00 9c 13 00 00 76 58 55 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252335
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 20 9e e1 51 81 00 03 12 05 80 07 00 00 00 9c 13 00 00 76 58 55 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252335
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 21 9e b8 f6 81 00 03 12 05 80 07 00 00 00 a5 13 00 00 71 4c 3d 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252351
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 21 9e b8 f6 81 00 03 12 05 80 07 00 00 00 a5 13 00 00 71 4c 3d 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252351
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 22 9e 73 18 81 00 03 12 05 80 07 00 00 00 b6 13 00 00 73 55 29 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252367
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 22 9e 73 18 81 00 03 12 05 80 07 00 00 00 b6 13 00 00 73 55 29 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252367
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 23 9e 3c 13 81 00 03 12 05 80 07 00 00 00 be 13 00 00 75 56 16 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252368
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 23 9e 3c 13 81 00 03 12 05 80 07 00 00 00 be 13 00 00 75 56 16 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252368
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 24 9e 51 27 81 00 03 12 05 80 07 00 00 00 c8 13 00 00 73 4d 25 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252384
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 24 9e 51 27 81 00 03 12 05 80 07 00 00 00 c8 13 00 00 73 4d 25 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252384
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 25 9e 10 9a 81 00 03 12 05 80 07 00 00 00 d1 13 00 00 6c 4b 7b 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252401
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 25 9e 10 9a 81 00 03 12 05 80 07 00 00 00 d1 13 00 00 6c 4b 7b 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252401
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 26 9e 28 cd 81 00 03 12 05 80 07 00 00 00 dc 13 00 00 73 55 28 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252402
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 26 9e 28 cd 81 00 03 12 05 80 07 00 00 00 dc 13 00 00 73 55 28 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252402
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 27 9e 49 8d 81 00 03 12 05 80 07 00 00 00 e8 13 00 00 70 4c 40 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252417
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 27 9e 49 8d 81 00 03 12 05 80 07 00 00 00 e8 13 00 00 70 4c 40 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252417
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 28 9e f8 af 81 00 03 12 05 80 07 00 00 00 fb 13 00 00 79 51 51 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252418
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 28 9e f8 af 81 00 03 12 05 80 07 00 00 00 fb 13 00 00 79 51 51 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252418
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 29 9e 4b dc 81 00 03 12 05 80 07 00 00 00 06 14 00 00 73 58 28 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252435
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 29 9e 4b dc 81 00 03 12 05 80 07 00 00 00 06 14 00 00 73 58 28 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252435
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 2a 9e 27 a6 81 00 03 12 05 80 07 00 00 00 12 14 00 00 7c 59 0c 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252451
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 2a 9e 27 a6 81 00 03 12 05 80 07 00 00 00 12 14 00 00 7c 59 0c 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252451
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 2b 9e 9f c0 81 00 03 12 05 80 07 00 00 00 1b 14 00 00 77 51 0e 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252468
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 2b 9e 9f c0 81 00 03 12 05 80 07 00 00 00 1b 14 00 00 77 51 0e 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252468
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 2c 9e d5 8c 81 00 03 12 05 80 07 00 00 00 26 14 00 00 74 50 35 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252469
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 2c 9e d5 8c 81 00 03 12 05 80 07 00 00 00 26 14 00 00 74 50 35 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252469
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 2d 9e 29 a7 81 00 03 12 05 80 07 00 00 00 2f 14 00 00 75 58 68 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252485
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 2d 9e 29 a7 81 00 03 12 05 80 07 00 00 00 2f 14 00 00 75 58 68 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252485
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 2e 9e 7e 3d 81 00 03 12 05 80 07 00 00 00 41 14 00 00 73 4d 77 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252502
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 2e 9e 7e 3d 81 00 03 12 05 80 07 00 00 00 41 14 00 00 73 4d 77 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252502
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 2f 9e a4 fa 81 00 03 12 05 80 07 00 00 00 49 14 00 00 73 42 35 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252517
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 2f 9e a4 fa 81 00 03 12 05 80 07 00 00 00 49 14 00 00 73 42 35 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252517
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 30 9e 5b c5 81 00 03 12 05 80 07 00 00 00 51 14 00 00 77 50 4e 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252533
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 30 9e 5b c5 81 00 03 12 05 80 07 00 00 00 51 14 00 00 77 50 4e 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252533
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 31 9e fe a9 81 00 03 12 05 80 07 00 00 00 5a 14 00 00 74 58 2a 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252534
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 31 9e fe a9 81 00 03 12 05 80 07 00 00 00 5a 14 00 00 74 58 2a 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252534
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 32 9e 01 d6 81 00 03 12 05 80 07 00 00 00 64 14 00 00 7c 5a 4c 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252534
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 32 9e 01 d6 81 00 03 12 05 80 07 00 00 00 64 14 00 00 7c 5a 4c 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252534
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 33 9e 32 c8 81 00 03 12 05 80 07 00 00 00 6e 14 00 00 73 58 29 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252551
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 33 9e 32 c8 81 00 03 12 05 80 07 00 00 00 6e 14 00 00 73 58 29 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252551
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 34 9e 55 a8 81 00 03 12 05 80 07 00 00 00 7b 14 00 00 75 4d 38 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252567
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 34 9e 55 a8 81 00 03 12 05 80 07 00 00 00 7b 14 00 00 75 4d 38 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252567
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 35 9e 87 48 81 00 03 12 05 80 07 00 00 00 84 14 00 00 7e 5b 0d 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252567
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 35 9e 87 48 81 00 03 12 05 80 07 00 00 00 84 14 00 00 7e 5b 0d 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252567
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 36 9e 51 54 81 00 03 12 05 80 07 00 00 00 94 14 00 00 7c 5b 0e 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252583
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 36 9e 51 54 81 00 03 12 05 80 07 00 00 00 94 14 00 00 7c 5b 0e 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252584
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 37 9e cf b0 81 00 03 12 05 80 07 00 00 00 9c 14 00 00 73 4f 78 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252585
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 37 9e cf b0 81 00 03 12 05 80 07 00 00 00 9c 14 00 00 73 4f 78 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252585
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 38 9e 70 b6 81 00 03 12 05 80 07 00 00 00 a5 14 00 00 76 57 2a 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252602
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 38 9e 70 b6 81 00 03 12 05 80 07 00 00 00 a5 14 00 00 76 57 2a 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252602
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 39 9e 8f a8 81 00 03 12 05 80 07 00 00 00 ae 14 00 00 78 51 11 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252619
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 39 9e 8f a8 81 00 03 12 05 80 07 00 00 00 ae 14 00 00 78 51 11 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252619
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 3a 9e 9f 6c 81 00 03 12 05 80 07 00 00 00 b9 14 00 00 77 4d 76 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252620
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 3a 9e 9f 6c 81 00 03 12 05 80 07 00 00 00 b9 14 00 00 77 4d 76 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252620
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 3b 9e 16 b2 81 00 03 12 05 80 07 00 00 00 c5 14 00 00 7d 5b 0e 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252635
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 3b 9e 16 b2 81 00 03 12 05 80 07 00 00 00 c5 14 00 00 7d 5b 0e 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252635
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 3c 9e 56 3a 81 00 03 12 05 80 07 00 00 00 d0 14 00 00 76 58 6b 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252652
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 3c 9e 56 3a 81 00 03 12 05 80 07 00 00 00 d0 14 00 00 76 58 6b 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252652
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 3d 9e 56 38 81 00 03 12 05 80 07 00 00 00 d8 14 00 00 76 50 13 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252653
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 3d 9e 56 38 81 00 03 12 05 80 07 00 00 00 d8 14 00 00 76 50 13 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252653
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 3e 9e 57 d4 81 00 03 12 05 80 07 00 00 00 e9 14 00 00 72 50 34 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252669
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 3e 9e 57 d4 81 00 03 12 05 80 07 00 00 00 e9 14 00 00 72 50 34 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252669
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 3f 9e cd 53 81 00 03 12 05 80 07 00 00 00 f3 14 00 00 75 51 10 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252685
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 3f 9e cd 53 81 00 03 12 05 80 07 00 00 00 f3 14 00 00 75 51 10 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252685
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 40 9e d4 a4 81 00 03 12 05 80 07 00 00 00 fe 14 00 00 76 51 0d 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252703
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 40 9e d4 a4 81 00 03 12 05 80 07 00 00 00 fe 14 00 00 76 51 0d 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252703
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 41 9e 4a 08 81 00 03 12 05 80 07 00 00 00 09 15 00 00 73 42 74 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252704
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 41 9e 4a 08 81 00 03 12 05 80 07 00 00 00 09 15 00 00 73 42 74 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252704
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 42 9e f3 7a 81 00 03 12 05 80 07 00 00 00 13 15 00 00 7b 5b 0f 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252718
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 42 9e f3 7a 81 00 03 12 05 80 07 00 00 00 13 15 00 00 7b 5b 0f 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252718
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 43 9e fa 59 81 00 03 12 05 80 07 00 00 00 1b 15 00 00 73 4c 77 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252720
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 43 9e fa 59 81 00 03 12 05 80 07 00 00 00 1b 15 00 00 73 4c 77 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252720
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 44 9e f0 bd 81 00 03 12 05 80 07 00 00 00 25 15 00 00 77 59 6f 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252734
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 44 9e f0 bd 81 00 03 12 05 80 07 00 00 00 25 15 00 00 77 59 6f 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252735
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 45 9e 56 84 81 00 03 12 05 80 07 00 00 00 30 15 00 00 7e 5b 10 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252735
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 45 9e 56 84 81 00 03 12 05 80 07 00 00 00 30 15 00 00 7e 5b 10 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252735
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 46 9e 84 e3 81 00 03 12 05 80 07 00 00 00 3c 15 00 00 78 50 51 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252751
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 46 9e 84 e3 81 00 03 12 05 80 07 00 00 00 3c 15 00 00 78 50 51 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252751
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 47 9e c6 37 81 00 03 12 05 80 07 00 00 00 44 15 00 00 75 57 6f 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252751
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 47 9e c6 37 81 00 03 12 05 80 07 00 00 00 44 15 00 00 75 57 6f 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252751
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 48 9e 99 23 81 00 03 12 05 80 07 00 00 00 4e 15 00 00 70 4e 79 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252767
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 48 9e 99 23 81 00 03 12 05 80 07 00 00 00 4e 15 00 00 70 4e 79 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252767
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 49 9e 29 8f 81 00 03 12 05 80 07 00 00 00 5b 15 00 00 79 59 30 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252783
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 49 9e 29 8f 81 00 03 12 05 80 07 00 00 00 5b 15 00 00 79 59 30 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252783
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 4a 9e 64 17 81 00 03 12 05 80 07 00 00 00 65 15 00 00 7c 5b 51 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252801
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 4a 9e 64 17 81 00 03 12 05 80 07 00 00 00 65 15 00 00 7c 5b 51 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252801
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 4b 9e 0a a3 81 00 03 12 05 80 07 00 00 00 70 15 00 00 76 50 10 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252802
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 4b 9e 0a a3 81 00 03 12 05 80 07 00 00 00 70 15 00 00 76 50 10 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252802
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 4c 9e ba 4c 81 00 03 12 05 80 07 00 00 00 7a 15 00 00 72 42 3b 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252833
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 4c 9e ba 4c 81 00 03 12 05 80 07 00 00 00 7a 15 00 00 72 42 3b 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252833
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 4d 9e 65 58 81 00 03 12 05 80 07 00 00 00 85 15 00 00 75 50 53 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252834
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 4d 9e 65 58 81 00 03 12 05 80 07 00 00 00 85 15 00 00 75 50 53 01 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252834
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 4e 9e d8 4a 81 00 03 12 05 80 07 00 00 00 9c 15 00 00 79 50 26 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252850
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 4e 9e d8 4a 81 00 03 12 05 80 07 00 00 00 9c 15 00 00 79 50 26 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252850
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 4f 9e bc 09 81 00 03 12 05 80 07 00 00 00 a4 15 00 00 72 4a 04 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252867
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 4f 9e bc 09 81 00 03 12 05 80 07 00 00 00 a4 15 00 00 72 4a 04 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252867
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 50 9e c2 8e 81 00 03 12 05 80 07 00 00 00 b1 15 00 00 7b 59 5c 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252868
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 50 9e c2 8e 81 00 03 12 05 80 07 00 00 00 b1 15 00 00 7b 59 5c 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252868
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 51 9e 42 5d 81 00 03 12 05 80 07 00 00 00 b9 15 00 00 76 51 66 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252868
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 51 9e 42 5d 81 00 03 12 05 80 07 00 00 00 b9 15 00 00 76 51 66 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252868
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 52 9e cf 48 81 00 03 12 05 80 07 00 00 00 c2 15 00 00 78 57 30 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252884
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 52 9e cf 48 81 00 03 12 05 80 07 00 00 00 c2 15 00 00 78 57 30 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252884
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 53 9e 17 7c 81 00 03 12 05 80 07 00 00 00 cf 15 00 00 73 4c 7e 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252900
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 53 9e 17 7c 81 00 03 12 05 80 07 00 00 00 cf 15 00 00 73 4c 7e 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252900
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 54 9e 37 fd 81 00 03 12 05 80 07 00 00 00 da 15 00 00 7c 5b 5e 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252900
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 54 9e 37 fd 81 00 03 12 05 80 07 00 00 00 da 15 00 00 7c 5b 5e 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252900
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 55 9e 9a c8 81 00 03 12 05 80 07 00 00 00 e4 15 00 00 75 52 27 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252917
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 55 9e 9a c8 81 00 03 12 05 80 07 00 00 00 e4 15 00 00 75 52 27 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252917
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 56 9e 5b 84 81 00 03 12 05 80 07 00 00 00 ef 15 00 00 70 4c 02 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252934
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 56 9e 5b 84 81 00 03 12 05 80 07 00 00 00 ef 15 00 00 70 4c 02 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252934
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 57 9e 06 35 81 00 03 12 05 80 07 00 00 00 f9 15 00 00 76 56 73 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252935
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 57 9e 06 35 81 00 03 12 05 80 07 00 00 00 f9 15 00 00 76 56 73 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252935
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 58 9e 43 47 81 00 03 12 05 80 07 00 00 00 02 16 00 00 74 4b 44 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252951
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 58 9e 43 47 81 00 03 12 05 80 07 00 00 00 02 16 00 00 74 4b 44 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252951
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 59 9e 56 cf 81 00 03 12 05 80 07 00 00 00 0f 16 00 00 79 53 33 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252966
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 59 9e 56 cf 81 00 03 12 05 80 07 00 00 00 0f 16 00 00 79 53 33 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252966
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 5a 9e 35 4b 81 00 03 12 05 80 07 00 00 00 17 16 00 00 76 51 2c 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252967
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 5a 9e 35 4b 81 00 03 12 05 80 07 00 00 00 17 16 00 00 76 51 2c 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252967
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 5b 9e 8a 69 81 00 03 12 05 80 07 00 00 00 20 16 00 00 7c 5b 24 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304252983
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 5b 9e 8a 69 81 00 03 12 05 80 07 00 00 00 20 16 00 00 7c 5b 24 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304252983
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 5c 9e 82 f9 81 00 03 12 05 80 07 00 00 00 2c 16 00 00 77 52 25 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253001
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 5c 9e 82 f9 81 00 03 12 05 80 07 00 00 00 2c 16 00 00 77 52 25 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253001
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 5d 9e 45 31 81 00 03 12 05 80 07 00 00 00 38 16 00 00 80 5a 24 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253017
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 5d 9e 45 31 81 00 03 12 05 80 07 00 00 00 38 16 00 00 80 5a 24 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253017
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 5e 9e 39 cc 81 00 03 12 05 80 07 00 00 00 40 16 00 00 71 4f 48 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253018
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 5e 9e 39 cc 81 00 03 12 05 80 07 00 00 00 40 16 00 00 71 4f 48 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253018
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 5f 9e bc a5 81 00 03 12 05 80 07 00 00 00 4e 16 00 00 73 4b 0b 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253019
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 5f 9e bc a5 81 00 03 12 05 80 07 00 00 00 4e 16 00 00 73 4b 0b 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253019
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 60 9e eb a0 81 00 03 12 05 80 07 00 00 00 5a 16 00 00 7e 5a 26 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253034
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 60 9e eb a0 81 00 03 12 05 80 07 00 00 00 5a 16 00 00 7e 5a 26 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253034
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 61 9e 8c 68 81 00 03 12 05 80 07 00 00 00 63 16 00 00 78 56 36 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253051
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 61 9e 8c 68 81 00 03 12 05 80 07 00 00 00 63 16 00 00 78 56 36 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253051
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 62 9e 8a a4 81 00 03 12 05 80 07 00 00 00 6b 16 00 00 77 51 2b 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253052
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 62 9e 8a a4 81 00 03 12 05 80 07 00 00 00 6b 16 00 00 77 51 2b 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253052
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 63 9e 2e eb 81 00 03 12 05 80 07 00 00 00 76 16 00 00 75 4b 0d 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253068
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 63 9e 2e eb 81 00 03 12 05 80 07 00 00 00 76 16 00 00 75 4b 0d 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253068
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 64 9e 7a 05 81 00 03 12 05 80 07 00 00 00 80 16 00 00 7c 5b 65 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253069
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 64 9e 7a 05 81 00 03 12 05 80 07 00 00 00 80 16 00 00 7c 5b 65 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253069
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 65 9e 70 11 81 00 03 12 05 80 07 00 00 00 88 16 00 00 72 52 6e 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253083
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 65 9e 70 11 81 00 03 12 05 80 07 00 00 00 88 16 00 00 72 52 6e 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253083
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 66 9e 21 bf 81 00 03 12 05 80 07 00 00 00 93 16 00 00 77 56 7b 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253101
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 66 9e 21 bf 81 00 03 12 05 80 07 00 00 00 93 16 00 00 77 56 7b 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253101
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 67 9e 59 00 81 00 03 12 05 80 07 00 00 00 9f 16 00 00 77 54 3b 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253102
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 67 9e 59 00 81 00 03 12 05 80 07 00 00 00 9f 16 00 00 77 54 3b 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253102
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 68 9e 63 33 81 00 03 12 05 80 07 00 00 00 af 16 00 00 7e 5c 28 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253117
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 68 9e 63 33 81 00 03 12 05 80 07 00 00 00 af 16 00 00 7e 5c 28 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253117
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 69 9e 9b a8 81 00 03 12 05 80 07 00 00 00 b7 16 00 00 77 53 2f 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253134
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 69 9e 9b a8 81 00 03 12 05 80 07 00 00 00 b7 16 00 00 77 53 2f 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253134
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 6a 9e 73 3d 81 00 03 12 05 80 07 00 00 00 c2 16 00 00 80 5c 29 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253151
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 6a 9e 73 3d 81 00 03 12 05 80 07 00 00 00 c2 16 00 00 80 5c 29 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253151
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 6b 9e 17 ae 81 00 03 12 05 80 07 00 00 00 cc 16 00 00 7a 53 30 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253152
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 6b 9e 17 ae 81 00 03 12 05 80 07 00 00 00 cc 16 00 00 7a 53 30 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253152
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 6c 9e 01 d6 81 00 03 12 05 80 07 00 00 00 d5 16 00 00 72 4d 0c 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253167
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 6c 9e 01 d6 81 00 03 12 05 80 07 00 00 00 d5 16 00 00 72 4d 0c 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253167
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 6d 9e 30 3f 81 00 03 12 05 80 07 00 00 00 df 16 00 00 78 55 40 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253184
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 6d 9e 30 3f 81 00 03 12 05 80 07 00 00 00 df 16 00 00 78 55 40 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253184
+  },
+  {
+    "type": "response",
+    "data": "",
+    "description": "TIMEOUT: Get Trigger State after 1000ms",
+    "length": 0,
+    "timestamp": 1749304253185
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 6e 9e ae f4 81 00 03 12 05 80 07 00 00 00 eb 16 00 00 74 4d 50 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253185
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 6e 9e ae f4 81 00 03 12 05 80 07 00 00 00 eb 16 00 00 74 4d 50 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253185
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 6f 9e a0 1a 81 00 03 12 05 80 07 00 00 00 f5 16 00 00 77 50 6f 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253186
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 6f 9e a0 1a 81 00 03 12 05 80 07 00 00 00 f5 16 00 00 77 50 6f 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253186
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 70 9e 51 9a 81 00 03 12 05 80 07 00 00 00 00 17 00 00 80 5c 6b 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253201
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 70 9e 51 9a 81 00 03 12 05 80 07 00 00 00 00 17 00 00 80 5c 6b 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253201
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 71 9e 77 22 81 00 03 12 05 80 07 00 00 00 0a 17 00 00 7c 53 01 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253218
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 71 9e 77 22 81 00 03 12 05 80 07 00 00 00 0a 17 00 00 7c 53 01 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253218
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 72 9e b5 ee 81 00 03 12 05 80 07 00 00 00 1a 17 00 00 7f 5b 6c 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253235
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 72 9e b5 ee 81 00 03 12 05 80 07 00 00 00 1a 17 00 00 7f 5b 6c 02 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253235
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 73 9e a5 59 81 00 03 12 05 80 07 00 00 00 31 17 00 00 73 4e 14 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253251
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 73 9e a5 59 81 00 03 12 05 80 07 00 00 00 31 17 00 00 73 4e 14 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253251
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 74 9e 1b e2 81 00 03 12 05 80 07 00 00 00 40 17 00 00 74 4b 17 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253268
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 74 9e 1b e2 81 00 03 12 05 80 07 00 00 00 40 17 00 00 74 4b 17 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253268
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 75 9e 88 e9 81 00 03 12 05 80 07 00 00 00 48 17 00 00 7f 5d 2c 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253285
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 75 9e 88 e9 81 00 03 12 05 80 07 00 00 00 48 17 00 00 7f 5d 2c 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253286
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 76 9e 94 87 81 00 03 12 05 80 07 00 00 00 53 17 00 00 76 55 05 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253287
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 76 9e 94 87 81 00 03 12 05 80 07 00 00 00 53 17 00 00 76 55 05 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253287
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 77 9e 40 4c 81 00 03 12 05 80 07 00 00 00 5b 17 00 00 78 54 6b 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253301
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 77 9e 40 4c 81 00 03 12 05 80 07 00 00 00 5b 17 00 00 78 54 6b 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253301
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 78 9e 6b 83 81 00 03 12 05 80 07 00 00 00 6e 17 00 00 77 55 50 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253319
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 78 9e 6b 83 81 00 03 12 05 80 07 00 00 00 6e 17 00 00 77 55 50 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253319
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 79 9e 28 59 81 00 03 12 05 80 07 00 00 00 76 17 00 00 78 52 6f 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253335
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 79 9e 28 59 81 00 03 12 05 80 07 00 00 00 76 17 00 00 78 52 6f 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253335
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 7a 9e 15 e8 81 00 03 12 05 80 07 00 00 00 7e 17 00 00 73 4d 59 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253336
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 7a 9e 15 e8 81 00 03 12 05 80 07 00 00 00 7e 17 00 00 73 4d 59 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253336
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 7b 9e d9 8c 81 00 03 12 05 80 07 00 00 00 88 17 00 00 80 5c 6f 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253367
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 7b 9e d9 8c 81 00 03 12 05 80 07 00 00 00 88 17 00 00 80 5c 6f 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253367
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 7c 9e 66 a1 81 00 03 12 05 80 07 00 00 00 92 17 00 00 81 5d 73 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253367
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 7c 9e 66 a1 81 00 03 12 05 80 07 00 00 00 92 17 00 00 81 5d 73 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253368
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 7d 9e 59 1c 81 00 03 12 05 80 07 00 00 00 a0 17 00 00 75 51 39 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253368
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 7d 9e 59 1c 81 00 03 12 05 80 07 00 00 00 a0 17 00 00 75 51 39 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253368
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 7e 9e a3 a3 81 00 03 12 05 80 07 00 00 00 a9 17 00 00 74 4f 22 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253368
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 7e 9e a3 a3 81 00 03 12 05 80 07 00 00 00 a9 17 00 00 74 4f 22 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253368
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 7f 9e 3a a3 81 00 03 12 05 80 07 00 00 00 b2 17 00 00 78 58 1a 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253384
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 7f 9e 3a a3 81 00 03 12 05 80 07 00 00 00 b2 17 00 00 78 58 1a 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253384
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 80 9e a3 a9 81 00 03 12 05 80 07 00 00 00 c5 17 00 00 80 5e 39 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253400
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 80 9e a3 a9 81 00 03 12 05 80 07 00 00 00 c5 17 00 00 80 5e 39 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253400
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 81 9e 4b a2 81 00 03 12 05 80 07 00 00 00 d2 17 00 00 75 50 3e 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253417
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 81 9e 4b a2 81 00 03 12 05 80 07 00 00 00 d2 17 00 00 75 50 3e 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253417
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 82 9e aa 15 81 00 03 12 05 80 07 00 00 00 de 17 00 00 80 5d 3c 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253434
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 82 9e aa 15 81 00 03 12 05 80 07 00 00 00 de 17 00 00 80 5d 3c 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253434
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 83 9e 01 25 81 00 03 12 05 80 07 00 00 00 e6 17 00 00 7e 5a 26 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253435
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 83 9e 01 25 81 00 03 12 05 80 07 00 00 00 e6 17 00 00 7e 5a 26 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253435
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 84 9e c3 1f 81 00 03 12 05 80 07 00 00 00 ee 17 00 00 72 50 28 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253451
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 84 9e c3 1f 81 00 03 12 05 80 07 00 00 00 ee 17 00 00 72 50 28 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253451
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 85 9e 40 3f 81 00 03 12 05 80 07 00 00 00 f6 17 00 00 71 45 21 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253452
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 85 9e 40 3f 81 00 03 12 05 80 07 00 00 00 f6 17 00 00 71 45 21 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253452
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 86 9e 84 3e 81 00 03 12 05 80 07 00 00 00 01 18 00 00 73 4f 0a 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253467
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 86 9e 84 3e 81 00 03 12 05 80 07 00 00 00 01 18 00 00 73 4f 0a 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253467
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 87 9e 53 de 81 00 03 12 05 80 07 00 00 00 0b 18 00 00 74 46 76 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253468
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 87 9e 53 de 81 00 03 12 05 80 07 00 00 00 0b 18 00 00 74 46 76 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253468
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 88 9e 48 40 81 00 03 12 05 80 07 00 00 00 15 18 00 00 80 5b 6e 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253484
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 88 9e 48 40 81 00 03 12 05 80 07 00 00 00 15 18 00 00 80 5b 6e 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253484
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 89 9e 32 db 81 00 03 12 05 80 07 00 00 00 20 18 00 00 71 50 30 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253485
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 89 9e 32 db 81 00 03 12 05 80 07 00 00 00 20 18 00 00 71 50 30 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253485
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 8a 9e 3a ee 81 00 03 12 05 80 07 00 00 00 28 18 00 00 74 50 55 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253501
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 8a 9e 3a ee 81 00 03 12 05 80 07 00 00 00 28 18 00 00 74 50 55 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253501
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 8b 9e 1a ab 81 00 03 12 05 80 07 00 00 00 32 18 00 00 7d 5d 10 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253502
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 8b 9e 1a ab 81 00 03 12 05 80 07 00 00 00 32 18 00 00 7d 5d 10 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253502
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 8c 9e 09 34 81 00 03 12 05 80 07 00 00 00 3e 18 00 00 73 4c 77 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253517
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 8c 9e 09 34 81 00 03 12 05 80 07 00 00 00 3e 18 00 00 73 4c 77 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253517
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 8d 9e c5 94 81 00 03 12 05 80 07 00 00 00 48 18 00 00 7e 5f 17 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253534
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 8d 9e c5 94 81 00 03 12 05 80 07 00 00 00 48 18 00 00 7e 5f 17 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253534
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 8e 9e 07 8c 81 00 03 12 05 80 07 00 00 00 52 18 00 00 7c 5c 37 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253535
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 8e 9e 07 8c 81 00 03 12 05 80 07 00 00 00 52 18 00 00 7c 5c 37 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253535
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 8f 9e fc 21 81 00 03 12 05 80 07 00 00 00 5a 18 00 00 6f 43 38 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253551
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 8f 9e fc 21 81 00 03 12 05 80 07 00 00 00 5a 18 00 00 6f 43 38 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253551
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 90 9e 54 98 81 00 03 12 05 80 07 00 00 00 63 18 00 00 6e 53 1e 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253567
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 90 9e 54 98 81 00 03 12 05 80 07 00 00 00 63 18 00 00 6e 53 1e 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253567
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 91 9e f1 1e 81 00 03 12 05 80 07 00 00 00 6d 18 00 00 6d 48 38 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253567
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 91 9e f1 1e 81 00 03 12 05 80 07 00 00 00 6d 18 00 00 6d 48 38 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253567
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 92 9e 2e f1 81 00 03 12 05 80 07 00 00 00 78 18 00 00 78 5c 3d 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253583
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 92 9e 2e f1 81 00 03 12 05 80 07 00 00 00 78 18 00 00 78 5c 3d 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253583
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 93 9e 0a 42 81 00 03 12 05 80 07 00 00 00 80 18 00 00 78 4c 49 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253601
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 93 9e 0a 42 81 00 03 12 05 80 07 00 00 00 80 18 00 00 78 4c 49 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253601
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 94 9e 95 a0 81 00 03 12 05 80 07 00 00 00 8d 18 00 00 83 62 22 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253602
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 94 9e 95 a0 81 00 03 12 05 80 07 00 00 00 8d 18 00 00 83 62 22 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253602
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 95 9e 0d bb 81 00 03 12 05 80 07 00 00 00 97 18 00 00 84 62 65 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253618
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 95 9e 0d bb 81 00 03 12 05 80 07 00 00 00 97 18 00 00 84 62 65 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253618
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 96 9e 76 12 81 00 03 12 05 80 07 00 00 00 a1 18 00 00 7a 5e 49 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253634
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 96 9e 76 12 81 00 03 12 05 80 07 00 00 00 a1 18 00 00 7a 5e 49 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253634
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 97 9e 27 b6 81 00 03 12 05 80 07 00 00 00 ab 18 00 00 75 51 53 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253635
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 97 9e 27 b6 81 00 03 12 05 80 07 00 00 00 ab 18 00 00 75 51 53 03 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253635
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 98 9e db 3b 81 00 03 12 05 80 07 00 00 00 c4 18 00 00 71 53 70 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253650
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 98 9e db 3b 81 00 03 12 05 80 07 00 00 00 c4 18 00 00 71 53 70 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253650
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 99 9e e3 70 81 00 03 12 05 80 07 00 00 00 cc 18 00 00 91 68 09 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253667
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 99 9e e3 70 81 00 03 12 05 80 07 00 00 00 cc 18 00 00 91 68 09 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253667
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 9a 9e cc 3f 81 00 03 12 05 80 07 00 00 00 da 18 00 00 76 55 48 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253684
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 9a 9e cc 3f 81 00 03 12 05 80 07 00 00 00 da 18 00 00 76 55 48 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253684
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 9b 9e e6 ad 81 00 03 12 05 80 07 00 00 00 e2 18 00 00 71 4b 51 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253685
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 9b 9e e6 ad 81 00 03 12 05 80 07 00 00 00 e2 18 00 00 71 4b 51 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253685
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 9c 9e 72 2b 81 00 03 12 05 80 07 00 00 00 ea 18 00 00 88 67 24 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253701
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 9c 9e 72 2b 81 00 03 12 05 80 07 00 00 00 ea 18 00 00 88 67 24 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253701
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 9d 9e 58 e0 81 00 03 12 05 80 07 00 00 00 f5 18 00 00 74 56 10 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253702
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 9d 9e 58 e0 81 00 03 12 05 80 07 00 00 00 f5 18 00 00 74 56 10 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253702
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 9e 9e d8 ca 81 00 03 12 05 80 07 00 00 00 ff 18 00 00 72 54 33 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253717
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 9e 9e d8 ca 81 00 03 12 05 80 07 00 00 00 ff 18 00 00 72 54 33 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253717
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 9f 9e 82 0d 81 00 03 12 05 80 07 00 00 00 09 19 00 00 92 6b 14 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253735
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 9f 9e 82 0d 81 00 03 12 05 80 07 00 00 00 09 19 00 00 92 6b 14 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253735
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 a0 9e db bf 81 00 03 12 05 80 07 00 00 00 12 19 00 00 70 4e 1c 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253736
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 a0 9e db bf 81 00 03 12 05 80 07 00 00 00 12 19 00 00 70 4e 1c 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253736
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 a1 9e 3d 54 81 00 03 12 05 80 07 00 00 00 1c 19 00 00 8c 68 68 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253751
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 a1 9e 3d 54 81 00 03 12 05 80 07 00 00 00 1c 19 00 00 8c 68 68 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253751
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 a2 9e b2 e0 81 00 03 12 05 80 07 00 00 00 27 19 00 00 94 6d 16 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253768
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 a2 9e b2 e0 81 00 03 12 05 80 07 00 00 00 27 19 00 00 94 6d 16 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253768
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 a3 9e 76 c4 81 00 03 12 05 80 07 00 00 00 32 19 00 00 8c 68 69 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253769
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 a3 9e 76 c4 81 00 03 12 05 80 07 00 00 00 32 19 00 00 8c 68 69 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253769
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 a4 9e 41 75 81 00 03 12 05 80 07 00 00 00 3a 19 00 00 74 56 38 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253785
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 a4 9e 41 75 81 00 03 12 05 80 07 00 00 00 3a 19 00 00 74 56 38 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253785
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 a5 9e 53 53 81 00 03 12 05 80 07 00 00 00 45 19 00 00 70 51 1b 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253786
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 a5 9e 53 53 81 00 03 12 05 80 07 00 00 00 45 19 00 00 70 51 1b 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253786
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 a6 9e 7c 24 81 00 03 12 05 80 07 00 00 00 4f 19 00 00 76 58 79 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253802
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 a6 9e 7c 24 81 00 03 12 05 80 07 00 00 00 4f 19 00 00 76 58 79 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253802
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 04 d9 82 9e c5 fd a1 01 00 00",
+    "description": "Raw notification packet",
+    "length": 4,
+    "timestamp": 1749304253803
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 a7 9e d9 aa 81 00 03 12 05 80 07 00 00 00 58 19 00 00 71 51 5d 04 00 a7 b3 26 c2 a8 9e af 4b 81 00 03 12 05 80 07 00 00 00 60",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253803
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 a7 9e d9 aa 81 00 03 12 05 80 07 00 00 00 58 19 00 00 71 51 5d 04 00 a7 b3 26 c2 a8 9e af 4b 81 00 03 12 05 80 07 00 00 00 60",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253803
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 04 d9 82 9e c5 fd a1 01 00 00",
+    "description": "Raw notification packet",
+    "length": 4,
+    "timestamp": 1749304253806
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 04 d9 82 9e c5 fd a1 01 00 00",
+    "description": "Raw notification packet",
+    "length": 4,
+    "timestamp": 1749304253817
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 a9 9e b7 a9 81 00 03 12 05 80 07 00 00 00 6a 19 00 00 8e 69 6e 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253817
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 a9 9e b7 a9 81 00 03 12 05 80 07 00 00 00 6a 19 00 00 8e 69 6e 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253817
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 aa 9e 5f e0 81 00 03 12 05 80 07 00 00 00 79 19 00 00 90 69 2f 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253836
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 aa 9e 5f e0 81 00 03 12 05 80 07 00 00 00 79 19 00 00 90 69 2f 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253836
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 ab 9e 8c 75 81 00 03 12 05 80 07 00 00 00 82 19 00 00 75 57 63 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253852
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 ab 9e 8c 75 81 00 03 12 05 80 07 00 00 00 82 19 00 00 75 57 63 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253852
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 ac 9e 23 e9 81 00 03 12 05 80 07 00 00 00 8d 19 00 00 98 6d 5d 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253854
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 ac 9e 23 e9 81 00 03 12 05 80 07 00 00 00 8d 19 00 00 98 6d 5d 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253854
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 ad 9e 90 60 81 00 03 12 05 80 07 00 00 00 96 19 00 00 77 53 65 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253882
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 ad 9e 90 60 81 00 03 12 05 80 07 00 00 00 96 19 00 00 77 53 65 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253882
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 ae 9e 88 e9 81 00 03 12 05 80 07 00 00 00 9e 19 00 00 79 58 7d 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253883
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 ae 9e 88 e9 81 00 03 12 05 80 07 00 00 00 9e 19 00 00 79 58 7d 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253883
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 af 9e 73 a1 81 00 03 12 05 80 07 00 00 00 ab 19 00 00 77 59 7d 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253883
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 af 9e 73 a1 81 00 03 12 05 80 07 00 00 00 ab 19 00 00 77 59 7d 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253883
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b0 9e 6b ef 81 00 03 12 05 80 07 00 00 00 b4 19 00 00 74 55 65 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253900
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b0 9e 6b ef 81 00 03 12 05 80 07 00 00 00 b4 19 00 00 74 55 65 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253900
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b1 9e e0 81 81 00 03 12 05 80 07 00 00 00 bc 19 00 00 90 69 70 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253916
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b1 9e e0 81 81 00 03 12 05 80 07 00 00 00 bc 19 00 00 90 69 70 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253916
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b2 9e 67 b9 81 00 03 12 05 80 07 00 00 00 c5 19 00 00 98 6e 20 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253917
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b2 9e 67 b9 81 00 03 12 05 80 07 00 00 00 c5 19 00 00 98 6e 20 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253917
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b3 9e 69 3d 81 00 03 12 05 80 07 00 00 00 d2 19 00 00 75 58 2c 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253917
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b3 9e 69 3d 81 00 03 12 05 80 07 00 00 00 d2 19 00 00 75 58 2c 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253917
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b4 9e d5 6c 81 00 03 12 05 80 07 00 00 00 de 19 00 00 90 68 70 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253934
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b4 9e d5 6c 81 00 03 12 05 80 07 00 00 00 de 19 00 00 90 68 70 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253934
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b5 9e 86 41 81 00 03 12 05 80 07 00 00 00 e6 19 00 00 76 56 26 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253934
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b5 9e 86 41 81 00 03 12 05 80 07 00 00 00 e6 19 00 00 76 56 26 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253934
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b6 9e 09 1b 81 00 03 12 05 80 07 00 00 00 f2 19 00 00 99 6d 5f 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253950
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b6 9e 09 1b 81 00 03 12 05 80 07 00 00 00 f2 19 00 00 99 6d 5f 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253950
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b7 9e 13 4a 81 00 03 12 05 80 07 00 00 00 fd 19 00 00 90 69 30 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253967
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b7 9e 13 4a 81 00 03 12 05 80 07 00 00 00 fd 19 00 00 90 69 30 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253968
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b8 9e cd df 81 00 03 12 05 80 07 00 00 00 06 1a 00 00 99 6e 60 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253984
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b8 9e cd df 81 00 03 12 05 80 07 00 00 00 06 1a 00 00 99 6e 60 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253984
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b9 9e b4 54 81 00 03 12 05 80 07 00 00 00 0f 1a 00 00 77 59 67 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304253984
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 b9 9e b4 54 81 00 03 12 05 80 07 00 00 00 0f 1a 00 00 77 59 67 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304253984
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 ba 9e 97 04 81 00 03 12 05 80 07 00 00 00 19 1a 00 00 75 56 30 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254000
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 ba 9e 97 04 81 00 03 12 05 80 07 00 00 00 19 1a 00 00 75 56 30 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254000
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 bb 9e 6d 8e 81 00 03 12 05 80 07 00 00 00 25 1a 00 00 75 58 68 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254016
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 bb 9e 6d 8e 81 00 03 12 05 80 07 00 00 00 25 1a 00 00 75 58 68 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254016
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 0a c2 bc 9e 4f f4 81 00 02 00 07 80 00 00 00 00",
+    "description": "Raw notification packet",
+    "length": 10,
+    "timestamp": 1749304254016
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 0a c2 bc 9e 4f f4 81 00 02 00 07 80 00 00 00 00",
+    "description": "RFID INVENTORY_CYCLE",
+    "length": 10,
+    "timestamp": 1749304254017
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 bd 9e 3a 7f 81 00 03 12 05 80 07 00 00 00 37 1a 00 00 91 69 30 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254050
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 bd 9e 3a 7f 81 00 03 12 05 80 07 00 00 00 37 1a 00 00 91 69 30 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254050
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 be 9e 22 c0 81 00 03 12 05 80 07 00 00 00 43 1a 00 00 99 6f 24 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254051
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 be 9e 22 c0 81 00 03 12 05 80 07 00 00 00 43 1a 00 00 99 6f 24 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254051
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 bf 9e a7 b2 81 00 03 12 05 80 07 00 00 00 4b 1a 00 00 77 58 33 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254067
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 bf 9e a7 b2 81 00 03 12 05 80 07 00 00 00 4b 1a 00 00 77 58 33 04 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254067
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c0 9e bc 93 81 00 03 12 05 80 07 00 00 00 5e 1a 00 00 9a 6e 64 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254084
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c0 9e bc 93 81 00 03 12 05 80 07 00 00 00 5e 1a 00 00 9a 6e 64 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254084
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c1 9e 7e 33 81 00 03 12 05 80 07 00 00 00 66 1a 00 00 76 58 70 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254085
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c1 9e 7e 33 81 00 03 12 05 80 07 00 00 00 66 1a 00 00 76 58 70 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254085
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c2 9e 11 f9 81 00 03 12 05 80 07 00 00 00 6f 1a 00 00 92 6a 72 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254085
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c2 9e 11 f9 81 00 03 12 05 80 07 00 00 00 6f 1a 00 00 92 6a 72 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254085
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c3 9e 1d 20 81 00 03 12 05 80 07 00 00 00 79 1a 00 00 7c 5a 6b 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254101
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c3 9e 1d 20 81 00 03 12 05 80 07 00 00 00 79 1a 00 00 7c 5a 6b 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254101
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c4 9e 05 77 81 00 03 12 05 80 07 00 00 00 81 1a 00 00 94 6b 73 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254101
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c4 9e 05 77 81 00 03 12 05 80 07 00 00 00 81 1a 00 00 94 6b 73 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254101
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c5 9e a4 83 81 00 03 12 05 80 07 00 00 00 8a 1a 00 00 7f 5f 7d 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254117
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c5 9e a4 83 81 00 03 12 05 80 07 00 00 00 8a 1a 00 00 7f 5f 7d 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254117
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c6 9e 55 21 81 00 03 12 05 80 07 00 00 00 96 1a 00 00 75 58 72 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254133
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c6 9e 55 21 81 00 03 12 05 80 07 00 00 00 96 1a 00 00 75 58 72 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254133
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c7 9e 9c 4f 81 00 03 12 05 80 07 00 00 00 9e 1a 00 00 9a 70 65 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254151
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c7 9e 9c 4f 81 00 03 12 05 80 07 00 00 00 9e 1a 00 00 9a 70 65 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254151
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c8 9e 8a 45 81 00 03 12 05 80 07 00 00 00 b0 1a 00 00 92 69 34 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254168
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c8 9e 8a 45 81 00 03 12 05 80 07 00 00 00 b0 1a 00 00 92 69 34 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254168
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c9 9e 3a a6 81 00 03 12 05 80 07 00 00 00 b9 1a 00 00 77 5a 73 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254169
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 c9 9e 3a a6 81 00 03 12 05 80 07 00 00 00 b9 1a 00 00 77 5a 73 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254169
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 ca 9e 7d 7f 81 00 03 12 05 80 07 00 00 00 c1 1a 00 00 99 6f 66 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254184
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 ca 9e 7d 7f 81 00 03 12 05 80 07 00 00 00 c1 1a 00 00 99 6f 66 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254184
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 cb 9e 6d 7b 81 00 03 12 05 80 07 00 00 00 ca 1a 00 00 7e 5e 7f 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254184
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 cb 9e 6d 7b 81 00 03 12 05 80 07 00 00 00 ca 1a 00 00 7e 5e 7f 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254184
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 cc 9e 38 49 81 00 03 12 05 80 07 00 00 00 d4 1a 00 00 97 70 66 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254201
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 cc 9e 38 49 81 00 03 12 05 80 07 00 00 00 d4 1a 00 00 97 70 66 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 1f 9c",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254201
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 cd 9e 92 69 81 00 03 12 05 80 07 00 00 00 dc 1a 00 00 92 6b 73 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254217
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 cd 9e 92 69 81 00 03 12 05 80 07 00 00 00 dc 1a 00 00 92 6b 73 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 09 9c 84",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254217
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 02 d9 82 9e b6 e6 a1 03",
+    "description": "Raw notification packet",
+    "length": 2,
+    "timestamp": 1749304254218
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 02 d9 82 9e b6 e6 a1 03",
+    "description": "Trigger UP event",
+    "length": 2,
+    "timestamp": 1749304254218
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 c2 82 37 00 00 40 03",
+    "description": "Abort Command to module 0xc2",
+    "length": 2,
+    "timestamp": 1749304254219
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 ce 9e f0 e6 81 00 03 12 05 80 07 00 00 00 e6 1a 00 00 78 58 6c 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254220
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 ce 9e f0 e6 81 00 03 12 05 80 07 00 00 00 e6 1a 00 00 78 58 6c 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 11 0f bd",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254220
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 cf 9e cb 04 81 00 03 12 05 80 07 00 00 00 ee 1a 00 00 76 59 70 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254220
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 cf 9e cb 04 81 00 03 12 05 80 07 00 00 00 ee 1a 00 00 76 59 70 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254220
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 d0 9e 27 34 81 00 03 12 05 80 07 00 00 00 f7 1a 00 00 7c 5a 00 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254235
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 d0 9e 27 34 81 00 03 12 05 80 07 00 00 00 f7 1a 00 00 7c 5a 00 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 12 3f de",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254235
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 04 d9 82 9e c5 fd a1 01 00 00",
+    "description": "Raw notification packet",
+    "length": 4,
+    "timestamp": 1749304254235
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 04 d9 82 9e c5 fd a1 01 00 00",
+    "description": "Raw notification packet",
+    "length": 4,
+    "timestamp": 1749304254235
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 d1 9e d6 50 81 00 03 12 05 03 12 05 80 07 00 00 00 0e 1b 00 00 77 55 28 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254250
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 d1 9e d6 50 81 00 03 12 05 03 12 05 80 07 00 00 00 0e 1b 00 00 77 55 28 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00",
+    "description": "RFID UNKNOWN",
+    "length": 38,
+    "timestamp": 1749304254250
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 04 d9 82 9e c5 fd a1 01 00 00",
+    "description": "Raw notification packet",
+    "length": 4,
+    "timestamp": 1749304254250
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 d3 9e 10 1d 81 00 03 12 05 80 07 00 00 00 1b 1b 00 00 75 58 2c 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "Raw notification packet",
+    "length": 38,
+    "timestamp": 1749304254266
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 26 c2 d3 9e 10 1d 81 00 03 12 05 80 07 00 00 00 1b 1b 00 00 75 58 2c 05 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 2f ff",
+    "description": "RFID INVENTORY",
+    "length": 38,
+    "timestamp": 1749304254266
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 02 d9 82 9e b6 e6 a1 03",
+    "description": "Raw notification packet",
+    "length": 2,
+    "timestamp": 1749304254700
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 02 d9 82 9e b6 e6 a1 03",
+    "description": "Trigger UP event",
+    "length": 2,
+    "timestamp": 1749304254701
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304254701
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Firmware Command Response (status=128)",
+    "length": 3,
+    "timestamp": 1749304254701
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 32 f1 80 02 00",
+    "description": "RFID Response with short payload (1 bytes)",
+    "length": 11,
+    "timestamp": 1749304254701
+  },
+  {
+    "type": "response",
+    "data": "",
+    "description": "TIMEOUT: Abort Command after 800ms",
+    "length": 0,
+    "timestamp": 1749304255020
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 c2 82 37 00 00 80 01",
+    "description": "RFID Power Off to module 0xc2",
+    "length": 2,
+    "timestamp": 1749304255020
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 18 99 80 01 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304255068
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 18 99 80 01 00",
+    "description": "RFID Power OFF Response",
+    "length": 3,
+    "timestamp": 1749304255068
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 c2 82 37 00 00 80 00",
+    "description": "RFID Power On to module 0xc2",
+    "length": 2,
+    "timestamp": 1749304255568
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 01 41 80 00 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749304255600
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 01 41 80 00 00",
+    "description": "RFID Power ON Response",
+    "length": 3,
+    "timestamp": 1749304255600
+  }
+]
