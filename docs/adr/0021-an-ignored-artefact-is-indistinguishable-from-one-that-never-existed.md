@@ -66,6 +66,18 @@ encoding with *"the input is excluded from your view"*. In both cases a
 not-measurable state is silently rendered as a benign one, and downstream code
 then reasons confidently from the benign reading.
 
+But this instance is worse than a wrong sentence sitting in a config file, and
+the difference is what makes it durable enough to record. **The false
+explanation was productive.** It did not merely fail to be true — it accounted
+for a real observation, and on the strength of that it justified excluding two
+spec files. A comment that explains something genuine earns its keep. Nobody
+deletes it, because deleting it would leave the observation unexplained.
+
+That is the shape to watch for. An explanation that leaves a puzzle behind
+invites someone to come back to it. This one *closed* the puzzle, with the wrong
+answer, and the closure is precisely what protected it from review for months —
+while the tests it disabled were failing.
+
 It is also ADR 0020's principle applied to a different kind of guard. A bare
 `data/` is a rule whose *stated* scope (a database volume) and *actual* scope
 (any directory of that name, anywhere) differ — and nothing about reading it
