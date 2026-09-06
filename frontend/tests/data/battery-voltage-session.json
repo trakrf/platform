@@ -1,0 +1,16 @@
+[
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 00",
+    "description": "Get Battery Voltage to module 0xd9",
+    "length": 2,
+    "timestamp": 1749304240597
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 04 d9 82 9e 59 8f a0 00 0f eb",
+    "description": "Battery: 4075mV (4.08V)",
+    "length": 4,
+    "timestamp": 1749304240656
+  }
+]

@@ -1,0 +1,108 @@
+{
+  "description": "Real test tags from CS108 inventory captures",
+  "source": "inventory_2025-07-05.csv",
+  "tags": [
+    {
+      "epc": "E2801160600002084D9F34E9",
+      "pc": "0x3000",
+      "rssi": -45,
+      "description": "Real tag from inventory scan"
+    },
+    {
+      "epc": "E2801160600002084D9F3439",
+      "pc": "0x3000",
+      "rssi": -48,
+      "description": "Real tag from inventory scan"
+    },
+    {
+      "epc": "E2801160600002084D9EF4BA",
+      "pc": "0x3000",
+      "rssi": -65,
+      "description": "Real tag from inventory scan"
+    },
+    {
+      "epc": "E2801160600002084D9F4A9A",
+      "pc": "0x3000",
+      "rssi": -72,
+      "description": "Real tag from inventory scan"
+    },
+    {
+      "epc": "000000000000000000000009",
+      "pc": "0x3000",
+      "rssi": -28,
+      "description": "Test tag 9"
+    },
+    {
+      "epc": "E2006B060000000000000000",
+      "pc": "0x3000",
+      "rssi": -67,
+      "description": "EPC with different manufacturer prefix"
+    },
+    {
+      "epc": "E2801160600002084D9F4AF9",
+      "pc": "0x3000",
+      "rssi": -33,
+      "description": "Real tag from inventory scan"
+    },
+    {
+      "epc": "E2801190A502006016440AE6",
+      "pc": "0x3000",
+      "rssi": -60,
+      "description": "Different tag format"
+    },
+    {
+      "epc": "000000000000000000000012",
+      "pc": "0x3000",
+      "rssi": -32,
+      "description": "Test tag 18 (decimal)"
+    },
+    {
+      "epc": "E280116060000208D794B184",
+      "pc": "0x3000",
+      "rssi": -59,
+      "description": "Real tag from inventory scan"
+    }
+  ],
+  "compactModePackets": {
+    "singleTag": {
+      "description": "Single tag in compact mode (0x04 version)",
+      "hex": "a7 b3 19 c2 01 9e 00 00 81 00 04 00 05 80 0f 00 06 00 30 00 E2 80 11 60 60 00 02 08 4D 9F 34 E9 39",
+      "parsed": {
+        "eventCode": "0x8100",
+        "version": "0x04",
+        "packetType": "0x8005",
+        "length": 15,
+        "antennaPort": 6,
+        "epc": "E2801160600002084D9F34E9",
+        "rssi": -45
+      }
+    },
+    "multipleTags": {
+      "description": "Two tags in single compact mode packet",
+      "hex": "a7 b3 28 c2 01 9e 00 00 81 00 04 00 05 80 1e 00 06 00 30 00 E2 80 11 60 60 00 02 08 4D 9F 34 E9 39 30 00 E2 80 11 60 60 00 02 08 4D 9F 34 39 3C",
+      "parsed": {
+        "eventCode": "0x8100",
+        "version": "0x04",
+        "packetType": "0x8005",
+        "length": 30,
+        "antennaPort": 6,
+        "tags": 2
+      }
+    }
+  },
+  "normalModePackets": {
+    "singleTag": {
+      "description": "Single tag in normal mode (0x03 version)",
+      "hex": "a7 b3 2a c2 01 9e 00 00 81 00 03 00 05 80 08 00 00 00 00 00 00 00 48 48 01 00 01 00 30 00 E2 80 11 60 60 00 02 08 4D 9F 34 E9 D3 FE",
+      "parsed": {
+        "eventCode": "0x8100",
+        "version": "0x03",
+        "packetType": "0x8005",
+        "lengthWords": 8,
+        "antennaPort": 1,
+        "epc": "E2801160600002084D9F34E9",
+        "rssi": -45
+      }
+    }
+  }
+}

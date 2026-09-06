@@ -68,8 +68,21 @@ export default defineConfig({
       '**/src/components/__tests__/InventoryScreen.test.tsx',
       '**/src/hooks/useScanToInput.test.ts',
       '**/src/lib/asset/transforms.test.ts',
-      // Tests with missing test data files (tests/data/ never created)
-      '**/src/worker/cs108/rfid/parser.test.ts',
+      // TRA-1215: tests/data/ was never missing. It existed all along and was
+      // swallowed by a bare `data/` in .gitignore, so the two specs excluded
+      // here ran nowhere while their exclusion read as a known, benign gap.
+      //
+      // parser.test.ts is re-enabled and passes. handler.test.ts is NOT, and
+      // the reason is now a measurement rather than an assumption: with its
+      // fixtures present it runs 21 tests, 19 pass, and 2 fail for a real
+      // reason unrelated to test data —
+      //
+      //   canHandle > accepts 0x8100 packets in LOCATE mode
+      //   handle    > emits LOCATE_UPDATE events in LOCATE mode
+      //
+      // The handler emits TAG_READ where both expect LOCATE_UPDATE. That is
+      // either a stale spec or a live defect on the Locate path, and deciding
+      // which is its own ticket, not a guess folded into a provenance PR.
       '**/src/worker/cs108/rfid/inventory/handler.test.ts',
     ],
   },

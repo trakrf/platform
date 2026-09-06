@@ -1,0 +1,177 @@
+[
+  {
+    "type": "command",
+    "data": "a7 b3 02 c2 82 37 00 00 80 01",
+    "description": "RFID Power Off to module 0xc2",
+    "length": 2,
+    "timestamp": 1749250685598
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 18 99 80 01 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749250685657
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 18 99 80 01 00",
+    "description": "RFID Power OFF Response",
+    "length": 3,
+    "timestamp": 1749250685657
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 c2 82 37 00 00 80 00",
+    "description": "RFID Power On to module 0xc2",
+    "length": 2,
+    "timestamp": 1749250686158
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 c2 82 9e 01 41 80 00 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749250686197
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 01 41 80 00 00",
+    "description": "RFID Power ON Response",
+    "length": 3,
+    "timestamp": 1749250686197
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 00",
+    "description": "Get Battery Voltage to module 0xd9",
+    "length": 2,
+    "timestamp": 1749250686197
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 04 d9 82 9e f7 dd a0 00 0f f0",
+    "description": "Raw notification packet",
+    "length": 4,
+    "timestamp": 1749250686257
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 04 d9 82 9e f7 dd a0 00 0f f0",
+    "description": "Battery: 4080mV (4.08V)",
+    "length": 4,
+    "timestamp": 1749250686257
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 02",
+    "description": "Start Battery Reporting to module 0xd9",
+    "length": 2,
+    "timestamp": 1749250686258
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 5e 5f a0 02 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749250686317
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 d9 82 37 00 00 a0 01",
+    "description": "Get Trigger State to module 0xd9",
+    "length": 2,
+    "timestamp": 1749250686317
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 03 d9 82 9e 74 37 a0 01 00",
+    "description": "Raw notification packet",
+    "length": 3,
+    "timestamp": 1749250686377
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 d9 82 9e 74 37 a0 01 00",
+    "description": "Trigger state: UP",
+    "length": 3,
+    "timestamp": 1749250686378
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 04 d9 82 9e f7 dd a0 00 0f f0",
+    "description": "Raw notification packet",
+    "length": 4,
+    "timestamp": 1749250689261
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 04 d9 82 9e f7 dd a0 00 0f f0",
+    "description": "Battery: 4080mV (4.08V)",
+    "length": 4,
+    "timestamp": 1749250689261
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 02 d9 82 9e a7 6f a1 02",
+    "description": "Raw notification packet",
+    "length": 2,
+    "timestamp": 1749250689347
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 02 d9 82 9e a7 6f a1 02",
+    "description": "Trigger DOWN event",
+    "length": 2,
+    "timestamp": 1749250689347
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 06 9e ad 5a 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 3e 30 00 00 00 00 00 00 00 00 00 00 00 00 12 48 30 00 00 00 00 00 00 00 00 00 00 00 00 11 50 30 00 00 00 00 00 00 00 00 00 00 00 00 09 60",
+    "description": "Raw notification packet",
+    "length": 70,
+    "timestamp": 1749250690433
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 46 c2 06 9e ad 5a 81 00 04 00 05 80 3c 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 13 3e 30 00 00 00 00 00 00 00 00 00 00 00 00 12 48 30 00 00 00 00 00 00 00 00 00 00 00 00 11 50 30 00 00 00 00 00 00 00 00 00 00 00 00 09 60",
+    "description": "RFID INVENTORY",
+    "length": 70,
+    "timestamp": 1749250690433
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 19 c2 07 9e bb 59 81 00 04 00 05 80 0f 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 5d",
+    "description": "Raw notification packet",
+    "length": 25,
+    "timestamp": 1749250690434
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 19 c2 07 9e bb 59 81 00 04 00 05 80 0f 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 10 5d",
+    "description": "RFID INVENTORY",
+    "length": 25,
+    "timestamp": 1749250690434
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 02 d9 82 9e b6 e6 a1 03",
+    "description": "Raw notification packet",
+    "length": 2,
+    "timestamp": 1749250691334
+  },
+  {
+    "type": "notification",
+    "data": "a7 b3 02 d9 82 9e b6 e6 a1 03",
+    "description": "Trigger UP event",
+    "length": 2,
+    "timestamp": 1749250691334
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 c2 82 37 00 00 40 03",
+    "description": "Abort Command to module 0xc2",
+    "length": 2,
+    "timestamp": 1749250691337
+  }
+]

@@ -1,0 +1,86 @@
+[
+  {
+    "type": "command",
+    "data": "a7 b3 02 c2 82 37 00 00 80 01",
+    "description": "RFID Power Off to module 0xc2",
+    "length": 2,
+    "timestamp": 1749304239997
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 18 99 80 01 00",
+    "description": "RFID Power OFF Response",
+    "length": 3,
+    "timestamp": 1749304240056
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 c2 82 37 00 00 80 00",
+    "description": "RFID Power On to module 0xc2",
+    "length": 2,
+    "timestamp": 1749304240557
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 01 41 80 00 00",
+    "description": "RFID Power ON Response",
+    "length": 3,
+    "timestamp": 1749304240596
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 c2 82 37 00 00 80 01",
+    "description": "RFID Power Off to module 0xc2",
+    "length": 2,
+    "timestamp": 1749304246455
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 18 99 80 01 00",
+    "description": "RFID Power OFF Response",
+    "length": 3,
+    "timestamp": 1749304246490
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 c2 82 37 00 00 80 00",
+    "description": "RFID Power On to module 0xc2",
+    "length": 2,
+    "timestamp": 1749304246991
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 01 41 80 00 00",
+    "description": "RFID Power ON Response",
+    "length": 3,
+    "timestamp": 1749304247016
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 c2 82 37 00 00 80 01",
+    "description": "RFID Power Off to module 0xc2",
+    "length": 2,
+    "timestamp": 1749304255020
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 18 99 80 01 00",
+    "description": "RFID Power OFF Response",
+    "length": 3,
+    "timestamp": 1749304255068
+  },
+  {
+    "type": "command",
+    "data": "a7 b3 02 c2 82 37 00 00 80 00",
+    "description": "RFID Power On to module 0xc2",
+    "length": 2,
+    "timestamp": 1749304255568
+  },
+  {
+    "type": "response",
+    "data": "a7 b3 03 c2 82 9e 01 41 80 00 00",
+    "description": "RFID Power ON Response",
+    "length": 3,
+    "timestamp": 1749304255600
+  }
+]
