@@ -1,8 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
-import dotenv from 'dotenv';
+import { loadRootEnv } from './tests/config/load-root-env';
 
-// Load environment variables from .env.local
-dotenv.config({ path: '.env.local' });
+// Load the repo-root .env.local (TRA-1195). This used to be a bare
+// dotenv.config({ path: '.env.local' }), which resolved against the CWD —
+// playwright runs from frontend/, so it read frontend/.env.local and found
+// nothing. The values arrived from direnv instead, which is why the suite
+// passed everywhere a human ran it and failed everywhere else.
+loadRootEnv();
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
 const isRemote = !!process.env.PLAYWRIGHT_BASE_URL;

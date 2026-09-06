@@ -6,16 +6,21 @@
  */
 
 import os from 'os';
-import * as dotenv from 'dotenv';
 import {
   CS108_BLE_SERVICE_UUID,
   CS108_BLE_WRITE_UUID,
   CS108_BLE_NOTIFY_UUID
 } from '../../src/lib/device/transport/cs108-ble-transport';
 import { resolveBridgePort } from './resolve-bridge-port';
+import { loadRootEnv } from './load-root-env';
 
-// Load environment variables once
-dotenv.config({ path: '.env.local' });
+// Load environment variables once, from the repo root (TRA-1195).
+//
+// vite.config.ts imports this file, which is why `pnpm vite` printed
+// "[dotenv] injecting env (0) from .env.local" on every start — a standing,
+// visible symptom of the bug that nobody read as one, because vite's own
+// loadEnv covered for it and the app resolved its API URL correctly anyway.
+loadRootEnv();
 
 // System hostname for unique session IDs
 const systemHostname = os.hostname();

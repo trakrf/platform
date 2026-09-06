@@ -19,8 +19,18 @@ import { validateBleEnvironment } from './validate-url.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Load environment variables
-dotenv.config({ path: join(__dirname, '..', '.env.local') });
+// Load environment variables from the repo root (TRA-1195).
+//
+// This file is plain JS run outside the TS build, so it keeps its own copy of
+// the resolution rather than importing tests/config/load-root-env.ts — the same
+// arrangement resolve-bridge-port.ts documents for BLE_MCP_WS_PORT, where the
+// guard is what keeps the copy honest.
+//
+// It had the right technique and the wrong depth: this file lives in
+// frontend/scripts/, so a single '..' reaches frontend/, not the repo root. It
+// had been reading frontend/.env.local — a file that has never existed — for as
+// long as it has had this line.
+dotenv.config({ path: join(__dirname, '..', '..', '.env.local') });
 
 // Validate environment variables
 const envValidation = validateBleEnvironment(process.env);

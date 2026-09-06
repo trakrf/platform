@@ -111,6 +111,20 @@ export default async function assertPreconditions(): Promise<void> {
       '  This usually means the request reached the vite dev server rather than',
       '  the backend. Set VITE_API_URL to the backend, e.g.',
       '    VITE_API_URL=http://localhost:8080/api/v1',
+      // TRA-1195: when VITE_API_URL is unset we are on the fallback origin, and
+      // the most likely reason is that .env.local never loaded rather than that
+      // the health endpoint is malformed. Say so, because this guard's whole
+      // value is naming its own cause — and for as long as the dotenv calls
+      // resolved against the CWD, it confidently named the wrong one.
+      ...(process.env.VITE_API_URL
+        ? []
+        : [
+            '',
+            '  VITE_API_URL is unset, so the URL above is the fallback origin,',
+            '  not a configured backend. Did the repo-root .env.local load?',
+            '  Outside a direnv shell nothing else supplies these values —',
+            '  check that it exists and that this process can read it.',
+          ]),
     ]);
   }
 
