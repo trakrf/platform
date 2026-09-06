@@ -76,7 +76,9 @@ describe('InventoryTagHandler', () => {
       expect(handler.canHandle(packet, context)).toBe(true);
     });
 
-    it('accepts 0x8100 packets in LOCATE mode', () => {
+    it('rejects 0x8100 packets in LOCATE mode', () => {
+      // LOCATE mode is served by locate/handler.ts, which emits LOCATE_UPDATE.
+      // This handler declining is the boundary between the two.
       context.currentMode = ReaderMode.LOCATE;
       const packet: CS108Packet = {
         eventCode: 0x8100,
@@ -88,7 +90,7 @@ describe('InventoryTagHandler', () => {
         crc16: 0
       };
 
-      expect(handler.canHandle(packet, context)).toBe(true);
+      expect(handler.canHandle(packet, context)).toBe(false);
     });
 
     it('rejects non-0x8100 packets', () => {
@@ -212,51 +214,6 @@ describe('InventoryTagHandler', () => {
           type: WorkerEventType.TAG_READ,
           payload: expect.objectContaining({
             tags: testTags,
-            timestamp: expect.any(Number)
-          })
-        })
-      );
-    });
-
-    it('emits LOCATE_UPDATE events in LOCATE mode', async () => {
-      context.currentMode = ReaderMode.LOCATE;
-
-      const testTags = [
-        {
-          epc: 'E280116060000123456789AB',
-          pc: 0x3000,
-          rssi: -45,
-          timestamp: Date.now()
-        },
-        {
-          epc: 'E280116060000123456789AC',
-          pc: 0x3000,
-          rssi: -60,
-          timestamp: Date.now()
-        }
-      ];
-
-      mockProcessInventoryPayload.mockReturnValue(testTags);
-
-      const packet: CS108Packet = {
-        eventCode: 0x8100,
-        rawPayload: new Uint8Array([0x03, 0x12, 0x05, 0x80]),
-        prefix: 0xA7B3,
-        messageLength: 4,
-        flags: 0,
-        reserve: 0,
-        crc16: 0
-      };
-
-      await handler.handle(packet, context);
-
-      // Should emit LOCATE_UPDATE with strongest tag
-      expect(mockPostWorkerEvent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: WorkerEventType.LOCATE_UPDATE,
-          payload: expect.objectContaining({
-            epc: testTags[0].epc, // Strongest RSSI tag
-            rssi: testTags[0].rssi,
             timestamp: expect.any(Number)
           })
         })
