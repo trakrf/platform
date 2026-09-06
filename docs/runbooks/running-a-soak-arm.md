@@ -79,10 +79,33 @@ commit hours.
 ```bash
 cd frontend
 
-setsid nohup node scripts/characterise-suite-runs.mjs \
+setsid nohup ./node_modules/.bin/ble-radio-lock --label platform-soak -- \
+  node scripts/characterise-suite-runs.mjs \
   --runner vitest --shape fixed --reps 200 --note tra-1239-after \
   < /dev/null > .suite-runs/ARM-$(date +%F)-driver.log 2>&1 &
 ```
+
+⚠ **Hold the radio for the whole arm, and wrap the driver rather than the reps.**
+An arm is one operation lasting hours; the reader must not become available
+between rep 47 and rep 48. Wrapping each rep would release in every gap, which is
+the 2026-08-31 defect at a different scale — and a rep that lost the race would
+exit **75** without running, landing in the record as a suite failure and
+corrupting the very rate the arm exists to measure. Wrapping the driver holds the
+lock for exactly as long as the driver lives and returns it when the driver dies
+by any means, `setsid`/`nohup` included.
+
+Do **not** use `ble-radio-lock hold` here: it opens an interactive shell, and a
+detached arm outlives the shell that launched it. Exiting that shell would release
+the lock with 150 reps still to run.
+
+The wrap is re-entrant for descendants, so any rep that is itself wrapped passes
+through instead of deadlocking — you will see `Already inside the radio hold taken
+by pid N` in the driver log, which is the wrap working, not a warning.
+
+If the reader is already held the launch refuses with exit 75 and **nothing
+starts**, so a refused launch can never be mistaken for an arm that began and
+died. Check `.suite-runs/ARM-…-driver.log` for `RADIO BUSY` before concluding
+anything else went wrong.
 
 ⚠ **`setsid nohup … < /dev/null`, not a plain `&`.** A bare `&` dies with the
 launching shell whenever the arm is started from anything that is not an
