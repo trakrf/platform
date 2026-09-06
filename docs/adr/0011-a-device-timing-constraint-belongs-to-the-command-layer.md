@@ -225,10 +225,40 @@ guidance for those examples rather than a bus-level prohibition.
 >
 > **3. "Returns immediately" — true of the caller, false of the pipeline.**
 > CSL's post-ABORT protection is **response-gated, not time-gated**: nothing
-> leaves `_sendBuffer` until the ABORT is answered, or ~42 s of retries are
+> leaves `_sendBuffer` until the ABORT is answered, or the retry budget is
 > spent. On the wire, every abort-to-abort interval carries 8-54 downlinks —
 > except the two intervals following an *unanswered* ABORT, which carry **zero**
 > for 80 and 83 packets respectively.
+>
+> ⚠ **The budget is a band, not a figure — corrected 2026-09-06.** This
+> originally read "~42 s of retries". 42 s is the *floor*. Derived from
+> `BTSend.cs:294-405`: the deadline is a flat `Now.AddSeconds(2)` with no
+> backoff, and an ABORT takes the `BTCOMMANDTYPE.None` path (its `SendAsync`
+> overload never assigns a type), which shares `Normal`'s budget of 20 re-sends
+> — **21 transmissions**. But the deadline is only noticed when the send engine
+> runs, and the engine is not a loop. It is driven by every send, **every
+> received packet** (`CSLibrary.cs:297`), and a **1 Hz timer**
+> (`new Timer(TimerFunc, this, 0, 1000)`). So the interval depends on whether
+> anything is still arriving:
+>
+> ```
+> tag data still streaming   engine runs ~10x/s   spacing ≈ 2s
+> link genuinely quiet       1 Hz timer only      spacing ∈ (2s, 3s]
+>
+> total before give-up = 21 transmissions ∈ [42s, 63s]
+> ```
+>
+> This does not disturb the correction above — response-gating is the claim, and
+> it holds anywhere in the band. It matters when the number is *cited*: "~42 s"
+> reads as a measurement and is actually the best case.
+>
+> Two things not to repeat. CSL's own comment, `// retry 19 times (~40s)`, is
+> wrong on both counts — 20 re-sends, and 42 s at the floor. And the band is not
+> a source-reading limitation that a closer read would close: an ABORT is sent
+> *during* inventory, so which row applies turns on whether a reader that
+> ignored the abort keeps streaming tag data — a question about the **device**,
+> not the library. **Only a timestamped capture of an unanswered vendor-side
+> abort can answer it**, and that is the sole part of this still worth hardware.
 >
 > **4. "CSL wires abort to the physical trigger (0xA004) so a stop cannot be
 > lost" — motive unsupported.** Zero hits for `A004` across all 281 `.cs` files.
