@@ -22,5 +22,5 @@ Architecture: `README.md`, `docs/architecture-decisions.md`, `docs/adr/`, `docs/
 ## Hardware
 - `ble-mcp-test` is test tooling only; the app reaches a CS108 via browser `navigator.bluetooth`
 - One connection at a time: a connected client blocks hand-testing, a running daemon does not
-- An idle bridge port does not mean the reader is free, and neither does `held: false` — the reader is SHARED with the ble-mcp-test session and changes hands on an explicit message; see `docs/ble-hardware-access.md`
+- The reader is SHARED with the ble-mcp-test session: take it by acquiring the lock, never by polling `held: false`. `test:integration`, `test:hardware`, `test:e2e` and `test:ui` are wrapped in `ble-radio-lock` already; wrap a hand-run vitest yourself. Refusal is exit 75 and never queues; a browser hand-test and arm B are outside the lock — see `docs/ble-hardware-access.md`
 - The bridge is a supervised `systemctl --user` unit; `pkill` returns in 5s

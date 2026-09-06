@@ -26,14 +26,15 @@ typecheck:
 test:
     pnpm test
 
-# Run E2E tests (headless only)
+# Run E2E tests (headless only) -- holds the shared reader for the whole run
 test-e2e:
     pnpm test:e2e
 
 # Run E2E tests against a remote deployment (skips local webServer + hardware tests)
+# Takes no radio lock: @hardware is excluded, so this run never reaches a reader.
 # Example: just frontend test-e2e-remote https://gke.trakrf.app
 test-e2e-remote base_url:
-    PLAYWRIGHT_BASE_URL={{base_url}} pnpm test:e2e --grep-invert "@hardware"
+    PLAYWRIGHT_BASE_URL={{base_url}} pnpm test:e2e:remote
 
 # Build frontend for production
 build:

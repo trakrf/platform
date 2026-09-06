@@ -89,14 +89,6 @@ two attempts"* — a retried publish, a spec that disconnects between reps, a su
 mid-restart. **The query cannot tell them apart, so it can never establish
 clearance on its own.**
 
-> **The reader changes hands on an explicit message.** Announce before connecting,
-> announce when finished, and announce again **before a retry**. Then check
-> `get_connection_state` as a second guard — behind the signal, never instead of it.
-
-If nobody answers within ~10 minutes, check the state and, if free, take it **and
-announce that you have taken it**. Announcing into an empty inbox still leaves the
-record. The protocol must not deadlock on an absent counterpart.
-
 **Measured, 2026-08-31.** ble-mcp-test's first publish passed its 23-test hardware
 gate and died at the last step on an expired OTP; it re-attempted 26 seconds later.
 Platform polled inside that gap, read `held: false`, and connected. The flag was
@@ -105,11 +97,86 @@ telling the truth and the lock was genuinely enforced — the collision produced
 section** (gate → OTP → retry) outlasted the **lock hold** protecting it. Cost:
 8 of 23 e2e tests and a publish attempt.
 
-⚠ **This is a convention, not a control.** It has no red state: if either side
-forgets to send the words, nothing fails — the sessions simply collide again and
-reconstruct it afterwards. A real lock is being designed in the ble-mcp-test repo
-(TRA-1221), whose acceptance criteria include deleting this section and the
-`CLAUDE.md` line pointing at it. **Do not keep both.**
+## Take the reader by acquiring the lock, not by asking
+
+`ble-mcp-test` ships `ble-radio-lock`, which takes an `flock(2)` on one fixed path
+and execs your command. The kernel holds it for exactly as long as that command
+lives, and takes it back when the process dies by any means — `Ctrl-C`, a killed
+vitest, a crash. **The lock file is the contract, not the script:** anything that
+flocks the same path participates, in any language.
+
+```bash
+pnpm exec ble-radio-lock path      # /tmp/ble-mcp-test.radio.lock -- both sides agree on this
+```
+
+**Our entry points are already wrapped**, so the ordinary case needs nothing from
+you:
+
+| command | holds the reader |
+| -- | -- |
+| `pnpm test:integration` | yes |
+| `pnpm test:hardware` | yes |
+| `pnpm test:e2e` (and `just frontend test-e2e`) | yes |
+| `pnpm test:ui` | yes, for as long as the UI is open |
+| `pnpm test:e2e:remote` (and `just frontend test-e2e-remote`) | **no** — `@hardware` is excluded, so it never reaches a reader |
+
+A **hand-run vitest** is the case that is not wrapped for you, because there is no
+entry point to wrap. Wrap it yourself:
+
+```bash
+pnpm exec ble-radio-lock --label platform-adhoc -- \
+    pnpm vitest run tests/integration/cs108/locate.spec.ts
+```
+
+For several commands that are **one** operation — a build, then a run, then a
+retry — take the hold once and stay inside it, or you release between the steps
+and reproduce the 2026-08-31 defect exactly:
+
+```bash
+pnpm exec ble-radio-lock --label platform-session hold   # opens a shell holding the reader
+# ...run as many commands as the operation needs...
+exit                                                     # releases
+```
+
+The wrapper is **re-entrant for its own descendants**: a wrapped `pnpm test:e2e`
+run inside that shell passes straight through rather than deadlocking on itself.
+
+**Refusal is loud, immediate, and never queues.** A contended acquire exits **75**
+(`EX_TEMPFAIL`) naming the holder, and the wrapped command does not run at all —
+so exit 75 always means *"refused, never started"*, distinguishable from any code
+your suite produces. Wait and re-run; do not poll for a gap.
+
+**There is deliberately no way to ask whether the lock is free.** Acquisition is
+the only interface, precisely because the 2026-08-31 collision was a poll whose
+answer was true when read and false when acted on. You cannot poll what does not
+exist — which is why the section above matters: `held` describes the device, and
+the lock describes the operation.
+
+### What the lock does not cover
+
+`flock` is same-kernel, and it only binds processes that take it. Two cases sit
+outside it, both by construction:
+
+- **A browser hand-test.** Someone driving a reader from a real
+  `navigator.bluetooth` tab takes no lock and appears in no bridge state. Holding
+  the lock tells you no other **mssb command** is running; it says nothing about
+  the reader itself. The one honest observable is advertising: a connected
+  peripheral stops advertising, so *heard advertising* is real evidence nobody
+  holds it, while *not heard* means held **or** powered off **or** out of range.
+  Use it to decide whether to ask, never as permission to proceed.
+- **Arm B on knuckles.** A lock held on mssb excludes nothing on another host, so
+  that recipe is deliberately left unwrapped rather than wrapped for appearances.
+  Co-ordinate it by hand.
+
+**The gap between a hand test's reps is conceded, not co-ordinated.** If the device
+is advertising and an automated run takes it between someone's reps, that is
+accepted — the reciprocal being that a hand test which reconnects and cannot find
+the device has its own tell, and checks bridge status. Each side's loss is visible
+to the side that suffers it, so neither has to warn the other about that window.
+
+The mechanism, and what each design decision rejected, are in the ble-mcp-test
+checkout: `docs/radio-lock.md` and `docs/design/2026-09-06-radio-lock.md`
+(TRA-1241).
 
 **`observer_count > 0` is the hazard worth naming.** It is most often a leftover
 mock-injected browser tab, which **appears in no process listing and in no log**
