@@ -20,28 +20,72 @@ export interface ConsoleMonitorOptions {
   logAllMessages?: boolean; // Whether to log all console messages
 }
 
+/**
+ * Both lists are guarded, per entry, by
+ * `tests/config/every-console-allowlist-entry-has-a-producer.test.ts`.
+ *
+ * Read that guard before adding anything here. The short version: an entry must
+ * match a line something under `frontend/src/` can actually print, because that
+ * is the only tree the monitored browser page loads. An entry that matches
+ * nothing has no symptom — the gate stays green and nothing ever points at the
+ * list — which is how 15 of the 16 entries below rotted unobserved.
+ *
+ * When the guard condemns an entry, DELETE it. Do not reword it to match the
+ * current message: that resets the decay clock, adds no failure mode, and leaves
+ * the list looking correct until it silently is not again. TRA-1224.
+ */
+
 // Critical errors that should fail tests
-const DEFAULT_CRITICAL_ERRORS = [
-  'Start inventory command failed',
-  'Failed to start inventory', 
-  'Failed to stop inventory',
-  'Connection timeout',
+export const DEFAULT_CRITICAL_ERRORS = [
   'Connection error',
-  'RFID Module: Error',
-  'Transport error',
-  'Command timeout after',
-  'Device error notification'
+  // REMOVED 2026-09-06: eight entries that matched nothing under src/.
+  //
+  //   'Start inventory command failed'   'Failed to start inventory'
+  //   'Failed to stop inventory'         'Connection timeout'
+  //   'RFID Module: Error'               'Transport error'
+  //   'Command timeout after'            'Device error notification'
+  //
+  // This was the worse half of the finding. These are the entries that FAIL a
+  // run, so eight dead ones were a gate that could not fire — an e2e pass has
+  // been a weaker statement than it looked for as long as they have been dead.
+  //
+  // They are replatform casualties rather than typos. The CS108 worker rebuild
+  // and the ble-mcp-test replatform reworded the emissions out from under them;
+  // `'Command timeout after'` is the clearest case, because the line it was
+  // written for is now `[CommandManager] Command timeout: RFID_POWER_OFF` —
+  // different prefix, different name form, and no duration at all.
+  //
+  // Not reworded to match, deliberately. Three of them (`Connection timeout`,
+  // `Transport error`, and the timeout above) name conditions that DO still
+  // occur, so the temptation to retype them is real — but a critical entry is
+  // only worth having if a run can prove it still matches, and the guard now
+  // demands exactly that of whatever replaces them.
 ];
 
 // Known benign errors that should be ignored
-const DEFAULT_ALLOWED_ERRORS = [
-  'Failed to start battery auto reporting', // Known issue - benign
-  'Failed to power OFF RFID module', // Known firmware issue - benign
-  'No RFID packets received for', // Auto-stop feature removed - expected
-  'Device error notification: code 0x0', // End of fragmented inventory packet - normal operation
-  'Command timeout after 2000ms: RFID Firmware Command (0x8002)', // Background RFID cleanup - benign
-  'Command timeout after 5000ms: RFID Power Off (0x8001)', // RFID power commands - firmware quirk
-  'Command timeout after 5000ms: RFID Power On (0x8000)', // RFID power commands - firmware quirk
+export const DEFAULT_ALLOWED_ERRORS = [
+  // REMOVED 2026-09-06: all seven remaining entries matched nothing under src/.
+  //
+  //   'Failed to start battery auto reporting'
+  //   'Failed to power OFF RFID module'
+  //   'No RFID packets received for'
+  //   'Device error notification: code 0x0'
+  //   'Command timeout after 2000ms: RFID Firmware Command (0x8002)'
+  //   'Command timeout after 5000ms: RFID Power Off (0x8001)'
+  //   'Command timeout after 5000ms: RFID Power On (0x8000)'
+  //
+  // The last three were inert twice over, and the second reason is worth keeping
+  // because it is easy to re-introduce: `isAllowedError` gates the throwing path,
+  // but `Command timeout` is a `logger.warn`, and warnings do not fail a run.
+  // Wrong string AND nothing to suppress.
+  //
+  // Do not restore the Power Off entry from memory without reading TRA-1217
+  // first. That ticket changed what the condition MEANS: an unanswered
+  // RFID_POWER_OFF used to be "firmware quirk, benign" and is now a deliberately
+  // tolerated condition that emits its own line — which TRA-1223 wants COUNTED,
+  // because a recurrence of the device's silent window is otherwise invisible.
+  // "Allowlist it", "count it" and "assert on it" are three different answers.
+  //
   // REMOVED 2026-08-31: 'Device is busy with another session'.
   //
   // It matched nothing. Verified on both sides of the seam rather than assumed:

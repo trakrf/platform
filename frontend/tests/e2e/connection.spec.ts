@@ -47,10 +47,26 @@ test.describe('Connection Operations @hardware', () => {
     await sharedPage.goto('/');
 
     // Set up console monitoring
+    // Overrides removed 2026-09-06 (TRA-1224). All three strings this passed
+    // matched nothing under src/ — `Connection timeout` and `Transport error`
+    // narrowed the failing set to two dead needles, so the monitor could not
+    // fail this spec for any reason at all, and `Failed to start battery auto
+    // reporting` warned on a line nothing prints.
+    //
+    // Falling through to the defaults is the fix rather than retyping them:
+    // the defaults are the list guarded per-entry by
+    // tests/config/every-console-allowlist-entry-has-a-producer.test.ts, and a
+    // local override is invisible to that guard. Anything added back here is
+    // unguarded by construction, so add it to the defaults instead.
+    //
+    // `logAllMessages` was previously spelled `logAllErrors`, which is not an
+    // option on ConsoleMonitorOptions and was silently discarded — this spec has
+    // never actually logged all messages. Corrected, so it now does; that is a
+    // deliberate behaviour change and the reason this spec gets noisier.
+    // The typo survived because tsconfig.json excludes tests/**/*, so tsc never
+    // excess-property-checked this object literal.
     consoleMonitor = setupConsoleMonitoring(sharedPage, {
-      failOnErrors: ['Connection timeout', 'Transport error'],
-      warnOnErrors: ['Failed to start battery auto reporting'],
-      logAllErrors: true
+      logAllMessages: true
     });
 
     // Connect to device ONCE. '/' resolves to the Scan tab (TRA-1029), so the

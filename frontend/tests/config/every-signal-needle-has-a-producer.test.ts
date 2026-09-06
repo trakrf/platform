@@ -36,8 +36,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { buildHaystack } from './source-haystack';
 import { SIGNALS, E2E_SIGNALS, COMMAND_TIMEOUT_PREFIX } from '../../scripts/suite-run-signals.mjs';
 
 const FRONTEND_ROOT = path.resolve(__dirname, '../..');
@@ -90,42 +90,6 @@ const COMPOSED_AT_RUNTIME: Record<string, { staticPart: string; dynamicPart: str
 /** Source trees that can plausibly emit a log line. */
 const SEARCH_DIRS = ['src', 'tests', 'scripts'];
 
-function collectSources(dir: string, acc: string[] = []): string[] {
-  let entries: string[];
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    return acc;
-  }
-  for (const entry of entries) {
-    if (entry === 'node_modules' || entry === 'dist' || entry.startsWith('.')) continue;
-    const full = path.join(dir, entry);
-    const st = statSync(full);
-    if (st.isDirectory()) {
-      collectSources(full, acc);
-    } else if (/\.(ts|tsx|mjs|js)$/.test(entry)) {
-      acc.push(full);
-    }
-  }
-  return acc;
-}
-
-/**
- * Strip comments, because a needle mentioned in prose is not a producer.
- *
- * This is not tidiness — it is the defect being guarded against, one level down.
- * The dead `'Device busy'` retry arm looked live to a plain grep precisely
- * because every occurrence of the string in the shipped bundle was inside a
- * comment explaining it. A check that counts prose as evidence confirms itself
- * on documentation of the very thing that is missing.
- *
- * Verified by execution rather than assumed: `transportUnreachable` passed the
- * first version of this test on two comment hits and nothing else.
- */
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
-}
-
 /**
  * Source text of everything that could emit a log line, comments removed.
  *
@@ -135,23 +99,33 @@ function stripComments(source: string): string {
  */
 const HAYSTACK = (() => {
   const signalsModule = path.join(FRONTEND_ROOT, 'scripts', 'suite-run-signals.mjs');
-  const files = SEARCH_DIRS.flatMap((d) => collectSources(path.join(FRONTEND_ROOT, d)));
-  return files
-    .filter(
-      (f) =>
-        f !== signalsModule &&
-        !f.endsWith('every-signal-needle-has-a-producer.test.ts') &&
-        // TRA-1226. This file builds real `[CommandManager] Command timeout: <OP>`
-        // lines as FIXTURES, so leaving it in makes the producer check satisfiable
-        // by a test of the very thing being checked. Caught by deliberate break:
-        // rewording the producer in command.ts left the suite green until this
-        // exclusion existed. Same reason the signals module is excluded above —
-        // a haystack must hold only code that could EMIT the line, never code
-        // that tests, consumes, or documents it.
-        !f.endsWith('soak-command-timeouts-by-op.test.ts')
-    )
-    .map((f) => stripComments(readFileSync(f, 'utf8')))
-    .join('\n');
+  const harnessConfigTree = path.join(FRONTEND_ROOT, 'tests', 'config') + path.sep;
+  return buildHaystack(
+    SEARCH_DIRS.map((d) => path.join(FRONTEND_ROOT, d)),
+    (f) =>
+      f === signalsModule ||
+      // The whole harness-config tree, as a RULE rather than a list. TRA-1224.
+      //
+      // This used to name one file — `soak-command-timeouts-by-op.test.ts`,
+      // excluded under TRA-1226 because it builds real
+      // `[CommandManager] Command timeout: <OP>` lines as FIXTURES, which made
+      // the producer check satisfiable by a test of the very thing being
+      // checked. That exclusion was correct and immediately decayed: three more
+      // files here (`soak-command-rejection-op-table`, `soak-command-timeout-op-table`,
+      // `soak-command-in-flight-count`) were added later carrying the same
+      // literal in live code, and nobody came back to extend the list.
+      //
+      // Measured, not inferred: on plain main, rewording the producer in
+      // command.ts leaves this suite GREEN. The guard against dead needles had
+      // itself gone dead, in exactly the manner it exists to prevent — an
+      // enumeration that must be hand-maintained, with no red state when it
+      // falls behind.
+      //
+      // Nothing under tests/config/ can emit a product log line. It builds
+      // fixtures, parses captured logs and asserts on them. So the rule is the
+      // tree, and a fifth fixture file cannot silently re-open the hole.
+      f.startsWith(harnessConfigTree)
+  );
 })();
 
 describe('SIGNALS needles', () => {
