@@ -102,12 +102,64 @@ Both of these are free if known in advance, and expensive afterwards:
 - **Keep timestamps.** `scripts/getsnoopy.sh` now passes `-e frame.time_epoch`
   and no longer greps.
 
-**Still open, worth catching opportunistically:** CSL's real retry interval.
-`_packetResponseTimeout` is 2s in their source, but no capture we hold contains
-an *unanswered* abort on the vendor side, so the interval has never been
-measured — only the ordering (block, then re-send). A timestamped capture
-containing one closes it. That needs the vendor's Android app on a handset with
-btsnoop enabled, not our bench harness.
+### CSL's retry policy — settled from source, not from a capture
+
+This was previously recorded here as an open item needing a handset. It is
+mostly closed, and the reason is worth stating: **the retry policy is host-side
+behaviour, entirely determined by the vendor's own code.** No device is
+involved, so their source is the primary authority for it — a capture would be
+confirmation, not evidence.
+
+From `Library/CSLibrary/BluetoothProtocol/BTSend.cs` (`BLERWEngineTimer`,
+:294-405):
+
+| | |
+| -- | -- |
+| deadline | `_packetResponseTimeout = DateTime.Now.AddSeconds(2)` at every send (:380) |
+| backoff | none — flat 2s, re-armed identically on each re-send |
+| re-send | immediate on expiry; the head of `_sendBuffer` is never removed, and `_packetDelayTimeout` was set to `Now` at the original send |
+| budget, `None`/`Normal` | `_PROTOCOL_RetryCount > 19` → 20 re-sends, **21 transmissions**, then `COMMUNICATION_ERROR` and `_sendBuffer.Clear()` |
+| budget, `Validate` | retries **once** (2 transmissions), removes only that command and fires `sendFailCallback` |
+
+An ABORT takes the `None` path — `StopOperation()`'s `SendAsync` overload never
+assigns `sendItem.type`, so it keeps the `BTCOMMANDTYPE.None` default, and
+`case None:` falls through to `case Normal:`. So the 21-transmission budget is
+the one that applies to a lost abort.
+
+**What source cannot settle, and this is the whole of what is left.** The 2s
+deadline is only *noticed* when the send engine runs, and the engine is not a
+loop. It is driven by three things: every send, **every received packet**
+(`BLERWEngineTimer()` is the last statement of the receive handler,
+`CSLibrary.cs:297`), and a **1 Hz timer** (`new Timer(TimerFunc, this, 0, 1000)`).
+
+So the spacing depends on whether anything is coming back:
+
+| link state during the unanswered command | what runs the engine | spacing |
+| -- | -- | -- |
+| tag data still streaming | every uplink packet — ~10/s in this capture (608 `RFID_DATA` in 67.9s) | **≈ 2s** (noticed within ~100ms of the deadline) |
+| genuinely quiet | the 1 Hz timer alone | **(2s, 3s]** |
+
+```
+spacing between re-sends   ∈ [2s, 3s]   biased hard to 2s whenever uplink traffic flows
+total before give-up       = 21 transmissions   ∈ [42s, 63s]   same bias
+```
+
+The case that matters sits exactly on the ambiguity. An ABORT is sent *during*
+inventory, so tag data is very likely still arriving — which pins the spacing at
+≈2s. But whether a reader that ignored the abort keeps streaming is precisely
+what is unknown, and it is what decides which row applies.
+
+That is the narrow question a timestamped capture of an unanswered vendor-side
+abort would close — not "what is the retry interval", which the source already
+answers, but "was the link still carrying tag data while CSL was re-sending".
+It is the only part of this still worth a handset.
+
+⚠ CSL's own inline comment is wrong on both counts: `// retry 19 times (~40s)`.
+The loop does 20 re-sends, and even at the 2s floor that is 42s. Do not cite it.
+
+Independent corroboration of the byte-4 measurement, from the same file: the
+vendor's sender hardcodes `sendData[4] = 0x82` on every downlink (:130). Source
+and capture agree — 242 of 242 downlink packets, one distinct value.
 
 ## Not tracked
 
