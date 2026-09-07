@@ -60,6 +60,26 @@ ps -eo pid=,lstart=,args= | grep -E "dev-bridge|vite" | grep -v grep
 Kill by **explicit pid**. `pkill -f "vite …"` matches its own argv and silently
 does nothing.
 
+**The dev server is in BRIDGE MODE, not plain vite.**
+
+```bash
+just frontend dev-bridge      # NOT `just dev-local`, NOT `pnpm vite`
+```
+
+`dev:bridge` is what injects `navigator.bluetooth` into the page. Plain `vite`
+serves the same app, from the same worktree, at the same commit, on the same
+`:5173` — and answers every port, health and provenance check identically. The
+only difference is that no device can be reached.
+
+This is a **different question from the stale-server check above**: that one asks
+*whose* server is on the port, this asks *what mode* it is in. A server can be
+yours, current, and still wrong.
+
+The failure is loud but late — the first `@hardware` spec throws *"The dev server
+is not in bridge mode"* about 40 seconds in, after a BLE connect attempt, and
+every hardware spec after it fails the same way. `ss -lptn` shows `:5173`
+listening either way, so nothing before the run can tell.
+
 **The bench matches the arm you are comparing against.** Tag population is not
 cosmetic: the same commit passed `locate-mask-length-variants.spec.ts` 140 times
 on one arrangement and failed 6/6 on another (`TRA-1225`). If the comparison is
@@ -71,6 +91,46 @@ same thing. Lingering is marginally better because it exercises the exact
 configuration that will run, and it is one fewer step; take whichever you will
 actually do. What matters is that *something* proves a green rep before you
 commit hours.
+
+**And once it is running: do not write to the repo.**
+
+Not just merges. **Any** write under `frontend/src/` — the dev server is watching
+it, and a module that does not accept HMR (Zustand stores, `deviceStore.ts` among
+them) escalates to a **full page reload** mid-rep.
+
+A reload counterfeits a BLE disconnect exactly:
+
+| what the rep records | what actually happened |
+| -- | -- |
+| `readerState` = `Disconnected` | fresh store module |
+| `hasTransportManager: false` | `window.__TRANSPORT_MANAGER__` died with the document |
+| `link-close` 0 | no `gattserverdisconnected` — the page went away |
+| `link-teardown` 0 | `disconnect()` never ran |
+
+**Nothing in the run log shows it.** `[vite] page reload <file>` goes to the dev
+server's stdout, not the page console, so it never reaches the captured output —
+and it carries no KEEP token, so `console-forwarding.ts` would drop it even if it
+did. On 2026-09-07 this produced a written-up "reproduction" of `TRA-1259`, with
+a new hypothesis, before it was caught. What caught it was an arithmetic
+contradiction — `cleanup()` is the only deleter of `__TRANSPORT_MANAGER__` and
+all three of its callers log, yet none had — not suspicion.
+
+Safe while an arm runs: reading, Linear, `git commit` (does not touch the working
+tree), `git push`, `pnpm typecheck`, `pnpm test`, bare `pnpm lint`, and editing in
+a **separate worktree** — `.claude/worktrees/` is gitignored and sits outside
+vite's watch root, so it perturbs neither the tree fingerprint nor the page.
+
+⚠ NOT safe: root `just lint`, which appends `--fix` and rewrites files.
+
+The `csw:work` worktree discipline prevents this by construction — edits land in
+an isolated tree while the arm keeps serving from the checkout it started in.
+
+**To know whether a rep was clean**, record `git rev-parse HEAD` plus a hash of
+`git status --porcelain` at rep start *and* end, and count `page reload` in the
+dev server log across the same window. Either signal moving means the code under
+test changed mid-rep: **void the rep rather than analyse it.** Distinguish "clean
+tree" from "git failed" — both hash the empty string (`e3b0c442…`) and they mean
+opposite things.
 
 ---
 
@@ -526,8 +586,10 @@ cautionary decoration.
 - **Watchdog armed on the launching shell's pid.** Silently unwatches.
 - **`pkill -f` matching its own argv.** Kill by explicit pid.
 - **A stale dev server** serving an old bundle to anything that opens `:5173`.
-- **Merging from the soak checkout mid-run** — `--delete-branch` swaps the tree
-  under a running rep.
+- **Writing to the soak checkout mid-run.** Merging is one way — `--delete-branch`
+  swaps the tree under a running rep — but so is an editor: any write under
+  `frontend/src/` makes vite reload the page, which counterfeits a BLE
+  disconnect and leaves no trace in the run log. See §1.
 - **A relative path to the analysis scripts**, failing like a detector firing.
 - **Debug-level truth.** The worker logger defaults to `INFO`, and at least one
   real defect (`TRA-1225`) announces itself only at `DEBUG`. When a hardware
