@@ -278,7 +278,7 @@ function contaminationNote(records) {
  * things, and merging them is how a detector that sees nothing gets read as a
  * subsystem that did nothing.
  */
-function signalPairingTable(records) {
+export function signalPairingTable(records) {
   const resolved = records.map((r) => ({ r, ...resolveSignals(r) }));
   // The canary is asked for by ROLE, not by needle name. `harnessLines` is
   // emitted only by the integration harness, so on a Playwright record it is
@@ -316,7 +316,16 @@ function signalPairingTable(records) {
 
   const cell = { 'fail+sig': 0, 'fail+nosig': 0, 'pass+sig': 0, 'pass+nosig': 0 };
   for (const { r, signals } of usable) {
-    const failed = r.files.some((f) => f.status === 'failed');
+    // The REP's verdict, not "did the report name a failed file". Those differ
+    // for exactly the class this summary now has a row for, and the difference
+    // inverted this table's own conclusion: on the 2026-09-02 after-arm all
+    // three unattributable reps carry a scan-start error, and partitioning on
+    // failed files filed all three as PASSES — so the note below printed "no
+    // failure coincided with a scan-start error ... evidence against scan-start
+    // being the mechanism" on an arm where the correlation is 3/3 in favour of
+    // it. A rep with no parseable report is not a pass either; the record
+    // integrity note has said so since it was written.
+    const failed = repVerdict(r) !== 'passed';
     // EITHER limb. The trigger case awaits startScanning() on press and
     // stopScanning() on release; either rethrowing skips the postWorkerEvent()
     // below it, so both produce an identical missing-event symptom.
