@@ -14,6 +14,7 @@
  */
 
 import type { Page } from '@playwright/test';
+import type { WindowWithStores } from '../types';
 // Aliased because this module already exports a `getReaderState` of its own that
 // returns a number against a store which holds strings. Importing the
 // device-state one under its own name would shadow-clash with that; renaming or
@@ -557,7 +558,7 @@ export async function simulateTriggerCycle(
  */
 export async function getTriggerState(page: Page): Promise<boolean> {
   return await page.evaluate(() => {
-    const state = (window as unknown as { __ZUSTAND_STORES__?: { deviceStore?: { getState: () => { triggerState?: boolean } } } }).__ZUSTAND_STORES__?.deviceStore?.getState();
+    const state = (window as unknown as WindowWithStores).__ZUSTAND_STORES__?.deviceStore?.getState();
     return state?.triggerState || false;
   });
 }
@@ -569,14 +570,14 @@ export async function getTriggerState(page: Page): Promise<boolean> {
  */
 export async function getInventoryRunning(page: Page): Promise<boolean> {
   const states = await page.evaluate(() => {
-    const stores = (window as unknown as { __ZUSTAND_STORES__?: { deviceStore?: { getState: () => { triggerState?: boolean } } } }).__ZUSTAND_STORES__;
+    const stores = (window as unknown as WindowWithStores).__ZUSTAND_STORES__;
     const deviceStore = stores?.deviceStore?.getState();
     const tagStore = stores?.tagStore?.getState();
     const uiStore = stores?.uiStore?.getState();
     
     return {
-      readerState: deviceStore?.readerState || 0,
-      inventoryRunning: tagStore?.inventoryRunning || false,
+      readerState: deviceStore?.readerState ?? 'unknown',
+      searchRunning: tagStore?.searchRunning || false,
       activeTab: uiStore?.activeTab,
       triggerState: deviceStore?.triggerState
     };
@@ -584,7 +585,7 @@ export async function getInventoryRunning(page: Page): Promise<boolean> {
   
   // Check both reader state and inventory flag
   const readerInInventory = states.readerState === ReaderState.SCANNING;
-  const inventoryFlag = states.inventoryRunning;
+  const inventoryFlag = states.searchRunning;
   
   console.log('[Trigger] Inventory check:', {
     readerState: states.readerState,
@@ -602,10 +603,16 @@ export async function getInventoryRunning(page: Page): Promise<boolean> {
  * @param page - Playwright page
  * @returns Reader state number (4=READY, 5=INVENTORY, etc)
  */
-export async function getReaderState(page: Page): Promise<number> {
+// ⚠ A DEAD DUPLICATE of `getReaderState` in `device-state.ts`, which is the one
+// specs actually import. This one returned `Promise<number>` while the store's
+// `readerState` has been a string ('Connected') throughout — a signature nothing
+// could contradict while `tests/**` was outside `tsc` (TRA-1253). Corrected
+// rather than deleted; which of the two survives is a call for whoever
+// consolidates these helpers.
+export async function getReaderState(page: Page): Promise<string> {
   return await page.evaluate(() => {
-    const deviceStore = (window as unknown as { __ZUSTAND_STORES__?: { deviceStore?: { getState: () => unknown } } }).__ZUSTAND_STORES__?.deviceStore?.getState();
-    return deviceStore?.readerState || 0;
+    const deviceStore = (window as unknown as WindowWithStores).__ZUSTAND_STORES__?.deviceStore?.getState();
+    return deviceStore?.readerState ?? 'unknown';
   });
 }
 
@@ -664,13 +671,13 @@ export async function waitForTriggerReset(page: Page, timeout: number = 10000): 
   
   while (Date.now() - startTime < timeout) {
     const states = await page.evaluate(() => {
-      const stores = (window as unknown as { __ZUSTAND_STORES__?: { deviceStore?: { getState: () => { triggerState?: boolean } } } }).__ZUSTAND_STORES__;
+      const stores = (window as unknown as WindowWithStores).__ZUSTAND_STORES__;
       const deviceStore = stores?.deviceStore?.getState();
       const tagStore = stores?.tagStore?.getState();
       return {
         triggerState: deviceStore?.triggerState,
         readerState: deviceStore?.readerState,
-        inventoryRunning: tagStore?.inventoryRunning
+        searchRunning: tagStore?.searchRunning
       };
     });
     
@@ -690,7 +697,7 @@ export async function waitForTriggerReset(page: Page, timeout: number = 10000): 
     // trap armed for the next caller. Same shape as locate.spec.ts comparing
     // against 'SCANNING' while the store holds 'Scanning'. TRA-1245.
     if (!states.triggerState &&
-        !states.inventoryRunning &&
+        !states.searchRunning &&
         states.readerState === ReaderState.CONNECTED) {
       console.log('[Trigger] Fully reset and ready');
       return true;

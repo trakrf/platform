@@ -228,7 +228,7 @@ async function connectToDeviceOnce(page: Page): Promise<void> {
           const deviceManager = 
             window.__TRANSPORT_MANAGER__?.deviceManager || 
             window.__DEVICE_MANAGER__ ||
-            deviceStore?.getState?.()?.deviceManager;
+            (deviceStore as { getState?: () => { deviceManager?: unknown } } | undefined)?.getState?.()?.deviceManager;
             
           if (deviceManager && typeof deviceManager.configureForTab === 'function') {
             console.log('[Connection] Found deviceManager, configuring for settings tab (idle state)...');
@@ -482,7 +482,9 @@ async function disconnectDeviceUnbounded(page: Page): Promise<'disconnected' | '
 export async function getConnectionState(page: Page): Promise<{
   isConnected: boolean;
   deviceName: string | null;
-  batteryPercentage: number;
+  // `number | null`, matching the store. It was declared bare `number`, so a
+  // caller could not see that "no reading yet" is a real, reachable value.
+  batteryPercentage: number | null;
 }> {
   return await page.evaluate(() => {
     const deviceStore = (window as WindowWithStores).__ZUSTAND_STORES__?.deviceStore;
@@ -529,7 +531,7 @@ export async function cleanupOngoingOperations(page: Page): Promise<void> {
     // Stop inventory if running by releasing trigger
     const isInventoryRunning = await page.evaluate(() => {
       const tagStore = (window as WindowWithStores).__ZUSTAND_STORES__?.tagStore;
-      return tagStore?.getState().isInventoryRunning || false;
+      return tagStore?.getState().searchRunning || false;
     });
     
     if (isInventoryRunning) {
@@ -626,7 +628,7 @@ export async function simulateConnectionLoss(page: Page): Promise<void> {
     const transportManager = (window as WindowWithStores).__TRANSPORT_MANAGER__;
     if (transportManager && transportManager.device) {
       // Dispatch gatt disconnect event
-      transportManager.device.gatt.disconnect();
+      transportManager.device.gatt?.disconnect();
     }
   });
 }

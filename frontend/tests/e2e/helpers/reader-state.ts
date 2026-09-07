@@ -5,6 +5,7 @@
  */
 
 import type { Page } from '@playwright/test';
+import type { WindowWithStores } from '../types';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -39,7 +40,7 @@ export async function waitForReaderIdle(page: Page, timeout: number = 10000) {
   
   const idleState = ReaderState.IDLE;
   await page.waitForFunction((expectedState) => {
-    const deviceStore = window.__ZUSTAND_STORES__?.deviceStore;
+    const deviceStore = (window as unknown as WindowWithStores).__ZUSTAND_STORES__?.deviceStore;
     const readerState = deviceStore?.getState().readerState;
     
     // Log current state for debugging
@@ -64,14 +65,14 @@ export async function waitForReaderState(
   console.log(`[Helper] Waiting for reader state: ${expectedStates.join(' or ')}`);
   
   const state = await page.waitForFunction((states) => {
-    const deviceStore = window.__ZUSTAND_STORES__?.deviceStore;
+    const deviceStore = (window as unknown as WindowWithStores).__ZUSTAND_STORES__?.deviceStore;
     const readerState = deviceStore?.getState().readerState;
     
     if (readerState !== undefined) {
       console.log(`[Test] Reader state: ${readerState}`);
     }
     
-    if (states.includes(readerState)) {
+    if (readerState !== undefined && states.includes(readerState)) {
       return readerState;
     }
     return false;
@@ -87,7 +88,7 @@ export async function waitForReaderState(
  */
 export async function getCurrentReaderState(page: Page): Promise<string> {
   return await page.evaluate(() => {
-    const deviceStore = window.__ZUSTAND_STORES__?.deviceStore;
+    const deviceStore = (window as unknown as WindowWithStores).__ZUSTAND_STORES__?.deviceStore;
     return deviceStore?.getState().readerState || 'UNKNOWN';
   });
 }

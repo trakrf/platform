@@ -56,6 +56,60 @@ const ORG_CONTEXT_PREFIX = '[OrgContext]';
 const ORG_CACHE_PREFIXES = ['[OrgCache]', '[AuthStore]'];
 
 /**
+ * The three `command.ts` lines the soak instruments count, and nothing else.
+ *
+ * Added by TRA-1253 to close a HALF-COUNT, which is worse than a dropped needle
+ * because the number it produces looks plausible. One `CommandInFlightError`
+ * occurrence emits two lines:
+ *
+ *   WARN  [CommandManager] RFID_POWER_OFF (0x8001) went unanswered after 2
+ *         attempt(s): Command already active ... — tolerated, continuing the
+ *         sequence                                              <- was DROPPED
+ *   ERROR [setMode] Failed to set Idle mode: CommandInFlightError:
+ *         Command already active - executeCommand called concurrently  <- kept
+ *
+ * The ERROR line carries `Failed`; the WARN line carried no KEEP token at all,
+ * so an e2e arm returned roughly half the true value with no indication.
+ * `powerOffTimeouts` and `toleratedPowerOffs` were dropped for the identical
+ * reason — both are `logger.warn`.
+ *
+ * ⚠ NEEDLE TEXTS, NOT THE `[CommandManager]` PREFIX, and the difference was
+ * settled by measurement rather than taste. The first version of this fix kept
+ * the whole prefix. On the 2026-09-07 hardware arm that admitted 94
+ * `[CommandManager]` lines where the previous arm had 49 — and 90 of the 94
+ * were routine `logger.debug` chatter ('Response received: ...', 'Applying
+ * 200ms settling delay'). Paying ~90 debug lines per run to make three WARN
+ * needles visible is the wrong trade in a log every signal count is computed
+ * from, and this file's own rule at the top says to add a SPECIFIC prefix
+ * rather than loosen. These three strings cost nothing on a clean run and
+ * capture exactly the lines that have a named consumer.
+ *
+ * Each entry must correspond to a needle in `scripts/suite-run-signals.mjs`:
+ *   'Command timeout:'                  -> powerOffTimeouts, countCommandTimeouts
+ *   'tolerated, continuing the sequence'-> toleratedPowerOffs, and the WARN half
+ *                                          of a commandInFlight occurrence
+ *   'Command already active'            -> commandInFlight, both halves
+ */
+const COMMAND_SIGNAL_NEEDLES = [
+  'Command timeout:',
+  'tolerated, continuing the sequence',
+  'Command already active',
+];
+
+/**
+ * Emitted by `src/worker/cs108/settle-deferral-message.ts`.
+ *
+ * Kept as an explicit prefix rather than relying on the sentence's words,
+ * because the words used to include the reader state — so the line forwarded
+ * when the state was `Connecting` and vanished when it was `Busy`. An entry must
+ * match the event WHENEVER the event occurs, not merely sometimes; the invariant
+ * prefix is what makes that provable, and
+ * `tests/config/e2e-forwarder-keeps-state-interpolated-lines.test.ts` proves it
+ * across every member of `ReaderState`. TRA-1253.
+ */
+const SETTLE_DEFERRAL_PREFIX = '[Reader] Settings push deferred';
+
+/**
  * Substrings that mark a line as worth keeping.
  *
  * CASE-SENSITIVE, and deliberately so — that is what keeps the list narrow. It
@@ -69,6 +123,8 @@ const KEEP = [
   ...TAG_STORE_PREFIXES,
   ORG_CONTEXT_PREFIX,
   ...ORG_CACHE_PREFIXES,
+  ...COMMAND_SIGNAL_NEEDLES,
+  SETTLE_DEFERRAL_PREFIX,
   'Error',
   'Failed',
   'BLE',

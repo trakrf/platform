@@ -102,7 +102,7 @@ export async function getTriggerState(page: Page): Promise<boolean> {
 export async function isInventoryRunning(page: Page): Promise<boolean> {
   return await page.evaluate(() => {
     const tagStore = (window as WindowWithStores).__ZUSTAND_STORES__?.tagStore;
-    return tagStore?.getState().inventoryRunning || false;
+    return tagStore?.getState().searchRunning || false;
   });
 }
 
@@ -122,7 +122,10 @@ export async function getActiveTab(page: Page): Promise<string> {
 export async function getDeviceDebugState(page: Page): Promise<{
   readerState: string;
   triggerState: boolean;
-  inventoryRunning: boolean;
+  // `searchRunning`, spelled the way the store spells it. It read
+  // `inventoryRunning` until TRA-1253 and no such field exists, so this key was
+  // always `false` regardless of what the reader was doing.
+  searchRunning: boolean;
   activeTab: string;
   isConnected: boolean;
 }> {
@@ -133,9 +136,9 @@ export async function getDeviceDebugState(page: Page): Promise<{
     const uiState = stores?.uiStore?.getState();
     
     return {
-      readerState: deviceState?.readerState || 0,
+      readerState: deviceState?.readerState ?? 'unknown',
       triggerState: deviceState?.triggerState || false,
-      inventoryRunning: tagState?.inventoryRunning || false,
+      searchRunning: tagState?.searchRunning || false,
       activeTab: uiState?.activeTab || 'scan',
       isConnected: deviceState?.isConnected || false
     };

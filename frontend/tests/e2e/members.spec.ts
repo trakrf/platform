@@ -59,9 +59,22 @@ test.describe('Members Screen (TRA-181)', () => {
     ).toBeVisible({ timeout: 10000 });
 
     // Verify NO React error about null.length
-    const pageContent = await page.content();
-    expect(pageContent).not.toContain('Cannot read properties of null');
-    expect(pageContent).not.toContain('TypeError');
+    // RENDERED TEXT, not `page.content()`. This asserted over the whole HTML
+    // document, which under `dev:bridge` includes the ble-mcp-test mock inlined
+    // as a <script> — and that source contains three literal `throw new
+    // TypeError(...)` statements which never execute. So the bare `TypeError`
+    // grep matched the instrument rather than the page, and these two tests
+    // failed on every bridge-mode run while the crash they exist to catch was
+    // absent (the `Cannot read properties of null` limb above passed the whole
+    // time). Verified 2026-09-07: the served page carries 3 `throw new
+    // TypeError` and 0 `Cannot read properties of null`. TRA-1253.
+    //
+    // `innerText` is the surface the bug actually shows on — a React tree that
+    // threw renders the error text — and it excludes script bodies by
+    // construction, so the assertion can no longer match its own harness.
+    const renderedText = await page.locator('body').innerText();
+    expect(renderedText).not.toContain('Cannot read properties of null');
+    expect(renderedText).not.toContain('TypeError');
 
     // Should see either:
     // - The members list (if members exist)
@@ -107,9 +120,22 @@ test.describe('Members Screen (TRA-181)', () => {
     await page.waitForTimeout(2000); // Give time for API calls
 
     // Verify NO React error about null.length
-    const pageContent = await page.content();
-    expect(pageContent).not.toContain('Cannot read properties of null');
-    expect(pageContent).not.toContain('TypeError');
+    // RENDERED TEXT, not `page.content()`. This asserted over the whole HTML
+    // document, which under `dev:bridge` includes the ble-mcp-test mock inlined
+    // as a <script> — and that source contains three literal `throw new
+    // TypeError(...)` statements which never execute. So the bare `TypeError`
+    // grep matched the instrument rather than the page, and these two tests
+    // failed on every bridge-mode run while the crash they exist to catch was
+    // absent (the `Cannot read properties of null` limb above passed the whole
+    // time). Verified 2026-09-07: the served page carries 3 `throw new
+    // TypeError` and 0 `Cannot read properties of null`. TRA-1253.
+    //
+    // `innerText` is the surface the bug actually shows on — a React tree that
+    // threw renders the error text — and it excludes script bodies by
+    // construction, so the assertion can no longer match its own harness.
+    const renderedText = await page.locator('body').innerText();
+    expect(renderedText).not.toContain('Cannot read properties of null');
+    expect(renderedText).not.toContain('TypeError');
 
     // If invitations section is visible (admin), check for content
     if (await invitationsHeading.isVisible().catch(() => false)) {

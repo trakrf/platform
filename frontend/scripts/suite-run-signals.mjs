@@ -432,18 +432,19 @@ export function readReaderDetails(logPath) {
  *                    `Timeout waiting for event: ...`.
  *
  *   powerOffTimeouts   `[CommandManager] …` is logged by the worker, which DOES
- *   toleratedPowerOffs run in the browser under e2e — but these are `logger.warn`,
- *                      and `shouldForwardConsoleLine` keeps a non-error line only
- *                      if it contains one of `[ble-timing]`, `Error`, `Failed`,
- *                      `BLE`, `Connect`, `WebSocket`, `force`, `cleanup`,
- *                      `disconnect`. None of those appears in either message,
- *                      so the forwarder drops them and the needle would read a
- *                      confident 0 on every e2e rep however loud the device was.
- *                      INCIDENTAL, not structural — widening the forwarder would
- *                      make them fire. Do that deliberately if an e2e arm ever
- *                      needs them, and measure it rather than assuming (TRA-1209
- *                      is the precedent: the `[ble-timing]` needles sat at a
- *                      confident 0 here for exactly this reason).
+ *   toleratedPowerOffs run in the browser under e2e. These are `logger.warn` and
+ *                      carried none of `shouldForwardConsoleLine`'s KEEP tokens,
+ *                      so the forwarder dropped them and the needle read a
+ *                      confident 0 however loud the device was.
+ *
+ *                      ⚠ TRA-1253 TAUGHT THE FORWARDER THESE LINES, so that
+ *                      mechanism is gone: it now keeps 'Command timeout:',
+ *                      'tolerated, continuing the sequence' and 'Command already
+ *                      active'. They remain absent from E2E_SIGNALS for a
+ *                      DIFFERENT reason — no e2e arm has yet observed one, both
+ *                      2026-09-07 arms having run clean. A 0 here is therefore
+ *                      still not comparable to a vitest 0, and admitting them
+ *                      needs an arm that actually catches an occurrence.
  *   modeSwitchFailed   Logged by locate.spec.ts, an integration spec. No browser
  *                      loads it — structural, like the two at the top.
  *

@@ -38,6 +38,7 @@ import { NotificationRouter } from './notification/router.js';
 import { logger, LogLevel } from '../utils/logger.js';
 import type { CommandSequence, CS108Packet } from './type.js';
 import { IDLE_SEQUENCE, BATTERY_VOLTAGE_SEQUENCE } from './system/sequences.js';
+import { settleDeferralMessage } from './settle-deferral-message.js';
 import {
   IDENTITY_SEQUENCE,
   RFID_IDENTITY_SEQUENCE,
@@ -923,10 +924,13 @@ class CS108Reader extends BaseReader {
     // which is where a push that lands while CONNECTED has always paid it.
     if (hasHardwareSettings && (this.readerState === ReaderState.BUSY ||
                                 this.readerState === ReaderState.CONNECTING)) {
-      logger.info(
-        `[Reader] Settings push arrived while ${this.readerState} - ` +
-        'waiting for the reader to settle before applying'
-      );
+      // The state goes in a trailing parenthetical, NOT into the middle of the
+      // sentence. Under e2e this line reaches a captured log only through the
+      // console forwarder's case-sensitive substring list, and interpolating
+      // here made it forward for `Connecting` (which contains `Connect`) and
+      // vanish for `Busy` — the same event, observable or not depending on the
+      // branch. See settle-deferral-message.ts. TRA-1253.
+      logger.info(settleDeferralMessage(this.readerState));
       const settled = await this.waitForSettledState(SETTINGS_SETTLE_TIMEOUT_MS);
       if (settled === ReaderState.BUSY || settled === ReaderState.CONNECTING) {
         logger.error(

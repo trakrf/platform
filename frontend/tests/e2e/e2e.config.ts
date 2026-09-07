@@ -117,7 +117,11 @@ export function getBridgeWsUrl(): string {
 export function getDeviceConfig() {
   const config = getE2EConfig().device;
   return {
-    namePrefix: config.name,
+    // `namePrefix: config.name` was here until TRA-1253. The device config has
+    // never carried a `name` — device identifiers are deliberately kept out of
+    // source — so the key was always `undefined`. Dropped rather than given a
+    // placeholder: a key that is always undefined reads as a value that is
+    // sometimes set. This helper has no callers today.
     serviceUUID: config.serviceUuid,
     writeUUID: config.writeUuid,
     notifyUUID: config.notifyUuid
