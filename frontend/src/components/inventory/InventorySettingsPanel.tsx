@@ -1,4 +1,5 @@
 import { Settings } from 'lucide-react';
+import { TX_POWER_MIN_DBM, TX_POWER_MAX_DBM, TX_POWER_RANGE_DBM } from '@/utils/settingsValidation';
 
 interface InventorySettingsPanelProps {
   isOpen: boolean;
@@ -38,18 +39,18 @@ export function InventorySettingsPanel({
           <div className="mb-4">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center justify-between mb-2">
               <span>RF Power</span>
-              <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{rfPower} dBm</span>
+              <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{rfPower} dBm EIRP</span>
             </label>
             <input
               type="range"
-              min="10"
-              max="30"
+              min={TX_POWER_MIN_DBM}
+              max={TX_POWER_MAX_DBM}
               step="1"
               value={rfPower}
               onChange={(e) => onRfPowerChange(parseFloat(e.target.value))}
               className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer"
               style={{
-                background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((rfPower - 10) / 20) * 100}%, ${isOpen ? '#e5e7eb' : '#4b5563'} ${((rfPower - 10) / 20) * 100}%, ${isOpen ? '#e5e7eb' : '#4b5563'} 100%)`
+                background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((rfPower - TX_POWER_MIN_DBM) / TX_POWER_RANGE_DBM) * 100}%, ${isOpen ? '#e5e7eb' : '#4b5563'} ${((rfPower - TX_POWER_MIN_DBM) / TX_POWER_RANGE_DBM) * 100}%, ${isOpen ? '#e5e7eb' : '#4b5563'} 100%)`
               }}
             />
             <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">

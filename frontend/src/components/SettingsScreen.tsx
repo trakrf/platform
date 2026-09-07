@@ -8,6 +8,7 @@ import { ConnectIcon } from '@/components/icons/ConnectIcon';
 import toast from 'react-hot-toast';
 import { appVersion } from '@/version';
 import { ReaderDetailsPanel } from '@/components/ReaderDetailsPanel';
+import { TX_POWER_MIN_DBM, TX_POWER_MAX_DBM, TX_POWER_RANGE_DBM } from '@/utils/settingsValidation';
 
 export default function SettingsScreen() {
   // Set active tab when component mounts - standard React pattern
@@ -231,8 +232,11 @@ export default function SettingsScreen() {
               <span className={`text-sm font-medium ${powerInfo.color} mr-3`}>
                 {powerInfo.label}
               </span>
-              <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                {rfPower.toFixed(0)} dBm
+              <span
+                className="text-sm font-bold text-gray-900 dark:text-gray-100"
+                title="Effective Isotropic Radiated Power — the total radiated power including antenna gain, which is what regulators cap."
+              >
+                {rfPower.toFixed(0)} dBm EIRP
               </span>
             </div>
           </div>
@@ -240,14 +244,14 @@ export default function SettingsScreen() {
           <div className="relative">
             <input 
               type="range" 
-              min="10" 
-              max="30" 
-              step="1" 
+              min={TX_POWER_MIN_DBM}
+              max={TX_POWER_MAX_DBM}
+              step="1"
               value={rfPower}
               onChange={handlePowerChange}
               className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
               style={{
-                background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((rfPower - 10) / 20) * 100}%, ${isBrowserSupported ? '#4b5563' : '#e5e7eb'} ${((rfPower - 10) / 20) * 100}%, ${isBrowserSupported ? '#4b5563' : '#e5e7eb'} 100%)`
+                background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((rfPower - TX_POWER_MIN_DBM) / TX_POWER_RANGE_DBM) * 100}%, ${isBrowserSupported ? '#4b5563' : '#e5e7eb'} ${((rfPower - TX_POWER_MIN_DBM) / TX_POWER_RANGE_DBM) * 100}%, ${isBrowserSupported ? '#4b5563' : '#e5e7eb'} 100%)`
               }}
             />
             <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-2">
