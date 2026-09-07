@@ -76,8 +76,31 @@ export function validateEPC(epc: string): ValidationResult {
 }
 
 /**
+ * The CS108 transmit-power envelope, in **dBm EIRP**.
+ *
+ * Exported because the range had SIX independent hardcodings — `min` and `max`
+ * on each of two sliders, plus a `/ 20` divisor in each slider's gradient fill
+ * that is silently `max - min`. Changing the max in the two obvious places left
+ * both gradients wrong (the coloured bar stops tracking the thumb) with nothing
+ * failing. One source, so that cannot happen. TRA-391.
+ *
+ * ⚠ `TX_POWER_MAX_DBM` is a REGULATORY cap, not the hardware ceiling. The sled
+ * reaches **+31.5 dBm EIRP** where permitted; 30 is the FCC / most-regions
+ * limit. Raising it is a region-aware change, not a constant edit — the app has
+ * no region concept today, so shipping 31.5 globally would let an operator
+ * exceed their local limit. That is why this is a documented 30 rather than the
+ * device maximum.
+ *
+ * The floor is the hardware's: below +10 dBm the CS108 does not usefully read.
+ */
+export const TX_POWER_MIN_DBM = 10;
+export const TX_POWER_MAX_DBM = 30;
+/** `max - min`. The slider gradients need it; deriving it keeps them honest. */
+export const TX_POWER_RANGE_DBM = TX_POWER_MAX_DBM - TX_POWER_MIN_DBM;
+
+/**
  * RFID Transmit Power validation
- * Typical range: 10-30 dBm (device-dependent)
+ * Range: 10-30 dBm EIRP — see TX_POWER_MIN_DBM / TX_POWER_MAX_DBM above
  */
 export function validateTransmitPower(power: number): ValidationResult {
   if (typeof power !== 'number' || isNaN(power)) {
@@ -87,14 +110,10 @@ export function validateTransmitPower(power: number): ValidationResult {
     };
   }
 
-  // CS108 typical range: 10-30 dBm
-  const MIN_POWER = 10;
-  const MAX_POWER = 30;
-
-  if (power < MIN_POWER || power > MAX_POWER) {
+  if (power < TX_POWER_MIN_DBM || power > TX_POWER_MAX_DBM) {
     return {
       isValid: false,
-      error: `Transmit power must be between ${MIN_POWER} and ${MAX_POWER} dBm`
+      error: `Transmit power must be between ${TX_POWER_MIN_DBM} and ${TX_POWER_MAX_DBM} dBm`
     };
   }
 
