@@ -91,6 +91,20 @@ export const SIGNALS = {
   // Expect this to be NON-ZERO on every healthy arm — each spec's afterAll
   // disconnects — so unlike `linkCloses` a zero here is the suspicious reading.
   linkTeardowns: '[ble-timing] link-teardown',
+  // The SIGNATURE itself, as distinct from the two routes above.
+  //
+  // `linkCloses` and `linkTeardowns` say which transport event happened. Neither
+  // counts the thing TRA-1259 is actually about: the store leaving an
+  // ESTABLISHED state for DISCONNECTED. Without this needle the discriminating
+  // triple has to be assembled by hand out of a run log every time, and the
+  // interesting case — the store losing CONNECTED with BOTH counters at zero —
+  // has no count at all, only an absence of two other counts.
+  //
+  // ⚠ The producer is `console.warn` in `deviceStore.setReaderState`, so under
+  // e2e it is browser-side and reaches a captured log only through the
+  // forwarder. It is in `E2E_BROWSER_NEEDLES` for that reason; see the note
+  // there for what the omission cost.
+  lostConnected: '[DeviceStore] Reader lost CONNECTED',
   connectSamples: '[ble-timing] connect',
 
   // ── The CS108's silent window, after TRA-1217 made it survivable ──────────
@@ -545,6 +559,8 @@ export const E2E_SIGNALS = {
   // CONNECTED with the link intact". Same `[ble-timing]` prefix, so the
   // forwarder already passes it.
   linkTeardowns: SIGNALS.linkTeardowns,
+  // The store transition the pair above only explains. See `SIGNALS.lostConnected`.
+  lostConnected: SIGNALS.lostConnected,
   connectSamples: SIGNALS.connectSamples,
 };
 
@@ -577,6 +593,27 @@ export const E2E_BROWSER_NEEDLES = [
   'ackSamples',
   'linkCloses',
   'linkTeardowns',
+  // Added 2026-09-07. It was NOT declared when the warning shipped in #670, and
+  // the omission was the whole TRA-1209 failure again, one PR after the needle
+  // it completes: the forwarder's KEEP list matched nothing in the constant part
+  // of the line, so whether a given occurrence survived depended entirely on
+  // which state name got interpolated into it.
+  //
+  //     Configuring -> Disconnected    DROPPED
+  //     Connected   -> Disconnected    kept   (contains `Connect`)
+  //     Busy        -> Disconnected    DROPPED
+  //     Scanning    -> Disconnected    DROPPED
+  //     Error       -> Disconnected    kept   (contains `Error`)
+  //
+  // Three of five, and `Scanning -> Disconnected` is the one a trigger-hold
+  // sweep would produce. `console.warn` is type `warning`, so the
+  // `type === 'error'` escape hatch in the predicate does not apply either.
+  //
+  // The 17 lost-CONNECTED counted on the 2026-09-07 green arm are therefore a
+  // PARTIAL count — `Connected ->` and `Error ->` only. Do not compare a number
+  // measured after this fix against that baseline as though they counted the
+  // same thing.
+  'lostConnected',
   'connectSamples',
 ];
 

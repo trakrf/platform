@@ -110,6 +110,28 @@ const COMMAND_SIGNAL_NEEDLES = [
 const SETTLE_DEFERRAL_PREFIX = '[Reader] Settings push deferred';
 
 /**
+ * Emitted by `src/stores/deviceStore.ts` via console.warn — TRA-1259's signature,
+ * the store leaving an established state for DISCONNECTED.
+ *
+ * A PREFIX, and the reason is the same one this file already learned the hard
+ * way. The line reads `Reader lost CONNECTED: <prev> -> Disconnected.`, and
+ * nothing in its constant part matched any KEEP limb: `CONNECTED` is not
+ * `Connect`, `Disconnected` is not `disconnect`. So the only thing deciding
+ * whether an occurrence survived was which state name got interpolated in —
+ * `Connected` and `Error` matched by accident, `Configuring`, `Busy` and
+ * `Scanning` did not. Three of five dropped, and the dropped three include the
+ * one a trigger-hold sweep produces.
+ *
+ * It is `console.warn`, so Playwright's type is `warning` and the
+ * `type === 'error'` short-circuit below never covered it.
+ *
+ * An entry must match the event WHENEVER the event occurs, not merely sometimes.
+ * The invariant prefix is what makes that true here, exactly as it did for
+ * `SETTLE_DEFERRAL_PREFIX` above.
+ */
+const LOST_CONNECTED_PREFIX = '[DeviceStore] Reader lost CONNECTED';
+
+/**
  * Substrings that mark a line as worth keeping.
  *
  * CASE-SENSITIVE, and deliberately so — that is what keeps the list narrow. It
@@ -125,6 +147,7 @@ const KEEP = [
   ...ORG_CACHE_PREFIXES,
   ...COMMAND_SIGNAL_NEEDLES,
   SETTLE_DEFERRAL_PREFIX,
+  LOST_CONNECTED_PREFIX,
   'Error',
   'Failed',
   'BLE',
