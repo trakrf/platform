@@ -37,8 +37,21 @@ test.describe('Hamburger Menu (Mobile)', () => {
       await hamburgerButton.click();
       await expect(sharedPage.locator('[data-testid="hamburger-dropdown"]')).toBeVisible();
       
-      // Click outside to close (using body click at safe position)
-      await sharedPage.click('body', { position: { x: 350, y: 100 } });
+      // Close by clicking the OVERLAY, not a bare position on <body>.
+      //
+      // This was `sharedPage.click('body', { position: { x: 350, y: 100 } })`,
+      // which raced the drawer's open animation: on a 375px viewport that point
+      // can land on the drawer or on nothing depending on where the transition
+      // has got to, and the click is then swallowed. It survived because
+      // retries are 0 locally, so a failure looked deterministic and a pass
+      // looked clean — it first showed as `flaky` on the CI arm that gates this
+      // subset, where retries are 2 (TRA-1253).
+      //
+      // Waiting for the overlay is the pattern the sibling test below already
+      // uses, and it removes the race rather than papering it with a timeout.
+      const overlay = sharedPage.locator('[data-testid="mobile-menu-overlay"]');
+      await expect(overlay).toBeVisible();
+      await overlay.click({ force: true, position: { x: 300, y: 300 } });
       await expect(sharedPage.locator('[data-testid="hamburger-dropdown"]')).not.toBeVisible();
       
       // Now test clicking button again to re-open
