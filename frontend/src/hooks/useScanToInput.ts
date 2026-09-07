@@ -22,10 +22,47 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useTagStore, useBarcodeStore, useDeviceStore } from '@/stores';
 import { DeviceManager } from '@/lib/device/device-manager';
-import { ReaderMode } from '@/worker/types/reader';
+import { ReaderMode, ReaderState } from '@/worker/types/reader';
 import { stripAimIdentifier } from '@/lib/barcode/aim';
 
 
+/**
+ * Hand the reader back to `mode`, stopping a live scan first.
+ *
+ * ONE implementation, reached from both the capture path and the unmount
+ * cleanup. Those two carried this inline and had already drifted in the only
+ * way that mattered: the capture path awaited an UNGUARDED `stopScanning()`,
+ * so a rejection there skipped `setMode` entirely and left the reader in
+ * BARCODE with nothing to restore it. That is TRA-1143's reported symptom —
+ * `readerMode` stuck on Barcode — reached from the caller side rather than the
+ * worker's. Restoring the mode is the part an operator sees, so it no longer
+ * sits downstream of a call that is allowed to fail.
+ *
+ * The stop is SKIPPED when the store already reports CONNECTED, and nowhere
+ * else. On a barcode capture the worker auto-stops by itself
+ * (`BARCODE_AUTO_STOP_REQUEST` → `Reader.stopScanning`) and has usually
+ * settled before this runs, so the hook's stop is a second stop for an event
+ * the worker already handled — which the worker answers with `Not scanning,
+ * current state: Connected` and returns. Every OTHER state is left alone
+ * deliberately: BUSY resolves into SCANNING often enough that skipping there
+ * would strand a live scan, a worse failure than a redundant no-op. TRA-1244.
+ */
+async function returnReaderTo(mode: typeof ReaderMode[keyof typeof ReaderMode]): Promise<void> {
+  const dm = DeviceManager.getInstance();
+  if (!dm) return;
+
+  if (useDeviceStore.getState().readerState !== ReaderState.CONNECTED) {
+    try {
+      await dm.stopScanning();
+    } catch (error) {
+      // Logged, never rethrown. A stop that failed must not cost the mode
+      // restore that follows it.
+      console.error('[useScanToInput] stopScanning failed; returning to mode anyway:', error);
+    }
+  }
+
+  await dm.setMode(mode);
+}
 
 interface UseScanToInputOptions {
   /** Callback when a scan is captured (final value, triggers API checks) */
@@ -107,11 +144,7 @@ export function useScanToInput({
       sessionCleanupRef.current = null;
     }
 
-    const dm = DeviceManager.getInstance();
-    if (dm) {
-      await dm.stopScanning();
-      await dm.setMode(returnMode);
-    }
+    await returnReaderTo(returnMode);
   }, [returnMode]);
 
   // Listen to tag store for RFID scans
@@ -124,7 +157,18 @@ export function useScanToInput({
 
       // Check if new tag was added since session started (deterministic comparison)
       if (state.tags.length > session.startCount) {
-        const latestTag = state.tags[0]; // Most recent tag
+        // LAST, not first. The two stores this hook reads order themselves
+        // oppositely and the difference is invisible at the call site:
+        // `barcodeStore.addBarcode` prepends (`[barcode, ...state.barcodes]`)
+        // so its newest is index 0, while `tagStore.addTags` PUSHES, so index
+        // 0 is the oldest tag in the list. This line read `tags[0]` under a
+        // `// Most recent tag` comment, which is true of barcodes and false of
+        // tags: on any screen that already held tags — Locate after an
+        // inventory, say — a scan-to-input capture returned a stale EPC from
+        // before the session rather than the tag the operator just read.
+        // Only reachable when the list was non-empty at session start, which
+        // is why every form got away with it. TRA-1244.
+        const latestTag = state.tags[state.tags.length - 1];
         onScan(latestTag.epc);
 
         if (autoStop) {
@@ -149,7 +193,9 @@ export function useScanToInput({
 
     // Check if new barcode was added since session started (deterministic comparison)
     if (barcodeCount > session.startCount) {
-      const latestBarcode = barcodes[0]; // Most recent barcode
+      // Index 0 IS the newest here — `barcodeStore.addBarcode` prepends. Said
+      // out loud because the RFID branch above must not do the same thing.
+      const latestBarcode = barcodes[0];
       // Strip AIM prefix (e.g., Q]Q1) if present, keep actual data
       const cleanedData = stripAimIdentifier(latestBarcode.data);
       console.debug('[useScanToInput] Barcode received:', {
@@ -182,11 +228,13 @@ export function useScanToInput({
         clearTimeout(sessionCleanupRef.current);
       }
       if (isScanningRef.current) {
-        const dm = DeviceManager.getInstance();
-        if (dm) {
-          dm.stopScanning().catch(console.error);
-          dm.setMode(returnMode).catch(console.error);
-        }
+        // Fire-and-forget, because an unmount cannot await — but ONE promise,
+        // not two. The old pair issued `setMode` without waiting for the stop
+        // and relied on CommandManager's queue to order them; the hook should
+        // not depend on a guarantee it does not own.
+        returnReaderTo(returnMode).catch((error) => {
+          console.error('[useScanToInput] unmount cleanup failed:', error);
+        });
       }
     };
   }, [returnMode]);
