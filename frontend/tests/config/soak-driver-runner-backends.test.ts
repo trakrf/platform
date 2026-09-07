@@ -347,11 +347,26 @@ describe('playwright report parsing', () => {
  *   structural   harnessLines, triggerTimeout, modeSwitchFailed — the emitter is
  *                a file no browser loads. These can never leave.
  *   incidental   powerOffTimeouts, toleratedPowerOffs — the worker DOES run in
- *                the browser, but these are `logger.warn` and carry none of the
- *                console forwarder's KEEP tokens, so it drops them. Widening the
- *                forwarder would move them out, exactly as TRA-1209 moved the
- *                `[ble-timing]` needles out. Do that on a measurement, not on an
- *                assumption.
+ *                the browser. These were dropped because they are `logger.warn`
+ *                and carried none of the console forwarder's KEEP tokens.
+ *
+ * ⚠ THAT DROP IS FIXED AS OF TRA-1253, AND THESE THREE STILL CARRY NULL. The
+ * forwarder now keeps 'Command timeout:', 'tolerated, continuing the sequence'
+ * and 'Command already active', so the mechanism that hid them is gone —
+ * verified on the 2026-09-07 hardware arm, where the sibling fix made a
+ * `Busy`-state reader line appear that the previous arm could not have shown.
+ *
+ * They stay here because the REASON changed, not because nothing changed:
+ *
+ *   was   the forwarder cannot pass these lines
+ *   now   the forwarder passes them, but no e2e arm has yet OBSERVED one
+ *
+ * Neither arm produced a single occurrence of the three messages — both ran
+ * clean, and the device's silent window is what emits them. Moving a needle into
+ * `E2E_SIGNALS` asserts that an e2e count means the same thing a vitest count
+ * means, and no run has exercised that yet. Move them when an arm actually
+ * catches one, which is the same "on a measurement, not on an assumption" rule
+ * that governed the widening itself.
  */
 const VITEST_ONLY = [
   'harnessLines',

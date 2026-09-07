@@ -32,8 +32,37 @@ const RECONCILE_CSV = [
   ...Array.from({ length: 12 }, (_, i) => `ASSET-${String(i + 1).padStart(4, '0')},${1000 + i},Item ${i + 1},Main Warehouse`),
 ].join('\n');
 
+/*
+ * The credentials belong to a DEPLOYMENT, and this spec has to say so.
+ *
+ * `API_TEST_LOGIN` / `API_TEST_PASS` are for the user named by `API_TEST_URL`
+ * (preview). The old guard checked only that the two variables were SET, which
+ * they are in any direnv shell — so running the default local target ran these
+ * four tests against `localhost:5173`, where that user does not exist. Login
+ * then never completed and all four failed on `expect(input#password)
+ * .toHaveCount(0)` timing out after 20s.
+ *
+ * That reads as four broken tests. It is one unmet precondition, and it cost
+ * TRA-1253's inventory a whole spec's worth of misattribution: the ticket
+ * carried these as untriaged failures needing a rot/defect verdict when the
+ * answer was "wrong target". A guard that confirms the variables exist rather
+ * than that they APPLY is the same self-confirming shape ADR 0018 is about.
+ *
+ * Compared against `API_TEST_URL` rather than hardcoding a hostname, so this
+ * keeps working when preview moves.
+ */
+const TARGET = (process.env.PLAYWRIGHT_BASE_URL ?? '').replace(/\/+$/, '');
+const CREDENTIALED_TARGET = (process.env.API_TEST_URL ?? '').replace(/\/+$/, '');
+const TARGET_MATCHES_CREDENTIALS = !!TARGET && !!CREDENTIALED_TARGET && TARGET === CREDENTIALED_TARGET;
+
 test.describe('stale chunk recovery (TRA-1054)', () => {
   test.skip(!EMAIL || !PASS, 'requires API_TEST_LOGIN / API_TEST_PASS');
+  test.skip(
+    !TARGET_MATCHES_CREDENTIALS,
+    `these credentials are for ${CREDENTIALED_TARGET || 'API_TEST_URL (unset)'}, but this run ` +
+      `targets ${TARGET || 'the default localhost'}. Run with ` +
+      'PLAYWRIGHT_BASE_URL=$API_TEST_URL, which is what the header above documents.'
+  );
 
   const login = async (page: Page) => {
     await page.goto('/#login');

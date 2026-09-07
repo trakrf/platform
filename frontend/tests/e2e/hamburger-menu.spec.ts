@@ -75,12 +75,16 @@ test.describe('Hamburger Menu (Mobile)', () => {
       
       // The mobile menu shows TabNavigation component
       // Look for tab buttons within the dropdown
-      const inventoryTab = sharedPage.locator('[data-testid="hamburger-dropdown"] button:has-text("Inventory")').first();
+      // Anchored on the testid, not the label. This read `has-text("Inventory")`
+      // until TRA-1253 and the tab has been called "Scan" since TRA-1029, so the
+      // locator matched nothing and the spec failed on a rename rather than on
+      // any behaviour. `data-testid` survives relabelling; visible text does not.
+      const scanTab = sharedPage.locator('[data-testid="hamburger-dropdown"] [data-testid="menu-item-scan"]').first();
       const locateTab = sharedPage.locator('[data-testid="hamburger-dropdown"] button:has-text("Locate")').first();
       const settingsTab = sharedPage.locator('[data-testid="hamburger-dropdown"] button:has-text("Settings")').first();
       
       // Check that tabs exist
-      await expect(inventoryTab).toBeVisible();
+      await expect(scanTab).toBeVisible();
       await expect(locateTab).toBeVisible();
       await expect(settingsTab).toBeVisible();
       
@@ -178,7 +182,7 @@ test.describe('Hamburger Menu (Mobile)', () => {
       const navButtons = sharedPage.locator('[data-testid="hamburger-dropdown"] button');
       const buttonCount = await navButtons.count();
       
-      // Should have at least 3 nav buttons (Inventory, Locate, Settings)
+      // Should have at least 3 nav buttons (Scan, Locate, Settings)
       expect(buttonCount).toBeGreaterThanOrEqual(3);
       
       // Verify all buttons are visible and clickable
@@ -221,8 +225,9 @@ test.describe('Hamburger Menu (Mobile)', () => {
       await expect(sidebar).toBeVisible();
       
       // Navigation tabs should be directly accessible
-      const inventoryTab = sharedPage.locator('button:has-text("Inventory")').first();
-      await expect(inventoryTab).toBeVisible();
+      // Same rename as above — "Inventory" became "Scan" in TRA-1029.
+      const scanTab = sharedPage.locator('[data-testid="menu-item-scan"]').first();
+      await expect(scanTab).toBeVisible();
     });
   });
 });

@@ -192,6 +192,23 @@ export async function expectConnectionState(
  * Assert inventory is running
  * @param page - Playwright page
  */
+/**
+ * ⚠ These two read `searchRunning`, which is what the store actually calls it.
+ *
+ * They read `inventoryRunning` until TRA-1253, and no such field has ever
+ * existed on `TagState`. Both did `?? false`-style coalescing, so the wrong name
+ * did not throw — it made one helper unable to pass and the other unable to
+ * fail:
+ *
+ *   expectInventoryRunning   `expect(undefined || false).toBe(true)`   NEVER PASSES
+ *   expectInventoryStopped   `expect(undefined || false).toBe(false)`  ALWAYS PASSES
+ *
+ * The second is the dangerous one: a vacuous green that looks like coverage of
+ * the stop path. Neither has any caller today (verified by grep across `tests/`
+ * on 2026-09-07), which is why correcting the name changes no run — but a future
+ * caller would otherwise have inherited a broken assertion that reads as a
+ * working one.
+ */
 export async function expectInventoryRunning(page: Page): Promise<void> {
   // With trigger-based control, we check the store state directly
   const storeState = await page.evaluate(() => {
@@ -200,13 +217,13 @@ export async function expectInventoryRunning(page: Page): Promise<void> {
     const tagState = tagStore?.getState();
     const deviceState = deviceStore?.getState();
     console.log('[Test] Checking inventory state:', {
-      inventoryRunning: tagState?.inventoryRunning,
+      searchRunning: tagState?.searchRunning,
       tagCount: tagState?.tags.length,
       triggerState: deviceState?.triggerState,
       readerState: deviceState?.readerState
     });
     return {
-      isRunning: tagState?.inventoryRunning || false,
+      isRunning: tagState?.searchRunning || false,
       hasNoTags: tagState?.tags.length === 0
     };
   });
@@ -226,7 +243,7 @@ export async function expectInventoryStopped(page: Page): Promise<void> {
   // With trigger-based control, we check the store state directly
   const isRunning = await page.evaluate(() => {
     const tagStore = (window as WindowWithStores).__ZUSTAND_STORES__?.tagStore;
-    return tagStore?.getState().inventoryRunning || false;
+    return tagStore?.getState().searchRunning || false;
   });
   
   expect(isRunning).toBe(false);

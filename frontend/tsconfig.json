@@ -37,7 +37,6 @@
     "node_modules",
     "dist",
     "vite.config.ts",
-    "tests/**/*",
     "**/*.test.ts",
     "**/*.test.tsx",
     "**/*.spec.ts",

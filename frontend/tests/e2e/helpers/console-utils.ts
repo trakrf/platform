@@ -7,7 +7,24 @@
 import type { Page } from '@playwright/test';
 
 export interface ConsoleMessage {
-  type: 'error' | 'warn' | 'log';
+  /**
+   * Playwright's spelling, which is `warning` — NOT `warn` (TRA-1253).
+   *
+   * This said `'warn'` while `monitor()` assigned `msg.type()` through an
+   * unchecked cast, so the value at runtime was always `'warning'` and the type
+   * was simply wrong. Being wrong in a tree `tsc` never looked at, it produced
+   * three separate dead comparisons rather than one error:
+   *
+   *   console-utils.ts:150  `msg.type() === 'warn'`  — dead limb, harmless only
+   *                          because the `'warning'` limb short-circuits first
+   *   console-utils.ts:217  `msg.type === 'warn'`    — ALWAYS FALSE, so
+   *                          getWarningErrors() never matched on type at all
+   *   assertions.ts:57      `m.type === 'warning'`   — flagged as impossible by
+   *                          the compiler, and correct at runtime the whole time
+   *
+   * The last one is the tell: the type was the lie, not the comparison.
+   */
+  type: 'error' | 'warning' | 'log';
   text: string;
   timestamp: number;
   location?: string;
@@ -116,7 +133,6 @@ export class ConsoleMonitor {
   private errors: ConsoleMessage[] = [];
   private warnings: ConsoleMessage[] = [];
   private options: Required<ConsoleMonitorOptions>;
-  private page: Page | null = null;
   
   constructor(options: ConsoleMonitorOptions = {}) {
     this.options = {
@@ -131,11 +147,9 @@ export class ConsoleMonitor {
    * Start monitoring console messages on a page
    */
   public monitor(page: Page): void {
-    this.page = page;
-    
     page.on('console', (msg) => {
       const message: ConsoleMessage = {
-        type: msg.type() as 'error' | 'warn' | 'log',
+        type: msg.type() as 'error' | 'warning' | 'log',
         text: msg.text(),
         timestamp: Date.now(),
         location: msg.location()?.url
@@ -147,7 +161,7 @@ export class ConsoleMonitor {
       // Categorize by type
       if (msg.type() === 'error') {
         this.errors.push(message);
-      } else if (msg.type() === 'warning' || msg.type() === 'warn') {
+      } else if (msg.type() === 'warning') {
         this.warnings.push(message);
       }
       
@@ -214,7 +228,7 @@ export class ConsoleMonitor {
       }
       
       // Check if it matches warning patterns or is a warning type
-      return msg.type === 'warn' || 
+      return msg.type === 'warning' || 
         this.options.warnOnErrors.some(pattern => msg.text.includes(pattern));
     });
   }

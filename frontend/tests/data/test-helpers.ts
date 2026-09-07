@@ -3,7 +3,9 @@
  * Uses real packet captures from CS108 hardware
  */
 
-// @ts-expect-error - JSON import
+// `resolveJsonModule` is on, so this import typechecks and the
+// `@ts-expect-error` that used to sit here suppressed nothing — it only became
+// visible as an unused directive once `tests/**` entered the typecheck.
 import testTagsData from './test-tags.json' assert { type: 'json' };
 
 export const TEST_TAGS = testTagsData.tags;
