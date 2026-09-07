@@ -52,8 +52,7 @@ tests/e2e/
 │   ├── assertions.ts      # Custom matchers
 │   ├── ble-integration.ts # BLE mock/bridge utilities
 │   ├── commands.ts        # CS108 command helpers
-│   ├── connection.ts      # Device connection helpers
-│   ├── console-utils.ts   # Console monitoring
+│   ├── connection.ts      # Device connection helpers + console forwarding
 │   └── trigger-utils.ts   # Trigger simulation
 ├── e2e.config.ts         # Configuration constants
 ├── e2e.setup.ts          # Global test setup

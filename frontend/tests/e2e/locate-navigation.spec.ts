@@ -10,7 +10,6 @@ import {
   LOCATE_TEST_TAG_128_STRIPPED,
   TEST_TAGS,
 } from '@test-utils/constants';
-import { setupConsoleMonitoring } from './helpers/console-utils';
 import { HARDWARE_TEST_TIMEOUT_MS } from './e2e.config';
 
 test.describe('Locate Navigation Tests @hardware', () => {

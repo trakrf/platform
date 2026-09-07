@@ -121,11 +121,27 @@ passes them, but no arm has yet observed one", both runs having been clean. They
 move into `E2E_SIGNALS` when an arm actually catches an occurrence, on the same
 measure-don't-assume rule that governed the widening.
 
-Finally, `console-utils.ts` remains in the tree and remains **inert as a gate**:
-nothing calls `assertNoErrors`, `getErrors()` or `generateReport()`, so its
-critical/allowed lists cannot fail a run however carefully they are maintained.
-Repairing a list is not the same as restoring a gate. Deleting it is the likely
-right answer — 9 of 35 specs have already grown their own narrow
-`page.on('console')` next to the thing they provoke — but it is a deletion, and
-it is left to a human to authorise. Its measured contribution to a captured run
-is about 73 lines.
+Finally, `console-utils.ts` was **inert as a gate**: nothing called
+`assertNoErrors`, `getErrors()` or `generateReport()`, so its critical/allowed
+lists could not fail a run however carefully they were maintained. Repairing a
+list is not the same as restoring a gate.
+
+**Deleted 2026-09-07**, authorised after this record was first written. Two
+things came out of that which are worth keeping here, because both argue the
+decision was not merely tidiness:
+
+Its `logAllMessages: true` registered a **second** `page.on('console')` listener
+on the same page as the forwarder, so every browser line during
+`connection.spec.ts` reached the captured log **twice** — 56 `[ble-timing]
+write-ack` timestamps appearing exactly twice on the 2026-09-07 arm. That is a
+double-count in `ackSamples` and `connectSamples`, so the monitor was not inert
+after all: it was silently corrupting two measured signals.
+
+Deleting it also retired
+`every-console-allowlist-entry-has-a-producer.test.ts`, which had shipped only
+days earlier to guard the two lists per entry. That guard was correct and did
+its job; it simply has nothing left to guard once the lists are gone. Removing a
+guard alongside the thing it guards is the honest move — the alternative is a
+passing test over an empty list, which is the same false comfort this whole
+record is about. The surviving pattern is the one 9 of 35 specs already reached
+independently: a narrow `page.on('console')` next to the thing that provokes it.

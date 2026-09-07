@@ -6,7 +6,6 @@
 import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { getE2EConfig } from '../e2e.config';
-import type { ConsoleMessage } from './console-utils';
 import type { WindowWithStores } from '../types';
 import { getReaderMode } from './device-state';
 
@@ -46,26 +45,6 @@ export async function expectBatteryPercentage(
   //   return deviceStore?.getState().batteryPercentage;
   // });
   // expect(storeState).toBe(percentage);
-}
-
-/**
- * Assert no console errors or warnings were logged
- * @param messages - Array of console messages captured during test
- */
-export function expectNoConsoleErrors(messages: ConsoleMessage[]): void {
-  const errorMessages = messages.filter(m => 
-    m.type === 'error' || m.type === 'warning'
-  );
-  
-  if (errorMessages.length > 0) {
-    const details = errorMessages.map(m => 
-      `[${m.type}] ${m.text}`
-    ).join('\n');
-    
-    // Fail the test with detailed error information
-    expect.soft(errorMessages).toHaveLength(0);
-    throw new Error(`Console errors/warnings detected:\n${details}`);
-  }
 }
 
 /**
