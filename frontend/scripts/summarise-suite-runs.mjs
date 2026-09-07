@@ -20,6 +20,8 @@ import {
   resolveReadCycles,
   READ_CYCLE_FIELDS,
   cohortWarning,
+  repVerdict,
+  isUnattributableFailure,
 } from './suite-run-signals.mjs';
 
 const RECORD_PATH = path.resolve(process.cwd(), '.suite-runs', 'runs.jsonl');
@@ -37,7 +39,7 @@ function loadRecords() {
 
 const short = (f) => f.replace(/^tests\/integration\//, '');
 
-function perRunTable(records) {
+export function perRunTable(records) {
   const lines = [
     '| shape | rep | seed | dur | exit | clients@start | failed files | failed tests |',
     '| -- | -- | -- | -- | -- | -- | -- | -- |',
@@ -49,6 +51,7 @@ function perRunTable(records) {
     const testCell = tests.length ? tests.map((t) => `${t}`).join('<br>') : '—';
     const flags = [];
     if (r.reportMissing) flags.push('**REPORT MISSING**');
+    if (isUnattributableFailure(r)) flags.push('**NO FAILING TEST**');
     if (r.wsClientsAtStart) flags.push(`**${r.wsClientsAtStart} client(s) attached**`);
     lines.push(
       `| ${r.shape}${r.target ? ` (${short(r.target)})` : ''} | ${r.rep} | ${r.seed ?? '—'} ` +
@@ -56,6 +59,63 @@ function perRunTable(records) {
         `| ${names} | ${testCell} ${flags.length ? `<br>${flags.join(' ')}` : ''}|`
     );
   }
+  return lines.join('\n');
+}
+
+/**
+ * Split the rep-level failure count into the populations it is actually made of.
+ *
+ * The headline `failed` count is every rep with a non-zero exit. The per-spec
+ * failure table is built from files with `status === 'failed'`. Those are not
+ * the same population, and nothing before this row said so: a rep can exit 1
+ * with a report that parsed cleanly and names nothing — an unhandled rejection
+ * from a promise nobody awaited, which vitest fails the run for without ever
+ * attributing it to a test. On the TRA-1239 after-arm that was 3 of 7 failures,
+ * so 43% of the arm's failures were invisible to the per-spec view while the
+ * headline rate counted them.
+ *
+ * Printed BEFORE the per-file table on purpose. It is the caveat on that
+ * table's denominator, and a caveat printed after the number it undercuts is
+ * one the reader has already acted on.
+ */
+export function unattributableFailureTable(records) {
+  const n = records.length;
+  const by = { passed: [], attributed: [], unattributable: [], reportMissing: [] };
+  for (const r of records) by[repVerdict(r)].push(r);
+  const pct = (k) => (n ? `${((100 * k) / n).toFixed(1)}%` : '—');
+  const row = (label, reps) => `| ${label} | ${reps.length}/${n} | ${pct(reps.length)} |`;
+
+  const lines = [
+    '| rep verdict | reps | rate |',
+    '| -- | -- | -- |',
+    row('passed', by.passed),
+    row('failed, a failing test named', by.attributed),
+    row('**failed, NO failing test**', by.unattributable),
+    // Not a fourth verdict so much as an absence of one: the run failed —
+    // `contaminationNote` has always said a missing report is a failure and not
+    // a pass — but which of the two failure classes it belongs to cannot be
+    // recovered, so it is never counted into either.
+    row('no parseable report — a failure, class unrecoverable', by.reportMissing),
+  ];
+
+  lines.push('');
+  if (by.unattributable.length) {
+    lines.push(
+      `⚠️ ${by.unattributable.length} repetition(s) exited non-zero while naming no failing ` +
+        `test (${by.unattributable.map((r) => `${r.shape}#${r.rep}`).join(', ')}). Window the ` +
+        'bridge ring to each one\'s `startedAt`/`endedAt` — that is how the mechanism was ' +
+        'confirmed the first time, and the error text alone does not name a subsystem.'
+    );
+  } else {
+    lines.push('_No rep exited non-zero without naming a failing test._');
+  }
+  lines.push('');
+  lines.push(
+    '⚠️ This row goes to zero by construction once the escaping rejection is caught and ' +
+      'logged, while the `startScanFailed`/`stopScanFailed` needles stay non-zero — so a drop ' +
+      'here is not evidence of a fix. The occurrence is still happening; it has stopped being ' +
+      'conflated with a rep verdict. Read the needle counts, not this rate, across that change.'
+  );
   return lines.join('\n');
 }
 
@@ -762,6 +822,10 @@ function main() {
   console.log(`${records.length} repetitions recorded.\n`);
   console.log(`## Per-run failures\n`);
   console.log(perRunTable(records));
+  // Before the per-file table, not after it. This is the caveat on that table's
+  // denominator — a rep in this class fails the run and appears nowhere below.
+  console.log(`\n## Failed with no failing test — TRA-1243\n`);
+  console.log(unattributableFailureTable(records));
   console.log(`\n## Failure rate by file and shape\n`);
   console.log(perFileTable(records));
   console.log(`\n## Failure rate by execution position\n`);
