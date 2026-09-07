@@ -71,6 +71,26 @@ export const SIGNALS = {
   // whether it landed inside a write window needs the timestamps and lives in
   // scripts/ack-latency-report.mjs.
   linkCloses: '[ble-timing] link-close',
+  // The OTHER route to the same worker message, and the reason this needle
+  // exists is that its absence made `linkCloses: 0` mean more than it does.
+  //
+  // `ble:disconnected` is what drives the store to DISCONNECTED, and TWO places
+  // post it: `handleDisconnect()` (the gattserverdisconnected listener, which
+  // logs link-close) and `CS108BLETransport.disconnect()` (which removes that
+  // listener first, so it logged nothing at all until TRA-1259). Both end with
+  // the reader DISCONNECTED and the singleton destroyed.
+  //
+  // So `linkCloses: 0` establishes "no UNEXPECTED drop", NOT "the transport
+  // never went away" — and TRA-1259 is precisely a question about which of
+  // those two happened. Counting both is what makes the pair discriminating:
+  //
+  //     linkCloses 0, linkTeardowns 0   -> the store lost CONNECTED on its own
+  //     linkCloses 0, linkTeardowns > 0 -> WE tore it down; find the caller
+  //     linkCloses > 0                  -> a real drop, and the old story applies
+  //
+  // Expect this to be NON-ZERO on every healthy arm — each spec's afterAll
+  // disconnects — so unlike `linkCloses` a zero here is the suspicious reading.
+  linkTeardowns: '[ble-timing] link-teardown',
   connectSamples: '[ble-timing] connect',
 
   // ── The CS108's silent window, after TRA-1217 made it survivable ──────────
@@ -519,6 +539,12 @@ export const E2E_SIGNALS = {
   // mock fidelity.
   ackSamples: SIGNALS.ackSamples,
   linkCloses: SIGNALS.linkCloses,
+  // Added by TRA-1259 so the zero above is readable. See the note on
+  // `SIGNALS.linkTeardowns`: it is the deliberate-teardown counterpart, and the
+  // pair is what separates "we tore the link down" from "the store lost
+  // CONNECTED with the link intact". Same `[ble-timing]` prefix, so the
+  // forwarder already passes it.
+  linkTeardowns: SIGNALS.linkTeardowns,
   connectSamples: SIGNALS.connectSamples,
 };
 
@@ -550,6 +576,7 @@ export const E2E_BROWSER_NEEDLES = [
   'transportUnreachable',
   'ackSamples',
   'linkCloses',
+  'linkTeardowns',
   'connectSamples',
 ];
 

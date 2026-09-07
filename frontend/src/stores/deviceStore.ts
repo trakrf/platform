@@ -72,6 +72,29 @@ export const useDeviceStore = create<DeviceState>(createStoreWithTracking((set, 
       console.trace();
     }
 
+    /**
+     * The mirror of the warning above, and it exists because its absence cost a
+     * whole bench arm.
+     *
+     * TRA-1259: `hold-sweep` found the reader `Disconnected` three seconds after
+     * its own `beforeAll` had confirmed `Connected`, with the link demonstrably
+     * intact. Reconstructing WHY meant reading every route to DISCONNECTED after
+     * the fact, because the transition itself left no record — the worker logs
+     * its own transitions at `logger.debug`, which an e2e run does not forward.
+     *
+     * A stack trace names the caller at the moment it happens, which is the
+     * difference between one reproduction being enough and needing another arm.
+     * Deliberately only on the way OUT of a connected state: DISCONNECTED →
+     * DISCONNECTED is the ordinary idempotent teardown and says nothing.
+     */
+    if (state === ReaderState.DISCONNECTED && prevState.readerState !== ReaderState.DISCONNECTED) {
+      console.warn(
+        `[DeviceStore] Reader lost CONNECTED: ${prevState.readerState} -> Disconnected. ` +
+        'Trace names the caller — TRA-1259.'
+      );
+      console.trace();
+    }
+
     const isConnected = state !== ReaderState.DISCONNECTED;
     const isScanning = state === ReaderState.SCANNING;
 
@@ -109,6 +132,12 @@ export const useDeviceStore = create<DeviceState>(createStoreWithTracking((set, 
 
   // Connection methods
   connect: async () => {
+    // Held so the guard-refusal path below can put it back. `CONNECTING` is
+    // published before we know whether there is anything to connect, and it is
+    // a TRANSIENT state — `waitForSettledState` and the e2e trigger helpers
+    // both park on it — so leaving it behind is worse than the disconnect it
+    // replaced, not better.
+    const stateBeforeConnect = get().readerState;
     set({ readerState: ReaderState.CONNECTING });
 
     try {
@@ -134,13 +163,49 @@ export const useDeviceStore = create<DeviceState>(createStoreWithTracking((set, 
       });
     } catch (error) {
       console.error('Connection failed:', error);
-      set({ 
-        readerState: ReaderState.DISCONNECTED,
-        isConnected: false
-      });
-      trackRFIDOperation('error', { 
+
+      /**
+       * Publish DISCONNECTED only when there is in fact nothing connected.
+       *
+       * `create()` has two failure shapes and they need opposite treatment.
+       * When construction fails it destroys its own half-built singleton (
+       * TRA-1250), so `getInstance()` is null and DISCONNECTED is the truth.
+       * But the guard at the top of `create()` throws `Device already
+       * connected. Call destroy() first.` BEFORE touching anything — the
+       * existing manager, its worker and its transport are all alive and
+       * working. Publishing DISCONNECTED there tells the UI the reader is gone
+       * while it is sitting there connected, and it does it WITHOUT a transport
+       * event, so no `link-close` and no `link-teardown` accompanies it.
+       *
+       * That is exactly TRA-1259's signature — store loses CONNECTED, link
+       * intact, nothing in the log — which is why this route is closed rather
+       * than merely instrumented. It is NOT a claim that this is what happened
+       * in the observed failure; nothing yet establishes that. It is a route to
+       * the signature that should not exist either way.
+       */
+      const stillConnected = DeviceManager.getInstance() !== null;
+      if (stillConnected) {
+        console.warn(
+          '[DeviceStore] connect() failed but a live DeviceManager remains — ' +
+          'restoring reader state rather than reporting a disconnect that did ' +
+          'not happen. TRA-1259.'
+        );
+        // Only if nothing newer has landed. The surviving manager's worker is
+        // still publishing, so a state that has moved on since is the truth and
+        // this one is stale.
+        if (get().readerState === ReaderState.CONNECTING) {
+          get().setReaderState(stateBeforeConnect);
+        }
+      } else {
+        set({
+          readerState: ReaderState.DISCONNECTED,
+          isConnected: false
+        });
+      }
+
+      trackRFIDOperation('error', {
         operation: 'connect',
-        error: error instanceof Error ? error.message : String(error) 
+        error: error instanceof Error ? error.message : String(error)
       });
       throw error;
     }

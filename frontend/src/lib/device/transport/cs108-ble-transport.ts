@@ -396,10 +396,30 @@ export class CS108BLETransport implements Transport {
       await Promise.resolve(this.device.gatt.disconnect());
     }
     
-    // Notify worker and close port
+    // Notify worker and close port.
+    //
+    // ⚠ THIS POSTS THE SAME MESSAGE `handleDisconnect()` DOES, and until
+    // TRA-1259 it was the only one of the two that logged nothing.
+    //
+    // `ble:disconnected` reaches `BaseReader.handleTransportDisconnect()`,
+    // which publishes DISCONNECTED and asks DeviceManager to destroy the
+    // singleton — the same end state an unexpected GATT drop produces. But
+    // `link-close` is written by `handleDisconnect()` alone, and the listener
+    // that calls it was removed a few lines above. So a DELIBERATE teardown
+    // took the reader to DISCONNECTED while leaving zero trace in a run log.
+    //
+    // That silence is not cosmetic. It made `linkCloses == 0` read as "the
+    // transport never went away", when all it establishes is "no UNEXPECTED
+    // drop" — and the two are different answers to the question TRA-1259 is
+    // asking. One line here is what separates them.
+    console.info(
+      `[ble-timing] link-teardown t=${Date.now()} inflight=${this.commandInProgress ? 1 : 0} ` +
+      `queued=${this.commandQueue.length}`
+    );
+
     if (this.messagePort) {
-      this.messagePort.postMessage({ 
-        type: 'ble:disconnected' 
+      this.messagePort.postMessage({
+        type: 'ble:disconnected'
       } as BLEMessage);
       this.messagePort.close();
     }
