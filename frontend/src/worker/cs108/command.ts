@@ -224,6 +224,25 @@ export class CommandManager {
     quietPeriodAfter?: number,
     ignoresQuietPeriod?: boolean
   ): Promise<unknown> {
+    // An abort REJECTS on purpose. Do not "simplify" this to resolve-with-
+    // nothing on the grounds that an abort is a decision rather than a fault —
+    // the premise is right and the conclusion does not follow.
+    //
+    // Three callers depend on the rejection, and two of them use it to SKIP the
+    // success path:
+    //
+    //   - `reader.ts` setMode — a resolve would fall through to
+    //     convergeToTriggerState() for a mode the hardware never entered.
+    //   - `reader.ts` settings application — a resolve would treat an UNWRITTEN
+    //     locate mask as applied, leaving Locate searching on the previous
+    //     tag's mask. A stale mask is another tag's signal.
+    //   - the handover below relies on the rejection to hold BUSY across it
+    //     (TRA-1237).
+    //
+    // So resolving here would not remove a fault; it would convert three loud
+    // failures into three silent wrong answers. See TRA-1261 for the full map
+    // before changing this.
+    //
     // Check if sequence was aborted
     if (this.isAborted) {
       throw new SequenceAbortedError('Command execution aborted');
@@ -236,6 +255,9 @@ export class CommandManager {
     if (!ignoresQuietPeriod) {
       await this.awaitQuietWindow();
     }
+    // Same contract as the throw above, and this one is the reason the re-check
+    // exists: the wait can be seconds long, so an abort landing inside it must
+    // still take effect. Rejecting is what the callers read — see TRA-1261.
     if (this.isAborted) {
       throw new SequenceAbortedError('Command execution aborted');
     }

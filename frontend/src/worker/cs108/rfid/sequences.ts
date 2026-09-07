@@ -55,7 +55,38 @@ export const RFID_START_SEQUENCE: CommandSequence = [{
   // illustrate. See ADR 0011 for why the note's placement (Appendix C worked
   // examples, where the ABORT ends the flow and no restart is ever shown) makes
   // the unqualified reading an extrapolation rather than a certainty.
-  ignoresQuietPeriod: true
+  ignoresQuietPeriod: true,
+
+  // One unanswered START_INVENTORY used to wedge the reader in ERROR until a
+  // page reload, because an omitted schedule means exactly one attempt
+  // (`command.ts`: `cmd.retryDelays ?? []`). The stop path got its retry in
+  // TRA-1197 and the locate mask write in TRA-1239; this was the third instance
+  // of the same gap and the only one still uncovered.
+  //
+  // Measured 2026-09-07 on a 30-rep arm: 3 wedges, and
+  // "[Reader] Failed to start scanning" discriminated them perfectly — 3 of 3
+  // failures, 0 of 27 passes. The RFID_FIRMWARE_COMMAND timeout underneath it
+  // does NOT discriminate: 11 of 15 reps on the earlier arm carried one and
+  // passed. The timeout is common and survivable wherever it can be retried,
+  // and was lethal only here, where it could not be.
+  //
+  // Same shape as the stop path's schedule, and short at the front for the same
+  // reason: the residual risk is a retry slow enough for an unrelated
+  // abortSequence() to cancel it, and a first retry at ~300ms is a far smaller
+  // window for that than a patient one.
+  //
+  // ⚠ Retry does NOT reintroduce the quiet-window stall this step exists to
+  // avoid. The loop re-dispatches with this step's own `ignoresQuietPeriod`, so
+  // every attempt ignores the window exactly as the first does. Pinned by
+  // `start-retry-on-timeout.test.ts`, because it is a property of the loop
+  // rather than of this declaration.
+  //
+  // ⚠ Retry, do NOT reach for `toleratesFailure`. It looks like the right knob —
+  // its docstring describes TRA-1217, a structurally identical failure — but
+  // tolerating a failed start would publish `finalState: SCANNING` for a reader
+  // that is not scanning. The wedge at least announces itself; a tolerated
+  // failure is an operator waving a handheld at tags that never read.
+  retryDelays: [100, 200, 500, 1000]
 }];
 
 /**
