@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
 import { CS108Reader } from './reader.js';
 import { ReaderState, ReaderMode, RainTarget } from '../types/reader.js';
 import { CommandManager, SequenceAbortedError, CommandInFlightError } from './command.js';
@@ -9,7 +9,7 @@ import { INVENTORY_CONFIG_SEQUENCE } from './rfid/inventory/sequences.js';
 import { BARCODE_CONFIG_SEQUENCE } from './barcode/sequences.js';
 import { LOCATE_CONFIG_SEQUENCE, locateSettingsSequence } from './rfid/locate/sequences.js';
 import { RFID_REGISTERS } from './rfid/constant.js';
-import { RFID_START_SEQUENCE } from './rfid/sequences.js';
+import { RFID_START_SEQUENCE, RFID_STOP_SEQUENCE, POST_ABORT_QUIET_MS } from './rfid/sequences.js';
 import { RFID_IDENTITY_SEQUENCE } from './system/identity.js';
 import { removeLeadingZeros } from '../../utils/reconciliationUtils';
 import type { CS108Packet } from './type.js';
@@ -1811,6 +1811,66 @@ describe('CS108Reader', () => {
       await expect(reader.stopScanning()).rejects.toThrow('Command failed');
       // Implementation now sets ERROR state for stop failures (line 730 in reader.ts)
       expect(reader.getState()).toBe(ReaderState.ERROR);
+    });
+  });
+
+  /**
+   * TRA-1199 / TRA-1185. The stop must return to its caller as soon as the
+   * ABORT is acknowledged. The vendor's 2s buffer-clear window is real, but it
+   * is declared on RFID_STOP_SEQUENCE and held by CommandManager, so it gates
+   * the NEXT dispatch rather than this caller — the operator is told the scan
+   * stopped immediately.
+   *
+   * What used to sit here was an unconditional 1000ms sleep, and it cost every
+   * stop a perceptible second while buying nothing: the recovery it guarded
+   * could not fire, because the stopwatch was started immediately before the
+   * sleep meant to run it down.
+   *
+   * ⚠ Until now that property was asserted only by a COMMENT in `reader.ts`,
+   * and the ticket's own method rule says a doc comment stating a requirement
+   * is not a mechanism. Someone restoring a caller-side wait — plausibly, while
+   * "restoring the recovery" the comment mentions — would break nothing that
+   * says so. This is the mechanism.
+   *
+   * Fake timers are what give the test teeth: with a mocked CommandManager
+   * every real step resolves on a microtask, so a re-added sleep is the only
+   * thing that can leave the promise pending at t=0.
+   */
+  describe('the stop does not pay the quiet window itself (TRA-1199)', () => {
+    beforeEach(async () => {
+      await reader.connect();
+      await reader.setMode(ReaderMode.INVENTORY);
+      await reader.startScanning();
+      postMessageSpy.mockClear();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('resolves without any clock advancing at all', async () => {
+      vi.useFakeTimers();
+
+      let settled = false;
+      const stopped = reader.stopScanning().then(() => { settled = true; });
+
+      // Flush microtasks WITHOUT moving the clock. Anything awaiting a timer —
+      // a restored `await sleep(1000)`, or a stop that waited out the 2s
+      // window — is still pending here.
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(settled).toBe(true);
+      await stopped;
+    });
+
+    /**
+     * The other half, and the reason this is not simply "we deleted a wait":
+     * the window still exists. Removing it would be a different defect, so pin
+     * that it is still declared where CommandManager can hold it.
+     */
+    it('still declares the window for the next dispatch to honour', () => {
+      expect(RFID_STOP_SEQUENCE[0].quietPeriodAfter).toBe(POST_ABORT_QUIET_MS);
+      expect(POST_ABORT_QUIET_MS).toBeGreaterThan(0);
     });
   });
 
