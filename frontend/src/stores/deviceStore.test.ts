@@ -220,5 +220,32 @@ describe('DeviceStore', () => {
 
       warn.mockRestore();
     });
+
+    it('stays quiet on CONNECTING -> DISCONNECTED, which happens on every connect', () => {
+      // NOT a judgement call — measured. `deviceStore.connect()` publishes
+      // CONNECTING optimistically, then `CS108Reader`'s constructor runs
+      // `emitInitialState()` and broadcasts its initial DISCONNECTED over the
+      // top before bring-up climbs back to CONNECTED. A 5-rep isolation arm on
+      // 2026-09-07 logged exactly one of these per connect.
+      //
+      // Warning on it would put a line in every connect of every run, in the
+      // one log the next reproduction has to be read out of. The window itself
+      // is a separate finding on TRA-1259, not something this warning is for.
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { result } = renderHook(() => useDeviceStore());
+
+      act(() => {
+        result.current.setReaderState(ReaderState.CONNECTING);
+      });
+      warn.mockClear();
+
+      act(() => {
+        result.current.setReaderState(ReaderState.DISCONNECTED);
+      });
+
+      expect(warn).not.toHaveBeenCalled();
+
+      warn.mockRestore();
+    });
   });
 });
