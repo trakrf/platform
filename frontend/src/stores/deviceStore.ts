@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import { ReaderState, type ReaderStateType, type ReaderModeType, type ReaderDetails } from '@/worker/types/reader';
 import { trackRFIDOperation } from '@/lib/openreplay';
 import { createStoreWithTracking } from './createStore';
+import { lostConnectedMessage } from './lost-connected-message';
 import { DeviceManager } from '@/lib/device/device-manager';
 
 // Device store interface
@@ -107,10 +108,7 @@ export const useDeviceStore = create<DeviceState>(createStoreWithTracking((set, 
       prevState.readerState !== ReaderState.CONNECTING;
 
     if (state === ReaderState.DISCONNECTED && wasEstablished) {
-      console.warn(
-        `[DeviceStore] Reader lost CONNECTED: ${prevState.readerState} -> Disconnected. ` +
-        'Trace names the caller — TRA-1259.'
-      );
+      console.warn(lostConnectedMessage(prevState.readerState));
       console.trace();
     }
 

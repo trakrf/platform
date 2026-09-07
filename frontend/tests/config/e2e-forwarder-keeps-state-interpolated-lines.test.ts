@@ -41,6 +41,11 @@ import {
   SETTLE_DEFERRAL_PREFIX,
   settleDeferralMessage,
 } from '../../src/worker/cs108/settle-deferral-message';
+import {
+  LOST_CONNECTED_PREFIX,
+  lostConnectedMessage,
+} from '../../src/stores/lost-connected-message';
+import { E2E_SIGNALS } from '../../scripts/suite-run-signals.mjs';
 
 const FRONTEND_ROOT = path.resolve(__dirname, '../..');
 
@@ -79,6 +84,73 @@ describe('the settle-deferral line survives the forwarder in every reader state'
     // The predicate is a disjunction of `includes`, so passing the prefix alone
     // is what guarantees every line containing it passes.
     expect(shouldForwardConsoleLine(SETTLE_DEFERRAL_PREFIX, 'info')).toBe(true);
+  });
+});
+
+/**
+ * The same class again, one PR later — TRA-1259's own signature line.
+ *
+ * The warning added by #670 interpolates the previous reader state into the
+ * middle of the sentence, and nothing in the constant part carried a KEEP token:
+ * `CONNECTED` is not `Connect`, `Disconnected` is not `disconnect`. So whether
+ * an occurrence reached the run log was decided by which state was interpolated
+ * — `Connected` and `Error` matched by accident, `Configuring`, `Busy` and
+ * `Scanning` did not. Three of five dropped.
+ *
+ * That is not a uniform undercount, which is what makes it worse than a zero:
+ * the SURVIVING two are the ordinary teardown cases, and the dropped three
+ * include `Scanning -> Disconnected`, the transition a trigger-hold sweep
+ * produces. The instrument was blindest exactly where the ticket was looking.
+ *
+ * `console.warn` is Playwright type `warning`, so the `type === 'error'`
+ * short-circuit never covered it either — the type is asserted below rather than
+ * assumed, because passing `'error'` here would make this suite pass vacuously.
+ */
+describe('the lost-CONNECTED line survives the forwarder in every reader state', () => {
+  // The states that can actually produce the warning: `setReaderState` fires it
+  // only when leaving an ESTABLISHED state, i.e. not DISCONNECTED (the idempotent
+  // teardown) and not CONNECTING (the sub-frame bring-up window, excluded by
+  // design in #670). Looping over all of ReaderState anyway is deliberate — a
+  // state that cannot reach the warning today still must not be able to make the
+  // line vanish if the guard is ever widened.
+  for (const state of ALL_READER_STATES) {
+    it(`forwards the line rendered for \`${state}\``, () => {
+      const line = lostConnectedMessage(state);
+      expect(
+        shouldForwardConsoleLine(line, 'warning'),
+        `The forwarder DROPS the lost-CONNECTED line when the previous state is ${state}:\n` +
+          `  ${line}\n` +
+          'TRA-1259 is read out of this line. A dropped occurrence does not read as ' +
+          'dropped — it reads as the store never having lost CONNECTED, which is ' +
+          'the exact conclusion the ticket exists to test.'
+      ).toBe(true);
+    });
+  }
+
+  it('renders a byte-identical prefix for every state', () => {
+    const prefixes = new Set(
+      ALL_READER_STATES.map((s) => lostConnectedMessage(s).slice(0, LOST_CONNECTED_PREFIX.length))
+    );
+    expect([...prefixes]).toEqual([LOST_CONNECTED_PREFIX]);
+  });
+
+  it('forwards the bare invariant prefix on its own', () => {
+    expect(shouldForwardConsoleLine(LOST_CONNECTED_PREFIX, 'warning')).toBe(true);
+  });
+
+  it('is kept on its own merits, not by the `error` short-circuit', () => {
+    // The producer is console.warn. If this suite passed only for type 'error'
+    // it would be asserting nothing about the path the line actually takes.
+    const line = lostConnectedMessage(ReaderState.SCANNING);
+    expect(shouldForwardConsoleLine(line, 'warning')).toBe(true);
+    expect(shouldForwardConsoleLine(line, 'info')).toBe(true);
+  });
+
+  it('matches the needle the soak instruments count', () => {
+    // A prefix the forwarder keeps but the signals module does not count, or vice
+    // versa, is still an unobservable event. Same coupling `E2E_BROWSER_NEEDLES`
+    // declares, asserted on the literal.
+    expect(E2E_SIGNALS.lostConnected).toBe(LOST_CONNECTED_PREFIX);
   });
 });
 
