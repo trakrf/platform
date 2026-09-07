@@ -30,6 +30,7 @@
  */
 
 import path from 'node:path';
+import { isUnattributableFailure } from './suite-run-signals.mjs';
 
 /**
  * Sum a per-op signal table, preserving the null the instrument records.
@@ -83,6 +84,10 @@ export function formatRepLine(record, total) {
   ];
 
   if (specs.length) parts.push(`| ${specs.join(',')}`);
+  // A marker, not an invented spec name: this rep failed the run without any
+  // test being blamed, and putting a made-up basename here would feed the spec
+  // tally in the progress block a name nothing produced (TRA-1243).
+  if (isUnattributableFailure(record)) parts.push('[NO FAILING TEST]');
   if (record.reportMissing) parts.push('[REPORT MISSING]');
   if (signals.logMissing) parts.push('[LOG MISSING]');
 
@@ -133,10 +138,19 @@ export function formatProgressBlock(records, total, startedAtMs, now = Date.now(
   for (const record of failures) {
     for (const name of failedSpecs(record)) specCounts.set(name, (specCounts.get(name) ?? 0) + 1);
   }
-  const specs = [...specCounts.entries()]
+  const named = [...specCounts.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([name, n]) => `${name} ${n}`)
-    .join('  ') || 'none';
+    .join('  ');
+  // `failed` counts non-zero exits; this line counts files the report marked
+  // failed. They are different populations, and a rep that exits 1 on an
+  // unhandled rejection is in the first and not the second — so without this
+  // segment the block can read `failed 1 · failing specs: none` and give a
+  // watcher nothing to act on (TRA-1243). Appended rather than folded into the
+  // tally: it is not a spec, and printing it as one would invent a name.
+  const unattributable = failures.filter(isUnattributableFailure).length;
+  const orphans = unattributable ? `${unattributable} with no failing test` : '';
+  const specs = [named, orphans].filter(Boolean).join('  ·  ') || 'none';
 
   const sumAll = (key) =>
     records.reduce((acc, r) => {
