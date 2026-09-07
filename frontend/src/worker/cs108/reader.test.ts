@@ -1946,6 +1946,119 @@ describe('CS108Reader', () => {
     });
   });
 
+  /**
+   * TRA-1243 step 2. `handleNotificationEvent` is `async` and is bound into a
+   * callback slot typed `void` (`notification/types.ts`), so every caller
+   * invokes it synchronously and nobody holds the promise. It awaited three
+   * calls that can reject, and had no try/catch — so a rejection became an
+   * unhandled rejection, which vitest fails the whole run for while naming no
+   * test. Three reps of the 2026-09-02 after-arm died exactly that way.
+   *
+   * These assert against `console` at the logger's default level rather than
+   * spying the logger, for the reason the TRA-1225 block above gives: the soak
+   * counts these lines by grepping a log, so a line that is emitted but not
+   * PRINTED is not instrumentation.
+   */
+  describe('a rejection on the trigger path does not escape (TRA-1243)', () => {
+    let errorSpy: Mock;
+
+    const whatItSaid = () => errorSpy.mock.calls.map(call => call.join(' ')).join('\n');
+    const aborted = () => new Error('Sequence aborted: Command execution aborted');
+
+    beforeEach(async () => {
+      await reader.connect();
+      errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {}) as unknown as Mock;
+    });
+
+    it('does not reject when the press-side start fails', async () => {
+      await reader.setMode(ReaderMode.BARCODE);
+      (commandManagerMock.executeSequence as Mock).mockRejectedValueOnce(aborted());
+
+      await expect(
+        (reader as any).handleNotificationEvent({
+          type: 'TRIGGER_STATE_CHANGED',
+          payload: { pressed: true }
+        })
+      ).resolves.toBeUndefined();
+    });
+
+    it('does not reject when the release-side stop fails', async () => {
+      await reader.setMode(ReaderMode.BARCODE);
+      await reader.startScanning();
+      (reader as any).scanningRequested = false;
+      (commandManagerMock.executeSequence as Mock).mockRejectedValueOnce(aborted());
+
+      await expect(
+        (reader as any).handleNotificationEvent({
+          type: 'TRIGGER_STATE_CHANGED',
+          payload: { pressed: false }
+        })
+      ).resolves.toBeUndefined();
+    });
+
+    /** The third await, and the one with no trigger edge behind it. */
+    it('does not reject when the barcode auto-stop fails', async () => {
+      await reader.setMode(ReaderMode.BARCODE);
+      await reader.startScanning();
+      (commandManagerMock.executeSequence as Mock).mockRejectedValueOnce(aborted());
+
+      await expect(
+        (reader as any).handleNotificationEvent({ type: 'BARCODE_AUTO_STOP_REQUEST' })
+      ).resolves.toBeUndefined();
+    });
+
+    /**
+     * The whole case for catching rather than propagating: the occurrence stays
+     * counted. `startScanFailed` is a soak needle, so if catching cost us this
+     * line the fix would be trading a visible failure for an invisible one.
+     */
+    it('still PRINTS the counted needle, so nothing is silenced', async () => {
+      await reader.setMode(ReaderMode.BARCODE);
+      (commandManagerMock.executeSequence as Mock).mockRejectedValueOnce(aborted());
+
+      await (reader as any).handleNotificationEvent({
+        type: 'TRIGGER_STATE_CHANGED',
+        payload: { pressed: true }
+      });
+
+      expect(whatItSaid()).toContain('[Reader] Failed to start scanning:');
+    });
+
+    it('says which event it was handling when it swallows, rather than swallowing quietly', async () => {
+      await reader.setMode(ReaderMode.BARCODE);
+      (commandManagerMock.executeSequence as Mock).mockRejectedValueOnce(aborted());
+
+      await (reader as any).handleNotificationEvent({
+        type: 'TRIGGER_STATE_CHANGED',
+        payload: { pressed: true }
+      });
+
+      expect(whatItSaid()).toContain('TRIGGER_STATE_CHANGED');
+      expect(whatItSaid()).toMatch(/Sequence aborted/);
+    });
+
+    /**
+     * TRA-1168's guarantee has to survive this change: the UI is told about the
+     * edge before the scan call is awaited, so a rejection must not cost the
+     * store its trigger state.
+     */
+    it('still tells the UI about the edge when the scan call rejects', async () => {
+      await reader.setMode(ReaderMode.BARCODE);
+      (commandManagerMock.executeSequence as Mock).mockRejectedValueOnce(aborted());
+      postMessageSpy.mockClear();
+
+      await (reader as any).handleNotificationEvent({
+        type: 'TRIGGER_STATE_CHANGED',
+        payload: { pressed: true }
+      });
+
+      expect(postMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'TRIGGER_STATE_CHANGED',
+        payload: { pressed: true }
+      }));
+    });
+  });
+
   describe('Battery monitoring', () => {
     beforeEach(async () => {
       vi.useFakeTimers();

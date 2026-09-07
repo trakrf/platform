@@ -175,7 +175,64 @@ class CS108Reader extends BaseReader {
    * Handle domain events from notification handlers
    * Intercepts auto-stop, vibrator requests, and trigger events before emitting
    */
+  /**
+   * The boundary between the notification router and this reader, and the only
+   * place a rejection from below can be caught.
+   *
+   * This method is `async`, and it is bound into a callback slot typed
+   * `(event) => void` (`notification/types.ts`). TypeScript permits that
+   * silently, so every caller invokes it synchronously and nobody holds the
+   * returned promise — `system/trigger.ts` and `barcode/scan-handler.ts` all
+   * call it and none of them await or `.catch()` it. A rejection therefore had
+   * no owner: it surfaced as an unhandled rejection, which vitest fails the
+   * entire run for while naming no test at all. Three reps of the 2026-09-02
+   * after-arm died exactly that way, and the summary now has a row for the
+   * class (see `summarise-suite-runs.mjs`).
+   *
+   * Catching here is not a silencing, for three reasons:
+   *
+   * 1. `startScanning` and `stopScanning` publish ERROR and log before they
+   *    rethrow, so the app already knows. On this path the rethrow was
+   *    informing a caller that does not exist.
+   * 2. Those log lines are counted soak needles (`startScanFailed`,
+   *    `stopScanFailed`), and they still print. The occurrence stays visible
+   *    and counted — it just stops being conflated with a rep verdict.
+   * 3. `convergeToTriggerState` below already does exactly this, with the same
+   *    reasoning written down: a backstop with no caller must not rethrow.
+   *
+   * ⚠ Do not "fix" this by making `emitNotificationEvent` return a promise and
+   * awaiting it at the four call sites. It reads as the type-honest option and
+   * was rejected on purpose: those callers sit under BLE packet parsing, so
+   * awaiting there blocks notification processing on an RFID command
+   * round-trip — an ABORT plus its settle window. `system/trigger.ts` emits
+   * TRIGGER_STATE_CHANGED and the GET_TRIGGER_STATE response back to back, so
+   * the second would be delayed by that whole round-trip, on the same poll that
+   * revokes a simulated trigger level. It would also re-introduce the coupling
+   * TRA-1171 deliberately removed.
+   *
+   * ⚠ Whether an abort should reject at all is a separate and larger question
+   * (TRA-1261) — three consumers branch on `SequenceAbortedError` and two use
+   * it to skip the success path, so making it resolve would make them silently
+   * wrong rather than merely unhandled. This catch does not pre-judge it.
+   */
   private async handleNotificationEvent(event: Omit<WorkerEvent, 'timestamp'>): Promise<void> {
+    try {
+      await this.dispatchNotificationEvent(event);
+    } catch (error) {
+      // Named with the event type, because the class this fixes was
+      // diagnosable only by windowing a ring dump to the rep: the error text
+      // alone ("Sequence aborted", "Command timeout") says nothing about which
+      // notification was being handled when it escaped.
+      logger.error(`[Reader] Notification handling failed for ${event.type}:`, error);
+    }
+  }
+
+  /**
+   * The dispatch itself. Split from the boundary above so the catch is a
+   * boundary rather than a wrapper around one branch — every await reachable
+   * from a notification is inside it, including any added later.
+   */
+  private async dispatchNotificationEvent(event: Omit<WorkerEvent, 'timestamp'>): Promise<void> {
     // Handle internal control events
     switch (event.type) {
       case 'TRIGGER_STATE_CHANGED': {
