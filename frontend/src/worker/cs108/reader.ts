@@ -200,6 +200,16 @@ class CS108Reader extends BaseReader {
    * 3. `convergeToTriggerState` below already does exactly this, with the same
    *    reasoning written down: a backstop with no caller must not rethrow.
    *
+   * ⚠ Do not "fix" this by making `emitNotificationEvent` return a promise and
+   * awaiting it at the four call sites. It reads as the type-honest option and
+   * was rejected on purpose: those callers sit under BLE packet parsing, so
+   * awaiting there blocks notification processing on an RFID command
+   * round-trip — an ABORT plus its settle window. `system/trigger.ts` emits
+   * TRIGGER_STATE_CHANGED and the GET_TRIGGER_STATE response back to back, so
+   * the second would be delayed by that whole round-trip, on the same poll that
+   * revokes a simulated trigger level. It would also re-introduce the coupling
+   * TRA-1171 deliberately removed.
+   *
    * ⚠ Whether an abort should reject at all is a separate and larger question
    * (TRA-1261) — three consumers branch on `SequenceAbortedError` and two use
    * it to skip the success path, so making it resolve would make them silently
