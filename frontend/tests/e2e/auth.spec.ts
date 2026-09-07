@@ -67,8 +67,19 @@ test.describe('Authentication', () => {
       // Submit form
       await page.locator('button[type="submit"]').click();
 
-      // Should show loading state
-      await expect(page.locator('button[type="submit"]')).toContainText('Logging in...');
+      // NO ASSERTION ON THE TRANSIENT "Logging in..." STATE.
+      //
+      // It was here, and it is unreliable by construction: the text exists only
+      // while the request is in flight, so against a warm local backend the
+      // login fails before the assertion runs and the button already reads
+      // "Log In". It failed through all three attempts on the CI-shaped arm
+      // that gates this subset — deterministically, once the backend was fast
+      // enough (TRA-1253).
+      //
+      // Removed rather than stabilised with a route delay: this test is named
+      // for the ERROR MESSAGE, and the assertions below are its actual subject.
+      // Adding machinery to observe a spinner would be testing the harness's
+      // ability to slow the server down.
 
       // Wait for error (backend should return RFC 7807 error)
       // The error should be displayed as text, not as an object

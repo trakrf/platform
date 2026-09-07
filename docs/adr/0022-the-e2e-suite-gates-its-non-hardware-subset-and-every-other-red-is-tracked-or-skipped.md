@@ -73,14 +73,33 @@ so `tsc` never looked at the tree that produces every e2e verdict.
 ## Decision
 
 **1. The non-hardware subset is a gate. It is expected to be green, and a red
-run blocks.** It is now green on the bench (213 passed, 10 skipped, 0 failed),
-so this is a statement about a state that exists rather than one to work
-towards. Wiring it into CI against the PR's own preview deployment is a
-follow-up; this record fixes the intent so that work has something to implement.
+run blocks.** Enforced as steps in the `lint-test` job — 182 tests, ~5 minutes,
+`--grep-invert @hardware`, against a database and backend stood up in the job.
+
+It is a step in an existing job rather than a job of its own, and that is
+load-bearing: the main-branch-protection ruleset requires the exact contexts
+`build`, `lint-test`, `api-spec` and `main contract-tests must be green`, so a
+new job would have been **advisory until somebody edited that ruleset**. Shipping
+a gate that gates nothing is the precise failure this record exists to rule out,
+so it goes where enforcement already is. The changelog gate lives inside
+`lint-test` for the same reason.
+
+⚠ The first draft of this record proposed gating against the PR's own preview
+deployment. **There is no such thing.** `sync-preview.yml` resets `preview` to
+`main` and merges *every* open non-draft PR into it, so a failure there can be
+caused by somebody else's branch. Preview is a composition, and a composition
+cannot gate an individual PR — it is the continuous integration signal that
+replaced "require branches to be up to date" (TRA-1094), which is a different
+job from blocking a merge.
 
 **2. The `@hardware` subset is advisory and says so.** It cannot run in CI —
 there is one physical CS108 behind one bridge — so calling it a gate would be
 a claim nothing can enforce.
+
+There is a second reason to keep it out, and it is easier to forget: **a gate
+must not flake.** TRA-1259 is a live intermittent in `hold-sweep`. Gating a set
+that contains a known random failure teaches people to ignore the gate, which is
+the same end state as having no gate at all.
 
 **3. A spec that cannot pass against the configured target SKIPS, naming the
 target it needs.** It does not fail. `lazy-chunk-recovery` failing four times
@@ -102,8 +121,28 @@ evidence of anything while `retries: 0`.
 `tests/**` is now inside `tsc --noEmit`, so a helper reading a field the store
 does not have is a build error rather than a silently-`undefined` assertion.
 The `**/*.test.ts` and `**/*.spec.ts` exclusions remain: removing those surfaces
-**453** further errors, which is a real backlog and a separate piece of work,
+**419** further errors (TRA-1258), which is a real backlog and a separate piece of work,
 not something to fold into this one.
+
+**Turning retries on found two flakes the bench never could.** CI sets
+`retries: 2`; local runs set `0`. So the first CI-shaped arm was also the first
+run in this ticket's history where `flaky` could be non-zero at all — and it
+immediately surfaced two tests in the gated subset that no amount of local
+running would have shown:
+
+  `hamburger-menu` closed the drawer with a bare positional click on `<body>`,
+  racing the open animation. Fixed by clicking the overlay, which is the pattern
+  the sibling test in the same file already used.
+
+  `auth` asserted on the transient `"Logging in..."` button text. Against a warm
+  local backend the login fails before the assertion runs, so it failed through
+  all three attempts. The assertion was incidental — that test is named for the
+  error message — and was removed rather than stabilised by slowing the server
+  down, which would test the harness rather than the app.
+
+Neither was introduced here; both were pre-existing and invisible. That is the
+argument for the gate in miniature: a suite nothing runs under retry pressure
+cannot tell you which of its greens are luck.
 
 Two costs are worth naming rather than discovering later.
 

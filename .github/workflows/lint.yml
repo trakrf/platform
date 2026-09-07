@@ -27,7 +27,7 @@ jobs:
     # Without this the job inherits the 360-minute Actions default. A hung test
     # runner would then occupy a runner for six hours and emit no signal about
     # what happened — see TRA-1050. The job takes ~5 min when healthy.
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -84,3 +84,88 @@ jobs:
         # step that hung instead of just failing the whole job on timeout.
         timeout-minutes: 10
         run: just test
+
+      # ── The e2e gate (TRA-1253 item 2, ADR 0022) ────────────────────────────
+      #
+      # These steps live INSIDE lint-test rather than in a job of their own, for
+      # the same reason the changelog gate does: the main-branch-protection
+      # ruleset requires the exact contexts `build`, `lint-test`, `api-spec` and
+      # `main contract-tests must be green`. A new job would be advisory until
+      # somebody edited that ruleset — which is precisely the aspirational
+      # "it is a gate" that nothing enforces that ADR 0022 exists to rule out.
+      #
+      # WHAT IS GATED, AND WHAT IS NOT. `--grep-invert @hardware` excludes the
+      # 31 specs that drive a real CS108. Two independent reasons, and the
+      # second is the one that is easy to forget:
+      #
+      #   1. There is one physical reader behind one bridge. CI cannot reach it.
+      #   2. A gate must not flake. TRA-1259 is a live intermittent in
+      #      `hold-sweep` — the store loses CONNECTED with the transport intact —
+      #      and gating anything that can fail at random teaches people to ignore
+      #      the gate, which is the failure this whole exercise is about.
+      #
+      # Measured on the 2026-09-07 bench arm: the non-hardware subset is 182
+      # tests in 4.7 minutes, against 8.9 minutes for the hardware half.
+      #
+      # `APP_ENV=test` is what lets the backend boot on the dev JWT secret —
+      # jwt.go's ValidateSecret permits exactly local and test. Everything else
+      # (roles, passwords, the Feistel key) uses the deliberately well-known
+      # defaults in database/justfile, so no secret is needed here at all.
+      - name: Start database
+        env:
+          POSTGRES_PASSWORD: postgres
+        run: just database up
+
+      - name: Migrate and grant
+        env:
+          POSTGRES_PASSWORD: postgres
+        run: |
+          just backend migrate
+          just database grants
+
+      - name: Start backend
+        env:
+          POSTGRES_PASSWORD: postgres
+          APP_ENV: test
+        run: |
+          # setsid + nohup so the server survives this step's shell exiting;
+          # a plain `&` is not reliably orphaned between Actions steps.
+          setsid nohup just backend dev-no-reload > /tmp/backend.log 2>&1 &
+          # Fail loudly here rather than letting 182 specs fail identically on a
+          # backend that never came up — that shape has already been triaged as
+          # test rot once (TRA-1190).
+          for i in $(seq 1 45); do
+            if curl -fsS --max-time 2 http://localhost:8080/health.json > /dev/null; then
+              echo "backend up after ${i} attempt(s)"; exit 0
+            fi
+            sleep 2
+          done
+          echo "backend did not become healthy in 90s; log follows:" >&2
+          cat /tmp/backend.log >&2
+          exit 1
+
+      - name: Install Playwright browser
+        run: pnpm --filter frontend exec playwright install --with-deps chromium
+
+      - name: E2E (non-hardware subset)
+        timeout-minutes: 12
+        env:
+          # Playwright's own webServer starts vite (CI=true, USE_BRIDGE unset),
+          # so only the API origin has to be pointed at the backend — there is
+          # no dev-server proxy for /api.
+          VITE_API_URL: http://localhost:8080/api/v1
+        run: pnpm --filter frontend exec playwright test --grep-invert @hardware
+
+      - name: Backend log on failure
+        if: failure()
+        run: tail -200 /tmp/backend.log || true
+
+      - name: Upload e2e artefacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/test-results/
+            frontend/playwright-report/
+          retention-days: 7

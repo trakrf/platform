@@ -15,7 +15,7 @@ Architecture: `README.md`, `docs/architecture-decisions.md`, `docs/adr/`, `docs/
 
 ## Gotchas
 - A new migration requires `just backend migrate-checksums`; applied migrations are immutable
-- Playwright e2e never runs in CI — run it against preview yourself
+- Playwright's NON-hardware subset gates in CI (a step in `lint-test`, `--grep-invert @hardware`). The `@hardware` half never runs there — one reader, one bridge — so run that yourself: `just fe test:e2e`
 - `just bootstrap` a fresh worktree before validating, or the `go:embed` targets are missing and every check fails for that reason alone
 - Opening a PR auto-deploys to `https://app.preview.trakrf.id` (`.github/workflows/sync-preview.yml`)
 
