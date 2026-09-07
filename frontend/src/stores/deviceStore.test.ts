@@ -148,4 +148,104 @@ describe('DeviceStore', () => {
     // Button should auto-reset to false
     expect(result.current.scanButtonActive).toBe(false);
   });
+
+  /**
+   * TRA-1259 — a lost CONNECTED must name its own caller.
+   *
+   * `hold-sweep` found the reader `Disconnected` three seconds after its own
+   * `beforeAll` had confirmed `Connected`, and reconstructing why meant reading
+   * every route to DISCONNECTED after the fact, because the transition left no
+   * record: the worker logs its transitions at `logger.debug`, which an e2e run
+   * does not forward.
+   *
+   * These assert the trace fires when it should and stays quiet when it should
+   * not — a warning on every idempotent teardown would be noise in the one log
+   * the next reproduction has to be read out of.
+   */
+  describe('losing CONNECTED is traced (TRA-1259)', () => {
+    it('warns and traces when a connected reader goes to DISCONNECTED', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const trace = vi.spyOn(console, 'trace').mockImplementation(() => {});
+      const { result } = renderHook(() => useDeviceStore());
+
+      act(() => {
+        result.current.setReaderState(ReaderState.CONNECTED);
+      });
+      warn.mockClear();
+      trace.mockClear();
+
+      act(() => {
+        result.current.setReaderState(ReaderState.DISCONNECTED);
+      });
+
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('Reader lost CONNECTED'));
+      expect(trace).toHaveBeenCalled();
+
+      warn.mockRestore();
+      trace.mockRestore();
+    });
+
+    it('fires from SCANNING too, not only from CONNECTED', () => {
+      // Every state that is not DISCONNECTED counts as connected here. A drop
+      // mid-scan is the one most worth attributing, so it must not be the case
+      // a narrower check misses.
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { result } = renderHook(() => useDeviceStore());
+
+      act(() => {
+        result.current.setReaderState(ReaderState.SCANNING);
+      });
+      warn.mockClear();
+
+      act(() => {
+        result.current.setReaderState(ReaderState.DISCONNECTED);
+      });
+
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('Scanning -> Disconnected'));
+
+      warn.mockRestore();
+    });
+
+    it('stays quiet on DISCONNECTED -> DISCONNECTED', () => {
+      // The ordinary idempotent teardown. Warning on it would put a line in
+      // every run for something that says nothing.
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { result } = renderHook(() => useDeviceStore());
+
+      act(() => {
+        result.current.setReaderState(ReaderState.DISCONNECTED);
+      });
+
+      expect(warn).not.toHaveBeenCalled();
+
+      warn.mockRestore();
+    });
+
+    it('stays quiet on CONNECTING -> DISCONNECTED, which happens on every connect', () => {
+      // NOT a judgement call — measured. `deviceStore.connect()` publishes
+      // CONNECTING optimistically, then `CS108Reader`'s constructor runs
+      // `emitInitialState()` and broadcasts its initial DISCONNECTED over the
+      // top before bring-up climbs back to CONNECTED. A 5-rep isolation arm on
+      // 2026-09-07 logged exactly one of these per connect.
+      //
+      // Warning on it would put a line in every connect of every run, in the
+      // one log the next reproduction has to be read out of. The window itself
+      // is a separate finding on TRA-1259, not something this warning is for.
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { result } = renderHook(() => useDeviceStore());
+
+      act(() => {
+        result.current.setReaderState(ReaderState.CONNECTING);
+      });
+      warn.mockClear();
+
+      act(() => {
+        result.current.setReaderState(ReaderState.DISCONNECTED);
+      });
+
+      expect(warn).not.toHaveBeenCalled();
+
+      warn.mockRestore();
+    });
+  });
 });

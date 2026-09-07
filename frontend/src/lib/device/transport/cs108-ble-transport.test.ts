@@ -615,6 +615,92 @@ describe('CS108BLETransport disconnect awaits the GATT close', () => {
 });
 
 /**
+ * TRA-1259 — a deliberate teardown must leave a trace, because it reaches the
+ * store the same way an unexpected drop does.
+ *
+ * `ble:disconnected` is what drives `BaseReader.handleTransportDisconnect()`,
+ * which publishes DISCONNECTED and asks DeviceManager to destroy the singleton.
+ * TWO places post it, and only one of them logged:
+ *
+ *   handleDisconnect()   the gattserverdisconnected listener  -> `link-close`
+ *   disconnect()         our own teardown                     -> NOTHING
+ *
+ * `disconnect()` removes the listener before tearing down, so `handleDisconnect`
+ * never runs and no `link-close` is written. The reader still ends DISCONNECTED.
+ *
+ * So `linkCloses: 0` on an arm establishes "no UNEXPECTED drop", not "the
+ * transport never went away" — and that gap is exactly what TRA-1259 has to
+ * distinguish. These pin BOTH halves: each route posts the message, and each
+ * route announces itself with its own distinguishable line.
+ */
+describe('both routes to ble:disconnected announce themselves (TRA-1259)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete (window as unknown as Record<string, unknown>).__TRANSPORT_MANAGER__;
+  });
+
+  /** A transport wired up just enough to reach the teardown notification. */
+  function transportWithPort() {
+    const posted: unknown[] = [];
+    const transport = new CS108BLETransport();
+    Object.assign(transport as unknown as Record<string, unknown>, {
+      device: {
+        removeEventListener: () => {},
+        gatt: { connected: false, disconnect: () => {} }
+      },
+      messagePort: {
+        postMessage: (m: unknown) => posted.push(m),
+        close: () => {}
+      }
+    });
+    return { transport, posted };
+  }
+
+  it('a deliberate disconnect posts ble:disconnected — the same message a drop posts', async () => {
+    // The premise the whole ticket turns on. If this were NOT posted, a
+    // deliberate teardown could not move the store at all and the signature
+    // would have to come from somewhere else.
+    const { transport, posted } = transportWithPort();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    await transport.disconnect();
+
+    expect(posted).toContainEqual({ type: 'ble:disconnected' });
+  });
+
+  it('and logs link-teardown, so it is not invisible in a run log', async () => {
+    const { transport } = transportWithPort();
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    await transport.disconnect();
+
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('[ble-timing] link-teardown'));
+  });
+
+  it('does NOT log link-close, which stays reserved for an unexpected drop', async () => {
+    // The discrimination is the point. If a deliberate teardown also wrote
+    // link-close, the pair would count the same thing twice and the existing
+    // `linkCloses` needle would stop meaning "a drop we did not ask for".
+    const { transport } = transportWithPort();
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    await transport.disconnect();
+
+    expect(info).not.toHaveBeenCalledWith(expect.stringContaining('[ble-timing] link-close'));
+  });
+
+  it('an unexpected drop still logs link-close and not link-teardown', () => {
+    const transport = new CS108BLETransport();
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    (transport as unknown as { handleDisconnect: () => void }).handleDisconnect();
+
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('[ble-timing] link-close'));
+    expect(info).not.toHaveBeenCalledWith(expect.stringContaining('[ble-timing] link-teardown'));
+  });
+});
+
+/**
  * TRA-1179 — a retry must leave a trace.
  *
  * The retry branch was silent: the only marker was a `// Retrying write after
