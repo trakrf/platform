@@ -109,6 +109,36 @@ describe('formatRepLine', () => {
     expect(line).toContain('ack=?');
     expect(line).not.toMatch(/rej=0|to=0|err=0|ack=0/);
   });
+
+  /**
+   * TRA-1243, per-rep. `FAIL` with no spec segment and no marker leaves the
+   * reader of a live arm with a verdict and no subject — and it is the same
+   * three reps the summary's row is about, so it should be as findable here.
+   * Marker rather than a spec name: inventing one would put a fabricated
+   * basename into the spec tally two lines below.
+   */
+  it('marks a failing rep that named no spec, rather than printing a bare FAIL', () => {
+    const line = formatRepLine(rec({ rep: 52, exitCode: 1, files: [] }), 200);
+
+    expect(line).toContain('FAIL');
+    expect(line).toContain('[NO FAILING TEST]');
+  });
+
+  it('does not mark a failing rep that named a spec', () => {
+    const line = formatRepLine(
+      rec({ rep: 52, exitCode: 1, files: failed('tests/integration/cs108/locate.spec.ts') }),
+      200
+    );
+
+    expect(line).not.toContain('[NO FAILING TEST]');
+  });
+
+  it('does not mark a rep whose report was missing — it already has its own marker', () => {
+    const line = formatRepLine(rec({ rep: 52, exitCode: 1, files: [], reportMissing: true }), 200);
+
+    expect(line).toContain('[REPORT MISSING]');
+    expect(line).not.toContain('[NO FAILING TEST]');
+  });
 });
 
 describe('formatProgressBlock', () => {
@@ -125,6 +155,41 @@ describe('formatProgressBlock', () => {
   it('tallies failing specs by basename', () => {
     const block = formatProgressBlock(many([1, 1, 0]), 200, Date.now() - 600_000);
     expect(block).toContain('locate-mask-length-variants 2');
+  });
+
+  /**
+   * TRA-1243. `failed` counts non-zero exits; `failing specs` counts files the
+   * report marked failed. A rep that exits 1 on an unhandled rejection is in the
+   * first and not the second, so the block could read `failed 1 · failing specs:
+   * none` and give a watcher nothing to act on — the exact two-counters problem
+   * the summariser's own row exists to end. This is the live view, so it matters
+   * more here: it is read while there is still time to stop the arm.
+   */
+  it('says how many failures named no spec, rather than leaving them as "none"', () => {
+    const block = formatProgressBlock(
+      [rec({ rep: 1, exitCode: 1, files: [] }), rec({ rep: 2, exitCode: 0 })],
+      200,
+      Date.now() - 600_000
+    );
+
+    expect(block).toContain('failed 1');
+    expect(block).toMatch(/1 .*no failing test/);
+    expect(block).not.toMatch(/failing specs: none\s*$/m);
+  });
+
+  /**
+   * The third clause of the detector, here too: a rep whose report never parsed
+   * has no failed file either, and counting it in this class would report a
+   * defect built out of missing data.
+   */
+  it('does not count a rep whose report was missing as one of them', () => {
+    const block = formatProgressBlock(
+      [rec({ rep: 1, exitCode: 1, files: [], reportMissing: true })],
+      200,
+      Date.now() - 600_000
+    );
+
+    expect(block).not.toMatch(/no failing test/);
   });
 
   /**

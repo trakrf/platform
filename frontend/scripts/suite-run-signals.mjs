@@ -818,6 +818,43 @@ export function runnerOf(record) {
 }
 
 /**
+ * The verdict for one repetition, as a single classification rather than a set
+ * of overlapping predicates. Exactly one applies to every record, which is what
+ * lets a table of these be summed and checked against the rep count.
+ *
+ * Here rather than in either script for this module's stated reason: the live
+ * progress block and the summariser both classify reps, and a definition held
+ * twice is one that drifts. Two counters measuring different populations is the
+ * defect this exists to end (TRA-1243) — reproducing it inside the fix would be
+ * a poor joke.
+ *
+ * `reportMissing` is tested FIRST and deliberately. A rep whose report never
+ * parsed also has no file with `status === 'failed'` — because it has no file
+ * list at all — so an ordering that reached `unattributable` first would sweep
+ * every broken capture into that class and report a defect rate assembled out of
+ * missing data. A zero from a working capture and a zero from a broken one mean
+ * opposite things; same null-vs-zero discipline as the signal tables.
+ */
+export function repVerdict(record) {
+  if (record?.reportMissing) return 'reportMissing';
+  if (record?.exitCode === 0) return 'passed';
+  if ((record?.files ?? []).some((f) => f.status === 'failed')) return 'attributed';
+  return 'unattributable';
+}
+
+/**
+ * Exit non-zero, report parsed, and nothing in it names a thing that failed.
+ *
+ * This is an unhandled rejection escaping a promise nobody awaited: vitest fails
+ * the run without attributing it to any test, so the headline `failed` count
+ * carries it and the per-spec view cannot see it. On the TRA-1239 after-arm that
+ * was 3 of 7 failures.
+ */
+export function isUnattributableFailure(record) {
+  return repVerdict(record) === 'unattributable';
+}
+
+/**
  * Count each signature in a captured run log.
  *
  * Returns `{ logMissing: true }` when the log is gone — distinct from a log
