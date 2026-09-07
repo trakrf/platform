@@ -37,9 +37,37 @@ export default defineConfig({
     env: {
       VITE_API_URL: 'http://127.0.0.1:9/api/v1',
     },
-    // Disable parallel execution for ALL tests that communicate with hardware
-    // Both integration and E2E tests access real CS108 hardware via bridge server
-    // Running tests in parallel causes hardware conflicts and test failures
+    // KEEP `singleFork`. The reason is CI WALL-CLOCK, not hardware (TRA-1095).
+    //
+    // This comment used to say "disable parallel execution for ALL tests that
+    // communicate with hardware — both integration and E2E tests access real
+    // CS108 hardware via bridge server". Every clause of that was false, and it
+    // steered the diagnosis on four tickets (TRA-1050, TRA-1052, TRA-1079,
+    // TRA-1093), each of which read it and treated the constraint as
+    // load-bearing:
+    //
+    //   - E2E tests are excluded by THIS FILE, a few lines below
+    //     ('**/tests/e2e/**' — "they use Playwright").
+    //   - Integration tests are not in this run either. `pnpm test` is
+    //     `vitest run src/ tests/config/` (package.json), so nothing under
+    //     tests/integration/ is reached.
+    //   - `test:integration` self-serializes with its own
+    //     `--no-file-parallelism` on the command line, so the hardware suite
+    //     does not depend on this setting at all.
+    //
+    // So this serializes ~166 pure unit files for a reason that applies to none
+    // of them. It still must not be deleted:
+    //
+    //   TRA-1093 measured per-file isolation at 11.9s vs 16.1s on a 24-core dev
+    //   box (faster), but **87s vs 15s on a 2-core CI-sized runner** — a 5.7x
+    //   regression. It also makes lazy-route resolution slower (cold module
+    //   graph per fork, 66ms vs 18ms), and needs
+    //   `import '@testing-library/jest-dom'` added to the shared setup, since 9
+    //   files currently free-ride on another file's import.
+    //
+    // The numbers are recorded here so the next person does not re-derive them.
+    // Whether `pool`/`poolOptions` should live in a config the unit run and the
+    // integration run both read is a separate question — TRA-1196.
     pool: 'forks',
     poolOptions: {
       forks: {
