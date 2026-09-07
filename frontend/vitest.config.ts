@@ -66,7 +66,6 @@ export default defineConfig({
       '**/src/components/inventory/InventoryTableRow.test.tsx',
       '**/src/components/__tests__/Header.test.tsx',
       '**/src/components/__tests__/InventoryScreen.test.tsx',
-      '**/src/hooks/useScanToInput.test.ts',
       '**/src/lib/asset/transforms.test.ts',
     ],
   },
