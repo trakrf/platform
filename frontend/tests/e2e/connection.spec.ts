@@ -17,7 +17,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { connectToDevice, disconnectDevice } from './helpers/connection';
 import { expectConnectionState, expectBatteryPercentage, expectReaderMode } from './helpers/assertions';
-import { setupConsoleMonitoring } from './helpers/console-utils';
 import { getReaderState } from './helpers/device-state';
 import { getE2EConfig, HARDWARE_TEST_TIMEOUT_MS } from './e2e.config';
 import {
@@ -36,7 +35,6 @@ test.describe('Connection Operations @hardware', () => {
 
   // Shared page instance for all tests in this suite
   let sharedPage: Page;
-  let consoleMonitor: ReturnType<typeof setupConsoleMonitoring>;
 
   // Connect ONCE for all tests in this group
   test.beforeAll(async ({ browser }) => {
@@ -46,29 +44,17 @@ test.describe('Connection Operations @hardware', () => {
     // Navigate to the app
     await sharedPage.goto('/');
 
-    // Set up console monitoring
-    // Overrides removed 2026-09-06 (TRA-1224). All three strings this passed
-    // matched nothing under src/ — `Connection timeout` and `Transport error`
-    // narrowed the failing set to two dead needles, so the monitor could not
-    // fail this spec for any reason at all, and `Failed to start battery auto
-    // reporting` warned on a line nothing prints.
+    // Console monitoring removed 2026-09-07 (TRA-1253 item 6).
     //
-    // Falling through to the defaults is the fix rather than retyping them:
-    // the defaults are the list guarded per-entry by
-    // tests/config/every-console-allowlist-entry-has-a-producer.test.ts, and a
-    // local override is invisible to that guard. Anything added back here is
-    // unguarded by construction, so add it to the defaults instead.
+    // `ConsoleMonitor` was constructed here and never read: nothing in the
+    // suite called assertNoErrors, getErrors() or generateReport(), so it could
+    // not fail this spec by any path. Its `logAllMessages: true` was not
+    // harmless either — it registered a SECOND page.on('console') listener on
+    // the same page as helpers/connection.ts's forwarder, so every browser line
+    // during this spec was written to the captured log twice. Measured on the
+    // 2026-09-07 arm: 56 `[ble-timing] write-ack` timestamps appearing exactly
+    // twice, which is a double-count in `ackSamples` and `connectSamples`.
     //
-    // `logAllMessages` was previously spelled `logAllErrors`, which is not an
-    // option on ConsoleMonitorOptions and was silently discarded — this spec has
-    // never actually logged all messages. Corrected, so it now does; that is a
-    // deliberate behaviour change and the reason this spec gets noisier.
-    // The typo survived because tsconfig.json excludes tests/**/*, so tsc never
-    // excess-property-checked this object literal.
-    consoleMonitor = setupConsoleMonitoring(sharedPage, {
-      logAllMessages: true
-    });
-
     // Connect to device ONCE. '/' resolves to the Scan tab (TRA-1029), so the
     // reader is configured for INVENTORY as part of the connect flow.
     await connectToDevice(sharedPage);
