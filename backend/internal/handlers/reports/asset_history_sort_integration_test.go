@@ -34,16 +34,19 @@ func TestListAssetHistory_SortHonorsAscAndDesc(t *testing.T) {
 	yesterday := now.Add(-24 * time.Hour)
 
 	assetID := seedAssetForReports(t, pool, orgID, "H-SORT-A", yesterday, nil)
-	locID := seedLocationForReports(t, pool, orgID, "H-SORT-L", yesterday, nil)
+	locA := seedLocationForReports(t, pool, orgID, "H-SORT-LA", yesterday, nil)
+	locB := seedLocationForReports(t, pool, orgID, "H-SORT-LB", yesterday, nil)
 
 	// Seed three scans in non-monotonic insertion order so any
-	// insertion-order leakage would be visible.
+	// insertion-order leakage would be visible. History lists stays, so the
+	// location alternates — three scans at one location would be one item.
 	t0 := now.Add(-3 * time.Hour)
 	t1 := now.Add(-2 * time.Hour)
 	t2 := now.Add(-1 * time.Hour)
-	seedScan(t, pool, orgID, assetID, locID, t1)
-	seedScan(t, pool, orgID, assetID, locID, t0)
-	seedScan(t, pool, orgID, assetID, locID, t2)
+	seedScan(t, pool, orgID, assetID, locB, t1)
+	seedScan(t, pool, orgID, assetID, locA, t0)
+	seedScan(t, pool, orgID, assetID, locA, t2)
+	testutil.RefreshAssetScanLatest(t, pool)
 
 	handler := NewHandler(store)
 	router := setupTemporalReportsRouter(handler)
