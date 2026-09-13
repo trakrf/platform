@@ -42,6 +42,12 @@ type AssetHistoryResponse struct {
 // @Summary Asset movement history
 // @Description Location history for an asset identified by its canonical id.
 // @Description
+// @Description Each item is a **stay**: an unbroken run of observations of the asset at one location, not an individual scan. Consecutive observations at the same location are one item; moving away and returning starts a new one. An observation that resolved to no location is its own stay (null `location_id`). History is resolved at one-minute granularity, so a visit shorter than a minute may not appear.
+// @Description
+// @Description `event_observed_at` is when the stay began. `duration_seconds` runs from there to the first observation of the asset anywhere else, and is null when there has been none since — the stay is ongoing. A stay counts from observation to observation: a period with no reads between two observations at the same location is inside the stay, not a gap in it.
+// @Description
+// @Description `from` and `to` select which stays are listed — those with at least one observation in the window — but do not clip them. A stay that began before `from` reports its real start, and a stay that continues past `to` reports its real duration. `total_count`, `limit` and `offset` count stays.
+// @Description
 // @Description The asset existence check follows path-addressed semantics — the asset is returned even if its `valid_to` has elapsed. Each history row's location reference applies the temporal-validity predicate, so an event referencing a location whose effective window is past surfaces with null `location_external_key`.
 // @Tags assets,public
 // @ID assets.history

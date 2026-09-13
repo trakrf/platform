@@ -38,15 +38,19 @@ func TestListAssetHistory_WideGapDoesNotOverflow(t *testing.T) {
 	validFrom := time.Date(1899, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	assetID := seedAssetForReports(t, pool, orgID, "H-OVF-A", validFrom, nil)
-	locID := seedLocationForReports(t, pool, orgID, "H-OVF-L", validFrom, nil)
+	oldLoc := seedLocationForReports(t, pool, orgID, "H-OVF-L1", validFrom, nil)
+	newLoc := seedLocationForReports(t, pool, orgID, "H-OVF-L2", validFrom, nil)
 
 	// Two scans ~126 years apart: the gap is well past the 2^31-second
 	// (~68 year) int4 ceiling that EXTRACT(EPOCH ...)::INT hits. A single
 	// sentinel/bad timestamp in real seeded history produces exactly this.
 	ancient := time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC)
 	recent := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	seedScan(t, pool, orgID, assetID, locID, ancient)
-	seedScan(t, pool, orgID, assetID, locID, recent)
+	// Two locations, so the scans are two stays and the gap is a duration
+	// rather than the inside of one stay.
+	seedScan(t, pool, orgID, assetID, oldLoc, ancient)
+	seedScan(t, pool, orgID, assetID, newLoc, recent)
+	testutil.RefreshAssetScanLatest(t, pool)
 
 	handler := NewHandler(store)
 	router := setupTemporalReportsRouter(handler)
@@ -63,8 +67,8 @@ func TestListAssetHistory_WideGapDoesNotOverflow(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	require.Len(t, resp.Data, 2)
 
-	// Exactly one row carries the wide-gap duration (the most-recent row has a
-	// null duration via LEAD). That duration must exceed the int4 ceiling —
+	// Exactly one row carries the wide-gap duration (the most-recent stay is
+	// open, so its duration is null). That duration must exceed the int4 ceiling —
 	// proving the BIGINT cast: an INT cast would have raised SQLSTATE 22003.
 	const int32Max = 2147483647
 	var withDuration int

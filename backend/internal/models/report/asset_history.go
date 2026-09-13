@@ -2,7 +2,10 @@ package report
 
 import "time"
 
-// AssetHistoryItem represents a single scan in the asset's history
+// AssetHistoryItem is one stay in the asset's history: an unbroken run of
+// observations at one location, not a single scan. Timestamp is when the stay
+// began; DurationSeconds runs to the next observation elsewhere, nil while the
+// stay is ongoing.
 type AssetHistoryItem struct {
 	Timestamp           time.Time `json:"timestamp"`
 	LocationID          *int      `json:"location_id"`

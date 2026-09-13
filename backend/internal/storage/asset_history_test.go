@@ -49,7 +49,7 @@ func TestListAssetHistory_RunsInOrgContext(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec(`SET LOCAL app.current_org_id = 781048918750452`).
 		WillReturnResult(pgxmock.NewResult("SET", 0))
-	mock.ExpectQuery(`LEAD\(s.timestamp\)`).
+	mock.ExpectQuery(`asset_scan_latest`).
 		WithArgs(assetID, orgID, filter.From, filter.To, filter.Limit, filter.Offset).
 		WillReturnRows(rows)
 	mock.ExpectCommit()

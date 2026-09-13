@@ -153,6 +153,7 @@ func TestListAssetHistory_TemporalValidity_LocationJoinAppliesPredicate(t *testi
 
 	seedScan(t, pool, orgID, expiredAsset, effectiveLoc, now.Add(-2*time.Hour))
 	seedScan(t, pool, orgID, expiredAsset, expiredLoc, now.Add(-1*time.Hour))
+	testutil.RefreshAssetScanLatest(t, pool)
 
 	handler := NewHandler(store)
 	router := setupTemporalReportsRouter(handler)
@@ -165,7 +166,7 @@ func TestListAssetHistory_TemporalValidity_LocationJoinAppliesPredicate(t *testi
 
 	var resp historyResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	require.Len(t, resp.Data, 2, "both scans must surface")
+	require.Len(t, resp.Data, 2, "both stays must surface")
 
 	for _, item := range resp.Data {
 		if item.LocationID != nil && *item.LocationID == effectiveLoc {
