@@ -7,6 +7,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestSanitizeHeaders_RedactsTwilioSignature(t *testing.T) {
+	for _, key := range []string{"X-Twilio-Signature", "x-twilio-signature"} {
+		sanitized := SanitizeHeaders(http.Header{key: {"private-signature"}})
+		assert.Equal(t, "<redacted>", sanitized[key])
+	}
+}
+
 func TestSanitizeHeaders(t *testing.T) {
 	tests := []struct {
 		name     string

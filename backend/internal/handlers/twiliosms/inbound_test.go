@@ -49,6 +49,8 @@ func TestInbound_NormalizesStandardConsentKeywords(t *testing.T) {
 		{name: "optout", body: "\tOpToUt\n", keyword: "STOP"},
 		{name: "start", body: " start ", keyword: "START"},
 		{name: "unstop", body: "UnStOp", keyword: "START"},
+		{name: "yes", body: "YES", keyword: "START"},
+		{name: "trimmed mixed case yes", body: "\tYeS\n", keyword: "START"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			consumer := &inboundConsumer{}

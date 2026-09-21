@@ -15,6 +15,11 @@ import (
 
 const statusCallbackPath = "/api/v1/notifications/twilio/status"
 
+// Twilio defaults to retrying connection failures only. Include server errors
+// and read timeouts so a transient callback persistence failure can recover.
+// This fragment is consumed by Twilio and excluded from callback signatures.
+const callbackRetryOverrides = "#rc=3&rp=ct,rt,5xx"
+
 // Sender submits SMS messages through the configured Twilio Messaging Service.
 type Sender struct {
 	messages            messageCreator
@@ -56,7 +61,7 @@ func NewSenderWithMetrics(config Config, metrics *Metrics) (*Sender, error) {
 func newSender(config Config, httpClient *http.Client, metrics *Metrics) *Sender {
 	client := &twilioclient.Client{
 		Credentials: twilioclient.NewCredentials(config.APIKeySID, config.APIKeySecret),
-		HTTPClient:  httpClient,
+		HTTPClient:  newProviderHTTPClient(httpClient),
 	}
 	client.SetAccountSid(config.AccountSID)
 	restClient := twiliogo.NewRestClientWithParams(twiliogo.ClientParams{Client: client})
@@ -68,7 +73,7 @@ func newSenderWithMessages(config Config, messages messageCreator, metrics *Metr
 	return &Sender{
 		messages:            messages,
 		messagingServiceSID: config.MessagingServiceSID,
-		statusCallbackURL:   config.PublicBaseURL + statusCallbackPath,
+		statusCallbackURL:   config.PublicBaseURL + statusCallbackPath + callbackRetryOverrides,
 		metrics:             metrics,
 	}
 }

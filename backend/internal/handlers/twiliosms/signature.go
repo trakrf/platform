@@ -39,6 +39,13 @@ func (h *Handler) verifiedForm(w http.ResponseWriter, r *http.Request) (url.Valu
 	if signature == "" || !h.validator.Validate(h.publicRequestURL(r), params, signature) {
 		return nil, errInvalidSignature
 	}
+	// The signing token is account scoped, not Messaging Service scoped.
+	// Reject conflicting signed metadata before the consumer binds an event
+	// to this configured service. Older callback shapes may omit these fields.
+	if (r.PostForm.Has("AccountSid") && r.PostForm.Get("AccountSid") != h.accountSID) ||
+		(r.PostForm.Has("MessagingServiceSid") && r.PostForm.Get("MessagingServiceSid") != h.messagingServiceSID) {
+		return nil, errMalformedForm
+	}
 
 	return r.PostForm, nil
 }

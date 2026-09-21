@@ -12,11 +12,13 @@ import (
 
 // Handler provides the shared boundary for Twilio SMS callbacks.
 type Handler struct {
-	consumer      sms.CallbackConsumer
-	publicBaseURL string
-	validator     client.RequestValidator
-	now           func() time.Time
-	metrics       *twilio.Metrics
+	consumer            sms.CallbackConsumer
+	publicBaseURL       string
+	accountSID          string
+	messagingServiceSID string
+	validator           client.RequestValidator
+	now                 func() time.Time
+	metrics             *twilio.Metrics
 }
 
 // NewHandler builds a Twilio callback handler only from a complete Twilio
@@ -36,11 +38,13 @@ func NewHandlerWithMetrics(config twilio.Config, consumer sms.CallbackConsumer, 
 	}
 
 	return &Handler{
-		consumer:      consumer,
-		publicBaseURL: config.PublicBaseURL,
-		validator:     client.NewRequestValidator(config.AuthToken),
-		now:           time.Now,
-		metrics:       metrics,
+		consumer:            consumer,
+		publicBaseURL:       config.PublicBaseURL,
+		accountSID:          config.AccountSID,
+		messagingServiceSID: config.MessagingServiceSID,
+		validator:           client.NewRequestValidator(config.AuthToken),
+		now:                 time.Now,
+		metrics:             metrics,
 	}, nil
 }
 

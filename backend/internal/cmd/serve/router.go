@@ -38,6 +38,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	"github.com/trakrf/platform/backend/internal/models"
+	"github.com/trakrf/platform/backend/internal/notification"
 	"github.com/trakrf/platform/backend/internal/ratelimit"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
@@ -64,6 +65,7 @@ func setupRouter(
 	webhooksHandler *webhookshandler.Handler,
 	testHandler *testhandler.Handler,
 	store *storage.Storage,
+	smsRuntime ...*notification.Runtime,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -135,6 +137,11 @@ func setupRouter(
 	})
 
 	healthHandler.RegisterRoutes(r)
+	// Provider callbacks use form bodies and Twilio signatures, not a user
+	// session. The configured runtime supplies a durable callback consumer.
+	for _, runtime := range smsRuntime {
+		runtime.RegisterRoutes(r)
+	}
 
 	// Auth handler registers POST endpoints (signup, login, …) plus
 	// GET /api/v1/auth/invitation-info. ContentType is only consulted on

@@ -60,6 +60,9 @@ func twilioCode(code int) string {
 }
 
 func classifyTwilioFailure(code string, status int) sms.ErrorKind {
+	if status == 429 || (status >= 500 && status < 600) {
+		return sms.ErrorTransient
+	}
 	switch code {
 	case "30007", "30450":
 		return sms.ErrorRejected
@@ -67,9 +70,6 @@ func classifyTwilioFailure(code string, status int) sms.ErrorKind {
 		return sms.ErrorPermanent
 	}
 
-	if status == 429 || (status >= 500 && status < 600) {
-		return sms.ErrorTransient
-	}
 	if status >= 400 && status < 500 {
 		return sms.ErrorPermanent
 	}

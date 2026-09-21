@@ -71,7 +71,7 @@ func TestSenderIntegration_SubmitsThroughMessagingServiceWithBoundedOutcomes(t *
 		if got := form.Get("From"); got != "" {
 			recordTransportError(fmt.Errorf("raw From = %q", got))
 		}
-		if got, want := form.Get("StatusCallback"), config.PublicBaseURL+statusCallbackPath; got != want {
+		if got, want := form.Get("StatusCallback"), "https://callbacks.integration.example/api/v1/notifications/twilio/status#rc=3&rp=ct,rt,5xx"; got != want {
 			recordTransportError(fmt.Errorf("StatusCallback = %q, want %q", got, want))
 		}
 

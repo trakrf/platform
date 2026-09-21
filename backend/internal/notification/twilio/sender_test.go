@@ -82,7 +82,7 @@ func TestSendSMS_SubmitsTwilioMessagesRequest(t *testing.T) {
 			"To":                  {command.ToE164},
 			"Body":                {command.Body},
 			"MessagingServiceSid": {testMessagingServiceSID},
-			"StatusCallback":      {testPublicBaseURL + statusCallbackPath},
+			"StatusCallback":      {"https://api.example.com/api/v1/notifications/twilio/status#rc=3&rp=ct,rt,5xx"},
 		}, form)
 
 		return httpJSONResponse(request, http.StatusCreated, `{"sid":"SM123","status":"queued"}`), nil

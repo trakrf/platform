@@ -8,8 +8,8 @@ const (
 )
 
 // RegisterRoutes registers Twilio's public, signature-verified callback
-// endpoints. The production server attaches them only when it has a durable
-// callback consumer to inject.
+// endpoints. The production server mounts them when Twilio is configured,
+// with a durable PostgreSQL callback consumer.
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Post(statusCallbackPath, h.Status)
 	r.Post(inboundCallbackPath, h.Inbound)
