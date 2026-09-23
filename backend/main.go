@@ -1,6 +1,6 @@
 // @title TrakRF API
 // @version v1
-// @description TrakRF public REST API. See /api for the customer-facing reference.
+// @description TrakRF public REST API. See /api for the customer-facing reference. Integrator-focused Markdown documentation: https://docs.trakrf.id/llms-api.txt
 // @contact.name TrakRF Support
 // @contact.email support@trakrf.id
 // @license.name Business Source License 1.1
