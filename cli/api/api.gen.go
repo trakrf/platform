@@ -272,8 +272,6 @@ type AssetLocationItem struct {
 	AssetExternalKey    string     `json:"asset_external_key"`
 	AssetId             int64      `json:"asset_id"`
 	AssetLastSeen       time.Time  `json:"asset_last_seen"`
-	DwellSeconds        *int32     `json:"dwell_seconds,omitempty"`
-	DwellStartedAt      *time.Time `json:"dwell_started_at,omitempty"`
 	LocationExternalKey *string    `json:"location_external_key"`
 	LocationId          *int64     `json:"location_id"`
 }
