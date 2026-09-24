@@ -9,6 +9,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/trakrf/platform/backend/internal/alarm"
 	"github.com/trakrf/platform/backend/internal/alarm/shelly"
@@ -37,6 +38,8 @@ import (
 	"github.com/trakrf/platform/backend/internal/ingest"
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/mustering"
+	"github.com/trakrf/platform/backend/internal/notification"
+	"github.com/trakrf/platform/backend/internal/notification/twilio"
 	"github.com/trakrf/platform/backend/internal/readercontrol"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
 	"github.com/trakrf/platform/backend/internal/services/email"
@@ -63,6 +66,12 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// would let anyone forge a Bearer for any org. Refuse to boot instead.
 	if err := jwt.ValidateSecret(); err != nil {
 		log.Error().Err(err).Msg("Refusing to start: insecure JWT_SECRET")
+		return err
+	}
+	// SMS is optional, but partial credentials must fail before any services
+	// start. Loading and constructing the integration never contacts Twilio.
+	smsConfig, err := twilio.ConfigFromEnv()
+	if err != nil {
 		return err
 	}
 
@@ -93,6 +102,13 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	}
 	defer store.Close()
 	log.Info().Msg("Storage initialized")
+	smsRuntime, err := notification.NewRuntime(smsConfig,
+		store.SMSCallbackConsumer(smsConfig.AccountSID, smsConfig.MessagingServiceSID),
+		prometheus.DefaultRegisterer)
+	if err != nil {
+		return err
+	}
+	log.Info().Bool("enabled", smsConfig.Enabled()).Msg("SMS integration configured")
 
 	// Say it at boot as well as on /health (TRA-1190). The endpoint is what a
 	// test suite can check; this line is what a developer actually sees, and
@@ -272,7 +288,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	webhooksHandler := webhookshandler.NewHandler(store, webhookClient)
 	log.Info().Msg("Handlers initialized")
 
-	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, webhooksHandler, testHandler, store)
+	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, webhooksHandler, testHandler, store, smsRuntime)
 	log.Info().Msg("Routes registered")
 
 	server := &http.Server{

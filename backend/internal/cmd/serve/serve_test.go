@@ -34,6 +34,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/ingest"
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/mustering"
+	"github.com/trakrf/platform/backend/internal/notification"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
 	orgsservice "github.com/trakrf/platform/backend/internal/services/orgs"
 	readstreamsvc "github.com/trakrf/platform/backend/internal/services/readstream"
@@ -41,7 +42,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/webhook"
 )
 
-func setupTestRouter(t *testing.T) *chi.Mux {
+func setupTestRouter(t *testing.T, smsRuntime ...*notification.Runtime) *chi.Mux {
 	t.Helper()
 
 	store := &storage.Storage{}
@@ -70,7 +71,7 @@ func setupTestRouter(t *testing.T) *chi.Mux {
 	testHandler := testhandler.NewHandler(store)
 	webhooksHandler := webhookshandler.NewHandler(store, webhook.NewClient(true))
 
-	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, webhooksHandler, testHandler, store)
+	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, webhooksHandler, testHandler, store, smsRuntime...)
 }
 
 func TestRouterSetup(t *testing.T) {
