@@ -11,6 +11,7 @@ import (
 	sentryhttp "github.com/getsentry/sentry-go/http"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	httpSwagger "github.com/swaggo/http-swagger"
 
@@ -90,6 +91,7 @@ func setupRouter(
 	r.Use(sentryhttp.New(sentryhttp.Options{Repanic: true}).Handle)
 	r.Use(middleware.Recovery)
 	r.Use(middleware.CORS)
+	r.Use(middleware.NewHTTPMetrics(prometheus.DefaultRegisterer).Middleware)
 	r.Use(middleware.APIv1DefaultRateLimitHeaders(rl))
 	// ContentType is intentionally NOT global. Applying it globally would
 	// reject POST/PUT/PATCH probes against retired and static-only paths
