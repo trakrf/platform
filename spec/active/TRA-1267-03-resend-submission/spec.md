@@ -26,12 +26,12 @@ As a notification workflow developer, I want resend sdk submission adapter so th
 - Use three separate implementation sessions: tasks 1–3, 4–6, 7–8. Stop at each boundary and record a copyable startup prompt if automatic session creation is unavailable.
 
 ## Validation Criteria
-- [ ] Fake transport exercises payload mapping, success, malformed success, HTTP failures, network ambiguity, cancellation, timeouts, disabled mode and concurrent isolation without real sends.
-- [ ] Exact command results recorded in log.md.
+- [x] Fake transport exercises payload mapping, success, malformed success, HTTP failures, network ambiguity, cancellation, timeouts, disabled mode and concurrent isolation without real sends.
+- [x] Exact command results recorded in log.md.
 
 ## Success Metrics
-- [ ] All named behavioral tests pass without real sends.
-- [ ] No regressions in relevant existing email/SMS tests.
+- [x] All named behavioral tests pass without real sends.
+- [x] No regressions in relevant existing email/SMS tests.
 
 ## References
 - Parent: TRA-1267 (user-provided plan; child links unavailable).
