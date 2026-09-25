@@ -61,3 +61,14 @@ Implement session 2 of TRA-1267 in /home/nick/.codex/worktrees/3504/platform on 
 - Final: Ruling: reviewer set aside transactional migration/reserved-recipient policy and scheduling/suppression/recipient management — keep them excluded as explicitly requested — cost: notification workflows and policy need their separately scoped implementation. Production activation is excluded from ALL sessions, not deferred to task 8.
 - Final: Ruling: reviewer accepted tracked task docs and SMS starting revision — retain the earlier user-authorized choices — cost: task-document maintenance and possible future rebase.
 - Session boundary: STOPPED after task 3. All eight task directories have durable specs/plans/logs; tasks 4–8 are pending. No automatic fresh root session tool is available. Use the copyable prompt above.
+
+## 2026-09-25 — Published for review
+- Pull request: https://github.com/trakrf/platform/pull/684
+- Head: `feature/tra-1267-03-resend-submission`; base: `feature/tra-1267-02-email-config`. Stacked in task dependency order.
+- User requested a separate MR for each completed task, published after each batch of three. Session 1 tasks 1–3 have been pushed and opened; no merge requested.
+- Pre-publication `just backend test`: PASS. Existing validation and review evidence above still applies; no implementation changes since review.
+
+### Publishing instructions for subsequent sessions
+- At each session boundary, publish one separate PR per completed task, using stacked base branches where dependencies have not yet merged. Session 2 publishes tasks 4–6; the final session publishes tasks 7–8.
+- Current stack: #682 → #683 → #684. Merge in that order; retarget remaining PRs to main once their prerequisites merge. Do not merge automatically.
+- Continue implementation on local `feature/tra-1267-email`; dedicated task branches preserve the individual PR boundaries. Check current remote merge state before choosing bases for later task PRs.

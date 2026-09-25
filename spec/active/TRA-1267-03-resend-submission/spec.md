@@ -34,6 +34,7 @@ As a notification workflow developer, I want resend sdk submission adapter so th
 - [x] No regressions in relevant existing email/SMS tests.
 
 ## References
+- Task pull request: https://github.com/trakrf/platform/pull/684
 - Parent: TRA-1267 (user-provided plan; child links unavailable).
 - Prerequisites: tasks 1, 2 in adjacent TRA-1267 directories.
 - [Plan](plan.md), [session log](log.md).
