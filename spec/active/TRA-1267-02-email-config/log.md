@@ -30,3 +30,9 @@
 - No blockers for session 2. Repository-wide `just validate` and live-database callback integration tests remain session 3/task 8 work; this session changed backend library code only.
 - Next task: 4, submission idempotency, in a fresh implementation session. Do not continue tasks 4–6 in this context.
 - Boundary review: no blocking findings; task 2 implementation is commit 484d1ab8. Final handoff and one deferred test-strengthening note are in ../TRA-1267-03-resend-submission/log.md.
+
+## 2026-09-25 — Published for review
+- Pull request: https://github.com/trakrf/platform/pull/683
+- Head: `feature/tra-1267-02-email-config`; base: `feature/tra-1267-01-email-contracts`. Stacked in task dependency order.
+- User requested a separate MR for each completed task, published after each batch of three. Session 1 tasks 1–3 have been pushed and opened; no merge requested.
+- Pre-publication `just backend test`: PASS. Existing validation and review evidence above still applies; no implementation changes since review.

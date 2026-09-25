@@ -34,6 +34,7 @@ As a notification workflow developer, I want provider-neutral email contracts so
 - [x] No regressions in relevant existing email/SMS tests.
 
 ## References
+- Task pull request: https://github.com/trakrf/platform/pull/682
 - Parent: TRA-1267 (user-provided plan; child links unavailable).
 - Prerequisites: tasks None in adjacent TRA-1267 directories.
 - [Plan](plan.md), [session log](log.md).

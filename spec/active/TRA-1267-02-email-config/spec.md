@@ -34,6 +34,7 @@ As a notification workflow developer, I want explicit notification email configu
 - [x] No regressions in relevant existing email/SMS tests.
 
 ## References
+- Task pull request: https://github.com/trakrf/platform/pull/683
 - Parent: TRA-1267 (user-provided plan; child links unavailable).
 - Prerequisites: tasks 1 in adjacent TRA-1267 directories.
 - [Plan](plan.md), [session log](log.md).
