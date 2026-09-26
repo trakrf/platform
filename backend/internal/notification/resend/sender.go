@@ -2,6 +2,8 @@ package resend
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"net/url"
@@ -53,13 +55,13 @@ func (s *Sender) SendEmail(ctx context.Context, cmd email.Command) (email.Submis
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	sent, err := s.client.Emails.SendWithContext(ctx, &sdk.SendEmailRequest{
+	sent, err := s.client.Emails.SendWithOptions(ctx, &sdk.SendEmailRequest{
 		From:    s.from,
 		To:      []string{cmd.To},
 		Subject: cmd.Subject,
 		Text:    cmd.Text,
 		Html:    cmd.HTML,
-	})
+	}, &sdk.SendEmailOptions{IdempotencyKey: deliveryKey(cmd.DeliveryID)})
 	if err != nil {
 		return email.Submission{}, classifyError(err, true)
 	}
@@ -74,6 +76,13 @@ func classifyError(err error, submitted bool) *email.ProviderError {
 	if errors.As(err, &failure) {
 		result := &email.ProviderError{Kind: email.ErrorPermanent, HTTPStatus: failure.status}
 		switch {
+		case failure.status == http.StatusConflict:
+			// A concurrent or unrecognized conflict can refer to a submission
+			// still in flight. Only the explicit payload mismatch is known.
+			result.OutcomeUnknown = failure.conflict != "invalid_idempotent_request"
+			if failure.conflict == "concurrent_idempotent_requests" {
+				result.Kind = email.ErrorTransient
+			}
 		case failure.status == http.StatusTooManyRequests:
 			result.Kind = email.ErrorTransient
 		case failure.status == http.StatusRequestTimeout || failure.status >= 500:
@@ -96,4 +105,15 @@ func classifyError(err error, submitted bool) *email.ProviderError {
 	}
 	// A successful HTTP response that the SDK cannot decode may already have sent.
 	return &email.ProviderError{Kind: email.ErrorUnknown, OutcomeUnknown: submitted}
+}
+
+// deliveryKey is versioned and independent of attempts, sender configuration,
+// and payload. Hashing keeps arbitrary delivery identities within header limits.
+// Resend retains keys for 24 hours; this is not a permanent exactly-once promise.
+// Keep the payload (including From) unchanged on retries. A payload mismatch is
+// permanent: never evade it by generating a fresh key for the same delivery.
+// https://resend.com/docs/dashboard/emails/idempotency-keys
+func deliveryKey(deliveryID string) string {
+	digest := sha256.Sum256([]byte(deliveryID))
+	return "notification-email/v1/" + hex.EncodeToString(digest[:])
 }
