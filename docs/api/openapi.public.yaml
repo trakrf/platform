@@ -1013,7 +1013,7 @@ info:
         name: TrakRF Support
         url: https://trakrf.id
     description: |-
-        TrakRF public REST API. See /api for the customer-facing reference.
+        TrakRF public REST API. See /api for the customer-facing reference. Integrator-focused Markdown documentation: https://docs.trakrf.id/llms-api.txt
 
         Spec available as YAML (/api/openapi.yaml) and JSON (/api/openapi.json).
 
