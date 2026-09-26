@@ -23,6 +23,7 @@ type Handler struct {
 	consumer email.CallbackConsumer
 	verifier sdk.WebhooksSvc
 	secret   string
+	metrics  *resend.Metrics
 }
 
 func NewHandler(config resend.Config, consumer email.CallbackConsumer) (*Handler, error) {
@@ -39,9 +40,19 @@ func NewHandler(config resend.Config, consumer email.CallbackConsumer) (*Handler
 	return &Handler{consumer: consumer, verifier: sdk.NewClient("").Webhooks, secret: config.WebhookSecret}, nil
 }
 
+// WithMetrics returns a copy with telemetry attached before serving requests.
+func (h *Handler) WithMetrics(metrics *resend.Metrics) *Handler {
+	copy := *h
+	copy.metrics = metrics
+	return &copy
+}
+
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	receivedAt := time.Now().UTC()
+	result := "malformed"
+	defer func() { h.metrics.RecordCallback(result) }()
 	if r.Method != http.MethodPost {
+		result = "method_not_allowed"
 		w.Header().Set("Allow", http.MethodPost)
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -50,6 +61,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
+			result = "too_large"
 			http.Error(w, "callback too large", http.StatusRequestEntityTooLarge)
 		} else {
 			http.Error(w, "invalid callback", http.StatusBadRequest)
@@ -69,6 +81,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Payload: string(body), WebhookSecret: h.secret,
 		Headers: sdk.WebhookHeaders{Id: eventID, Timestamp: r.Header.Get("svix-timestamp"), Signature: strings.Join(signatures, " ")},
 	}); err != nil {
+		result = "invalid_signature"
 		http.Error(w, "invalid callback signature", http.StatusForbidden)
 		return
 	}
@@ -85,6 +98,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		// Authenticated future/unrelated event types do not need retries. Their
 		// data schema may differ; do not require email-specific fields.
+		result = "ignored"
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -101,9 +115,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Provider: "resend", ProviderEventID: eventID, ProviderMessageID: data.EmailID,
 		Type: kind, OccurredAt: occurredAt.UTC(), ReceivedAt: receivedAt,
 	}); err != nil {
+		result = "consumer_failure"
 		http.Error(w, "callback persistence failed", http.StatusServiceUnavailable)
 		return
 	}
+	result = "persisted"
 	w.WriteHeader(http.StatusNoContent)
 }
 
