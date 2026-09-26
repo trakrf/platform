@@ -166,14 +166,20 @@ func TestEntitlementGate_Enforcement(t *testing.T) {
 			"name": "Dock", "type": "csl_cs463",
 		}))
 
-		// (4) Must-stay-open write — POST /api/v1/users/me/current-org must NOT be 402.
+		// (4) Handheld inventory persistence is also a paid mutation on the
+		// session-auth group, not just on the public API-key route.
+		is402(t, do(lapsedOrg, http.MethodPost, "/api/v1/inventory/save", map[string]any{
+			"location_identifier": "WH-01", "asset_identifiers": []string{"ASSET-001"},
+		}))
+
+		// (5) Must-stay-open write — POST /api/v1/users/me/current-org must NOT be 402.
 		recCurrentOrg := do(lapsedOrg, http.MethodPost, "/api/v1/users/me/current-org", map[string]any{
 			"org_id": lapsedOrg,
 		})
 		require.NotEqual(t, http.StatusPaymentRequired, recCurrentOrg.Code,
 			"current-org switch must stay open; body: %s", recCurrentOrg.Body.String())
 
-		// (5) Operational output test action — POST .../test must NOT be 402.
+		// (6) Operational output test action — POST .../test must NOT be 402.
 		// Seed a real output device so the route resolves past the {id} lookup
 		// and we observe the gate decision (it must let the request through to
 		// the handler, which then 502s on the unreachable fake device — that
