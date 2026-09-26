@@ -83,6 +83,8 @@ export interface AdminOrgListItem {
   identifier: string;
   subscription_enabled: boolean;
   subscription_expires_at?: string | null;
+	/** Canonical backend entitlement, including the configured grace window. */
+	is_entitled: boolean;
   member_count: number;
   /**
    * TRA-1027: the org's granted capability names, sorted. Always sent (`[]`,

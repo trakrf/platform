@@ -106,8 +106,17 @@ func TestListScanTopics(t *testing.T) {
 
 	devA := registerDevice(t, db, orgID, "cs463-a")
 	devB := registerGLS10Device(t, db, orgID, "gls10-b")
+	var lapsedOrg int
+	require.NoError(t, db.AdminPool.QueryRow(ctx,
+		`INSERT INTO trakrf.organizations (name, identifier, is_active)
+		 VALUES ('Lapsed Topic Co', 'lapsed-topic-co', true)
+		 RETURNING id`).Scan(&lapsedOrg))
+	_ = registerDevice(t, db, lapsedOrg, "lapsed-reader")
+	_, err := db.AdminPool.Exec(ctx,
+		`UPDATE trakrf.organizations SET subscription_enabled = false WHERE id = $1`, lapsedOrg)
+	require.NoError(t, err)
 	// A web_ble (handheld) device has no MQTT topic and must be excluded.
-	_, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
+	_, err = db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
 		Name: "Handheld", Type: scandevice.DeviceTypeCS463, Transport: scandevice.TransportWebBLE,
 	})
 	require.NoError(t, err)
@@ -125,6 +134,8 @@ func TestListScanTopics(t *testing.T) {
 	require.True(t, okB, "device B topic must be listed")
 	assert.Equal(t, devB.ID, rB.ScanDeviceID)
 	assert.Equal(t, scandevice.DeviceTypeGLS10, rB.DeviceType)
+	_, lapsedListed := topics["trakrf.id/lapsed-reader/reads"]
+	assert.False(t, lapsedListed, "unentitled org topics must not reach the broker registry")
 
 	// Exactly the two mqtt topics — web_ble device excluded.
 	assert.Len(t, topics, 2)

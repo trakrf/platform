@@ -49,8 +49,10 @@ func TestOrgIsEntitled_TruthTable(t *testing.T) {
 	}{
 		{"enabled, no expiry", true, "NULL", true},
 		{"enabled, future expiry", true, "now() + interval '1 day'", true},
-		{"enabled, past expiry (lapsed)", true, "now() - interval '1 day'", false},
+		{"enabled, within default grace", true, "now() - interval '2 days'", true},
+		{"enabled, past default grace", true, "now() - interval '4 days'", false},
 		{"disabled", false, "NULL", false},
+		{"disabled during grace is immediate cutoff", false, "now() - interval '2 days'", false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

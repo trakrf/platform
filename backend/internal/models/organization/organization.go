@@ -38,7 +38,10 @@ type AdminOrgListItem struct {
 	Identifier            string     `json:"identifier"`
 	SubscriptionEnabled   bool       `json:"subscription_enabled"`
 	SubscriptionExpiresAt *time.Time `json:"subscription_expires_at,omitempty"`
-	MemberCount           int        `json:"member_count"`
+	// IsEntitled is the canonical server-side decision, including the configured
+	// grace window. Operators must not reimplement that policy in the browser.
+	IsEntitled  bool `json:"is_entitled"`
+	MemberCount int  `json:"member_count"`
 	// Capabilities is the org's granted capability names, sorted (TRA-1027).
 	// Always serialized, `[]` for the zero-grant default that most orgs sit at —
 	// the list is where an operator scans grant state across every org.
