@@ -125,7 +125,7 @@ func TestSenderClassifiesHTTPFailuresWithoutProviderDetails(t *testing.T) {
 		{301, email.ErrorPermanent, false}, {400, email.ErrorPermanent, false},
 		{401, email.ErrorPermanent, false}, {403, email.ErrorPermanent, false},
 		{404, email.ErrorPermanent, false}, {408, email.ErrorTransient, true},
-		{409, email.ErrorPermanent, false}, {422, email.ErrorPermanent, false},
+		{409, email.ErrorPermanent, true}, {422, email.ErrorPermanent, false},
 		{429, email.ErrorTransient, false}, {500, email.ErrorTransient, true},
 		{502, email.ErrorTransient, true}, {503, email.ErrorTransient, true},
 	} {
