@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { useDeviceStore, useTagStore, useSettingsStore, useAuthStore } from '@/stores';
+import { useDeviceStore, useTagStore, useSettingsStore, useAuthStore, useOrgStore } from '@/stores';
 import { useUIStore } from '@/stores/uiStore';
 import { useAssets } from '@/hooks/assets';
 import { useLocations } from '@/hooks/locations';
@@ -25,10 +25,12 @@ import { InventorySettingsPanel } from '@/components/inventory/InventorySettings
 import { LocationBar } from '@/components/inventory/LocationBar';
 import { latestBarcodeLocation } from '@/utils/barcodeLocation';
 import { usePersistedStatusFilters } from '@/hooks/inventory/usePersistedStatusFilters';
+import { SubscriptionLifecycleNotice } from '@/components/SubscriptionLifecycleNotice';
 
 export default function InventoryScreen() {
   const [searchTerm, setSearchTerm] = useState('');
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const currentOrg = useOrgStore((state) => state.currentOrg);
   const [statusFilters, setStatusFilters] = usePersistedStatusFilters(isAuthenticated);
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -377,6 +379,13 @@ export default function InventoryScreen() {
     <div className="h-full flex flex-col p-2 md:p-3 space-y-2">
       <ConfigurationSpinner readerState={readerState} mode={scanTabMode === 'barcode' ? 'Barcode' : 'RFID'} />
       <BrowserSupportBanner />
+      {currentOrg && (
+        <SubscriptionLifecycleNotice
+          isEntitled={currentOrg.is_entitled}
+          subscriptionEnabled={currentOrg.subscription_enabled}
+          subscriptionExpiresAt={currentOrg.subscription_expires_at}
+        />
+      )}
 
       <input
         ref={fileInputRef}
