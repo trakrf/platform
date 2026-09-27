@@ -239,6 +239,15 @@ func TestSenderDisablesRedirectsAndPreservesInjectedClient(t *testing.T) {
 }
 
 func TestSenderConcurrentRequestsKeepIndependentResults(t *testing.T) {
+	cases := []struct {
+		status int
+		want   *email.ProviderError
+	}{
+		{200, nil},
+		{400, &email.ProviderError{Kind: email.ErrorPermanent, HTTPStatus: 400}},
+		{429, &email.ProviderError{Kind: email.ErrorTransient, HTTPStatus: 429}},
+		{503, &email.ProviderError{Kind: email.ErrorTransient, HTTPStatus: 503, OutcomeUnknown: true}},
+	}
 	var calls atomic.Int32
 	sender := newTestSender(t, roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		calls.Add(1)
@@ -246,24 +255,26 @@ func TestSenderConcurrentRequestsKeepIndependentResults(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			return nil, err
 		}
-		if payload.Subject == "failure" {
-			return response(429, `{"message":"private"}`), nil
+		for _, tc := range cases {
+			if payload.Subject == fmt.Sprint(tc.status) {
+				return response(tc.status, `{"id":"accepted","message":"private"}`), nil
+			}
 		}
-		return response(200, `{"id":"accepted"}`), nil
+		return nil, errors.New("unexpected request subject")
 	}))
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
+			tc := cases[i%len(cases)]
 			cmd := command()
-			if i%2 == 0 {
-				cmd.Subject = "failure"
-			}
+			cmd.Subject = fmt.Sprint(tc.status)
 			result, err := sender.SendEmail(context.Background(), cmd)
-			if i%2 == 0 {
-				if result != (email.Submission{}) || !errors.As(err, new(*email.ProviderError)) {
-					t.Errorf("failure request lost classification: %v %v", result, err)
+			if tc.want != nil {
+				var failure *email.ProviderError
+				if result != (email.Submission{}) || !errors.As(err, &failure) || failure == nil || *failure != *tc.want {
+					t.Errorf("HTTP %d request lost classification: result=%v error=%+v want=%+v", tc.status, result, err, tc.want)
 				}
 			} else if err != nil || result.ProviderMessageID != "accepted" {
 				t.Errorf("success request mixed up: %v %v", result, err)
