@@ -83,8 +83,10 @@ export interface AdminOrgListItem {
   identifier: string;
   subscription_enabled: boolean;
   subscription_expires_at?: string | null;
-	/** Canonical backend entitlement, including the configured grace window. */
-	is_entitled: boolean;
+  /** Canonical backend entitlement, including the configured grace window. */
+  is_entitled: boolean;
+  /** Registered fixed (MQTT) readers; for a cut-off org these publish but nothing is recorded. */
+  fixed_reader_count?: number;
   member_count: number;
   /**
    * TRA-1027: the org's granted capability names, sorted. Always sent (`[]`,

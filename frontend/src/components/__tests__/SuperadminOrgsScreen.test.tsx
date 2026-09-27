@@ -36,6 +36,7 @@ describe('SuperadminOrgsScreen (TRA-949)', () => {
             subscription_enabled: false,
             subscription_expires_at: null,
             is_entitled: false,
+            fixed_reader_count: 2,
             member_count: 0,
           },
         ],
@@ -48,6 +49,8 @@ describe('SuperadminOrgsScreen (TRA-949)', () => {
     expect(screen.getByText('Lapsed LLC')).toBeInTheDocument();
     expect(screen.getByText('Active')).toBeInTheDocument();
     expect(screen.getByText('Cut off')).toBeInTheDocument();
+    // A cut-off org's fixed readers still publish; the operator must see that.
+    expect(screen.getByText('2 fixed readers not recorded')).toBeInTheDocument();
     // Member counts are surfaced.
     expect(screen.getByText('3')).toBeInTheDocument();
     // Each row links into the existing org edit screen by id.

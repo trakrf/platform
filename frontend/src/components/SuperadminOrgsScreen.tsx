@@ -155,6 +155,11 @@ export default function SuperadminOrgsScreen() {
                             const status = entitlementLabel(org);
                             return <span className={status.className}>{status.label}</span>;
                           })()}
+                          {!org.is_entitled && (org.fixed_reader_count ?? 0) > 0 && (
+                            <div className="text-xs text-red-400">
+                              {org.fixed_reader_count} fixed {org.fixed_reader_count === 1 ? "reader" : "readers"} not recorded
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           {formatExpiry(org.subscription_expires_at)}
