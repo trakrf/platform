@@ -45,6 +45,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/services/email"
 	orgsservice "github.com/trakrf/platform/backend/internal/services/orgs"
 	readstreamsvc "github.com/trakrf/platform/backend/internal/services/readstream"
+	"github.com/trakrf/platform/backend/internal/services/subscriptionnotice"
 	"github.com/trakrf/platform/backend/internal/services/topicroute"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
@@ -245,6 +246,12 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	}
 
 	emailClient := email.NewClient()
+
+	// TRA-1047: subscription expiry nags to org admins (T-14, T-3, at expiry, at
+	// cutoff). Stage and send-once are decided in SQL, so replicas can all run it.
+	noticeCtx, stopNotices := context.WithCancel(ctx)
+	defer stopNotices()
+	go subscriptionnotice.New(store, emailClient, *log).Run(noticeCtx, time.Hour)
 	authSvc := authservice.NewService(store.Pool().(*pgxpool.Pool), store, emailClient)
 	orgsSvc := orgsservice.NewService(store.Pool().(*pgxpool.Pool), store, emailClient)
 	log.Info().Msg("Services initialized")

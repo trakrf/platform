@@ -252,3 +252,49 @@ func TestSendEmailChangedNotification_StubsReservedDomain(t *testing.T) {
 		t.Fatalf("expected nil error for reserved recipient, got %v", err)
 	}
 }
+
+func TestSubscriptionNoticeContent(t *testing.T) {
+	expires := time.Date(2026, 10, 10, 0, 0, 0, 0, time.UTC)
+	cutoff := expires.Add(72 * time.Hour)
+	t.Setenv("APP_ENV", "production")
+
+	cases := []struct {
+		kind        string
+		wantSubject string
+		wantBody    string
+	}{
+		{"t_minus_14", "[TrakRF] Your TrakRF subscription for Acme <&> expires in 14 days", "Oct 10, 2026"},
+		{"t_minus_3", "[TrakRF] Your TrakRF subscription for Acme <&> expires in 3 days", "Oct 10, 2026"},
+		{"expired", "[TrakRF] Your TrakRF subscription for Acme <&> has expired", "Oct 13, 2026"},
+		{"cutoff", "[TrakRF] TrakRF service for Acme <&> has stopped", "not being recorded"},
+	}
+	for _, c := range cases {
+		t.Run(c.kind, func(t *testing.T) {
+			subject, html, err := subscriptionNoticeContent(c.kind, "Acme <&>", expires, cutoff)
+			if err != nil {
+				t.Fatalf("content: %v", err)
+			}
+			if subject != c.wantSubject {
+				t.Errorf("subject = %q, want %q", subject, c.wantSubject)
+			}
+			if !strings.Contains(html, c.wantBody) {
+				t.Errorf("body missing %q:\n%s", c.wantBody, html)
+			}
+			if strings.Contains(html, "Acme <&>") || !strings.Contains(html, "Acme &lt;&amp;&gt;") {
+				t.Errorf("org name must be HTML-escaped in body:\n%s", html)
+			}
+		})
+	}
+
+	if _, _, err := subscriptionNoticeContent("bogus", "Acme", expires, cutoff); err == nil {
+		t.Error("unknown kind must error")
+	}
+}
+
+func TestSendSubscriptionNotice_StubsReservedDomain(t *testing.T) {
+	c := &Client{} // nil resend client: a real send would panic
+	if err := c.SendSubscriptionNotice("admin@example.com", "t_minus_3", "Acme",
+		time.Now(), time.Now().Add(72*time.Hour)); err != nil {
+		t.Fatalf("reserved recipient must be stubbed, got %v", err)
+	}
+}

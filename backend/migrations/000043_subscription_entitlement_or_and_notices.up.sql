@@ -100,3 +100,21 @@ $$;
 
 COMMENT ON FUNCTION trakrf.org_mqtt_reader_count(BIGINT) IS
     'TRA-1047: count of registered fixed (MQTT) readers for an org, for operator visibility into cut-off orgs whose readers still publish.';
+
+-- Whether an org is currently paying through an active subscription row (no
+-- grace). subscriptions is RLS-scoped; the nag job reads across orgs, hence
+-- SECURITY DEFINER. Used to avoid nagging a paying org about a stale manual expiry.
+CREATE OR REPLACE FUNCTION trakrf.org_has_active_subscription(p_org_id BIGINT)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = trakrf, public
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM trakrf.subscriptions s
+        WHERE s.org_id = p_org_id
+          AND s.status = 'active'
+          AND (s.current_period_end IS NULL OR s.current_period_end > now())
+    );
+$$;
