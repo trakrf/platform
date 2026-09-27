@@ -40,8 +40,11 @@ type AdminOrgListItem struct {
 	SubscriptionExpiresAt *time.Time `json:"subscription_expires_at,omitempty"`
 	// IsEntitled is the canonical server-side decision, including the configured
 	// grace window. Operators must not reimplement that policy in the browser.
-	IsEntitled  bool `json:"is_entitled"`
-	MemberCount int  `json:"member_count"`
+	IsEntitled bool `json:"is_entitled"`
+	// FixedReaderCount is the org's registered fixed (MQTT) readers. For a
+	// cut-off org these still publish but nothing is recorded (TRA-1047).
+	FixedReaderCount int `json:"fixed_reader_count"`
+	MemberCount      int `json:"member_count"`
 	// Capabilities is the org's granted capability names, sorted (TRA-1027).
 	// Always serialized, `[]` for the zero-grant default that most orgs sit at —
 	// the list is where an operator scans grant state across every org.

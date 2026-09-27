@@ -55,6 +55,7 @@ func (s *Storage) ListAllOrgs(ctx context.Context) ([]organization.AdminOrgListI
 		SELECT o.id, o.name, o.identifier,
 		       o.subscription_enabled, o.subscription_expires_at,
 		       trakrf.org_is_entitled(o.id) AS is_entitled,
+		       trakrf.org_mqtt_reader_count(o.id) AS fixed_reader_count,
 		       COUNT(ou.user_id) FILTER (WHERE ou.deleted_at IS NULL) AS member_count,
 		       trakrf.org_capability_set(o.id) AS capabilities
 		FROM trakrf.organizations o
@@ -73,7 +74,7 @@ func (s *Storage) ListAllOrgs(ctx context.Context) ([]organization.AdminOrgListI
 	for rows.Next() {
 		var o organization.AdminOrgListItem
 		if err := rows.Scan(&o.ID, &o.Name, &o.Identifier,
-			&o.SubscriptionEnabled, &o.SubscriptionExpiresAt, &o.IsEntitled, &o.MemberCount,
+			&o.SubscriptionEnabled, &o.SubscriptionExpiresAt, &o.IsEntitled, &o.FixedReaderCount, &o.MemberCount,
 			&o.Capabilities); err != nil {
 			return nil, fmt.Errorf("failed to scan admin org: %w", err)
 		}

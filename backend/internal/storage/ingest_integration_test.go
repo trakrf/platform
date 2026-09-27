@@ -480,3 +480,30 @@ func TestGLS10_BLETagProducesScan(t *testing.T) {
 	assert.Equal(t, 1, res.Dropped["no_asset"], "unregistered BLE noise still drops at membership")
 	require.Equal(t, 1, countAssetScans(t, db, orgID))
 }
+
+// TRA-1047: the superadmin org list reports each org's registered fixed readers
+// across orgs (scan_devices is RLS-scoped), so an operator can see which cut-off
+// orgs still have readers publishing into the void. Handhelds do not count.
+func TestListAllOrgs_FixedReaderCount(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	registerDevice(t, db, orgID, "fixed-a")
+	registerGLS10Device(t, db, orgID, "fixed-b")
+	_, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
+		Name: "Handheld", Type: scandevice.DeviceTypeCS463, Transport: scandevice.TransportWebBLE,
+	})
+	require.NoError(t, err)
+
+	orgs, err := db.Store.ListAllOrgs(ctx)
+	require.NoError(t, err)
+	found := false
+	for _, o := range orgs {
+		if o.ID == orgID {
+			found = true
+			assert.Equal(t, 2, o.FixedReaderCount)
+		}
+	}
+	require.True(t, found, "org must be listed")
+}

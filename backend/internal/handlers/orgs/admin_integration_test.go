@@ -91,6 +91,7 @@ func TestListAllOrgs_Superadmin200(t *testing.T) {
 			found = true
 			assert.Equal(t, true, o["subscription_enabled"])
 			assert.Equal(t, true, o["is_entitled"])
+			assert.Equal(t, float64(0), o["fixed_reader_count"])
 			assert.Equal(t, float64(0), o["member_count"])
 		}
 	}

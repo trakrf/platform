@@ -145,6 +145,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// the scan-device CRUD handler can keep it current even when ingestion is off;
 	// the subscriber attaches as its SubscriptionManager when MQTT is enabled.
 	topicRegistry := topicroute.NewRegistry(store, *log)
+	topicRegistry.SetEntitlementChecker(store) // TRA-1047: WARN when a cutoff drops reader topics
 	if err := topicRegistry.Reconcile(ctx); err != nil {
 		log.Warn().Err(err).Msg("initial topic registry load failed; ticker will retry")
 	}
