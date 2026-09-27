@@ -176,7 +176,8 @@ func TestUpdateOrgEntitlement_PastExpiryLapses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create org: %v", err)
 	}
-	past := time.Now().Add(-1 * time.Hour)
+	// Past expiry AND past the default 3-day grace window (TRA-1047).
+	past := time.Now().Add(-4 * 24 * time.Hour)
 	if _, err := store.UpdateOrgEntitlement(ctx, org.ID, true, &past); err != nil {
 		t.Fatalf("set past expiry: %v", err)
 	}
@@ -185,7 +186,7 @@ func TestUpdateOrgEntitlement_PastExpiryLapses(t *testing.T) {
 		t.Fatalf("OrgIsEntitled: %v", err)
 	}
 	if entitled {
-		t.Errorf("entitled = true with past expiry, want false")
+		t.Errorf("entitled = true with expiry past grace, want false")
 	}
 }
 
