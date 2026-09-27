@@ -59,7 +59,7 @@ func TestHTTPMetricsExcludesProbeAndMetricRoutes(t *testing.T) {
 	metrics := NewHTTPMetrics(registry)
 	router := chi.NewRouter()
 	router.Use(metrics.Middleware)
-	for _, path := range []string{"/healthz", "/readyz"} {
+	for _, path := range []string{"/healthz", "/readyz", "/health", "/health.json", "/api/v1/reads/stream", "/api/v1/mustering/stream"} {
 		router.Get(path, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 		router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, path, nil))
 	}
@@ -72,6 +72,46 @@ func TestHTTPMetricsExcludesProbeAndMetricRoutes(t *testing.T) {
 
 	assertMetricAbsent(t, registry, "http_requests_total")
 	assertMetricAbsent(t, registry, "http_request_duration_seconds")
+}
+
+// A panicking handler must still be counted, as a 500. Recovery sits outside
+// this middleware in the router, so without this the worst failures would be
+// missing from the error rate entirely.
+func TestHTTPMetricsRecordsPanicsAs500(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	router := chi.NewRouter()
+	router.Use(Recovery)
+	router.Use(NewHTTPMetrics(registry).Middleware)
+	router.Get("/api/v1/orgs/{orgID}/invitations", func(http.ResponseWriter, *http.Request) { panic("boom") })
+
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/orgs/1/invitations", nil))
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500 from Recovery", response.Code)
+	}
+
+	labels := map[string]string{"method": http.MethodGet, "route": "/api/v1/orgs/{orgID}/invitations", "status": "500"}
+	assertMetric(t, registry, "http_requests_total", labels, func(metric *clientmodel.Metric) bool {
+		return metric.GetCounter().GetValue() == 1
+	})
+	assertMetric(t, registry, "http_requests_in_flight", nil, func(metric *clientmodel.Metric) bool {
+		return metric.GetGauge().GetValue() == 0
+	})
+}
+
+// The method label must stay bounded: arbitrary client-sent methods collapse
+// into a single OTHER series instead of one series each.
+func TestHTTPMetricsBoundsMethodLabel(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	router := metricsTestRouter(NewHTTPMetrics(registry), http.StatusOK, nil)
+	for _, method := range []string{"FOO1", "FOO2", "FOO3"} {
+		router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(method, "/api/v1/orgs/1/invitations", nil))
+	}
+
+	labels := map[string]string{"method": "OTHER", "route": unknownRoute, "status": strconv.Itoa(http.StatusMethodNotAllowed)}
+	assertMetric(t, registry, "http_requests_total", labels, func(metric *clientmodel.Metric) bool {
+		return metric.GetCounter().GetValue() == 3
+	})
 }
 
 func TestHTTPMetricsRegistrationCanBeRepeated(t *testing.T) {
