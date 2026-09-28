@@ -143,6 +143,7 @@ check-changelog:
 # Text assertions over database/sql/ and the env templates — no database needed.
 test-db-init:
     @./scripts/test-db-init.sh
+    @bash ./scripts/test-db-readiness.sh
 
 # TRA-1190: local env has exactly one declaration and every copy agrees with it
 # — .env.local.example holds parts rather than DSNs (the shape the cluster has
