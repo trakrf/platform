@@ -45,6 +45,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/services/email"
 	orgsservice "github.com/trakrf/platform/backend/internal/services/orgs"
 	readstreamsvc "github.com/trakrf/platform/backend/internal/services/readstream"
+	"github.com/trakrf/platform/backend/internal/services/subscriptionnotice"
 	"github.com/trakrf/platform/backend/internal/services/topicroute"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/jwt"
@@ -144,6 +145,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// the scan-device CRUD handler can keep it current even when ingestion is off;
 	// the subscriber attaches as its SubscriptionManager when MQTT is enabled.
 	topicRegistry := topicroute.NewRegistry(store, *log)
+	topicRegistry.SetEntitlementChecker(store) // TRA-1047: WARN when a cutoff drops reader topics
 	if err := topicRegistry.Reconcile(ctx); err != nil {
 		log.Warn().Err(err).Msg("initial topic registry load failed; ticker will retry")
 	}
@@ -245,6 +247,12 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	}
 
 	emailClient := email.NewClient()
+
+	// TRA-1047: subscription expiry nags to org admins (T-14, T-3, at expiry, at
+	// cutoff). Stage and send-once are decided in SQL, so replicas can all run it.
+	noticeCtx, stopNotices := context.WithCancel(ctx)
+	defer stopNotices()
+	go subscriptionnotice.New(store, emailClient, *log).Run(noticeCtx, time.Hour)
 	authSvc := authservice.NewService(store.Pool().(*pgxpool.Pool), store, emailClient)
 	orgsSvc := orgsservice.NewService(store.Pool().(*pgxpool.Pool), store, emailClient)
 	log.Info().Msg("Services initialized")

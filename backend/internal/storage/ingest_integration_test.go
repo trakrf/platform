@@ -106,8 +106,17 @@ func TestListScanTopics(t *testing.T) {
 
 	devA := registerDevice(t, db, orgID, "cs463-a")
 	devB := registerGLS10Device(t, db, orgID, "gls10-b")
+	var lapsedOrg int
+	require.NoError(t, db.AdminPool.QueryRow(ctx,
+		`INSERT INTO trakrf.organizations (name, identifier, is_active)
+		 VALUES ('Lapsed Topic Co', 'lapsed-topic-co', true)
+		 RETURNING id`).Scan(&lapsedOrg))
+	_ = registerDevice(t, db, lapsedOrg, "lapsed-reader")
+	_, err := db.AdminPool.Exec(ctx,
+		`UPDATE trakrf.organizations SET subscription_enabled = false WHERE id = $1`, lapsedOrg)
+	require.NoError(t, err)
 	// A web_ble (handheld) device has no MQTT topic and must be excluded.
-	_, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
+	_, err = db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
 		Name: "Handheld", Type: scandevice.DeviceTypeCS463, Transport: scandevice.TransportWebBLE,
 	})
 	require.NoError(t, err)
@@ -125,6 +134,8 @@ func TestListScanTopics(t *testing.T) {
 	require.True(t, okB, "device B topic must be listed")
 	assert.Equal(t, devB.ID, rB.ScanDeviceID)
 	assert.Equal(t, scandevice.DeviceTypeGLS10, rB.DeviceType)
+	_, lapsedListed := topics["trakrf.id/lapsed-reader/reads"]
+	assert.False(t, lapsedListed, "unentitled org topics must not reach the broker registry")
 
 	// Exactly the two mqtt topics — web_ble device excluded.
 	assert.Len(t, topics, 2)
@@ -468,4 +479,31 @@ func TestGLS10_BLETagProducesScan(t *testing.T) {
 	assert.Equal(t, 1, res.Inserted, "ble-registered asset MAC lands as a scan")
 	assert.Equal(t, 1, res.Dropped["no_asset"], "unregistered BLE noise still drops at membership")
 	require.Equal(t, 1, countAssetScans(t, db, orgID))
+}
+
+// TRA-1047: the superadmin org list reports each org's registered fixed readers
+// across orgs (scan_devices is RLS-scoped), so an operator can see which cut-off
+// orgs still have readers publishing into the void. Handhelds do not count.
+func TestListAllOrgs_FixedReaderCount(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	registerDevice(t, db, orgID, "fixed-a")
+	registerGLS10Device(t, db, orgID, "fixed-b")
+	_, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
+		Name: "Handheld", Type: scandevice.DeviceTypeCS463, Transport: scandevice.TransportWebBLE,
+	})
+	require.NoError(t, err)
+
+	orgs, err := db.Store.ListAllOrgs(ctx)
+	require.NoError(t, err)
+	found := false
+	for _, o := range orgs {
+		if o.ID == orgID {
+			found = true
+			assert.Equal(t, 2, o.FixedReaderCount)
+		}
+	}
+	require.True(t, found, "org must be listed")
 }

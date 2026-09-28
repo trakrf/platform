@@ -10,6 +10,7 @@ import { initOpenReplay, trackPageView } from '@/lib/openreplay';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { lazyWithRetry } from '@/utils/lazyWithRetry';
 import { EnvironmentBanner } from '@/components/EnvironmentBanner';
+import { CurrentOrgSubscriptionNotice } from '@/components/SubscriptionLifecycleNotice';
 import { DEFAULT_TAB, resolveLegacyTab, isLegacyTab } from '@/utils/tabRedirects';
 import { useCapabilityRouteGate } from '@/hooks/capability/useCapability';
 import { capabilityEntryForRoute } from '@/components/capability/registry';
@@ -391,6 +392,9 @@ export default function App() {
         <EnvironmentBanner />
         <ErrorBoundary name="Header">
           <Header onMenuToggle={() => setIsMobileMenuOpen(!isMobileMenuOpen)} isMobileMenuOpen={isMobileMenuOpen} />
+        </ErrorBoundary>
+        <ErrorBoundary name="SubscriptionNotice">
+          <CurrentOrgSubscriptionNotice />
         </ErrorBoundary>
 
         <div className="flex-1 p-2 md:p-8 bg-gray-50 dark:bg-gray-900">

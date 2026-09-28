@@ -15,6 +15,14 @@ import { orgsApi } from "@/lib/api/orgs";
 import { extractErrorMessage } from "@/lib/asset/helpers";
 import type { AdminOrgListItem } from "@/types/org";
 
+function entitlementLabel(org: AdminOrgListItem): { label: string; className: string } {
+  if (!org.is_entitled) return { label: "Cut off", className: "text-red-400" };
+  if (org.subscription_expires_at && new Date(org.subscription_expires_at).getTime() <= Date.now()) {
+    return { label: "Grace", className: "text-amber-400" };
+  }
+  return { label: "Active", className: "text-green-400" };
+}
+
 function formatExpiry(iso?: string | null): string {
   if (!iso) return "Never";
   const d = new Date(iso);
@@ -115,7 +123,7 @@ export default function SuperadminOrgsScreen() {
                         Name
                       </th>
                       <th scope="col" className="px-4 py-3">
-                        Entitled
+                        Subscription
                       </th>
                       <th scope="col" className="px-4 py-3">
                         Expires
@@ -143,10 +151,14 @@ export default function SuperadminOrgsScreen() {
                           </a>
                         </td>
                         <td className="px-4 py-3">
-                          {org.subscription_enabled ? (
-                            <span className="text-green-400">Enabled</span>
-                          ) : (
-                            <span className="text-gray-500">Disabled</span>
+                          {(() => {
+                            const status = entitlementLabel(org);
+                            return <span className={status.className}>{status.label}</span>;
+                          })()}
+                          {!org.is_entitled && (org.fixed_reader_count ?? 0) > 0 && (
+                            <div className="text-xs text-red-400">
+                              {org.fixed_reader_count} fixed {org.fixed_reader_count === 1 ? "reader" : "readers"} not recorded
+                            </div>
                           )}
                         </td>
                         <td className="px-4 py-3">

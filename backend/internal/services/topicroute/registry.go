@@ -29,13 +29,20 @@ type SubscriptionManager interface {
 	Unsubscribe(topic string)
 }
 
+// EntitlementChecker reports whether an org is entitled (satisfied by
+// *storage.Storage). Optional: only used to explain why a topic was dropped.
+type EntitlementChecker interface {
+	OrgIsEntitled(ctx context.Context, orgID int) (bool, error)
+}
+
 // Registry is the process-wide topic->route map and subscription set.
 type Registry struct {
-	lister TopicLister
-	log    zerolog.Logger
-	mu     sync.RWMutex
-	routes map[string]storage.ScanRoute
-	mgr    SubscriptionManager
+	lister      TopicLister
+	log         zerolog.Logger
+	mu          sync.RWMutex
+	routes      map[string]storage.ScanRoute
+	mgr         SubscriptionManager
+	entitlement EntitlementChecker
 }
 
 // NewRegistry builds an empty registry. Call Reconcile to populate it.
@@ -52,6 +59,14 @@ func NewRegistry(lister TopicLister, log zerolog.Logger) *Registry {
 func (r *Registry) SetManager(m SubscriptionManager) {
 	r.mu.Lock()
 	r.mgr = m
+	r.mu.Unlock()
+}
+
+// SetEntitlementChecker lets Reconcile tell a subscription cutoff apart from an
+// ordinary device removal when a topic drops out of the active list.
+func (r *Registry) SetEntitlementChecker(c EntitlementChecker) {
+	r.mu.Lock()
+	r.entitlement = c
 	r.mu.Unlock()
 }
 
@@ -84,11 +99,13 @@ func (r *Registry) Reconcile(ctx context.Context) error {
 		return err
 	}
 	var toSub, toUnsub []string
+	removed := map[string]storage.ScanRoute{}
 	r.mu.Lock()
-	for topic := range r.routes {
+	for topic, route := range r.routes {
 		if _, ok := fresh[topic]; !ok {
 			delete(r.routes, topic)
 			toUnsub = append(toUnsub, topic)
+			removed[topic] = route
 		}
 	}
 	for topic, route := range fresh {
@@ -98,6 +115,7 @@ func (r *Registry) Reconcile(ctx context.Context) error {
 		r.routes[topic] = route // refresh route even when the topic is unchanged
 	}
 	mgr := r.mgr
+	entitlement := r.entitlement
 	r.mu.Unlock()
 
 	if mgr != nil {
@@ -108,8 +126,34 @@ func (r *Registry) Reconcile(ctx context.Context) error {
 			mgr.Unsubscribe(t)
 		}
 	}
+	if entitlement != nil {
+		r.warnCutoffs(ctx, entitlement, removed)
+	}
 	if len(toSub) > 0 || len(toUnsub) > 0 {
 		r.log.Info().Int("added", len(toSub)).Int("removed", len(toUnsub)).Msg("topic registry reconciled")
 	}
 	return nil
+}
+
+// warnCutoffs logs, at WARN, each dropped topic whose org is no longer entitled.
+// The reader behind it keeps publishing and sees no error while the broker
+// discards its reads, so this is the operator's signal that it is not a fault.
+func (r *Registry) warnCutoffs(ctx context.Context, c EntitlementChecker, removed map[string]storage.ScanRoute) {
+	checked := map[int]bool{}
+	for topic, route := range removed {
+		entitled, seen := checked[route.OrgID]
+		if !seen {
+			var err error
+			entitled, err = c.OrgIsEntitled(ctx, route.OrgID)
+			if err != nil {
+				r.log.Warn().Err(err).Int("org_id", route.OrgID).Msg("entitlement check failed for dropped topic")
+				continue
+			}
+			checked[route.OrgID] = entitled
+		}
+		if !entitled {
+			r.log.Warn().Str("topic", topic).Int("org_id", route.OrgID).Int("scan_device_id", route.ScanDeviceID).
+				Msg("fixed reader unsubscribed: org not entitled; its reads are discarded until reactivation")
+		}
+	}
 }

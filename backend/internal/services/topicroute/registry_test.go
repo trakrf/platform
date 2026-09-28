@@ -1,6 +1,7 @@
 package topicroute
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"testing"
@@ -64,6 +65,27 @@ func TestReconcile_RemovesGoneTopics(t *testing.T) {
 	assert.Equal(t, []string{"org-a/d/reads"}, mgr.unsubs)
 }
 
+func TestReconcile_ExpiryUnsubscribesAndReactivationResubscribes(t *testing.T) {
+	const topic = "org-a/d/reads"
+	l := &fakeLister{m: map[string]storage.ScanRoute{topic: {OrgID: 1, ScanDeviceID: 1}}}
+	mgr := &fakeMgr{}
+	r := NewRegistry(l, testLogger())
+	r.SetManager(mgr)
+	require.NoError(t, r.Reconcile(context.Background()))
+
+	// list_active_scan_topics omits an org after its entitlement grace ends.
+	l.m = map[string]storage.ScanRoute{}
+	require.NoError(t, r.Reconcile(context.Background()))
+	assert.Equal(t, []string{topic}, mgr.unsubs, "cutoff must unsubscribe once")
+	assert.Empty(t, r.Topics(), "a reconnect must not resubscribe an ineligible topic")
+
+	// A reactivated org returns to the source list; no process restart is needed.
+	l.m = map[string]storage.ScanRoute{topic: {OrgID: 1, ScanDeviceID: 1}}
+	require.NoError(t, r.Reconcile(context.Background()))
+	assert.Equal(t, []string{topic, topic}, mgr.subs)
+	assert.Equal(t, []string{topic}, r.Topics())
+}
+
 func TestReconcile_NoDeltaIsQuiet(t *testing.T) {
 	l := &fakeLister{m: map[string]storage.ScanRoute{"o/d/reads": {ScanDeviceID: 5}}}
 	mgr := &fakeMgr{}
@@ -89,4 +111,35 @@ func TestTopicsSnapshot(t *testing.T) {
 	r := NewRegistry(l, testLogger())
 	require.NoError(t, r.Reconcile(context.Background()))
 	assert.ElementsMatch(t, []string{"a/x/reads", "b/y/reads"}, r.Topics())
+}
+
+type fakeEntitlement map[int]bool
+
+func (f fakeEntitlement) OrgIsEntitled(_ context.Context, orgID int) (bool, error) {
+	return f[orgID], nil
+}
+
+// A lapsed org's readers keep publishing into the void once unsubscribed, and
+// the reader itself sees no error. Say so at WARN, naming the org, so it does
+// not turn into a support call that looks like a bug.
+func TestReconcile_WarnsWhenCutoffDropsReaderTopics(t *testing.T) {
+	l := &fakeLister{m: map[string]storage.ScanRoute{
+		"lapsed/d/reads":  {OrgID: 1, ScanDeviceID: 1},
+		"deleted/d/reads": {OrgID: 2, ScanDeviceID: 2},
+	}}
+	var buf bytes.Buffer
+	r := NewRegistry(l, zerolog.New(&buf))
+	r.SetManager(&fakeMgr{})
+	r.SetEntitlementChecker(fakeEntitlement{1: false, 2: true})
+	require.NoError(t, r.Reconcile(context.Background()))
+	buf.Reset()
+
+	l.m = map[string]storage.ScanRoute{}
+	require.NoError(t, r.Reconcile(context.Background()))
+
+	out := buf.String()
+	assert.Contains(t, out, `"level":"warn"`)
+	assert.Contains(t, out, `"topic":"lapsed/d/reads"`)
+	assert.Contains(t, out, `"org_id":1`)
+	assert.NotContains(t, out, `"topic":"deleted/d/reads"`, "a device removed from an entitled org is not a cutoff")
 }
