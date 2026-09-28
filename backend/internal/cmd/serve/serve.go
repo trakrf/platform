@@ -39,6 +39,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/mustering"
 	"github.com/trakrf/platform/backend/internal/notification"
+	"github.com/trakrf/platform/backend/internal/notification/resend"
 	"github.com/trakrf/platform/backend/internal/notification/twilio"
 	"github.com/trakrf/platform/backend/internal/readercontrol"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
@@ -71,6 +72,11 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// SMS is optional, but partial credentials must fail before any services
 	// start. Loading and constructing the integration never contacts Twilio.
 	smsConfig, err := twilio.ConfigFromEnv()
+	if err != nil {
+		return err
+	}
+
+	emailConfig, err := resend.ConfigFromEnv()
 	if err != nil {
 		return err
 	}
@@ -109,6 +115,12 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 		return err
 	}
 	log.Info().Bool("enabled", smsConfig.Enabled()).Msg("SMS integration configured")
+
+	emailRuntime, err := notification.NewEmailRuntime(emailConfig, store.EmailCallbackConsumer(), prometheus.DefaultRegisterer)
+	if err != nil {
+		return err
+	}
+	log.Info().Bool("enabled", emailConfig.Enabled).Msg("Notification email integration configured")
 
 	// Say it at boot as well as on /health (TRA-1190). The endpoint is what a
 	// test suite can check; this line is what a developer actually sees, and
@@ -288,7 +300,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	webhooksHandler := webhookshandler.NewHandler(store, webhookClient)
 	log.Info().Msg("Handlers initialized")
 
-	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, webhooksHandler, testHandler, store, smsRuntime)
+	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, webhooksHandler, testHandler, store, smsRuntime, emailRuntime)
 	log.Info().Msg("Routes registered")
 
 	server := &http.Server{

@@ -26,14 +26,15 @@ As a notification workflow developer, I want explicit notification email configu
 - Use three separate implementation sessions: tasks 1–3, 4–6, 7–8. Stop at each boundary and record a copyable startup prompt if automatic session creation is unavailable.
 
 ## Validation Criteria
-- [ ] Test disabled and enabled environment combinations, malformed values, safe errors and transactional compatibility.
-- [ ] Exact command results recorded in log.md.
+- [x] Test disabled and enabled environment combinations, malformed values, safe errors and transactional compatibility.
+- [x] Exact command results recorded in log.md.
 
 ## Success Metrics
-- [ ] All named behavioral tests pass without real sends.
-- [ ] No regressions in relevant existing email/SMS tests.
+- [x] All named behavioral tests pass without real sends.
+- [x] No regressions in relevant existing email/SMS tests.
 
 ## References
+- Task pull request: https://github.com/trakrf/platform/pull/683
 - Parent: TRA-1267 (user-provided plan; child links unavailable).
 - Prerequisites: tasks 1 in adjacent TRA-1267 directories.
 - [Plan](plan.md), [session log](log.md).

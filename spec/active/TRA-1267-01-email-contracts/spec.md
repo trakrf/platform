@@ -26,14 +26,15 @@ As a notification workflow developer, I want provider-neutral email contracts so
 - Use three separate implementation sessions: tasks 1–3, 4–6, 7–8. Stop at each boundary and record a copyable startup prompt if automatic session creation is unavailable.
 
 ## Validation Criteria
-- [ ] Compile independent sender/consumer test doubles without Resend imports; verify safe errors and acceptance semantics.
-- [ ] Exact command results recorded in log.md.
+- [x] Compile independent sender/consumer test doubles without Resend imports; verify safe errors and acceptance semantics.
+- [x] Exact command results recorded in log.md.
 
 ## Success Metrics
-- [ ] All named behavioral tests pass without real sends.
-- [ ] No regressions in relevant existing email/SMS tests.
+- [x] All named behavioral tests pass without real sends.
+- [x] No regressions in relevant existing email/SMS tests.
 
 ## References
+- Task pull request: https://github.com/trakrf/platform/pull/682
 - Parent: TRA-1267 (user-provided plan; child links unavailable).
 - Prerequisites: tasks None in adjacent TRA-1267 directories.
 - [Plan](plan.md), [session log](log.md).

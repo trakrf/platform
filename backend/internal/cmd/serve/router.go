@@ -65,7 +65,7 @@ func setupRouter(
 	webhooksHandler *webhookshandler.Handler,
 	testHandler *testhandler.Handler,
 	store *storage.Storage,
-	smsRuntime ...*notification.Runtime,
+	notificationRuntimes ...notification.RouteRegistrar,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -137,9 +137,9 @@ func setupRouter(
 	})
 
 	healthHandler.RegisterRoutes(r)
-	// Provider callbacks use form bodies and Twilio signatures, not a user
-	// session. The configured runtime supplies a durable callback consumer.
-	for _, runtime := range smsRuntime {
+	// Provider callbacks authenticate signatures without a user session or
+	// JSON-only middleware. Each runtime supplies a durable callback consumer.
+	for _, runtime := range notificationRuntimes {
 		runtime.RegisterRoutes(r)
 	}
 

@@ -42,7 +42,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/webhook"
 )
 
-func setupTestRouter(t *testing.T, smsRuntime ...*notification.Runtime) *chi.Mux {
+func setupTestRouter(t *testing.T, notificationRuntimes ...notification.RouteRegistrar) *chi.Mux {
 	t.Helper()
 
 	store := &storage.Storage{}
@@ -71,7 +71,7 @@ func setupTestRouter(t *testing.T, smsRuntime ...*notification.Runtime) *chi.Mux
 	testHandler := testhandler.NewHandler(store)
 	webhooksHandler := webhookshandler.NewHandler(store, webhook.NewClient(true))
 
-	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, webhooksHandler, testHandler, store, smsRuntime...)
+	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, webhooksHandler, testHandler, store, notificationRuntimes...)
 }
 
 func TestRouterSetup(t *testing.T) {
