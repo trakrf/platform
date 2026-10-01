@@ -1,0 +1,92 @@
+//go:build integration
+
+package outbox_test
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/require"
+
+	"github.com/trakrf/platform/backend/internal/models/notificationdelivery"
+	"github.com/trakrf/platform/backend/internal/notification/outbox"
+	"github.com/trakrf/platform/backend/internal/storage"
+	"github.com/trakrf/platform/backend/internal/testutil"
+)
+
+type alwaysEntitled struct{}
+
+func (alwaysEntitled) OrgIsEntitled(ctx context.Context, orgID int) (bool, error) { return true, nil }
+
+// rollbackDeliveryStore wraps a real *storage.Storage and forces the
+// WithOrgTx transaction to roll back after fn has run — proving Enqueue's
+// two inserts (audit row + river job) live in one transaction, not two.
+// A real pgx transaction rollback is indistinguishable, from Enqueue's
+// point of view, from a caller's own surrounding transaction failing after
+// Enqueue returns — both discard everything written on that connection.
+type rollbackDeliveryStore struct {
+	*storage.Storage
+	forceErr error
+}
+
+func (s rollbackDeliveryStore) WithOrgTx(ctx context.Context, orgID int, fn func(tx pgx.Tx) error) error {
+	return s.Storage.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		if err := fn(tx); err != nil {
+			return err
+		}
+		return s.forceErr
+	})
+}
+
+func TestEnqueue_SourceRollbackLeavesNoJobAndNoAuditRow(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	registry := prometheus.NewRegistry()
+	metrics, err := outbox.NewMetrics(registry)
+	require.NoError(t, err)
+
+	runtime, err := outbox.NewRuntime(db.AppPool, fakeAdapter{}, db.Store, metrics)
+	require.NoError(t, err)
+
+	forcedErr := errors.New("simulated caller rollback")
+	store := rollbackDeliveryStore{Storage: db.Store, forceErr: forcedErr}
+
+	cmd := outbox.Command{DeliveryID: "evt-rollback:c1:email", OrgID: orgID, Channel: notificationdelivery.ChannelEmail}
+	err = outbox.Enqueue(ctx, store, alwaysEntitled{}, runtime.Client, metrics, cmd)
+	require.ErrorIs(t, err, forcedErr)
+
+	_, getErr := db.Store.GetNotificationDeliveryByDeliveryID(ctx, orgID, cmd.DeliveryID)
+	require.Error(t, getErr, "no audit row should exist after the enqueueing transaction rolled back")
+
+	// The brief's original query checked `encoded_args::text LIKE
+	// '%evt-rollback:c1:email%'` against river_job. Neither half of that
+	// held up against the real schema:
+	//
+	//   - Task 1's migration (backend/migrations/000043_river_schema.up.sql)
+	//     names the column `args` (jsonb), not `encoded_args` — River's own
+	//     INSERT (riverpgxv5's dbsqlc-generated JobInsertFull query) writes
+	//     to `args`.
+	//   - DeliveryJobArgs (job.go) only ever carries OrgID and
+	//     NotificationDeliveryID — the caller's DeliveryID string
+	//     ("evt-rollback:c1:email") is never serialized into River's args at
+	//     all, so a LIKE match against it could never succeed even for a job
+	//     that *did* survive the rollback. That would have made the
+	//     assertion pass vacuously regardless of whether atomicity held.
+	//
+	// testutil.SetupTestDBFull drops and recreates trakrf_test for this test
+	// alone, so any row of this job kind in this database can only be the
+	// one this test's Enqueue call attempted to insert — a plain count by
+	// kind is both correct against the real schema and a true positive.
+	var jobCount int
+	scanErr := db.AdminPool.QueryRow(ctx,
+		`SELECT count(*) FROM trakrf.river_job WHERE kind = $1`,
+		outbox.DeliveryJobArgs{}.Kind(),
+	).Scan(&jobCount)
+	require.NoError(t, scanErr)
+	require.Zero(t, jobCount, "no river_job row should exist after the enqueueing transaction rolled back")
+}
