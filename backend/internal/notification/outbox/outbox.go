@@ -20,9 +20,8 @@ type EntitlementChecker interface {
 }
 
 // deliveryStore is the storage surface Enqueue needs, narrowed for testing.
-// *storage.Storage satisfies this structurally once its
-// notification_deliveries methods exist (a separate, concurrently-developed
-// task) — this file does not import the storage package directly.
+// *storage.Storage satisfies this structurally — this file does not import
+// the storage package directly.
 type deliveryStore interface {
 	WithOrgTx(ctx context.Context, orgID int, fn func(tx pgx.Tx) error) error
 	InsertNotificationDeliveryTx(ctx context.Context, tx pgx.Tx, orgID int, d notificationdelivery.NotificationDelivery) (int64, error)
