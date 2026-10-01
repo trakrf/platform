@@ -18,6 +18,8 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/resend/resend-go/v2 v2.28.0
 	github.com/riverqueue/river v0.47.0
+	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.47.0
+	github.com/riverqueue/river/rivertype v0.47.0
 	github.com/rs/zerolog v1.33.0
 	github.com/stretchr/testify v1.12.1
 	github.com/swaggo/http-swagger v1.3.4
@@ -67,7 +69,6 @@ require (
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/riverqueue/river/riverdriver v0.47.0 // indirect
 	github.com/riverqueue/river/rivershared v0.47.0 // indirect
-	github.com/riverqueue/river/rivertype v0.47.0 // indirect
 	github.com/swaggo/files v1.0.1 // indirect
 	github.com/tidwall/gjson v1.19.0 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
