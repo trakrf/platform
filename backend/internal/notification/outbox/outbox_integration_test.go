@@ -5,6 +5,7 @@ package outbox_test
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -125,4 +126,49 @@ func TestWorker_ProcessRestartResumesInFlightJob(t *testing.T) {
 		d, err := db.Store.GetNotificationDeliveryByDeliveryID(ctx, orgID, "evt-restart:c1:email")
 		return err == nil && d.State == notificationdelivery.StateDelivered
 	}, 5*time.Second, 50*time.Millisecond, "a second process's runtime must pick up and complete the job the first process enqueued but never worked")
+}
+
+func TestWorker_ConcurrentRuntimesClaimJobExactlyOnce(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	registry := prometheus.NewRegistry()
+	metrics, err := outbox.NewMetrics(registry)
+	require.NoError(t, err)
+
+	var sendCount int32
+	adapter := countingAdapter{count: &sendCount, result: outbox.Result{ProviderMessageID: "resend-msg-2"}}
+
+	runtimeA, err := outbox.NewRuntime(db.AppPool, adapter, db.Store, metrics)
+	require.NoError(t, err)
+	runtimeB, err := outbox.NewRuntime(db.AppPool, adapter, db.Store, metrics)
+	require.NoError(t, err)
+
+	require.NoError(t, runtimeA.Start(ctx))
+	require.NoError(t, runtimeB.Start(ctx))
+	defer runtimeA.Stop(ctx)
+	defer runtimeB.Stop(ctx)
+
+	err = outbox.Enqueue(ctx, db.Store, alwaysEntitled{}, runtimeA.Client, metrics, outbox.Command{
+		DeliveryID: "evt-concurrent:c1:email", OrgID: orgID, Channel: notificationdelivery.ChannelEmail,
+	})
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		d, err := db.Store.GetNotificationDeliveryByDeliveryID(ctx, orgID, "evt-concurrent:c1:email")
+		return err == nil && d.State == notificationdelivery.StateDelivered
+	}, 5*time.Second, 50*time.Millisecond)
+
+	require.EqualValues(t, 1, sendCount, "two runtimes racing for one job must result in exactly one Send call, never a double-send")
+}
+
+type countingAdapter struct {
+	count  *int32
+	result outbox.Result
+}
+
+func (a countingAdapter) Send(ctx context.Context, cmd outbox.Command) (outbox.Result, error) {
+	atomic.AddInt32(a.count, 1)
+	return a.result, nil
 }
