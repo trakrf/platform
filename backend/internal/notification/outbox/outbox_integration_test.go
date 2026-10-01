@@ -93,7 +93,18 @@ func TestEnqueue_SourceRollbackLeavesNoJobAndNoAuditRow(t *testing.T) {
 	require.Zero(t, jobCount, "no river_job row should exist after the enqueueing transaction rolled back")
 }
 
-func TestWorker_ProcessRestartResumesInFlightJob(t *testing.T) {
+// TestWorker_UnclaimedJobResumesAfterProcessRestart proves that a job
+// enqueued but never claimed by any worker before a process dies (because
+// runtime1.Start() is never called here) is picked up and completed by a
+// second, independently-constructed runtime against the same pool/table.
+//
+// This does NOT prove true mid-job crash recovery (a worker dying while a
+// job is actively in flight, requiring River's rescuer to requeue it after
+// its stuck-job window elapses) — NewRuntime has no way to configure
+// River's RescueStuckJobsAfter window (it defaults to 1 hour), which would
+// make a real mid-job-crash test impractically slow without first adding
+// that config plumbing to NewRuntime, a follow-up out of scope here.
+func TestWorker_UnclaimedJobResumesAfterProcessRestart(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	ctx := context.Background()
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
@@ -125,7 +136,7 @@ func TestWorker_ProcessRestartResumesInFlightJob(t *testing.T) {
 	require.Eventually(t, func() bool {
 		d, err := db.Store.GetNotificationDeliveryByDeliveryID(ctx, orgID, "evt-restart:c1:email")
 		return err == nil && d.State == notificationdelivery.StateDelivered
-	}, 5*time.Second, 50*time.Millisecond, "a second process's runtime must pick up and complete the job the first process enqueued but never worked")
+	}, 5*time.Second, 50*time.Millisecond, "a job enqueued but never claimed before a process dies must be picked up by a new process's runtime")
 }
 
 func TestWorker_ConcurrentRuntimesClaimJobExactlyOnce(t *testing.T) {
@@ -160,7 +171,7 @@ func TestWorker_ConcurrentRuntimesClaimJobExactlyOnce(t *testing.T) {
 		return err == nil && d.State == notificationdelivery.StateDelivered
 	}, 5*time.Second, 50*time.Millisecond)
 
-	require.EqualValues(t, 1, sendCount, "two runtimes racing for one job must result in exactly one Send call, never a double-send")
+	require.EqualValues(t, 1, atomic.LoadInt32(&sendCount), "two runtimes racing for one job must result in exactly one Send call, never a double-send")
 }
 
 type countingAdapter struct {
@@ -171,6 +182,61 @@ type countingAdapter struct {
 func (a countingAdapter) Send(ctx context.Context, cmd outbox.Command) (outbox.Result, error) {
 	atomic.AddInt32(a.count, 1)
 	return a.result, nil
+}
+
+// failingCountingAdapter always reports a permanent provider failure and
+// counts how many times it was called, so a test can prove a permanently
+// failed job is never retried even though River attempts remain.
+type failingCountingAdapter struct {
+	count *int32
+	err   error
+}
+
+func (a failingCountingAdapter) Send(ctx context.Context, cmd outbox.Command) (outbox.Result, error) {
+	atomic.AddInt32(a.count, 1)
+	return outbox.Result{}, a.err
+}
+
+func TestWorker_PermanentFailureIsNeverRetried(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	registry := prometheus.NewRegistry()
+	metrics, err := outbox.NewMetrics(registry)
+	require.NoError(t, err)
+
+	var sendCount int32
+	adapter := failingCountingAdapter{count: &sendCount, err: &outbox.ProviderError{Kind: outbox.ErrorPermanent}}
+
+	runtime, err := outbox.NewRuntime(db.AppPool, adapter, db.Store, metrics)
+	require.NoError(t, err)
+	require.NoError(t, runtime.Start(ctx))
+	defer runtime.Stop(ctx)
+
+	err = outbox.Enqueue(ctx, db.Store, alwaysEntitled{}, runtime.Client, metrics, outbox.Command{
+		DeliveryID: "evt-permanent:c1:email", OrgID: orgID, Channel: notificationdelivery.ChannelEmail,
+	})
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		d, err := db.Store.GetNotificationDeliveryByDeliveryID(ctx, orgID, "evt-permanent:c1:email")
+		return err == nil && d.State == notificationdelivery.StatePermanentlyFailed
+	}, 5*time.Second, 50*time.Millisecond, "a permanent failure must be recorded as permanently_failed, not left pending or in_flight")
+
+	// The TRA-398 ladder's first rung is 1s; give it time to pass. If the
+	// river.JobCancel fix regressed and River treated this as an ordinary
+	// retryable error, Send would be called again around that mark.
+	time.Sleep(2 * time.Second)
+	require.EqualValues(t, 1, atomic.LoadInt32(&sendCount), "a permanent failure must never be retried, no matter how many attempts remain")
+
+	var jobState string
+	scanErr := db.AdminPool.QueryRow(ctx,
+		`SELECT state FROM trakrf.river_job WHERE kind = $1`,
+		outbox.DeliveryJobArgs{}.Kind(),
+	).Scan(&jobState)
+	require.NoError(t, scanErr)
+	require.Equal(t, "cancelled", jobState, "river.JobCancel must leave the job in River's own cancelled state, not retryable/available")
 }
 
 func TestWorker_AmbiguousSubmissionRetriesThroughProviderIdempotencyKey(t *testing.T) {
@@ -211,6 +277,10 @@ func TestWorker_AmbiguousSubmissionRetriesThroughProviderIdempotencyKey(t *testi
 	d, err := db.Store.GetNotificationDeliveryByDeliveryID(ctx, orgID, "evt-ambiguous:c1:email")
 	require.NoError(t, err)
 	require.Equal(t, 2, d.AttemptCount, "exactly two attempts: the ambiguous one and the retry that succeeded")
+
+	require.Len(t, adapter.sentDeliveryIDs, 2, "both the ambiguous attempt and its retry must have reached the adapter")
+	require.NotEmpty(t, adapter.sentDeliveryIDs[0], "the delivery ID that would be the provider idempotency key must not be empty")
+	require.Equal(t, adapter.sentDeliveryIDs[0], adapter.sentDeliveryIDs[1], "a retry after an ambiguous outcome must carry the same delivery ID (the provider idempotency key), not a blind resend with no idempotency linkage")
 }
 
 type adapterCall struct {
@@ -218,12 +288,18 @@ type adapterCall struct {
 	err    error
 }
 
+// sequenceAdapter returns its configured results in order, one per Send
+// call, and records the DeliveryID it was called with each time so tests can
+// confirm a retry carries the same provider idempotency key rather than
+// just blindly resending.
 type sequenceAdapter struct {
-	results []adapterCall
-	next    int
+	results         []adapterCall
+	next            int
+	sentDeliveryIDs []string
 }
 
 func (a *sequenceAdapter) Send(ctx context.Context, cmd outbox.Command) (outbox.Result, error) {
+	a.sentDeliveryIDs = append(a.sentDeliveryIDs, cmd.DeliveryID)
 	call := a.results[a.next]
 	if a.next < len(a.results)-1 {
 		a.next++
