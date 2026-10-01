@@ -172,3 +172,61 @@ func (a countingAdapter) Send(ctx context.Context, cmd outbox.Command) (outbox.R
 	atomic.AddInt32(a.count, 1)
 	return a.result, nil
 }
+
+func TestWorker_AmbiguousSubmissionRetriesThroughProviderIdempotencyKey(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	registry := prometheus.NewRegistry()
+	metrics, err := outbox.NewMetrics(registry)
+	require.NoError(t, err)
+
+	// First attempt: adapter reports outcome-unknown (provider may have
+	// accepted, response was lost). Second attempt: adapter succeeds,
+	// simulating the provider's own idempotency key preventing a duplicate
+	// send on retry.
+	adapter := &sequenceAdapter{
+		results: []adapterCall{
+			{err: &outbox.ProviderError{Kind: outbox.ErrorOutcomeUnknown}},
+			{result: outbox.Result{ProviderMessageID: "resend-msg-3"}},
+		},
+	}
+
+	runtime, err := outbox.NewRuntime(db.AppPool, adapter, db.Store, metrics)
+	require.NoError(t, err)
+	require.NoError(t, runtime.Start(ctx))
+	defer runtime.Stop(ctx)
+
+	err = outbox.Enqueue(ctx, db.Store, alwaysEntitled{}, runtime.Client, metrics, outbox.Command{
+		DeliveryID: "evt-ambiguous:c1:email", OrgID: orgID, Channel: notificationdelivery.ChannelEmail,
+	})
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		d, err := db.Store.GetNotificationDeliveryByDeliveryID(ctx, orgID, "evt-ambiguous:c1:email")
+		return err == nil && d.State == notificationdelivery.StateDelivered
+	}, 40*time.Second, 100*time.Millisecond, "an ambiguous first attempt must retry (per the TRA-398 ladder's 1s first rung) and succeed on the second, not be discarded as permanent nor silently marked delivered on the first ambiguous outcome")
+
+	d, err := db.Store.GetNotificationDeliveryByDeliveryID(ctx, orgID, "evt-ambiguous:c1:email")
+	require.NoError(t, err)
+	require.Equal(t, 2, d.AttemptCount, "exactly two attempts: the ambiguous one and the retry that succeeded")
+}
+
+type adapterCall struct {
+	result outbox.Result
+	err    error
+}
+
+type sequenceAdapter struct {
+	results []adapterCall
+	next    int
+}
+
+func (a *sequenceAdapter) Send(ctx context.Context, cmd outbox.Command) (outbox.Result, error) {
+	call := a.results[a.next]
+	if a.next < len(a.results)-1 {
+		a.next++
+	}
+	return call.result, call.err
+}
