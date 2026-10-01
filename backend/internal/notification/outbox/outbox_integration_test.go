@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/prometheus/client_golang/prometheus"
@@ -89,4 +90,39 @@ func TestEnqueue_SourceRollbackLeavesNoJobAndNoAuditRow(t *testing.T) {
 	).Scan(&jobCount)
 	require.NoError(t, scanErr)
 	require.Zero(t, jobCount, "no river_job row should exist after the enqueueing transaction rolled back")
+}
+
+func TestWorker_ProcessRestartResumesInFlightJob(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	registry := prometheus.NewRegistry()
+	metrics, err := outbox.NewMetrics(registry)
+	require.NoError(t, err)
+
+	adapter := fakeAdapter{result: outbox.Result{ProviderMessageID: "resend-msg-1"}}
+
+	// First "process": enqueue, then stop before working it (simulates a
+	// crash between commit and the worker claiming the job).
+	runtime1, err := outbox.NewRuntime(db.AppPool, adapter, db.Store, metrics)
+	require.NoError(t, err)
+	err = outbox.Enqueue(ctx, db.Store, alwaysEntitled{}, runtime1.Client, metrics, outbox.Command{
+		DeliveryID: "evt-restart:c1:email", OrgID: orgID, Channel: notificationdelivery.ChannelEmail,
+	})
+	require.NoError(t, err)
+	// No Start() call on runtime1: nothing claims the job, simulating a
+	// process that died immediately after the enqueueing transaction committed.
+
+	// Second "process": a fresh runtime against the same pool/table picks
+	// up the still-pending job.
+	runtime2, err := outbox.NewRuntime(db.AppPool, adapter, db.Store, metrics)
+	require.NoError(t, err)
+	require.NoError(t, runtime2.Start(ctx))
+	defer runtime2.Stop(ctx)
+
+	require.Eventually(t, func() bool {
+		d, err := db.Store.GetNotificationDeliveryByDeliveryID(ctx, orgID, "evt-restart:c1:email")
+		return err == nil && d.State == notificationdelivery.StateDelivered
+	}, 5*time.Second, 50*time.Millisecond, "a second process's runtime must pick up and complete the job the first process enqueued but never worked")
 }
