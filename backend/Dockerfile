@@ -4,7 +4,7 @@
 # both build from it. This file is intentionally development-only;
 # the previous `production` target here was unused and drifted (stale
 # `0.1.0-dev` version literal) — removed in TRA-485.
-FROM golang:1.25-alpine AS development
+FROM golang:1.26-alpine AS development
 WORKDIR /app
 
 # Install Air for hot-reload
