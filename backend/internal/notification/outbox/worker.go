@@ -67,10 +67,9 @@ func ClassifyOutcome(err error) DeliveryOutcome {
 	return DeliveryRetryableFailure
 }
 
-// deliveryWorkerStore is the storage surface DeliveryWorker needs. Satisfied
-// structurally by *storage.Storage once its notification_deliveries methods
-// exist (a separate, concurrently-developed task) — this file does not
-// import the storage package directly.
+// deliveryWorkerStore is the storage surface DeliveryWorker needs, narrowed
+// for testing. Satisfied structurally by *storage.Storage — this file does
+// not import the storage package directly.
 type deliveryWorkerStore interface {
 	GetNotificationDeliveryByRiverJobID(ctx context.Context, orgID int, riverJobID int64) (*notificationdelivery.NotificationDelivery, error)
 	UpdateNotificationDeliveryState(ctx context.Context, orgID int, id int64, state notificationdelivery.State, errorKind, providerMessageID *string) error
@@ -78,24 +77,6 @@ type deliveryWorkerStore interface {
 
 // DeliveryWorker works one DeliveryJobArgs job by loading its audit row,
 // calling the channel adapter, and recording the outcome.
-//
-// DeliveryJobArgs itself is defined in job.go, part of a sibling task
-// (Enqueue) landing concurrently. If job.go does not yet exist in this
-// worktree when you start, create this minimal version of it here so your
-// own package compiles and tests pass in isolation — then when the sibling
-// task's branch merges, there will be two definitions and one must be
-// deleted (prefer keeping the sibling's, since Enqueue also needs it):
-//
-//	type DeliveryJobArgs struct {
-//	    OrgID                  int   `json:"org_id"`
-//	    NotificationDeliveryID int64 `json:"notification_delivery_id"`
-//	}
-//	func (DeliveryJobArgs) Kind() string { return "notification_delivery" }
-//
-// Check first: run `find . -name job.go` under backend/internal/notification/outbox/
-// in your worktree. If it's not there, add the above as job.go. If it is
-// there already (e.g. because you merged in a sibling branch), do not
-// duplicate it.
 type DeliveryWorker struct {
 	river.WorkerDefaults[DeliveryJobArgs]
 	store   deliveryWorkerStore
@@ -135,8 +116,24 @@ func (w *DeliveryWorker) Work(ctx context.Context, job *river.Job[DeliveryJobArg
 		kind := string(ErrorPermanent)
 		errorKindPtr = &kind
 	default: // DeliveryRetryableFailure
-		state = notificationdelivery.StateInFlight
+		// River discards a job itself once Attempt reaches MaxAttempts; no
+		// further call into this worker will ever happen for this job. Mirror
+		// that end state in our own audit row now instead of leaving it
+		// stuck at in_flight forever.
+		if job.Attempt >= job.MaxAttempts {
+			state = notificationdelivery.StatePermanentlyFailed
+		} else {
+			state = notificationdelivery.StateInFlight
+		}
+		// Propagate the real provider error kind (transient vs.
+		// outcome-unknown) rather than hardcoding transient: this is the
+		// distinction support needs between "definitely not sent" and "may
+		// have already been accepted."
 		kind := string(ErrorTransient)
+		var providerErr *ProviderError
+		if errors.As(sendErr, &providerErr) && providerErr.Kind != "" {
+			kind = string(providerErr.Kind)
+		}
 		errorKindPtr = &kind
 	}
 
@@ -144,10 +141,20 @@ func (w *DeliveryWorker) Work(ctx context.Context, job *river.Job[DeliveryJobArg
 		return updateErr
 	}
 
-	if outcome != DeliveryDelivered {
+	switch outcome {
+	case DeliveryDelivered:
+		return nil
+	case DeliveryPermanentFailure:
+		// A permanent failure must never be retried, no matter how many
+		// attempts remain. river.JobCancel tells River's client to stop here
+		// instead of treating this as an ordinary retryable error, which
+		// would otherwise retry up to 5 more times over ~36 minutes per the
+		// retry ladder even though the audit row already says
+		// permanently_failed.
+		return river.JobCancel(sendErr)
+	default:
 		// Returning the original error (not a wrapped one) lets River's own
 		// retry/discard logic classify it the same way for every job kind.
 		return sendErr
 	}
-	return nil
 }

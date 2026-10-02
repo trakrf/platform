@@ -18,9 +18,10 @@ type Command struct {
 	DeliveryID string
 	OrgID      int
 	Channel    notificationdelivery.Channel
-	// Payload is opaque to the outbox: it is serialized as-is into the River
-	// job args and handed unchanged to ChannelAdapter.Send. The outbox never
-	// inspects it, so it never needs to know about email vs. SMS shapes.
+	// Payload is reserved for a future caller/adapter integration: this
+	// ticket's Enqueue and Work do not yet persist or thread it anywhere. A
+	// follow-up wiring a real ChannelAdapter must decide where it is stored
+	// before any adapter can read it back.
 	Payload []byte
 }
 
