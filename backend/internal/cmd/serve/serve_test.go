@@ -21,6 +21,7 @@ import (
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
 	musteringhandler "github.com/trakrf/platform/backend/internal/handlers/mustering"
+	notificationrecipientshandler "github.com/trakrf/platform/backend/internal/handlers/notificationrecipients"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
 	outputdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/outputdevices"
 	readerconfighandler "github.com/trakrf/platform/backend/internal/handlers/readerconfig"
@@ -59,6 +60,7 @@ func setupTestRouter(t *testing.T, notificationRuntimes ...notification.RouteReg
 	scanDevicesHandler := scandeviceshandler.NewHandler(store, nil)
 	scanPointsHandler := scanpointshandler.NewHandler(store)
 	outputDevicesHandler := outputdeviceshandler.NewHandler(store, alarm.NewDispatcher(shelly.New(0), nil, nil), 0)
+	notificationRecipientsHandler := notificationrecipientshandler.NewHandler(store)
 	readerConfigHandler := readerconfighandler.NewHandler(store, nil)
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(nil, buildinfo.Info{Version: "test"}, time.Now())
@@ -71,7 +73,7 @@ func setupTestRouter(t *testing.T, notificationRuntimes ...notification.RouteReg
 	testHandler := testhandler.NewHandler(store)
 	webhooksHandler := webhookshandler.NewHandler(store, webhook.NewClient(true))
 
-	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, webhooksHandler, testHandler, store, notificationRuntimes...)
+	return setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, webhooksHandler, testHandler, notificationRecipientsHandler, store, notificationRuntimes...)
 }
 
 func TestRouterSetup(t *testing.T) {

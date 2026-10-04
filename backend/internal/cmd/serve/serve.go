@@ -25,6 +25,7 @@ import (
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
 	musteringhandler "github.com/trakrf/platform/backend/internal/handlers/mustering"
+	notificationrecipientshandler "github.com/trakrf/platform/backend/internal/handlers/notificationrecipients"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
 	outputdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/outputdevices"
 	readerconfighandler "github.com/trakrf/platform/backend/internal/handlers/readerconfig"
@@ -274,6 +275,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// 2s test-fire pulse: long enough for an operator to see the strobe, short
 	// enough not to leave the relay latched after a confidence check.
 	outputDevicesHandler := outputdeviceshandler.NewHandler(store, alarmDispatcher, 2*time.Second)
+	notificationRecipientsHandler := notificationrecipientshandler.NewHandler(store)
 	// TRA-993: pass a true-nil RPCClient interface when reader control is disabled
 	// so the handler's nil check (→503) fires rather than a non-nil interface
 	// wrapping a nil *Client.
@@ -300,7 +302,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	webhooksHandler := webhookshandler.NewHandler(store, webhookClient)
 	log.Info().Msg("Handlers initialized")
 
-	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, webhooksHandler, testHandler, store, smsRuntime, emailRuntime)
+	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, webhooksHandler, testHandler, notificationRecipientsHandler, store, smsRuntime, emailRuntime)
 	log.Info().Msg("Routes registered")
 
 	server := &http.Server{
