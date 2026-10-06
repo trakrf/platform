@@ -502,17 +502,25 @@ api-spec:
 swagger: api-spec
 
 # Smoke test - verifies binary starts without panic (uses PG_URL_LOCAL for host → docker)
+# Listens on BACKEND_PORT (default 8080), the same variable the server reads, so
+# `BACKEND_PORT=18080 just backend validate` works when 8080 is taken.
 smoke-test:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "🔥 Running smoke test..."
+    export BACKEND_PORT="${BACKEND_PORT:-8080}"
+    # A foreign listener would answer the probe below and pass the test for us.
+    if ss -lnt "sport = :${BACKEND_PORT}" 2>/dev/null | grep -q ":${BACKEND_PORT}"; then
+        echo "❌ Port ${BACKEND_PORT} already in use — free it or set BACKEND_PORT" >&2
+        exit 1
+    fi
     just build
-    echo "Starting server with 5s timeout..."
+    echo "Starting server on :${BACKEND_PORT} with 5s timeout..."
     export PG_URL="{{pg_url_local}}"
     timeout 5s ./bin/trakrf > /tmp/trakrf-smoke.log 2>&1 & SERVER_PID=$!
     sleep 2
     echo "Testing /healthz endpoint..."
-    if curl -f http://localhost:8080/healthz > /dev/null 2>&1; then
+    if curl -f "http://localhost:${BACKEND_PORT}/healthz" > /dev/null 2>&1; then
     echo "✅ Smoke test passed"
     kill $SERVER_PID 2>/dev/null || true
     else
