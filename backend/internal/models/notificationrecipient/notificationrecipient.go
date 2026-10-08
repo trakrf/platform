@@ -43,6 +43,7 @@ type Subscription struct {
 	AssetID     int       `json:"asset_id"`
 	RecipientID int       `json:"recipient_id"`
 	Channel     string    `json:"channel"`
+	IsActive    bool      `json:"is_active"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -50,4 +51,11 @@ type Subscription struct {
 type CreateSubscriptionRequest struct {
 	RecipientID int     `json:"recipient_id" validate:"required,gt=0"`
 	Channel     *string `json:"channel,omitempty" validate:"omitempty,oneof=email sms"`
+}
+
+// UpdateSubscriptionRequest changes a subscription in place. Subscriptions are
+// never deleted: set is_active false to switch one off.
+type UpdateSubscriptionRequest struct {
+	Channel  *string `json:"channel,omitempty" validate:"omitempty,oneof=email sms"`
+	IsActive *bool   `json:"is_active,omitempty"`
 }
