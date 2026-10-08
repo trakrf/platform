@@ -24,6 +24,7 @@ import (
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
 	musteringhandler "github.com/trakrf/platform/backend/internal/handlers/mustering"
+	notificationrecipientshandler "github.com/trakrf/platform/backend/internal/handlers/notificationrecipients"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
 	outputdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/outputdevices"
 	readerconfighandler "github.com/trakrf/platform/backend/internal/handlers/readerconfig"
@@ -64,6 +65,7 @@ func setupRouter(
 	kitsHandler *kitshandler.Handler,
 	webhooksHandler *webhookshandler.Handler,
 	testHandler *testhandler.Handler,
+	notificationRecipientsHandler *notificationrecipientshandler.Handler,
 	store *storage.Storage,
 	notificationRuntimes ...notification.RouteRegistrar,
 ) *chi.Mux {
@@ -193,6 +195,7 @@ func setupRouter(
 		// by this gate. Keep the two registrations in this order and this group.
 		usersHandler.RegisterRoutes(r, middleware.RequireSuperadmin(store))
 		assetsHandler.RegisterRoutes(r, paidGate)
+		notificationRecipientsHandler.RegisterRoutes(r, paidGate)
 		inventoryHandler.RegisterRoutes(r)
 		reportsHandler.RegisterRoutes(r)
 		// Internal-only scan device/point management (not public API).
