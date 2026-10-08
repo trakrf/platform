@@ -139,3 +139,89 @@ func TestNotificationRecipients_CrossOrgReturnsNotFound(t *testing.T) {
 	rec = do(t, r, orgB, http.MethodGet, "/api/v1/notification-recipients/"+strconv.Itoa(created.Data.ID), nil)
 	require.Equal(t, http.StatusNotFound, rec.Code)
 }
+
+func createRecipient(t *testing.T, r http.Handler, orgID int, body map[string]any) int {
+	t.Helper()
+	rec := do(t, r, orgID, http.MethodPost, "/api/v1/notification-recipients", body)
+	require.Equal(t, http.StatusCreated, rec.Code)
+	var created struct {
+		Data struct {
+			ID int `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &created))
+	return created.Data.ID
+}
+
+type subscriptionBody struct {
+	Data struct {
+		ID       int    `json:"id"`
+		Channel  string `json:"channel"`
+		IsActive bool   `json:"is_active"`
+	} `json:"data"`
+}
+
+func TestNotificationSubscriptions_RepeatSubscribeReturnsExisting(t *testing.T) {
+	r, db, orgID := newRouter(t)
+	a := testutil.CreateTestAsset(t, db.AdminPool, orgID, "ASSET-H-REPEAT")
+	recipientID := createRecipient(t, r, orgID, map[string]any{"name": "R", "email": "repeat@acme.test"})
+	path := "/api/v1/assets/" + strconv.Itoa(a.ID) + "/notification-subscriptions"
+
+	rec := do(t, r, orgID, http.MethodPost, path, map[string]any{"recipient_id": recipientID})
+	require.Equal(t, http.StatusCreated, rec.Code)
+	var first subscriptionBody
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &first))
+
+	rec = do(t, r, orgID, http.MethodPost, path, map[string]any{"recipient_id": recipientID})
+	require.Equal(t, http.StatusOK, rec.Code)
+	var again subscriptionBody
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &again))
+	require.Equal(t, first.Data.ID, again.Data.ID)
+}
+
+func TestNotificationSubscriptions_PatchSwitchesOffAndDeleteIsNotAllowed(t *testing.T) {
+	r, db, orgID := newRouter(t)
+	a := testutil.CreateTestAsset(t, db.AdminPool, orgID, "ASSET-H-PATCH")
+	recipientID := createRecipient(t, r, orgID, map[string]any{"name": "P", "email": "patch@acme.test"})
+	path := "/api/v1/assets/" + strconv.Itoa(a.ID) + "/notification-subscriptions"
+
+	rec := do(t, r, orgID, http.MethodPost, path, map[string]any{"recipient_id": recipientID})
+	require.Equal(t, http.StatusCreated, rec.Code)
+	var sub subscriptionBody
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &sub))
+	subPath := path + "/" + strconv.Itoa(sub.Data.ID)
+
+	rec = do(t, r, orgID, http.MethodPatch, subPath, map[string]any{"is_active": false})
+	require.Equal(t, http.StatusOK, rec.Code)
+	var off subscriptionBody
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &off))
+	require.False(t, off.Data.IsActive)
+
+	require.Equal(t, http.StatusMethodNotAllowed, do(t, r, orgID, http.MethodDelete, subPath, nil).Code)
+
+	rec = do(t, r, orgID, http.MethodGet, path, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	var list struct {
+		Data []struct {
+			IsActive bool `json:"is_active"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &list))
+	require.Len(t, list.Data, 1, "a switched-off subscription is still listed")
+	require.False(t, list.Data[0].IsActive)
+}
+
+func TestNotificationSubscriptions_PatchSmsWithoutPhoneIsBadRequest(t *testing.T) {
+	r, db, orgID := newRouter(t)
+	a := testutil.CreateTestAsset(t, db.AdminPool, orgID, "ASSET-H-PSMS")
+	recipientID := createRecipient(t, r, orgID, map[string]any{"name": "E", "email": "psms@acme.test"})
+	path := "/api/v1/assets/" + strconv.Itoa(a.ID) + "/notification-subscriptions"
+
+	rec := do(t, r, orgID, http.MethodPost, path, map[string]any{"recipient_id": recipientID})
+	var sub subscriptionBody
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &sub))
+
+	rec = do(t, r, orgID, http.MethodPatch, path+"/"+strconv.Itoa(sub.Data.ID), map[string]any{"channel": "sms"})
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Equal(t, http.StatusNotFound, do(t, r, orgID, http.MethodPatch, path+"/"+strconv.Itoa(sub.Data.ID+1_000_000), map[string]any{"is_active": false}).Code)
+}

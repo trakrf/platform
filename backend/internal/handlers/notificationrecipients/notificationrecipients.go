@@ -38,6 +38,8 @@ type dataResponse[T any] struct {
 
 // RegisterRoutes mounts inside the session-auth group. Mutations are paid,
 // reads are open, matching the other asset-adjacent management surfaces.
+// Subscriptions have no DELETE: they are switched off with PATCH is_active
+// false, so the record of who was subscribed is kept.
 func (h *Handler) RegisterRoutes(r chi.Router, paidGate func(http.Handler) http.Handler) {
 	r.Get("/api/v1/notification-recipients", h.ListRecipients)
 	r.With(paidGate).Post("/api/v1/notification-recipients", h.CreateRecipient)
@@ -47,7 +49,7 @@ func (h *Handler) RegisterRoutes(r chi.Router, paidGate func(http.Handler) http.
 
 	r.Get("/api/v1/assets/{asset_id}/notification-subscriptions", h.ListSubscriptions)
 	r.With(paidGate).Post("/api/v1/assets/{asset_id}/notification-subscriptions", h.CreateSubscription)
-	r.With(paidGate).Delete("/api/v1/assets/{asset_id}/notification-subscriptions/{subscription_id}", h.DeleteSubscription)
+	r.With(paidGate).Patch("/api/v1/assets/{asset_id}/notification-subscriptions/{subscription_id}", h.UpdateSubscription)
 }
 
 func (h *Handler) ListRecipients(w http.ResponseWriter, r *http.Request) {
@@ -220,16 +222,22 @@ func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 	if req.Channel != nil {
 		channel = *req.Channel
 	}
-	sub, err := h.storage.CreateAssetNotificationSubscription(r.Context(), orgID, assetID, req.RecipientID, channel)
+	sub, created, err := h.storage.CreateAssetNotificationSubscription(r.Context(), orgID, assetID, req.RecipientID, channel)
 	if err != nil {
 		h.respondStorage(w, r, err, reqID)
 		return
 	}
+	// Subscribing is idempotent: an existing subscription is switched back on
+	// and returned with 200 rather than rejected as a duplicate.
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
 	w.Header().Set("Location", "/api/v1/assets/"+strconv.Itoa(assetID)+"/notification-subscriptions/"+strconv.Itoa(sub.ID))
-	httputil.WriteJSON(w, http.StatusCreated, dataResponse[notificationrecipient.Subscription]{Data: *sub})
+	httputil.WriteJSON(w, status, dataResponse[notificationrecipient.Subscription]{Data: *sub})
 }
 
-func (h *Handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 	orgID, err := middleware.GetRequestOrgID(r)
 	if err != nil {
@@ -246,21 +254,31 @@ func (h *Handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 		httputil.RespondPathParamError(w, r, err, reqID)
 		return
 	}
-	ok, err := h.storage.DeleteAssetNotificationSubscription(r.Context(), orgID, assetID, subID)
-	if err != nil {
-		httputil.RespondStorageError(w, r, err, reqID)
+	var req notificationrecipient.UpdateSubscriptionRequest
+	if err := httputil.DecodeJSONStrict(r, &req); err != nil {
+		httputil.RespondDecodeError(w, r, err, reqID)
 		return
 	}
-	if !ok {
+	if err := validate.Struct(req); err != nil {
+		httputil.RespondValidationError(w, r, err, reqID)
+		return
+	}
+	sub, err := h.storage.UpdateAssetNotificationSubscription(r.Context(), orgID, assetID, subID, req)
+	if err != nil {
+		h.respondStorage(w, r, err, reqID)
+		return
+	}
+	if sub == nil {
 		httputil.Respond404(w, r, "notification subscription not found", reqID)
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+	httputil.WriteJSON(w, http.StatusOK, dataResponse[notificationrecipient.Subscription]{Data: *sub})
 }
 
 // respondStorage maps the subscription sentinels to 404/400 and defers
 // everything else, including SQLSTATE 23505 on duplicate contacts, to the
-// shared storage-error mapper (409 conflict).
+// shared storage-error mapper (409 conflict), as when a channel change would
+// duplicate another of the recipient's subscriptions on the asset.
 func (h *Handler) respondStorage(w http.ResponseWriter, r *http.Request, err error, reqID string) {
 	switch {
 	case errors.Is(err, storage.ErrNotificationRecipientNotFound):
