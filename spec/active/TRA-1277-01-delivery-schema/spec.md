@@ -18,11 +18,11 @@ the shelves.
 Migration 000048 adds nullable `event_id`, `recipient_id`, `asset_id`, `payload` to `notification_deliveries` and creates `notification_suppressions`; checksums updated.
 
 ## Validation Criteria
-- [ ] `just backend migrate` applies 000048 cleanly
-- [ ] `just backend migrate-down` then `just backend migrate` round-trips cleanly
-- [ ] `git diff origin/main -- backend/migrations/checksums.txt` adds exactly 2 lines, changes none
-- [ ] `go test ./migrations/` passes
-- [ ] `just backend lint` and `just backend test` pass
+- [x] 000048 applies cleanly (scratch DB via `go run . migrate`; see log.md)
+- [x] Down then up round-trips cleanly (scratch DB via `migrate down 1` + `go run . migrate`; see log.md)
+- [x] `git diff origin/main -- backend/migrations/checksums.txt` adds exactly 2 lines, changes none
+- [x] `go test ./migrations/` passes
+- [x] `just backend lint` and `just backend test` pass
 
 ## Out of scope
 Everything not listed above; see the parent spec's MR table. No caller is wired in this MR.
