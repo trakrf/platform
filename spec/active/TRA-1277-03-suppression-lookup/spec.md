@@ -17,13 +17,13 @@ later cleared, and if the database can't answer, it says "I don't know" (an erro
 `(*Storage).IsSuppressed(ctx, orgID, channel, address) (bool, error)`, matching the spec's `SuppressionChecker`.
 
 ## Validation Criteria
-- [ ] Uncleared row → suppressed
-- [ ] Different case (`Foo@X.test` vs `foo@x.test`) → suppressed
-- [ ] Cleared row → not suppressed
-- [ ] Same address on the other channel → not suppressed
-- [ ] Same address in another org → not suppressed
-- [ ] `just backend check-rls-guard` clean
-- [ ] `just backend lint` and `just backend test` pass
+- [x] Uncleared row → suppressed (integration subtest `uncleared_row`)
+- [x] Different case (`Foo@X.test` vs `foo@x.test`) → suppressed (`different_case`)
+- [x] Cleared row → not suppressed (`cleared_row`)
+- [x] Same address on the other channel → not suppressed (`same_address,_other_channel`)
+- [x] Same address in another org → not suppressed (`same_address,_other_org`)
+- [x] `just backend check-rls-guard` clean (run as part of `just backend lint`: `✓ check-rls-guard: clean`)
+- [x] `just backend lint` and `just backend test` pass (lint clean; Go tests run via `just validate`, 69 packages ok)
 
 ## Out of scope
 Everything not listed above; see the parent spec's MR table. No caller is wired in this MR.
