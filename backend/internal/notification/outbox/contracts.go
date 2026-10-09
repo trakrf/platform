@@ -18,10 +18,14 @@ type Command struct {
 	DeliveryID string
 	OrgID      int
 	Channel    notificationdelivery.Channel
-	// Payload is reserved for a future caller/adapter integration: this
-	// ticket's Enqueue and Work do not yet persist or thread it anywhere. A
-	// follow-up wiring a real ChannelAdapter must decide where it is stored
-	// before any adapter can read it back.
+	// Routing context recorded on the delivery row. A zero value is stored
+	// as NULL.
+	EventID     string
+	RecipientID int
+	AssetID     int
+	// Payload is the rendered message (raw JSON). The batch enqueue path
+	// persists it to notification_deliveries.payload; it contains PII, so it
+	// must never be put in River job args or logs.
 	Payload []byte
 }
 

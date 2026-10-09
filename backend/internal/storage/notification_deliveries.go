@@ -12,7 +12,24 @@ import (
 )
 
 const notificationDeliveryColumns = `id, org_id, delivery_id, channel, river_job_id, state,
-	attempt_count, last_error_kind, provider_message_id, created_at, last_attempted_at, finalized_at`
+	attempt_count, last_error_kind, provider_message_id, created_at, last_attempted_at, finalized_at,
+	event_id, recipient_id, asset_id, payload`
+
+// scanNotificationDelivery scans notificationDeliveryColumns, in order.
+func scanNotificationDelivery(row pgx.Row, d *notificationdelivery.NotificationDelivery) error {
+	var channel, state string
+	err := row.Scan(
+		&d.ID, &d.OrgID, &d.DeliveryID, &channel, &d.RiverJobID, &state,
+		&d.AttemptCount, &d.LastErrorKind, &d.ProviderMessageID,
+		&d.CreatedAt, &d.LastAttemptedAt, &d.FinalizedAt,
+		&d.EventID, &d.RecipientID, &d.AssetID, &d.Payload)
+	if err != nil {
+		return err
+	}
+	d.Channel = notificationdelivery.Channel(channel)
+	d.State = notificationdelivery.State(state)
+	return nil
+}
 
 // InsertNotificationDeliveryTx inserts an audit row inside the caller's
 // transaction (TRA-1192). Call this in the same tx as the River job insert
@@ -29,6 +46,34 @@ func (s *Storage) InsertNotificationDeliveryTx(ctx context.Context, tx pgx.Tx, o
 		return 0, fmt.Errorf("failed to insert notification delivery: %w", err)
 	}
 	return id, nil
+}
+
+// InsertNotificationDeliveryIfAbsentTx inserts an audit row with its routing
+// context inside the caller's transaction, unless a row with the same
+// (org_id, delivery_id) already exists. inserted=false means the delivery was
+// enqueued earlier: the caller must not insert another job for it.
+func (s *Storage) InsertNotificationDeliveryIfAbsentTx(ctx context.Context, tx pgx.Tx, orgID int, d notificationdelivery.NotificationDelivery) (int64, bool, error) {
+	const query = `INSERT INTO trakrf.notification_deliveries
+		(org_id, delivery_id, channel, state, event_id, recipient_id, asset_id, payload)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (org_id, delivery_id) DO NOTHING
+		RETURNING id`
+
+	var payload []byte
+	if len(d.Payload) > 0 {
+		payload = d.Payload
+	}
+
+	var id int64
+	err := tx.QueryRow(ctx, query, orgID, d.DeliveryID, string(d.Channel), string(d.State),
+		d.EventID, d.RecipientID, d.AssetID, payload).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("failed to insert notification delivery: %w", err)
+	}
+	return id, true, nil
 }
 
 // SetNotificationDeliveryRiverJobIDTx records the River job ID against the
@@ -51,12 +96,8 @@ func (s *Storage) GetNotificationDeliveryByDeliveryID(ctx context.Context, orgID
 		WHERE org_id = $1 AND delivery_id = $2`
 
 	var d notificationdelivery.NotificationDelivery
-	var channel, state string
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, orgID, deliveryID).Scan(
-			&d.ID, &d.OrgID, &d.DeliveryID, &channel, &d.RiverJobID, &state,
-			&d.AttemptCount, &d.LastErrorKind, &d.ProviderMessageID,
-			&d.CreatedAt, &d.LastAttemptedAt, &d.FinalizedAt)
+		return scanNotificationDelivery(tx.QueryRow(ctx, query, orgID, deliveryID), &d)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("notification delivery %q not found", deliveryID)
@@ -64,8 +105,6 @@ func (s *Storage) GetNotificationDeliveryByDeliveryID(ctx context.Context, orgID
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notification delivery: %w", err)
 	}
-	d.Channel = notificationdelivery.Channel(channel)
-	d.State = notificationdelivery.State(state)
 	return &d, nil
 }
 
@@ -77,12 +116,8 @@ func (s *Storage) GetNotificationDeliveryByRiverJobID(ctx context.Context, orgID
 		WHERE org_id = $1 AND river_job_id = $2`
 
 	var d notificationdelivery.NotificationDelivery
-	var channel, state string
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, orgID, riverJobID).Scan(
-			&d.ID, &d.OrgID, &d.DeliveryID, &channel, &d.RiverJobID, &state,
-			&d.AttemptCount, &d.LastErrorKind, &d.ProviderMessageID,
-			&d.CreatedAt, &d.LastAttemptedAt, &d.FinalizedAt)
+		return scanNotificationDelivery(tx.QueryRow(ctx, query, orgID, riverJobID), &d)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("notification delivery for river job %d not found", riverJobID)
@@ -90,8 +125,6 @@ func (s *Storage) GetNotificationDeliveryByRiverJobID(ctx context.Context, orgID
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notification delivery by river job id: %w", err)
 	}
-	d.Channel = notificationdelivery.Channel(channel)
-	d.State = notificationdelivery.State(state)
 	return &d, nil
 }
 

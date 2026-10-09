@@ -37,4 +37,11 @@ type NotificationDelivery struct {
 	CreatedAt         time.Time
 	LastAttemptedAt   *time.Time
 	FinalizedAt       *time.Time
+	// Routing context; nil on rows written before it was recorded.
+	EventID     *string
+	RecipientID *int
+	AssetID     *int
+	// Payload is the rendered message as raw JSON; nil means NULL. It holds
+	// the recipient's address and message text, so never log it.
+	Payload []byte
 }
