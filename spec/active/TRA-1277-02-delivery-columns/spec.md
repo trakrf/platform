@@ -18,11 +18,11 @@ or crashing.
 `InsertNotificationDeliveryIfAbsentTx` writes the new columns with `ON CONFLICT DO NOTHING`; `outbox.Command` and the delivery model carry the fields; both getters read them back.
 
 ## Validation Criteria
-- [ ] Round-trip: every new field reads back equal (payload compared with `require.JSONEq`)
-- [ ] Second insert with the same `delivery_id` → `inserted=false`, row unchanged
-- [ ] nil payload reads back nil
-- [ ] Existing outbox and worker tests still pass unchanged
-- [ ] `just backend lint` and `just backend test` pass
+- [x] Round-trip: every new field reads back equal through both getters (payload compared with `require.JSONEq`)
+- [x] Second insert with the same `delivery_id` → `inserted=false`, id 0, row unchanged
+- [x] nil (and empty) payload reads back nil; unset event/recipient/asset read back nil
+- [x] Existing outbox and worker tests still pass unchanged (integration run of `./internal/notification/outbox/`)
+- [x] `just backend lint` and `just backend test` pass (and `just validate` exits 0)
 
 ## Out of scope
 Everything not listed above; see the parent spec's MR table. No caller is wired in this MR.
