@@ -17,12 +17,12 @@ behind; and two workers doing the same stack at the same moment still produce ex
 `batch_integration_test.go` covering the spec's atomicity, idempotency, concurrency and RLS criteria for the outbox.
 
 ## Validation Criteria
-- [ ] N commands → N rows with payload + `river_job_id`, N River jobs, `ok=N`
-- [ ] Same batch again → all `Duplicate`; row and job counts unchanged; `duplicate=N`
-- [ ] River insert fails on the 2nd command → error; 0 rows and 0 jobs for the org; no metrics
-- [ ] Two concurrent identical batches → exactly N rows and N jobs in total
-- [ ] Org B cannot read org A's rows
-- [ ] `just backend lint` and `just backend test` pass
+- [x] N commands → N rows with payload + `river_job_id`, N River jobs, `ok=N`
+- [x] Same batch again → all `Duplicate`; row and job counts unchanged; `duplicate=N`
+- [x] River insert fails on the 2nd command → error; 0 rows and 0 jobs for the org; no metrics
+- [x] Two concurrent identical batches → exactly N rows and N jobs in total; N queued + N duplicate across both; no error
+- [x] Org B cannot read org A's rows (by-id lookup not found, and a predicate-free count under org B's RLS context is 0)
+- [x] `just backend lint` and `just backend test` pass (also `just validate` exit 0)
 
 ## Out of scope
 Everything not listed above; see the parent spec's MR table. No caller is wired in this MR.
