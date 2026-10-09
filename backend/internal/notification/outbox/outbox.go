@@ -40,6 +40,10 @@ func CheckEntitlement(ctx context.Context, checker EntitlementChecker, orgID int
 	return !entitled, nil
 }
 
+// deliveryMaxAttempts bounds every delivery job: the TRA-398 ladder has 5
+// rungs; original attempt + 5 retries = 6.
+const deliveryMaxAttempts = 6
+
 // Enqueue durably records cmd as a pending delivery, atomically with the
 // audit row, inside one DB transaction. A rolled-back caller transaction
 // (by using the same tx passed here) leaves neither row behind.
@@ -70,7 +74,7 @@ func Enqueue(ctx context.Context, store deliveryStore, entitlement EntitlementCh
 
 		args := DeliveryJobArgs{OrgID: cmd.OrgID, NotificationDeliveryID: deliveryDBID}
 		result, err := riverClient.InsertTx(ctx, tx, args, &river.InsertOpts{
-			MaxAttempts: 6, // TRA-398 ladder has 5 rungs; original attempt + 5 retries = 6
+			MaxAttempts: deliveryMaxAttempts,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to enqueue river job: %w", err)
