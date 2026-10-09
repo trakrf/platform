@@ -17,12 +17,12 @@ are paused or deleted, so the next step can explain why they were skipped.
 `(*Storage).ListSubscribersForAsset(ctx, orgID, assetID) ([]notificationrecipient.Subscriber, error)`: one org-scoped join, filtered on `s.is_active`.
 
 ## Validation Criteria
-- [ ] No subscriptions → empty, non-nil slice
-- [ ] One recipient on email and SMS → two rows
-- [ ] Switched-off subscription → absent
-- [ ] Inactive recipient → present with `RecipientActive=false`
-- [ ] Another org's subscriptions never returned
-- [ ] `just backend lint` and `just backend test` pass
+- [x] No subscriptions → empty, non-nil slice
+- [x] One recipient on email and SMS → two rows
+- [x] Switched-off subscription → absent
+- [x] Inactive recipient → present with `RecipientActive=false`
+- [x] Another org's subscriptions never returned
+- [x] `just backend lint` and the backend Go tests pass (run via `just validate`: 69 packages `ok`), plus `./internal/storage/` under `-tags=integration`
 
 ## Out of scope
 Everything not listed above; see the parent spec's MR table. No caller is wired in this MR.
