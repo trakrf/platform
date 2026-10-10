@@ -2,7 +2,7 @@ import React, { type ReactNode } from 'react';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useAssetHistory } from './useAssetHistory';
+import { useAssetHistory, fetchAllAssetHistory } from './useAssetHistory';
 import { reportsApi } from '@/lib/api/reports';
 
 vi.mock('@/lib/api/reports');
@@ -101,5 +101,56 @@ describe('useAssetHistory', () => {
         to: '2025-01-27T23:59:59Z',
       });
     });
+  });
+});
+
+const historyRows = (n: number, start = 0) =>
+  Array.from({ length: n }, (_, i) => ({
+    timestamp: '2025-01-27T10:30:00Z',
+    location_id: start + i,
+    location_external_key: `LOC-${start + i}`,
+    duration_seconds: null,
+  }));
+
+const historyPage = (rows: ReturnType<typeof historyRows>, offset: number, total: number) =>
+  ({
+    data: { data: rows, limit: 200, offset, total_count: total },
+  }) as Awaited<ReturnType<typeof reportsApi.listAssetHistory>>;
+
+describe('fetchAllAssetHistory', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('pages through every row in the range at the backend page cap', async () => {
+    vi.mocked(reportsApi.listAssetHistory)
+      .mockResolvedValueOnce(historyPage(historyRows(200), 0, 250))
+      .mockResolvedValueOnce(historyPage(historyRows(50, 200), 200, 250));
+
+    const rows = await fetchAllAssetHistory(7, { from: '2025-01-01T00:00:00Z' });
+
+    expect(rows).toHaveLength(250);
+    expect(reportsApi.listAssetHistory).toHaveBeenCalledTimes(2);
+    expect(reportsApi.listAssetHistory).toHaveBeenNthCalledWith(1, 7, {
+      from: '2025-01-01T00:00:00Z',
+      limit: 200,
+      offset: 0,
+    });
+    expect(reportsApi.listAssetHistory).toHaveBeenNthCalledWith(2, 7, {
+      from: '2025-01-01T00:00:00Z',
+      limit: 200,
+      offset: 200,
+    });
+  });
+
+  it('stops on an empty page even when total_count claims more', async () => {
+    vi.mocked(reportsApi.listAssetHistory)
+      .mockResolvedValueOnce(historyPage(historyRows(200), 0, 500))
+      .mockResolvedValueOnce(historyPage([], 200, 500));
+
+    const rows = await fetchAllAssetHistory(7, {});
+
+    expect(rows).toHaveLength(200);
+    expect(reportsApi.listAssetHistory).toHaveBeenCalledTimes(2);
   });
 });
