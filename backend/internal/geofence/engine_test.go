@@ -101,6 +101,7 @@ func newTestEngine(cfg Config, s engineStore, d outputDriver) *Engine {
 		store:        s,
 		driver:       d,
 		latch:        newLatch(0, clk),
+		pulses:       newPulseGuard(),
 		presence:     newPresence(d, log),
 		startupGrace: cfg.StartupGrace,
 		log:          log,
