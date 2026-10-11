@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/rs/zerolog"
 
@@ -278,5 +279,63 @@ func TestHandleRPC_UnparseableDropped(t *testing.T) {
 	topic, reply := d.handleRPC([]byte(`{not valid json`))
 	if topic != "" || reply != nil {
 		t.Errorf("expected drop (empty topic, nil reply); got topic=%q reply=%v", topic, reply)
+	}
+}
+
+// fakeMessage is a minimal mqtt.Message carrying only a payload.
+type fakeMessage struct{ payload []byte }
+
+func (m fakeMessage) Duplicate() bool   { return false }
+func (m fakeMessage) Qos() byte         { return 1 }
+func (m fakeMessage) Retained() bool    { return false }
+func (m fakeMessage) Topic() string     { return "trakrf.id/cs463-212/rpc" }
+func (m fakeMessage) MessageID() uint16 { return 0 }
+func (m fakeMessage) Payload() []byte   { return m.payload }
+func (m fakeMessage) Ack()              {}
+
+// The paho callback must never wait on the reply publish: the client cannot
+// process the broker's ack until the callback returns, so waiting there costs
+// the full publish timeout per request and holds every later command behind it.
+func TestHandleMessage_ReplyPublishDoesNotHoldNextCommand(t *testing.T) {
+	a := &fakeAdapter{}
+	d := newTestDaemon(a)
+
+	release := make(chan struct{})
+	published := make(chan string, 2)
+	d.publish = func(topic string, _ []byte) error {
+		<-release
+		published <- topic
+		return nil
+	}
+
+	gpo := func(id, port int) fakeMessage {
+		params, _ := json.Marshal(readerrpc.GpoSetParams{Port: port, On: true})
+		b, _ := json.Marshal(readerrpc.Request{ID: id, Src: "reply/" + string(rune('0'+id)), Method: readerrpc.MethodGpoSet, Params: params})
+		return fakeMessage{payload: b}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		d.handleMessage(nil, gpo(1, 2))
+		d.handleMessage(nil, gpo(2, 1))
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handleMessage blocked on the reply publish; the second command never ran")
+	}
+	if a.lastGpoPort != 1 {
+		t.Errorf("last gpo port = %d, want 1 (second command driven)", a.lastGpoPort)
+	}
+
+	close(release)
+	for i := 0; i < 2; i++ {
+		select {
+		case <-published:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("reply %d was never published", i+1)
+		}
 	}
 }
