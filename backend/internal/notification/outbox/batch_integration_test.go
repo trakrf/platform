@@ -68,7 +68,7 @@ func (f batchFixture) commands(n int) []outbox.Command {
 			DeliveryID:  fmt.Sprintf("evt-batch:c%d:email", i),
 			OrgID:       f.orgID,
 			Channel:     notificationdelivery.ChannelEmail,
-			EventID:     "evt-batch",
+			EventID:     9001,
 			RecipientID: f.recipientID,
 			AssetID:     f.assetID,
 			Payload:     []byte(fmt.Sprintf(`{"subject":"Asset left zone","seq":%d}`, i)),
@@ -119,7 +119,7 @@ func TestEnqueueBatch_RecordsRowsWithPayloadAndOneJobEach(t *testing.T) {
 		require.NotNil(t, d.RiverJobID)
 		require.Equal(t, results[i].RiverJobID, *d.RiverJobID)
 		require.Equal(t, notificationdelivery.StatePending, d.State)
-		require.Equal(t, "evt-batch", *d.EventID)
+		require.Equal(t, 9001, *d.EventID)
 		require.Equal(t, f.recipientID, *d.RecipientID)
 		require.Equal(t, f.assetID, *d.AssetID)
 		require.JSONEq(t, string(cmd.Payload), string(d.Payload))
