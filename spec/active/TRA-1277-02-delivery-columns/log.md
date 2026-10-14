@@ -16,8 +16,8 @@ File: `backend/internal/storage/notification_deliveries_integration_test.go`
 - `go vet -tags=integration ./internal/storage/` → `unknown field EventID in struct literal of type notificationdelivery.NotificationDelivery` (expected red).
 
 ### Task 1: model and `Command` fields — ✅ Complete
-- `NotificationDelivery` gains `EventID *string`, `RecipientID *int`, `AssetID *int`, `Payload []byte`.
-- `outbox.Command` gains `EventID string`, `RecipientID int`, `AssetID int`; the `Payload` comment now says the batch path persists it and it never goes in River job args or logs. `Enqueue` is unchanged.
+- `NotificationDelivery` gains `EventID *int`, `RecipientID *int`, `AssetID *int`, `Payload []byte`.
+- `outbox.Command` gains `EventID int`, `RecipientID int`, `AssetID int`; the `Payload` comment now says the batch path persists it and it never goes in River job args or logs. `Enqueue` is unchanged.
 
 ### Task 2: `InsertNotificationDeliveryIfAbsentTx` — ✅ Complete
 - Signature as planned: `(ctx, tx pgx.Tx, orgID int, d NotificationDelivery) (int64, bool, error)`.
@@ -41,3 +41,9 @@ File: `backend/internal/storage/notification_deliveries_integration_test.go`
 Total tasks: 4 · Completed: 4 · Failed: 0
 Deviations: none from the plan's code; `EnterWorktree` could not be used (see Setup).
 Ready for /check: YES
+
+### Follow-up: `event_id` is BIGINT — ✅ Complete
+- An event is a row with a BIGINT id, and one event has many deliveries, so `event_id` is that id repeated on each delivery. It is not unique; `delivery_id` is.
+- 000048 ships in #712, which is synced to preview and may already be applied there, so the type change is a forward migration, `000049_notification_delivery_event_id_bigint`. The FK comes with the events table.
+- `EventID` is `*int` on the model and `int` on `outbox.Command`, matching `RecipientID` and `AssetID`.
+- `go build ./...`, `go vet` (incl. `-tags=integration ./internal/storage/`) clean; `go test -tags=integration -run NotificationDelivery ./internal/storage/` 3/3 PASS; `./internal/notification/...` and `./migrations/` ok. 000049 down → `text`, up → `bigint`, run in a rolled-back transaction on `trakrf_test`.

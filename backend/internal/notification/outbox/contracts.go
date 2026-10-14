@@ -20,7 +20,7 @@ type Command struct {
 	Channel    notificationdelivery.Channel
 	// Routing context recorded on the delivery row. A zero value is stored
 	// as NULL.
-	EventID     string
+	EventID     int
 	RecipientID int
 	AssetID     int
 	// Payload is the rendered message (raw JSON). The batch enqueue path

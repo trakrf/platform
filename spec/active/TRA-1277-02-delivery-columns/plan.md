@@ -26,13 +26,13 @@ or crashing.
 ### Task 1: Model and `Command` fields
 ```go
 // notificationdelivery.NotificationDelivery — append:
-EventID     *string
+EventID     *int
 RecipientID *int
 AssetID     *int
 Payload     []byte // raw JSON; nil means NULL
 
 // outbox.Command — add (zero value is stored as NULL):
-EventID     string
+EventID     int
 RecipientID int
 AssetID     int
 ```

@@ -67,7 +67,7 @@ func TestNotificationDelivery_InsertIfAbsentRoundTripsRoutingContext(t *testing.
 	})
 	require.NoError(t, err)
 
-	eventID := "evt-route-1"
+	eventID := 9001
 	payload := []byte(`{"to":"priya@acme.test","subject":"Asset moved","body":"hi"}`)
 	d := notificationdelivery.NotificationDelivery{
 		DeliveryID:  "evt-route-1:recipient:email",
@@ -100,7 +100,7 @@ func TestNotificationDelivery_InsertIfAbsentRoundTripsRoutingContext(t *testing.
 
 	// A second insert of the same delivery is a no-op, not a duplicate or an error.
 	other := d
-	otherEvent := "evt-route-other"
+	otherEvent := 9002
 	other.EventID = &otherEvent
 	other.Payload = []byte(`{"body":"changed"}`)
 	var secondID int64
