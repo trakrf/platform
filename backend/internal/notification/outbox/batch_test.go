@@ -193,7 +193,7 @@ func TestEnqueueBatchTx_MapsRoutingContextAndLeavesTxToCaller(t *testing.T) {
 	jobs := &fakeInserter{}
 	withContext := batchCmd("evt-9:contact-1:sms")
 	withContext.Channel = notificationdelivery.ChannelSMS
-	withContext.EventID = "evt-9"
+	withContext.EventID = 9
 	withContext.RecipientID = 5
 	withContext.AssetID = 77
 	bare := outbox.Command{DeliveryID: "evt-9:contact-2:email", OrgID: 42, Channel: notificationdelivery.ChannelEmail}
@@ -208,7 +208,7 @@ func TestEnqueueBatchTx_MapsRoutingContextAndLeavesTxToCaller(t *testing.T) {
 	require.Equal(t, "evt-9:contact-1:sms", got.DeliveryID)
 	require.Equal(t, notificationdelivery.ChannelSMS, got.Channel)
 	require.Equal(t, notificationdelivery.StatePending, got.State)
-	require.Equal(t, "evt-9", *got.EventID)
+	require.Equal(t, 9, *got.EventID)
 	require.Equal(t, 5, *got.RecipientID)
 	require.Equal(t, 77, *got.AssetID)
 	require.Equal(t, withContext.Payload, got.Payload)

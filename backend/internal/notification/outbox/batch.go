@@ -96,7 +96,7 @@ func toDelivery(cmd Command) notificationdelivery.NotificationDelivery {
 		State:      notificationdelivery.StatePending,
 		Payload:    cmd.Payload,
 	}
-	if cmd.EventID != "" {
+	if cmd.EventID != 0 {
 		d.EventID = &cmd.EventID
 	}
 	if cmd.RecipientID != 0 {
