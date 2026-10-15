@@ -10,7 +10,7 @@ func SanitizeHeaders(headers http.Header) map[string]string {
 
 	for key, values := range headers {
 		lowerKey := strings.ToLower(key)
-		if lowerKey == "x-twilio-signature" {
+		if lowerKey == "x-twilio-signature" || strings.HasPrefix(lowerKey, "svix-") {
 			sanitized[key] = "<redacted>"
 			continue
 		}

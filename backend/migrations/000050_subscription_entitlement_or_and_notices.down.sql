@@ -1,4 +1,4 @@
--- Revert to the 000042 entitlement formula and drop the TRA-1047 follow-up objects.
+-- Revert to the 000049 entitlement formula and drop the TRA-1047 follow-up objects.
 DROP FUNCTION IF EXISTS trakrf.org_has_active_subscription(BIGINT);
 DROP FUNCTION IF EXISTS trakrf.org_mqtt_reader_count(BIGINT);
 DROP TABLE IF EXISTS trakrf.subscription_notices;

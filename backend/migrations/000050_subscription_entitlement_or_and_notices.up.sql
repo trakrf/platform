@@ -1,8 +1,8 @@
--- TRA-1047 follow-up to 000042 (which may already be applied on preview, so it
+-- TRA-1047 follow-up to 000049 (which may already be applied on preview, so it
 -- is amended here rather than edited in place).
 --
 -- 1. Restore TRA-947's OR contract: manual entitlement OR an active
---    trakrf.subscriptions row. 000042 turned subscription_enabled=false into a
+--    trakrf.subscriptions row. 000049 turned subscription_enabled=false into a
 --    hard cutoff that also overrode an active subscription — a change the ticket
 --    did not ask for, and one Stripe (TRA-135) would trip over.
 -- 2. Read the grace GUC through a helper that falls back to the default on a

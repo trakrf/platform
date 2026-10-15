@@ -1,10 +1,31 @@
 import { useQuery } from '@tanstack/react-query';
 import { useOrgStore } from '@/stores/orgStore';
 import { reportsApi } from '@/lib/api/reports';
-import type { AssetHistoryParams } from '@/types/reports';
+import type { AssetHistoryItem, AssetHistoryParams } from '@/types/reports';
+import { MAX_PAGE_SIZE } from './useCurrentLocations';
 
 export interface UseAssetHistoryOptions extends AssetHistoryParams {
   enabled?: boolean;
+}
+
+// Every stay in the range, paged at the backend cap. For exports, which must
+// not stop at the pages a timeline has loaded so far.
+export async function fetchAllAssetHistory(
+  assetId: number,
+  params: Omit<AssetHistoryParams, 'limit' | 'offset'>
+): Promise<AssetHistoryItem[]> {
+  const all: AssetHistoryItem[] = [];
+  for (let offset = 0; ; offset += MAX_PAGE_SIZE) {
+    const response = await reportsApi.listAssetHistory(assetId, {
+      ...params,
+      limit: MAX_PAGE_SIZE,
+      offset,
+    });
+    const page = response.data;
+    all.push(...page.data);
+    if (all.length >= page.total_count || page.data.length === 0) break;
+  }
+  return all;
 }
 
 export function useAssetHistory(assetId: number | null, options: UseAssetHistoryOptions = {}) {

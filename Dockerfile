@@ -88,7 +88,7 @@ RUN VITE_COMMIT_SHA=$(cat /tmp/buildinfo/commit) \
 # Output: /app/frontend/dist
 
 # Stage 2: Backend Builder
-FROM golang:1.25-alpine AS backend-builder
+FROM golang:1.26-alpine AS backend-builder
 WORKDIR /app/backend
 
 # Build-time metadata injected via -ldflags so /health can report the

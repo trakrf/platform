@@ -20,18 +20,21 @@ migrate_password := env("PG_MIGRATE_PASSWORD", "trakrf-migrate")
 obfuscation_key := env("OBFUSCATION_KEY", "6f626675736361746f72746573746b657920303132333435363738396162636465")
 
 # Start TimescaleDB container
+# The image's temporary initialization server accepts Unix sockets and then
+# shuts down. TCP readiness identifies the final server before bootstrap runs.
 up:
     docker compose up -d timescaledb
     @echo "⏳ Waiting for database to be ready..."
     @for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do \
-        if docker compose exec timescaledb pg_isready -U postgres > /dev/null 2>&1; then \
+        if docker compose exec -T timescaledb pg_isready -h 127.0.0.1 -U postgres > /dev/null 2>&1; then \
             echo "✅ Database is ready"; \
             just init || exit 1; \
             exit 0; \
         fi; \
         sleep 2; \
     done; \
-    echo "⚠️  Database is starting but not ready yet. Run 'just database status' to check."
+    echo "❌ Database did not become ready. Run 'just database logs' to check." >&2; \
+    exit 1
 
 # Bootstrap the non-superuser roles, the trakrf database and its grants.
 #
@@ -122,19 +125,20 @@ reset:
     docker compose up -d timescaledb
     echo "⏳ Waiting for database to initialize..."
     for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-        if docker compose exec timescaledb pg_isready -U postgres > /dev/null 2>&1; then
+        if docker compose exec -T timescaledb pg_isready -h 127.0.0.1 -U postgres > /dev/null 2>&1; then
             just init
             echo "✅ Database reset complete"
             exit 0
         fi
         sleep 2
     done
-    echo "⚠️  Database is starting but not ready yet. Run 'just database status' to check."
+    echo "❌ Database did not become ready. Run 'just database logs' to check." >&2
+    exit 1
 
 # Check database status
 status:
     @docker compose ps timescaledb
-    @docker compose exec timescaledb pg_isready -U postgres && echo "✅ Database is ready" || echo "❌ Database not ready"
+    @docker compose exec -T timescaledb pg_isready -h 127.0.0.1 -U postgres && echo "✅ Database is ready" || echo "❌ Database not ready"
 
 # ============================================================================
 # Migrations

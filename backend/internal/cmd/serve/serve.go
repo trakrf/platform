@@ -25,6 +25,7 @@ import (
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
 	musteringhandler "github.com/trakrf/platform/backend/internal/handlers/mustering"
+	notificationrecipientshandler "github.com/trakrf/platform/backend/internal/handlers/notificationrecipients"
 	orgshandler "github.com/trakrf/platform/backend/internal/handlers/orgs"
 	outputdeviceshandler "github.com/trakrf/platform/backend/internal/handlers/outputdevices"
 	readerconfighandler "github.com/trakrf/platform/backend/internal/handlers/readerconfig"
@@ -39,6 +40,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/mustering"
 	"github.com/trakrf/platform/backend/internal/notification"
+	"github.com/trakrf/platform/backend/internal/notification/resend"
 	"github.com/trakrf/platform/backend/internal/notification/twilio"
 	"github.com/trakrf/platform/backend/internal/readercontrol"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
@@ -72,6 +74,11 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// SMS is optional, but partial credentials must fail before any services
 	// start. Loading and constructing the integration never contacts Twilio.
 	smsConfig, err := twilio.ConfigFromEnv()
+	if err != nil {
+		return err
+	}
+
+	emailConfig, err := resend.ConfigFromEnv()
 	if err != nil {
 		return err
 	}
@@ -110,6 +117,12 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 		return err
 	}
 	log.Info().Bool("enabled", smsConfig.Enabled()).Msg("SMS integration configured")
+
+	emailRuntime, err := notification.NewEmailRuntime(emailConfig, store.EmailCallbackConsumer(), prometheus.DefaultRegisterer)
+	if err != nil {
+		return err
+	}
+	log.Info().Bool("enabled", emailConfig.Enabled).Msg("Notification email integration configured")
 
 	// Say it at boot as well as on /health (TRA-1190). The endpoint is what a
 	// test suite can check; this line is what a developer actually sees, and
@@ -270,6 +283,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// 2s test-fire pulse: long enough for an operator to see the strobe, short
 	// enough not to leave the relay latched after a confidence check.
 	outputDevicesHandler := outputdeviceshandler.NewHandler(store, alarmDispatcher, 2*time.Second)
+	notificationRecipientsHandler := notificationrecipientshandler.NewHandler(store)
 	// TRA-993: pass a true-nil RPCClient interface when reader control is disabled
 	// so the handler's nil check (→503) fires rather than a non-nil interface
 	// wrapping a nil *Client.
@@ -296,7 +310,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	webhooksHandler := webhookshandler.NewHandler(store, webhookClient)
 	log.Info().Msg("Handlers initialized")
 
-	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, webhooksHandler, testHandler, store, smsRuntime)
+	r := setupRouter(authHandler, orgsHandler, usersHandler, assetsHandler, locationsHandler, inventoryHandler, reportsHandler, scanDevicesHandler, scanPointsHandler, outputDevicesHandler, readerConfigHandler, lookupHandler, healthHandler, frontendHandler, readstreamHandler, musteringHandler, kitsHandler, webhooksHandler, testHandler, notificationRecipientsHandler, store, smsRuntime, emailRuntime)
 	log.Info().Msg("Routes registered")
 
 	server := &http.Server{
