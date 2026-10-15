@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/trakrf/platform/backend/internal/models/asset"
+	"github.com/trakrf/platform/backend/internal/models/scandevice"
 	"github.com/trakrf/platform/backend/internal/models/shared"
 )
 
@@ -178,4 +179,35 @@ func CreateTestAsset(t *testing.T, pool *pgxpool.Pool, orgID int, externalKey st
 		ValidTo:     &validTo,
 		IsActive:    true,
 	}
+}
+
+// CreateTestNotificationEvent inserts a gate alarm for assetID and a
+// notification_events row from it, and returns the event's id. key names the
+// reader the alarm is read on, so it must be unique per test.
+func CreateTestNotificationEvent(t *testing.T, db *TestDB, orgID, assetID int, key string) int {
+	t.Helper()
+	ctx := context.Background()
+	topic := "trakrf.id/" + key + "/reads"
+	dev, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
+		Name: "Test Reader " + key, Type: scandevice.DeviceTypeCS463, PublishTopic: &topic,
+	})
+	if err != nil {
+		t.Fatalf("Failed to create test scan device: %v", err)
+	}
+	var eventID int
+	err = db.AdminPool.QueryRow(ctx, `
+		WITH alarm AS (
+			INSERT INTO trakrf.alarm_events (org_id, asset_id, scan_point_id, epc)
+			SELECT $1, $2, id, 'E2801160600002' FROM trakrf.scan_points
+			WHERE org_id = $1 AND scan_device_id = $3 AND antenna_port = 1
+			RETURNING id
+		)
+		INSERT INTO trakrf.notification_events (org_id, event_type, alarm_event_id, asset_id, occurred_at)
+		SELECT $1, 'asset.exited', id, $2, now() FROM alarm
+		RETURNING id
+	`, orgID, assetID, dev.ID).Scan(&eventID)
+	if err != nil {
+		t.Fatalf("Failed to create test notification event: %v", err)
+	}
+	return eventID
 }

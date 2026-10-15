@@ -67,7 +67,7 @@ func TestNotificationDelivery_InsertIfAbsentRoundTripsRoutingContext(t *testing.
 	})
 	require.NoError(t, err)
 
-	eventID := 9001
+	eventID := testutil.CreateTestNotificationEvent(t, db, orgID, a.ID, "nd-route-1")
 	payload := []byte(`{"to":"priya@acme.test","subject":"Asset moved","body":"hi"}`)
 	d := notificationdelivery.NotificationDelivery{
 		DeliveryID:  "evt-route-1:recipient:email",
@@ -100,7 +100,7 @@ func TestNotificationDelivery_InsertIfAbsentRoundTripsRoutingContext(t *testing.
 
 	// A second insert of the same delivery is a no-op, not a duplicate or an error.
 	other := d
-	otherEvent := 9002
+	otherEvent := testutil.CreateTestNotificationEvent(t, db, orgID, a.ID, "nd-route-2")
 	other.EventID = &otherEvent
 	other.Payload = []byte(`{"body":"changed"}`)
 	var secondID int64
@@ -157,4 +157,33 @@ func TestNotificationDelivery_InsertIfAbsentNilRoutingContextReadsBackNil(t *tes
 	require.Nil(t, got.RecipientID)
 	require.Nil(t, got.AssetID)
 	require.Nil(t, got.Payload)
+}
+
+func TestNotificationDelivery_EventMustBelongToTheOrgAndOutliveItsDeliveries(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+	otherOrgID := createOrg(t, db.AdminPool, "Notification Event Org B", "notification-event-org-b")
+	a := testutil.CreateTestAsset(t, db.AdminPool, orgID, "ASSET-ND-EVENT")
+	otherAsset := testutil.CreateTestAsset(t, db.AdminPool, otherOrgID, "ASSET-ND-EVENT-OTHER")
+	eventID := testutil.CreateTestNotificationEvent(t, db, orgID, a.ID, "nd-event-fk")
+	otherEventID := testutil.CreateTestNotificationEvent(t, db, otherOrgID, otherAsset.ID, "nd-event-fk-other")
+
+	insert := func(deliveryID string, event int) error {
+		return db.Store.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+			_, _, err := db.Store.InsertNotificationDeliveryIfAbsentTx(ctx, tx, orgID, notificationdelivery.NotificationDelivery{
+				DeliveryID: deliveryID,
+				Channel:    notificationdelivery.ChannelEmail,
+				State:      notificationdelivery.StatePending,
+				EventID:    &event,
+			})
+			return err
+		})
+	}
+
+	require.Error(t, insert("evt-fk:other-org:email", otherEventID), "an event from another org is rejected")
+	require.NoError(t, insert("evt-fk:own-org:email", eventID))
+
+	_, err := db.AdminPool.Exec(ctx, `DELETE FROM trakrf.notification_events WHERE id = $1`, eventID)
+	require.Error(t, err, "an event with deliveries cannot be deleted")
 }
