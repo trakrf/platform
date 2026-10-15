@@ -30,6 +30,7 @@ type batchFixture struct {
 	orgID       int
 	assetID     int
 	recipientID int
+	eventID     int
 	runtime     *outbox.Runtime
 	metrics     *outbox.Metrics
 	registry    *prometheus.Registry
@@ -40,6 +41,8 @@ func newBatchFixture(t *testing.T) batchFixture {
 	db := testutil.SetupTestDBFull(t)
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
 	asset := testutil.CreateTestAsset(t, db.AdminPool, orgID, "batch-asset")
+	// The one event every fixture command fans out from.
+	eventID := testutil.CreateTestNotificationEvent(t, db, orgID, asset.ID, "batch-event")
 
 	email := "batch@acme.test"
 	recipient, err := db.Store.CreateNotificationRecipient(context.Background(), orgID,
@@ -54,7 +57,7 @@ func newBatchFixture(t *testing.T) batchFixture {
 	require.NoError(t, err)
 
 	return batchFixture{
-		db: db, orgID: orgID, assetID: asset.ID, recipientID: recipient.ID,
+		db: db, orgID: orgID, assetID: asset.ID, recipientID: recipient.ID, eventID: eventID,
 		runtime: runtime, metrics: metrics, registry: registry,
 	}
 }
@@ -68,7 +71,7 @@ func (f batchFixture) commands(n int) []outbox.Command {
 			DeliveryID:  fmt.Sprintf("evt-batch:c%d:email", i),
 			OrgID:       f.orgID,
 			Channel:     notificationdelivery.ChannelEmail,
-			EventID:     9001,
+			EventID:     f.eventID,
 			RecipientID: f.recipientID,
 			AssetID:     f.assetID,
 			Payload:     []byte(fmt.Sprintf(`{"subject":"Asset left zone","seq":%d}`, i)),
@@ -119,7 +122,7 @@ func TestEnqueueBatch_RecordsRowsWithPayloadAndOneJobEach(t *testing.T) {
 		require.NotNil(t, d.RiverJobID)
 		require.Equal(t, results[i].RiverJobID, *d.RiverJobID)
 		require.Equal(t, notificationdelivery.StatePending, d.State)
-		require.Equal(t, 9001, *d.EventID)
+		require.Equal(t, f.eventID, *d.EventID)
 		require.Equal(t, f.recipientID, *d.RecipientID)
 		require.Equal(t, f.assetID, *d.AssetID)
 		require.JSONEq(t, string(cmd.Payload), string(d.Payload))
