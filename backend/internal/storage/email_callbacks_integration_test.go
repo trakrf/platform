@@ -74,17 +74,22 @@ func TestEmailCallbackPersistence(t *testing.T) {
 func TestEmailCallbackMigrationRoundTrip(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	ctx := context.Background()
-	down, err := migrations.FS.ReadFile("000042_email_callback_events.down.sql")
-	require.NoError(t, err)
-	_, err = db.AdminPool.Exec(ctx, string(down))
-	require.NoError(t, err)
+	// Suppressions reference this table since 000051; unwind that first, as
+	// migrating down would.
+	exec := func(name string) {
+		t.Helper()
+		sql, err := migrations.FS.ReadFile(name)
+		require.NoError(t, err)
+		_, err = db.AdminPool.Exec(ctx, string(sql))
+		require.NoError(t, err)
+	}
+	exec("000051_suppression_source_callback_fks.down.sql")
+	exec("000042_email_callback_events.down.sql")
 	var absent bool
 	require.NoError(t, db.AdminPool.QueryRow(ctx, `SELECT to_regclass('trakrf.email_callback_events') IS NULL`).Scan(&absent))
 	require.True(t, absent)
-	up, err := migrations.FS.ReadFile("000042_email_callback_events.up.sql")
-	require.NoError(t, err)
-	_, err = db.AdminPool.Exec(ctx, string(up))
-	require.NoError(t, err)
+	exec("000042_email_callback_events.up.sql")
+	exec("000051_suppression_source_callback_fks.up.sql")
 	var count int
 	require.NoError(t, db.AdminPool.QueryRow(ctx, `SELECT count(*) FROM trakrf.email_callback_events`).Scan(&count))
 	require.Zero(t, count)
