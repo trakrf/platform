@@ -90,7 +90,7 @@ func NewMQTTPublisher(cfg ingest.Config, log *zerolog.Logger) (*MQTTPublisher, f
 		publish: func(topic string, payload []byte) error {
 			tok := client.Publish(topic, 1, false, payload)
 			if !tok.WaitTimeout(publishTimeout) {
-				return fmt.Errorf("mqtt: publish to %s timed out (broker unreachable?)", topic)
+				return fmt.Errorf("mqtt: publish to %s (broker unreachable?): %w", topic, ErrPublishTimeout)
 			}
 			return tok.Error()
 		},
