@@ -56,6 +56,17 @@ import { DEFAULT_TAB } from '@/utils/tabRedirects';
  */
 const FAR_FUTURE_JWT = `header.${btoa(JSON.stringify({ exp: 4102444800 }))}.sig`;
 
+/**
+ * How long to wait for a lazy route's screen. waitFor's 1s default is a budget
+ * for the cold dynamic import too, and a slow CI runner blows it: the granted
+ * Kits test failed on main with the gate fully resolved (right capabilities,
+ * module requested, Suspense spinner still showing) in a run whose suite took
+ * 36.8s of test time against 27s for the same commit's green re-run. Locally the
+ * whole test takes ~20ms, ~100ms on two saturated cores. Stays under the 5s test
+ * timeout, so a gate that really routes elsewhere still fails, with the dump.
+ */
+const LAZY_ROUTE_TIMEOUT = { timeout: 4000 };
+
 function setCapabilities(capabilities: string[] | null) {
   useAuthStore.setState({
     isAuthenticated: true,
@@ -172,7 +183,10 @@ describe('App capability route gating', () => {
     openTab('mustering');
     render(<App />);
 
-    await waitFor(() => expect(screen.getByTestId('mustering-screen')).toBeInTheDocument());
+    await waitFor(
+      () => expect(screen.getByTestId('mustering-screen')).toBeInTheDocument(),
+      LAZY_ROUTE_TIMEOUT
+    );
     expect(useUIStore.getState().activeTab).toBe('mustering');
   });
 
@@ -219,7 +233,10 @@ describe('App capability route gating', () => {
     // `lazyModuleRequested` true means the route resolved and only the render
     // budget was missed; anything else means the gate sent the route elsewhere.
     try {
-      await waitFor(() => expect(screen.getByTestId('kits-screen')).toBeInTheDocument());
+      await waitFor(
+        () => expect(screen.getByTestId('kits-screen')).toBeInTheDocument(),
+        LAZY_ROUTE_TIMEOUT
+      );
     } catch (error) {
       console.error(
         '[TRA-1093] kits-screen never rendered: ' +

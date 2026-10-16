@@ -1,10 +1,19 @@
-import { useCallback, useMemo } from 'react';
-import { X, Download, ChevronDown, MapPin } from 'lucide-react';
-import { useAssetDetailPanel } from '@/hooks/reports';
+import { useCallback, useMemo, useState } from 'react';
+import { X, Download, ChevronDown, MapPin, Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { ExportModal } from '@/components/export';
+import { useAssetDetailPanel, fetchAllAssetHistory } from '@/hooks/reports';
 import { useReportHydration } from '@/hooks/reports/useReportHydration';
-import { DATE_RANGE_OPTIONS } from '@/lib/reports/utils';
+import { useExport } from '@/hooks/useExport';
+import { DATE_RANGE_OPTIONS, getDateRangeStart } from '@/lib/reports/utils';
+import {
+  generateAssetHistoryCSV,
+  generateAssetHistoryExcel,
+  generateAssetHistoryPDF,
+} from '@/utils/export';
 import { FreshnessBadge } from './FreshnessBadge';
 import { MovementTimeline } from './MovementTimeline';
+import type { ExportFormat, ExportResult } from '@/types/export';
 import type { AssetHistoryItem, CurrentLocationItem } from '@/types/reports';
 
 interface AssetDetailPanelProps {
@@ -27,15 +36,22 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
     isNotFoundError,
   } = useAssetDetailPanel({ asset, onClose });
 
+  const { isModalOpen, selectedFormat, openExport, closeExport } = useExport();
+  // The export covers every stay in the range, so it is fetched on click
+  // rather than taken from the timeline's loaded pages.
+  const [exportRows, setExportRows] = useState<AssetHistoryItem[]>([]);
+  const [isPreparingExport, setIsPreparingExport] = useState(false);
+
   const hydrationIds = useMemo(
     () => ({
       assetIds: asset?.asset_id != null ? [asset.asset_id] : [],
       locationIds: [
         asset?.location_id ?? null,
         ...timelineData.map((t) => t.location_id),
+        ...exportRows.map((r) => r.location_id),
       ],
     }),
-    [asset?.asset_id, asset?.location_id, timelineData]
+    [asset?.asset_id, asset?.location_id, timelineData, exportRows]
   );
   const { getAssetName, getLocationName } = useReportHydration(hydrationIds);
   const locationNameOf = useCallback(
@@ -44,14 +60,46 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
     [getLocationName]
   );
 
+  const assetName = asset
+    ? getAssetName(asset.asset_id, asset.asset_external_key, asset.asset_deleted_at)
+    : '';
+  const assetKey = asset?.asset_external_key ?? '';
+
+  const generateExport = useCallback(
+    (format: ExportFormat): ExportResult => {
+      const opts = { assetName, assetKey, getLocationName: locationNameOf };
+      switch (format) {
+        case 'csv':
+          return generateAssetHistoryCSV(exportRows, opts);
+        case 'xlsx':
+          return generateAssetHistoryExcel(exportRows, opts);
+        case 'pdf':
+          return generateAssetHistoryPDF(exportRows, opts);
+        default:
+          throw new Error(`Unsupported format: ${format}`);
+      }
+    },
+    [exportRows, assetName, assetKey, locationNameOf]
+  );
+
+  const handleDownloadHistory = useCallback(async () => {
+    if (asset?.asset_id == null) return;
+    setIsPreparingExport(true);
+    try {
+      const rows = await fetchAllAssetHistory(asset.asset_id, {
+        from: getDateRangeStart(dateRange).toISOString(),
+      });
+      setExportRows(rows);
+      openExport('csv');
+    } catch {
+      toast.error('Failed to load movement history for download');
+    } finally {
+      setIsPreparingExport(false);
+    }
+  }, [asset?.asset_id, dateRange, openExport]);
+
   if (!asset) return null;
 
-  const assetName = getAssetName(
-    asset.asset_id,
-    asset.asset_external_key,
-    asset.asset_deleted_at
-  );
-  const assetKey = asset.asset_external_key ?? '';
   const showAssetKeySubtext = assetKey && assetKey !== assetName;
   const currentLocationName = getLocationName(
     asset.location_id,
@@ -155,13 +203,22 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
       {/* Download Button */}
       <button
         className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700
-          text-white font-medium py-3 px-4 rounded-lg transition-colors"
-        onClick={() => {
-          // TODO: Implement CSV download
-          console.log('Download history CSV for asset:', asset.asset_external_key);
-        }}
+          text-white font-medium py-3 px-4 rounded-lg transition-colors
+          disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
+        onClick={handleDownloadHistory}
+        disabled={
+          isPreparingExport ||
+          isLoading ||
+          !!error ||
+          timelineData.length === 0 ||
+          asset.asset_id == null
+        }
       >
-        <Download className="w-4 h-4" />
+        {isPreparingExport ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <Download className="w-4 h-4" />
+        )}
         Download History CSV
       </button>
     </>
@@ -227,6 +284,18 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
           <div className="p-4 overflow-y-auto flex-1 min-h-0">{panelContent}</div>
         </div>
       </div>
+
+      {/* Outside panelContent: that renders twice, and both containers are
+          transformed, which would pin a fixed modal to the panel. */}
+      <ExportModal
+        isOpen={isModalOpen}
+        onClose={closeExport}
+        selectedFormat={selectedFormat}
+        itemCount={exportRows.length}
+        itemLabel="movements"
+        generateExport={generateExport}
+        shareTitle={`${assetName} History`}
+      />
     </>
   );
 }

@@ -7,7 +7,7 @@ import type {
 } from '@/types/reports';
 
 // Keep in sync with backend httputil.maxListLimit (backend/internal/util/httputil/listparams.go).
-const MAX_PAGE_SIZE = 200;
+export const MAX_PAGE_SIZE = 200;
 
 export interface UseCurrentLocationsOptions extends CurrentLocationsParams {
   enabled?: boolean;

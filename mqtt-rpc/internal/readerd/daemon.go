@@ -165,6 +165,12 @@ func loadTLS(path string) (*tls.Config, error) {
 // handleMessage is the paho callback. It recovers from panics so one bad request
 // never kills the daemon, dispatches via handleRPC, and publishes any reply to the
 // request's reply topic.
+//
+// Requests are dispatched here, on the callback, so they are driven in arrival
+// order — an ON then OFF for one GPO port must never swap. The reply is published
+// from its own goroutine: paho cannot process the broker's ack for a QoS 1 publish
+// until this callback returns, so waiting on it here costs the full publishTimeout
+// on every request and holds every later command behind it.
 func (d *Daemon) handleMessage(_ mqtt.Client, m mqtt.Message) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -176,9 +182,11 @@ func (d *Daemon) handleMessage(_ mqtt.Client, m mqtt.Message) {
 	if replyTopic == "" || reply == nil {
 		return
 	}
-	if err := d.publish(replyTopic, reply); err != nil {
-		d.log.Error().Err(err).Str("reply_topic", replyTopic).Msg("publish rpc reply failed")
-	}
+	go func() {
+		if err := d.publish(replyTopic, reply); err != nil {
+			d.log.Error().Err(err).Str("reply_topic", replyTopic).Msg("publish rpc reply failed")
+		}
+	}()
 }
 
 // handleRPC is the testable dispatch core. It parses the request, drives the

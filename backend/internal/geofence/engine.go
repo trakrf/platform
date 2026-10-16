@@ -45,8 +45,9 @@ type Engine struct {
 	cfg      Config
 	store    engineStore
 	driver   outputDriver
-	latch    *latch    // egress dedup, keyed per (org, output, epc)
-	presence *presence // presence tracker, keyed per (org, output)
+	latch    *latch      // egress dedup, keyed per (org, output, epc)
+	pulses   *pulseGuard // egress re-entrancy guard, keyed per (org, output)
+	presence *presence   // presence tracker, keyed per (org, output)
 	log      zerolog.Logger
 
 	// startupGrace is the cold-start grace window (TRA-991); graceUntil is its
@@ -65,6 +66,7 @@ func NewEngine(cfg Config, store *storage.Storage, driver outputDriver, log *zer
 		store:        store,
 		driver:       driver,
 		latch:        newLatch(cfg.SweepInterval, clk),
+		pulses:       newPulseGuard(),
 		presence:     newPresence(driver, l),
 		startupGrace: cfg.StartupGrace,
 		log:          l,
@@ -191,8 +193,20 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 				metricSuppressed.WithLabelValues("startup_grace").Inc()
 				continue
 			}
+			// Drop the fire while this output is still pulsing from an earlier tag:
+			// a second ON would restart or be swallowed by the device-side auto-off,
+			// depending on transport. The latch has admitted this tag, so it will
+			// not re-fire while it stays present.
+			pulse := time.Duration(tuning.AutoOffSeconds) * time.Second
+			if !e.pulses.tryStart(orgID, dev.ID, receivedAt, pulse) {
+				metricSuppressed.WithLabelValues("pulse_active").Inc()
+				continue
+			}
 			firedAny = true
-			e.drive(ctx, orgID, dev, true, tuning.AutoOffSeconds)
+			if !e.drive(ctx, orgID, dev, true, tuning.AutoOffSeconds) {
+				// A failed ON must not hold the output busy for the whole window.
+				e.pulses.release(orgID, dev.ID, receivedAt, pulse)
+			}
 		}
 
 		if firedAny {
@@ -202,11 +216,14 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 }
 
 // drive turns a device on/off, folding any error into the best-effort metric.
-func (e *Engine) drive(ctx context.Context, orgID int, dev outputdevice.OutputDevice, on bool, offAfter int) {
+// It reports whether the drive succeeded.
+func (e *Engine) drive(ctx context.Context, orgID int, dev outputdevice.OutputDevice, on bool, offAfter int) bool {
 	if err := e.driver.Set(ctx, dev, on, offAfter); err != nil {
 		e.log.Error().Err(err).Int("org_id", orgID).Int("output_device_id", dev.ID).Bool("on", on).Msg("output device drive failed (best-effort)")
 		metricFireErrors.Inc()
+		return false
 	}
+	return true
 }
 
 // recordFire writes the durable alarm_events row for a read that drove at least

@@ -26,6 +26,7 @@ describe('SuperadminOrgsScreen (TRA-949)', () => {
             identifier: 'acme-co',
             subscription_enabled: true,
             subscription_expires_at: null,
+            is_entitled: true,
             member_count: 3,
           },
           {
@@ -34,6 +35,8 @@ describe('SuperadminOrgsScreen (TRA-949)', () => {
             identifier: 'lapsed-llc',
             subscription_enabled: false,
             subscription_expires_at: null,
+            is_entitled: false,
+            fixed_reader_count: 2,
             member_count: 0,
           },
         ],
@@ -44,6 +47,10 @@ describe('SuperadminOrgsScreen (TRA-949)', () => {
 
     expect(await screen.findByText('Acme Co')).toBeInTheDocument();
     expect(screen.getByText('Lapsed LLC')).toBeInTheDocument();
+    expect(screen.getByText('Active')).toBeInTheDocument();
+    expect(screen.getByText('Cut off')).toBeInTheDocument();
+    // A cut-off org's fixed readers still publish; the operator must see that.
+    expect(screen.getByText('2 fixed readers not recorded')).toBeInTheDocument();
     // Member counts are surfaced.
     expect(screen.getByText('3')).toBeInTheDocument();
     // Each row links into the existing org edit screen by id.
@@ -55,9 +62,9 @@ describe('SuperadminOrgsScreen (TRA-949)', () => {
     vi.mocked(orgsApi.listAllOrgs).mockResolvedValueOnce({
       data: {
         data: [
-          { id: 42, name: 'Acme Co', identifier: 'acme-co', subscription_enabled: true, subscription_expires_at: null, member_count: 3 },
-          { id: 7, name: 'Lapsed LLC', identifier: 'lapsed-llc', subscription_enabled: false, subscription_expires_at: null, member_count: 0 },
-          { id: 9, name: 'Globex', identifier: 'globex', subscription_enabled: true, subscription_expires_at: null, member_count: 1 },
+          { id: 42, name: 'Acme Co', identifier: 'acme-co', subscription_enabled: true, subscription_expires_at: null, is_entitled: true, member_count: 3 },
+          { id: 7, name: 'Lapsed LLC', identifier: 'lapsed-llc', subscription_enabled: false, subscription_expires_at: null, is_entitled: false, member_count: 0 },
+          { id: 9, name: 'Globex', identifier: 'globex', subscription_enabled: true, subscription_expires_at: null, is_entitled: true, member_count: 1 },
         ],
       },
     } as Awaited<ReturnType<typeof orgsApi.listAllOrgs>>);
@@ -77,7 +84,7 @@ describe('SuperadminOrgsScreen (TRA-949)', () => {
     vi.mocked(orgsApi.listAllOrgs).mockResolvedValueOnce({
       data: {
         data: [
-          { id: 42, name: 'Acme Co', identifier: 'acme-co', subscription_enabled: true, subscription_expires_at: null, member_count: 3 },
+          { id: 42, name: 'Acme Co', identifier: 'acme-co', subscription_enabled: true, subscription_expires_at: null, is_entitled: true, member_count: 3 },
         ],
       },
     } as Awaited<ReturnType<typeof orgsApi.listAllOrgs>>);
@@ -98,8 +105,8 @@ describe('SuperadminOrgsScreen (TRA-949)', () => {
     vi.mocked(orgsApi.listAllOrgs).mockResolvedValueOnce({
       data: {
         data: [
-          { id: 42, name: 'Acme Co', identifier: 'acme-co', subscription_enabled: true, subscription_expires_at: null, member_count: 3, capabilities: ['geofence', 'mustering'] },
-          { id: 7, name: 'Bare Co', identifier: 'bare-co', subscription_enabled: true, subscription_expires_at: null, member_count: 1, capabilities: [] },
+          { id: 42, name: 'Acme Co', identifier: 'acme-co', subscription_enabled: true, subscription_expires_at: null, is_entitled: true, member_count: 3, capabilities: ['geofence', 'mustering'] },
+          { id: 7, name: 'Bare Co', identifier: 'bare-co', subscription_enabled: true, subscription_expires_at: null, is_entitled: true, member_count: 1, capabilities: [] },
         ],
       },
     } as Awaited<ReturnType<typeof orgsApi.listAllOrgs>>);
