@@ -12,6 +12,9 @@ type EnqueueResult string
 const (
 	EnqueueOK                EnqueueResult = "ok"
 	EnqueueSkippedUnentitled EnqueueResult = "skipped_unentitled"
+	// EnqueueDuplicate: the delivery ID was already in the outbox, so no
+	// second row or job was created.
+	EnqueueDuplicate EnqueueResult = "duplicate"
 )
 
 // DeliveryOutcome is the bounded outcome of one worker attempt.
