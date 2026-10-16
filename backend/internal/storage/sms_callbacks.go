@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"time"
@@ -56,12 +57,13 @@ func (c *smsCallbackConsumer) save(ctx context.Context, kind, messageID string, 
 	if err != nil {
 		return errors.New("SMS callback encoding failed")
 	}
-	eventKey := sha256.Sum256(identity)
+	sum := sha256.Sum256(identity)
+	eventKey := hex.EncodeToString(sum[:])
 	_, err = c.store.pool.Exec(ctx, `INSERT INTO trakrf.sms_callback_events
 		(event_key, account_sid, messaging_service_sid, event_type, provider_message_id, payload, received_at)
 		VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
 		ON CONFLICT (event_key) DO NOTHING`,
-		eventKey[:], c.accountSID, c.messagingServiceSID, kind, messageID, string(payload), receivedAt.UTC())
+		eventKey, c.accountSID, c.messagingServiceSID, kind, messageID, string(payload), receivedAt.UTC())
 	if err != nil {
 		// SQL/provider errors may contain callback identities or phone numbers.
 		return errors.New("SMS callback persistence failed")
