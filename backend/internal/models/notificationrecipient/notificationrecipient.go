@@ -59,3 +59,17 @@ type UpdateSubscriptionRequest struct {
 	Channel  *string `json:"channel,omitempty" validate:"omitempty,oneof=email sms"`
 	IsActive *bool   `json:"is_active,omitempty"`
 }
+
+// Subscriber is one switched-on subscription joined with its recipient: what
+// routing needs to decide eligibility and address a message. The recipient's
+// pause and delete state are carried, not filtered, so a skip can be explained.
+type Subscriber struct {
+	SubscriptionID     int
+	RecipientID        int
+	Channel            string
+	Name               string
+	Email              *string
+	Phone              *string
+	RecipientActive    bool
+	RecipientDeletedAt *time.Time
+}

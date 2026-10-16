@@ -2,6 +2,7 @@ package email
 
 import (
 	"fmt"
+	"html"
 	"os"
 	"strings"
 	"time"
@@ -307,5 +308,79 @@ func (c *Client) SendOrgDeletedNotification(toEmail, orgName, orgIdentifier, act
 		return fmt.Errorf("failed to send org deleted notification: %w", err)
 	}
 
+	return nil
+}
+
+// subscriptionNoticeContent builds the subject and HTML body for one stage of the
+// subscription expiry nag sequence. kind is one of t_minus_14, t_minus_3,
+// expired, cutoff. cutoffAt is expiry plus the grace window.
+func subscriptionNoticeContent(kind, orgName string, expiresAt, cutoffAt time.Time) (string, string, error) {
+	day := func(t time.Time) string { return t.UTC().Format("Jan 2, 2006") }
+	name := html.EscapeString(orgName)
+
+	var subject, heading, body string
+	switch kind {
+	case "t_minus_14", "t_minus_3":
+		days := 14
+		if kind == "t_minus_3" {
+			days = 3
+		}
+		subject = fmt.Sprintf("Your TrakRF subscription for %s expires in %d days", orgName, days)
+		heading = "Your subscription is expiring soon"
+		body = fmt.Sprintf(`<p>The TrakRF subscription for <strong>%s</strong> expires on <strong>%s</strong>.</p>
+			<p>Renew before then to avoid any interruption to scan saves, fixed-reader capture and webhook delivery.</p>`,
+			name, day(expiresAt))
+	case "expired":
+		subject = fmt.Sprintf("Your TrakRF subscription for %s has expired", orgName)
+		heading = "Your subscription has expired"
+		body = fmt.Sprintf(`<p>The TrakRF subscription for <strong>%s</strong> expired on <strong>%s</strong>.</p>
+			<p>Service continues during a grace period until <strong>%s</strong>. After that, scan saves, fixed-reader capture and webhook delivery stop.</p>`,
+			name, day(expiresAt), day(cutoffAt))
+	case "cutoff":
+		subject = fmt.Sprintf("TrakRF service for %s has stopped", orgName)
+		heading = "Service has stopped"
+		body = fmt.Sprintf(`<p>The grace period for <strong>%s</strong> ended on <strong>%s</strong>.</p>
+			<p>Scan saves and webhook delivery are stopped. Fixed readers may still look online, but their reads are not being recorded.</p>
+			<p>Your existing data is unchanged. Reactivating the subscription restores service immediately.</p>`,
+			name, day(cutoffAt))
+	default:
+		return "", "", fmt.Errorf("unknown subscription notice kind %q", kind)
+	}
+
+	return fmt.Sprintf("%s %s", getEmailPrefix(), subject),
+		fmt.Sprintf(`
+			<h2>%s</h2>
+			%s
+			<p>Contact your TrakRF account manager to renew.</p>
+			%s
+		`, heading, body, getEnvironmentNotice()), nil
+}
+
+// SendSubscriptionNotice emails an org admin one stage of the subscription
+// expiry nag sequence (see subscriptionNoticeContent).
+func (c *Client) SendSubscriptionNotice(toEmail, kind, orgName string, expiresAt, cutoffAt time.Time) error {
+	subject, htmlBody, err := subscriptionNoticeContent(kind, orgName, expiresAt, cutoffAt)
+	if err != nil {
+		return err
+	}
+	if isReservedTestRecipient(toEmail) {
+		log.Info().
+			Str("to", toEmail).
+			Str("kind", "subscription_notice_"+kind).
+			Str("org", orgName).
+			Str("app_env", os.Getenv("APP_ENV")).
+			Msg("email send stubbed: reserved test-fixture recipient")
+		return nil
+	}
+
+	_, err = c.client.Emails.Send(&resend.SendEmailRequest{
+		From:    "TrakRF <noreply@trakrf.id>",
+		To:      []string{toEmail},
+		Subject: subject,
+		Html:    htmlBody,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to send subscription notice: %w", err)
+	}
 	return nil
 }

@@ -298,3 +298,36 @@ func (s *Storage) UpdateAssetNotificationSubscription(ctx context.Context, orgID
 	}
 	return &sub, nil
 }
+
+// ListSubscribersForAsset returns the asset's switched-on subscriptions joined
+// with their recipients, one row per channel, or an empty slice if there are
+// none. A paused or deleted recipient is still returned: routing reports why it
+// was skipped instead of losing it silently.
+func (s *Storage) ListSubscribersForAsset(ctx context.Context, orgID, assetID int) ([]notificationrecipient.Subscriber, error) {
+	query := `
+		SELECT s.id, s.recipient_id, s.channel, r.name, r.email, r.phone, r.is_active, r.deleted_at
+		  FROM trakrf.asset_notification_recipients s
+		  JOIN trakrf.notification_recipients r ON r.id = s.recipient_id AND r.org_id = s.org_id
+		 WHERE s.org_id = $1 AND s.asset_id = $2 AND s.is_active
+		 ORDER BY s.id`
+	out := []notificationrecipient.Subscriber{}
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, orgID, assetID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var sub notificationrecipient.Subscriber
+			if err := rows.Scan(&sub.SubscriptionID, &sub.RecipientID, &sub.Channel, &sub.Name, &sub.Email, &sub.Phone, &sub.RecipientActive, &sub.RecipientDeletedAt); err != nil {
+				return err
+			}
+			out = append(out, sub)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list asset subscribers: %w", err)
+	}
+	return out, nil
+}
