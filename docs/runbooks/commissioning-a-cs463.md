@@ -329,8 +329,7 @@ printf 'READER_API_PASS=%s\n' "$NEW_WEB_PASS" \
   | ssh cs463-xxyyzz 'umask 077; mkdir -p /opt/trakrf; cat > /opt/trakrf/mqtt-rpcd.env'
 ```
 
-No `READERD_EVENT_ID` is needed; the event self-bootstraps. No
-`READERD_CLOUDSERVER_ID` either, as long as §7 used the exact golden name.
+Nothing else goes in it: the event self-bootstraps, and §7's exact name is the default.
 
 Then, from an up-to-date `main` on the operator machine:
 
@@ -386,8 +385,11 @@ ssh cs463-xxyyzz 'cd /opt/EmbeddedGlassFish/logs
   reflected-power guard: the reader sent power into port N and most of it came
   back. **It halts the whole inventory, every port, until the port is disabled
   and the event re-armed.** The cause is physical: nothing on the port, a
-  loose or damaged connector, or a bad antenna. Fix the hardware first, then
-  `systemctl restart mqtt-rpcd`; its reconcile re-arms the event. A reboot
+  loose connector, or a bad cable or antenna. If two antennas trip on the same
+  cable, suspect the cable. A reading just over the threshold (241 against 240)
+  is a marginal match that a nudge tips over: 30 dBm is the daemon's default,
+  not a requirement, so lower it with `Reader.SetOperProfile`, since reflected
+  power falls with it. Then `systemctl restart mqtt-rpcd` to re-arm. A reboot
   changes nothing, and costs the slow reconnect in §8.
 
 The vendor web UI shows the same thing live: **Events → Tag Inventory → Capture
@@ -454,10 +456,7 @@ then compare in the morning:
 | `MAC Error` lines in `CS463System.log` | count | no new ones |
 | `DataRate` | ~10/s with test tags on the antenna | still non-zero |
 | prod `tag_scans` for the topic | — | arriving every second, no gap of more than a few seconds |
-| vendor web-app java RSS (`EmbeddedGlassFish.jar`, `VmRSS` in `/proc/<pid>/status`) | ~160 MB after boot | record it; not a pass/fail |
-
-The vendor web app freezes for seconds at a time after long uptime, with its RSS
-grown, so the RSS figures start that record.
+| vendor web-app java RSS (`EmbeddedGlassFish.jar`, `VmRSS` in `/proc/<pid>/status`) | ~160 MB after boot | record it: the app freezes after long uptime |
 
 ## 11. Before it ships
 
