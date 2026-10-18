@@ -10,55 +10,38 @@ import (
 func TestDetectEnvironment(t *testing.T) {
 	tests := []struct {
 		name     string
-		envValue string
+		appEnv   string
 		expected Environment
 	}{
-		{
-			name:     "Development environment",
-			envValue: "dev",
-			expected: EnvDev,
-		},
-		{
-			name:     "Development environment (development)",
-			envValue: "development",
-			expected: EnvDev,
-		},
-		{
-			name:     "Staging environment",
-			envValue: "staging",
-			expected: EnvStaging,
-		},
-		{
-			name:     "Production environment",
-			envValue: "prod",
-			expected: EnvProd,
-		},
-		{
-			name:     "Production environment (production)",
-			envValue: "production",
-			expected: EnvProd,
-		},
-		{
-			name:     "Empty environment defaults to dev",
-			envValue: "",
-			expected: EnvDev,
-		},
-		{
-			name:     "Unknown environment defaults to dev",
-			envValue: "unknown",
-			expected: EnvDev,
-		},
+		{name: "unset is local development", appEnv: "", expected: EnvDev},
+		{name: "dev", appEnv: "dev", expected: EnvDev},
+		{name: "development", appEnv: "development", expected: EnvDev},
+		{name: "local", appEnv: "local", expected: EnvDev},
+		{name: "test harness", appEnv: "test", expected: EnvDev},
+		{name: "staging", appEnv: "staging", expected: EnvStaging},
+		{name: "preview runs the staging profile", appEnv: "preview", expected: EnvStaging},
+		{name: "prod (the chart's value)", appEnv: "prod", expected: EnvProd},
+		{name: "production", appEnv: "production", expected: EnvProd},
+		{name: "case-insensitive", appEnv: "PROD", expected: EnvProd},
+		{name: "unrecognized fails closed to prod", appEnv: "whitelabel-acme", expected: EnvProd},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("ENVIRONMENT", tt.envValue)
-			defer os.Unsetenv("ENVIRONMENT")
+			t.Setenv("APP_ENV", tt.appEnv)
 
-			result := DetectEnvironment()
-			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, tt.expected, DetectEnvironment())
 		})
 	}
+}
+
+// ENVIRONMENT was the logger's old selector; nothing sets it, and it must not
+// override APP_ENV (that mismatch ran prod on the dev profile).
+func TestDetectEnvironmentIgnoresENVIRONMENT(t *testing.T) {
+	t.Setenv("APP_ENV", "prod")
+	t.Setenv("ENVIRONMENT", "dev")
+
+	assert.Equal(t, EnvProd, DetectEnvironment())
 }
 
 func TestDetectServiceName(t *testing.T) {
@@ -142,7 +125,7 @@ func TestNewConfig(t *testing.T) {
 			expected: Config{
 				Environment:    EnvProd,
 				ServiceName:    "platform-backend",
-				Level:          "warn",
+				Level:          "info",
 				Format:         "json",
 				IncludeStack:   false,
 				IncludeCaller:  false,
@@ -157,8 +140,7 @@ func TestNewConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("ENVIRONMENT", tt.environment)
-			defer os.Unsetenv("ENVIRONMENT")
+			t.Setenv("APP_ENV", tt.environment)
 
 			result := NewConfig(tt.version)
 			assert.Equal(t, tt.expected, *result)
