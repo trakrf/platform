@@ -14,29 +14,35 @@ const (
 	EnvProd    Environment = "prod"
 )
 
+// Config carries no redaction switches: the logger does not scrub output. PII
+// (emails, phone numbers, message bodies) stays out of log lines at the call
+// site — log ids, never addresses — and the caller's tests assert it.
 type Config struct {
-	Environment    Environment
-	ServiceName    string
-	Level          string
-	Format         string
-	IncludeStack   bool
-	IncludeCaller  bool
-	ColorOutput    bool
-	SanitizeEmails bool
-	SanitizeIPs    bool
-	MaxBodySize    int
-	Version        string
+	Environment   Environment
+	ServiceName   string
+	Level         string
+	Format        string
+	IncludeStack  bool
+	IncludeCaller bool
+	ColorOutput   bool
+	Version       string
 }
 
+// DetectEnvironment picks the log profile from APP_ENV, the same variable every
+// other env gate in the backend reads (the deploy chart sets "prod"/"preview").
+//
+// Fail-CLOSED, like serve.testAffordancesAllowed: only the known local/CI values
+// get the dev profile (debug, console, caller+stack); an unrecognized APP_ENV
+// gets prod. Reading a variable the chart never set is how prod once ran the
+// dev profile, with env=dev in every line.
 func DetectEnvironment() Environment {
-	env := strings.ToLower(os.Getenv("ENVIRONMENT"))
-	switch env {
-	case "staging":
-		return EnvStaging
-	case "prod", "production":
-		return EnvProd
-	default:
+	switch strings.ToLower(os.Getenv("APP_ENV")) {
+	case "", "test", "dev", "development", "local":
 		return EnvDev
+	case "staging", "preview":
+		return EnvStaging
+	default:
+		return EnvProd
 	}
 }
 
@@ -63,9 +69,6 @@ func NewConfig(version string) *Config {
 		cfg.IncludeStack = getBoolEnv("LOG_INCLUDE_STACK", true)
 		cfg.IncludeCaller = getBoolEnv("LOG_INCLUDE_CALLER", true)
 		cfg.ColorOutput = getBoolEnv("LOG_COLOR", true)
-		cfg.SanitizeEmails = getBoolEnv("LOG_SANITIZE_EMAILS", false)
-		cfg.SanitizeIPs = getBoolEnv("LOG_SANITIZE_IPS", false)
-		cfg.MaxBodySize = getIntEnv("LOG_MAX_BODY_SIZE", 1000)
 
 	case EnvStaging:
 		cfg.Level = getEnvOrDefault("LOG_LEVEL", "info")
@@ -73,19 +76,15 @@ func NewConfig(version string) *Config {
 		cfg.IncludeStack = getBoolEnv("LOG_INCLUDE_STACK", false)
 		cfg.IncludeCaller = getBoolEnv("LOG_INCLUDE_CALLER", false)
 		cfg.ColorOutput = getBoolEnv("LOG_COLOR", false)
-		cfg.SanitizeEmails = getBoolEnv("LOG_SANITIZE_EMAILS", true)
-		cfg.SanitizeIPs = getBoolEnv("LOG_SANITIZE_IPS", true)
-		cfg.MaxBodySize = getIntEnv("LOG_MAX_BODY_SIZE", 0)
 
 	case EnvProd:
-		cfg.Level = getEnvOrDefault("LOG_LEVEL", "warn")
+		// info, not warn: startup, MQTT subscriber, request and api.write audit
+		// lines are INF and are what operators read in prod.
+		cfg.Level = getEnvOrDefault("LOG_LEVEL", "info")
 		cfg.Format = getEnvOrDefault("LOG_FORMAT", "json")
 		cfg.IncludeStack = getBoolEnv("LOG_INCLUDE_STACK", false)
 		cfg.IncludeCaller = getBoolEnv("LOG_INCLUDE_CALLER", false)
 		cfg.ColorOutput = getBoolEnv("LOG_COLOR", false)
-		cfg.SanitizeEmails = getBoolEnv("LOG_SANITIZE_EMAILS", true)
-		cfg.SanitizeIPs = getBoolEnv("LOG_SANITIZE_IPS", true)
-		cfg.MaxBodySize = getIntEnv("LOG_MAX_BODY_SIZE", 0)
 	}
 
 	return cfg
