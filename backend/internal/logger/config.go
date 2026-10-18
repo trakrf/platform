@@ -14,18 +14,18 @@ const (
 	EnvProd    Environment = "prod"
 )
 
+// Config carries no redaction switches: the logger does not scrub output. PII
+// (emails, phone numbers, message bodies) stays out of log lines at the call
+// site — log ids, never addresses — and the caller's tests assert it.
 type Config struct {
-	Environment    Environment
-	ServiceName    string
-	Level          string
-	Format         string
-	IncludeStack   bool
-	IncludeCaller  bool
-	ColorOutput    bool
-	SanitizeEmails bool
-	SanitizeIPs    bool
-	MaxBodySize    int
-	Version        string
+	Environment   Environment
+	ServiceName   string
+	Level         string
+	Format        string
+	IncludeStack  bool
+	IncludeCaller bool
+	ColorOutput   bool
+	Version       string
 }
 
 // DetectEnvironment picks the log profile from APP_ENV, the same variable every
@@ -69,9 +69,6 @@ func NewConfig(version string) *Config {
 		cfg.IncludeStack = getBoolEnv("LOG_INCLUDE_STACK", true)
 		cfg.IncludeCaller = getBoolEnv("LOG_INCLUDE_CALLER", true)
 		cfg.ColorOutput = getBoolEnv("LOG_COLOR", true)
-		cfg.SanitizeEmails = getBoolEnv("LOG_SANITIZE_EMAILS", false)
-		cfg.SanitizeIPs = getBoolEnv("LOG_SANITIZE_IPS", false)
-		cfg.MaxBodySize = getIntEnv("LOG_MAX_BODY_SIZE", 1000)
 
 	case EnvStaging:
 		cfg.Level = getEnvOrDefault("LOG_LEVEL", "info")
@@ -79,9 +76,6 @@ func NewConfig(version string) *Config {
 		cfg.IncludeStack = getBoolEnv("LOG_INCLUDE_STACK", false)
 		cfg.IncludeCaller = getBoolEnv("LOG_INCLUDE_CALLER", false)
 		cfg.ColorOutput = getBoolEnv("LOG_COLOR", false)
-		cfg.SanitizeEmails = getBoolEnv("LOG_SANITIZE_EMAILS", true)
-		cfg.SanitizeIPs = getBoolEnv("LOG_SANITIZE_IPS", true)
-		cfg.MaxBodySize = getIntEnv("LOG_MAX_BODY_SIZE", 0)
 
 	case EnvProd:
 		// info, not warn: startup, MQTT subscriber, request and api.write audit
@@ -91,9 +85,6 @@ func NewConfig(version string) *Config {
 		cfg.IncludeStack = getBoolEnv("LOG_INCLUDE_STACK", false)
 		cfg.IncludeCaller = getBoolEnv("LOG_INCLUDE_CALLER", false)
 		cfg.ColorOutput = getBoolEnv("LOG_COLOR", false)
-		cfg.SanitizeEmails = getBoolEnv("LOG_SANITIZE_EMAILS", true)
-		cfg.SanitizeIPs = getBoolEnv("LOG_SANITIZE_IPS", true)
-		cfg.MaxBodySize = getIntEnv("LOG_MAX_BODY_SIZE", 0)
 	}
 
 	return cfg
