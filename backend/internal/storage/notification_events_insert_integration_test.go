@@ -238,6 +238,39 @@ func TestInsertNotificationEvent_InvalidNeverReachesTheDB(t *testing.T) {
 	require.Zero(t, countRows(t, db, "notification_events"))
 }
 
+// Detectors pass time.Now(), which carries nanoseconds that Postgres cannot
+// store. The trigger and its event must still compare equal under the
+// composite foreign key, and a replay at the same nanosecond time must still
+// read as a duplicate.
+func TestInsertNotificationEvent_NanosecondTimeMatchesItsTrigger(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+	f := newEventFixture(t, db, orgID, "ine-nanos")
+	at := time.Date(2026, 10, 18, 12, 0, 30, 123456789, time.UTC)
+	c := notificationevent.LocationChange{
+		OrgID: orgID, AssetID: f.assetID, ToLocationID: f.locationID,
+		Origin: notificationevent.OriginManualSave, DetectedAt: at,
+	}
+
+	require.NoError(t, db.Store.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		changeID, inserted, err := db.Store.InsertLocationChangeIfAbsentTx(ctx, tx, orgID, c)
+		require.NoError(t, err)
+		require.True(t, inserted)
+		_, inserted, err = db.Store.InsertNotificationEventIfAbsentTx(ctx, tx, orgID, notificationevent.NotificationEvent{
+			OrgID: orgID, Source: notificationevent.SourceLocationChange, AssetID: c.AssetID,
+			OccurredAt: at, LocationChangeID: &changeID,
+		})
+		require.NoError(t, err, "event at the same nanosecond time matches its change")
+		require.True(t, inserted)
+		return nil
+	}))
+
+	_, inserted, err := insertChange(t, db, orgID, c)
+	require.NoError(t, err)
+	require.False(t, inserted, "a replay at the same nanosecond time is a duplicate")
+}
+
 // ON CONFLICT DO NOTHING absorbs only duplicates. An event that does not
 // match its trigger is a real error, never reported as "already enqueued".
 func TestInsertNotificationEvent_MismatchedTriggerIsAnError(t *testing.T) {
