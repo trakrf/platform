@@ -163,6 +163,32 @@ expect_status "plan without arguments is a usage error" 2 "$status"
 "$script" nonsense >/dev/null 2>&1; status=$?
 expect_status "an unknown command is a usage error" 2 "$status"
 
+echo "workflow"
+# The workflow resets its working tree to main before composing, and main need
+# not carry this script (a PR introducing or changing it does not). Run from the
+# tree, it was missing, and without pipefail the empty plan passed.
+wf="$repo_root/.github/workflows/sync-preview.yml"
+wf_text=$(cat "$wf")
+expect "the workflow copies the script before resetting to main" \
+    'cp scripts/preview-composition.sh "$RUNNER_TEMP/preview-composition.sh"' "$wf_text"
+if grep -qE '(^|[^/])\./scripts/preview-composition\.sh' "$wf"; then
+    echo "  ✗ the workflow never runs the script from the reset working tree"
+    fail=$((fail + 1))
+else
+    echo "  ✓ the workflow never runs the script from the reset working tree"
+    pass=$((pass + 1))
+fi
+copy_line=$(grep -n 'cp scripts/preview-composition.sh' "$wf" | cut -d: -f1)
+reset_line=$(grep -n 'git checkout -B preview origin/main' "$wf" | cut -d: -f1)
+if [ -n "$copy_line" ] && [ -n "$reset_line" ] && [ "$copy_line" -lt "$reset_line" ]; then
+    echo "  ✓ the copy happens before the reset"
+    pass=$((pass + 1))
+else
+    echo "  ✗ the copy happens before the reset (copy line ${copy_line:-none}, reset line ${reset_line:-none})"
+    fail=$((fail + 1))
+fi
+expect "the job runs bash with pipefail" "shell: bash" "$wf_text"
+
 echo
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

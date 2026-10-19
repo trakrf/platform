@@ -13,6 +13,11 @@ concurrency:
 jobs:
   sync-preview:
     runs-on: ubuntu-latest
+    # Explicit bash is `bash -eo pipefail`; the default omits pipefail, which let
+    # a failing `script | tee` pass as an empty plan.
+    defaults:
+      run:
+        shell: bash
     permissions:
       contents: write
       pull-requests: write
@@ -42,6 +47,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # Resetting to main swaps the working tree, so the composition script is
+      # copied out first: it must come from the commit this run was triggered
+      # for, not from whatever main or the composed preview happens to carry.
+      - name: Keep the composition script
+        run: cp scripts/preview-composition.sh "$RUNNER_TEMP/preview-composition.sh"
 
       - name: Reset preview to main
         run: |
@@ -100,7 +111,7 @@ jobs:
             fi
           done < <(jq -r '.[] | "\(.number) \(.branch)"' <<<"$PRS")
 
-          ./scripts/preview-composition.sh plan origin/main "$candidates" | tee "$RUNNER_TEMP/plan"
+          "$RUNNER_TEMP/preview-composition.sh" plan origin/main "$candidates" | tee "$RUNNER_TEMP/plan"
 
           excluded=$(jq -Rnc '[inputs | select(startswith("exclude "))
             | capture("^exclude (?<number>[0-9]+) (?<reason>.*)$") | .number |= tonumber]' \
@@ -195,9 +206,17 @@ jobs:
             echo "No previous preview build to compare against"
             exit 0
           fi
-          if files=$(./scripts/preview-composition.sh dropped origin/preview HEAD); then
+          status=0
+          files=$("$RUNNER_TEMP/preview-composition.sh" dropped origin/preview HEAD) || status=$?
+          if [ "$status" -eq 0 ]; then
             echo "No migrations dropped"
             exit 0
+          fi
+          # Exit 1 with files named is a drop; anything else is the check
+          # failing to run, which must not pass for either answer.
+          if [ "$status" -ne 1 ] || [ -z "$files" ]; then
+            echo "::error::the dropped-migrations check could not run (exit $status)"
+            exit 1
           fi
           previous=$(git show origin/preview:.preview-manifest 2>/dev/null || true)
           current=$(cat .preview-manifest 2>/dev/null || true)
