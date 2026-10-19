@@ -79,12 +79,44 @@ jobs:
             console.log(`Found ${prInfo.length} open PRs to merge`);
             return prInfo;
 
+      # Decide, before anything is merged, which PRs' migration numbers may reach
+      # preview's shared database. The rule lives in a tested script rather than
+      # here, so `just test` exercises it; see the header of that script.
+      - name: Plan composition by migration number
+        id: plan
+        env:
+          PRS: ${{ steps.get-prs.outputs.result }}
+        run: |
+          candidates="$RUNNER_TEMP/candidates"
+          : > "$candidates"
+          while read -r number branch; do
+            [ -n "$number" ] || continue
+            # A branch that cannot be fetched (a fork's) is left out of the plan;
+            # its merge then fails and it is reported as a conflict, as before.
+            if git fetch -q origin "refs/heads/$branch:refs/remotes/origin/$branch"; then
+              echo "$number origin/$branch" >> "$candidates"
+            else
+              echo "::warning::could not fetch $branch for PR #$number"
+            fi
+          done < <(jq -r '.[] | "\(.number) \(.branch)"' <<<"$PRS")
+
+          ./scripts/preview-composition.sh plan origin/main "$candidates" | tee "$RUNNER_TEMP/plan"
+
+          excluded=$(jq -Rnc '[inputs | select(startswith("exclude "))
+            | capture("^exclude (?<number>[0-9]+) (?<reason>.*)$") | .number |= tonumber]' \
+            < "$RUNNER_TEMP/plan")
+          echo "excluded=$excluded" >> "$GITHUB_OUTPUT"
+
       - name: Merge PRs into preview
         id: merge-prs
         uses: actions/github-script@v7
+        env:
+          EXCLUDED: ${{ steps.plan.outputs.excluded }}
         with:
           script: |
             const prs = ${{ steps.get-prs.outputs.result }};
+            const excluded = JSON.parse(process.env.EXCLUDED || '[]');
+            const excludedNumbers = new Set(excluded.map(e => e.number));
             const { exec: executeCommand } = require('child_process');
             const util = require('util');
             const execPromise = util.promisify(executeCommand);
@@ -98,15 +130,16 @@ jobs:
             const merged = [];
 
             for (const pr of prs) {
+              if (excludedNumbers.has(pr.number)) {
+                console.log(`Skipping PR #${pr.number}: excluded by migration number`);
+                continue;
+              }
               console.log(`Attempting to merge PR #${pr.number}: ${pr.title}`);
 
               try {
-                // Fetch the PR branch - branch name is safe as it comes from GitHub
-                await execPromise(`git fetch origin ${pr.branch}:refs/remotes/origin/${pr.branch}`);
-
-                // Try to merge with properly escaped title
+                // The plan step already fetched the branch.
                 const safeTitle = escapeShellArg(pr.title);
-                const mergeResult = await execPromise(`git merge origin/${pr.branch} --no-edit -m 'Merge PR #${pr.number}: ${safeTitle}'`);
+                await execPromise(`git merge origin/${pr.branch} --no-edit -m 'Merge PR #${pr.number}: ${safeTitle}'`);
                 console.log(`Successfully merged PR #${pr.number}`);
                 merged.push(pr.number);
               } catch (error) {
@@ -119,21 +152,13 @@ jobs:
                 } catch (e) {
                   // Already aborted or not in merge state
                 }
-
-                // Post comment on the PR about the conflict
-                if (context.eventName === 'pull_request' && context.payload.pull_request.number === pr.number) {
-                  // This is the PR that triggered the workflow
-                  await github.rest.issues.createComment({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: pr.number,
-                    body: `⚠️ **Merge Conflict Detected**\n\nThis PR has conflicts with the current preview branch (main + other open PRs).\n\nPlease resolve conflicts with the main branch or wait for conflicting PRs to be merged first.\n\nPRs merged before this one: ${merged.join(', ') || 'none'}`
-                  });
-                }
               }
             }
 
-            const result = { conflicts, merged };
+            const excludedPRs = prs
+              .filter(pr => excludedNumbers.has(pr.number))
+              .map(pr => ({ ...pr, reason: excluded.find(e => e.number === pr.number).reason }));
+            const result = { conflicts, merged, excluded: excludedPRs };
             core.setOutput('conflicts', JSON.stringify(conflicts));
             core.setOutput('merged', JSON.stringify(merged));
             core.setOutput('result', JSON.stringify(result));
@@ -156,6 +181,34 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "preview: manifest of merged PRs"
           fi
+
+      # A migration file the previous build carried and this one lacks, or
+      # carries changed, means preview's ledger is now ahead of its image: the
+      # PR that brought it conflicted, was excluded, closed, or rewrote it.
+      # Recorded here, reported after the push and the PR comments, and then
+      # the run fails. The migrate Job refuses that image before writing, so
+      # the database is safe; the red run is how someone finds out.
+      - name: Check for migrations dropped from the previous build
+        id: dropped
+        run: |
+          if ! git rev-parse -q --verify origin/preview >/dev/null; then
+            echo "No previous preview build to compare against"
+            exit 0
+          fi
+          if files=$(./scripts/preview-composition.sh dropped origin/preview HEAD); then
+            echo "No migrations dropped"
+            exit 0
+          fi
+          previous=$(git show origin/preview:.preview-manifest 2>/dev/null || true)
+          current=$(cat .preview-manifest 2>/dev/null || true)
+          left=$(comm -23 <(sort -u <<<"$previous") <(sort -u <<<"$current") | sed '/^$/d; s/^/#/' | paste -sd' ' -)
+          {
+            echo "found=true"
+            echo "left=${left:-none}"
+            echo "files<<EOF"
+            echo "$files"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Push preview branch
         id: push-preview
@@ -194,26 +247,113 @@ jobs:
             const prNumber = context.payload.pull_request.number;
             const mergeResult = ${{ steps.merge-prs.outputs.result }};
 
-            let comment = '🚀 **Preview Deployment Update**\n\n';
-
-            if (mergeResult.merged.includes(prNumber)) {
-              comment += '✅ This PR has been successfully merged into the preview branch.\n\n';
-              comment += 'The preview environment will update shortly at: **https://app.preview.trakrf.id**\n\n';
-
-              if (mergeResult.conflicts.length > 0) {
-                comment += `⚠️ Note: The following PRs have conflicts and were not included in preview:\n`;
-                mergeResult.conflicts.forEach(pr => {
-                  comment += `- PR #${pr.number}: ${pr.title}\n`;
-                });
-              }
+            // Only the success notice belongs here. Exclusions and conflicts are
+            // announced by the next step to every PR whose status changed.
+            if (!mergeResult.merged.includes(prNumber)) {
+              return;
             }
 
-            // Only post if we have something meaningful to say
-            if (mergeResult.merged.includes(prNumber) || mergeResult.conflicts.some(c => c.number === prNumber)) {
+            let comment = '🚀 **Preview Deployment Update**\n\n';
+            comment += '✅ This PR has been successfully merged into the preview branch.\n\n';
+            comment += 'The preview environment will update shortly at: **https://app.preview.trakrf.id**\n\n';
+
+            const left = [...mergeResult.conflicts, ...mergeResult.excluded];
+            if (left.length > 0) {
+              comment += `⚠️ Note: The following PRs were not included in preview:\n`;
+              left.forEach(pr => {
+                comment += `- PR #${pr.number}: ${pr.title}\n`;
+              });
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: comment
+            });
+
+      # Every PR whose place in preview changed hears about it on this run,
+      # whichever PR triggered it. The conflict notice used to go only to the
+      # triggering PR, so a PR dropped by someone else's push was dropped
+      # silently while its migrations stayed applied on preview.
+      #
+      # Each notice carries a marker, and a PR is told again only when its
+      # status differs from the last marker it was sent.
+      - name: Comment on PRs whose preview status changed
+        if: always() && steps.merge-prs.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const mergeResult = ${{ steps.merge-prs.outputs.result }};
+            const markerRe = /<!-- preview-sync-status: (.*?) -->/;
+
+            const lastStatus = async (number) => {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: number,
+                per_page: 100
+              });
+              let last = null;
+              for (const c of comments) {
+                const m = markerRe.exec(c.body || '');
+                if (m) last = m[1];
+              }
+              return last;
+            };
+
+            const notify = async (number, status, body) => {
+              if (await lastStatus(number) === status) return;
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: prNumber,
-                body: comment
+                issue_number: number,
+                body: `${body}\n\n<!-- preview-sync-status: ${status} -->`
               });
+            };
+
+            for (const pr of mergeResult.excluded) {
+              await notify(pr.number, `excluded: ${pr.reason}`,
+                `⛔ **Left out of preview: migration number**\n\n` +
+                `This PR was not composed into preview because ${pr.reason}.\n\n` +
+                `Preview applies every open PR's migrations to one shared database, and golang-migrate ` +
+                `remembers only the number, so a number that changes after it has been applied there leaves ` +
+                `preview's database describing a file that no longer exists. See ` +
+                `\`backend/migrations/CONVENTIONS.md\`.`);
             }
+            for (const pr of mergeResult.conflicts) {
+              await notify(pr.number, 'conflict',
+                `⚠️ **Merge Conflict Detected**\n\n` +
+                `This PR has conflicts with the current preview branch (main + other open PRs) and is not in preview.\n\n` +
+                `Please resolve conflicts with the main branch or wait for conflicting PRs to be merged first.\n\n` +
+                `PRs in preview: ${mergeResult.merged.join(', ') || 'none'}`);
+            }
+            for (const number of mergeResult.merged) {
+              const last = await lastStatus(number);
+              if (last && last !== 'included') {
+                await notify(number, 'included', '✅ **Back in preview.** This PR is composed into preview again.');
+              }
+            }
+
+      - name: Fail on migrations dropped from preview
+        if: steps.dropped.outputs.found == 'true'
+        env:
+          FILES: ${{ steps.dropped.outputs.files }}
+          LEFT: ${{ steps.dropped.outputs.left }}
+        run: |
+          {
+            echo "## Preview's database is ahead of the new preview build"
+            echo
+            echo "The previous build carried these migrations and this one does not, or carries them changed:"
+            echo
+            echo '```'
+            echo "$FILES"
+            echo '```'
+            echo
+            echo "PRs that left the build: $LEFT"
+            echo
+            echo "Preview's migrate Job will refuse this image until the database is reconciled"
+            echo "or the PR returns with its migrations unchanged."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::migrations applied on preview are missing from the new build ($LEFT): $(paste -sd' ' <<<"$FILES")"
+          exit 1

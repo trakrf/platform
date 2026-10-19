@@ -57,7 +57,7 @@ check-contributing:
 
 lint: check-contributing (frontend "lint") (backend "lint") (cli "lint")
 
-test: test-ops test-release-guards test-db-init test-env-drift test-bootstrap (frontend "test") (backend "test") (cli "test")
+test: test-ops test-release-guards test-db-init test-env-drift test-bootstrap test-preview-composition (frontend "test") (backend "test") (cli "test")
 
 build: (frontend "build") (backend "build") (cli "build")
 
@@ -157,6 +157,12 @@ test-env-drift:
 # the real script against a stub toolchain in a temp dir — no network, no vite.
 test-bootstrap:
     @./scripts/test-bootstrap.sh
+
+# The rule deciding which open PRs' migrations may reach preview's shared
+# database, and the check that a rebuild did not drop migrations preview already
+# applied. Runs the real script against throwaway git repos — git only.
+test-preview-composition:
+    @./scripts/test-preview-composition.sh
 
 # ============================================================================
 # Full Stack Development
