@@ -118,6 +118,16 @@ func (e NotificationEvent) Validate() error {
 	return nil
 }
 
+// Occurrence is what a notification is about: the asset, where it was, and
+// when, read from the alarm or location change that triggered it.
+type Occurrence struct {
+	Source     Source
+	SourceID   int // the alarm_events or location_changes id
+	AssetID    int
+	LocationID *int // nil for an alarm with no location
+	OccurredAt time.Time
+}
+
 func invalid(msg string) error {
 	return fmt.Errorf("%w: %s", ErrInvalid, msg)
 }
