@@ -5,6 +5,7 @@ import type { Tag } from '@/types/shared';
 import { useLocationStore, useAssetStore } from '@/stores';
 import { useAssetLocations } from '@/hooks/reports';
 import { TagList } from './TagList';
+import { AssetNotificationsButton } from '@/components/notifications/AssetNotificationsButton';
 
 interface AssetDetailsModalProps {
   asset: Asset | null;
@@ -79,13 +80,21 @@ export function AssetDetailsModal({ asset, isOpen, onClose, onEdit }: AssetDetai
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
               Asset Details
             </h2>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              aria-label="Close modal"
-            >
-              <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-            </button>
+            <div className="flex items-center gap-1">
+              <AssetNotificationsButton
+                assetId={asset.id}
+                assetName={asset.name}
+                assetKey={asset.external_key}
+                variant="icon"
+              />
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                aria-label="Close modal"
+              >
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+              </button>
+            </div>
           </div>
           <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-8rem)]">
             <div className="space-y-6">
