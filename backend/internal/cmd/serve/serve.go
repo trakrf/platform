@@ -40,7 +40,9 @@ import (
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/mustering"
 	"github.com/trakrf/platform/backend/internal/notification"
+	"github.com/trakrf/platform/backend/internal/notification/outbox"
 	"github.com/trakrf/platform/backend/internal/notification/resend"
+	"github.com/trakrf/platform/backend/internal/notification/routing"
 	"github.com/trakrf/platform/backend/internal/notification/twilio"
 	"github.com/trakrf/platform/backend/internal/readercontrol"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
@@ -123,6 +125,45 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 		return err
 	}
 	log.Info().Bool("enabled", emailConfig.Enabled).Msg("Notification email integration configured")
+
+	// The delivery planner turns a detected alarm or move into queued
+	// deliveries. Built at boot so a bad phone region or a broken template
+	// refuses to start; detection wires it in later, and the queue runtime
+	// that would run its trigger jobs is not started yet.
+	routingConfig, err := routing.ConfigFromEnv()
+	if err != nil {
+		return err
+	}
+	templates, err := routing.NewTemplateRenderer()
+	if err != nil {
+		return err
+	}
+	jobInserter, err := outbox.NewInserter(store.Pool().(*pgxpool.Pool))
+	if err != nil {
+		return err
+	}
+	planningMetrics, err := routing.NewMetrics(prometheus.DefaultRegisterer)
+	if err != nil {
+		return err
+	}
+	outboxMetrics, err := outbox.NewMetrics(prometheus.DefaultRegisterer)
+	if err != nil {
+		return err
+	}
+	deliveryPlanner, err := routing.NewDeliveryPlanner(routing.Deps{
+		Store:         store,
+		Jobs:          jobInserter,
+		Renderer:      templates,
+		Metrics:       planningMetrics,
+		OutboxMetrics: outboxMetrics,
+		PhoneRegion:   routingConfig.PhoneRegion,
+		Log:           *log,
+	})
+	if err != nil {
+		return err
+	}
+	_ = deliveryPlanner
+	log.Info().Str("phone_region", routingConfig.PhoneRegion).Msg("notification delivery planner constructed")
 
 	// Say it at boot as well as on /health (TRA-1190). The endpoint is what a
 	// test suite can check; this line is what a developer actually sees, and
