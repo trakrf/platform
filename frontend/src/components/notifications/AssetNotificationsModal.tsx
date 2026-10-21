@@ -2,9 +2,90 @@ import { useEffect, useState } from 'react';
 import { UserPlus, X } from 'lucide-react';
 import { useEscapeToClose } from '@/hooks/useEscapeToClose';
 import { PaidGate } from '@/components/entitlement';
+import { useNotificationAlerts } from '@/hooks/notifications/useNotificationAlerts';
 import { AddSubscriberForm } from './AddSubscriberForm';
+import { AlertList } from './AlertList';
 import { NotificationsGate } from './NotificationsGate';
 import { SubscriberList } from './SubscriberList';
+
+const ALERTS_PER_PAGE = 10;
+
+const PAGE_BUTTON =
+  'px-2.5 py-1 text-xs sm:text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+
+/**
+ * One asset's alert history. Mounted only while the modal is open, so alerts
+ * are read only then and paging starts again at 1 on reopen.
+ */
+function AssetAlertHistory({ assetId }: { assetId: number }) {
+  const [page, setPage] = useState(1);
+  const { alerts, total, isLoading } = useNotificationAlerts({
+    asset_id: assetId,
+    page,
+    per_page: ALERTS_PER_PAGE,
+  });
+  const totalPages = Math.max(1, Math.ceil(total / ALERTS_PER_PAGE));
+
+  let body;
+  if (isLoading) {
+    body = <p className="py-2 text-sm text-gray-500 dark:text-gray-400">Loading alerts…</p>;
+  } else if (total === 0) {
+    body = (
+      <p className="py-2 text-sm text-gray-500 dark:text-gray-400">
+        No alerts for this asset yet.
+      </p>
+    );
+  } else {
+    body = (
+      <>
+        <AlertList alerts={alerts} compact />
+        {total > ALERTS_PER_PAGE && (
+          <div className="flex items-center justify-between gap-2 mt-3">
+            <button
+              type="button"
+              data-testid="asset-alerts-prev"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className={PAGE_BUTTON}
+            >
+              Previous
+            </button>
+            <span
+              data-testid="asset-alerts-page"
+              className="text-xs sm:text-sm text-gray-600 dark:text-gray-400"
+            >
+              Page {page} of {totalPages}
+            </span>
+            <button
+              type="button"
+              data-testid="asset-alerts-next"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className={PAGE_BUTTON}
+            >
+              Next
+            </button>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <section
+      aria-labelledby="asset-alerts-heading"
+      className="border-t border-gray-200 dark:border-gray-700 pt-4"
+    >
+      <h3
+        id="asset-alerts-heading"
+        className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-3"
+      >
+        Alerts
+      </h3>
+      {body}
+    </section>
+  );
+}
 
 interface AssetNotificationsModalProps {
   isOpen: boolean;
@@ -106,7 +187,7 @@ export function AssetNotificationsModal({
                   )}
                   <SubscriberList assetId={assetId} assetName={assetName} />
                 </section>
-                {/* Further sections (alert history) follow as siblings. */}
+                <AssetAlertHistory assetId={assetId} />
               </div>
             </NotificationsGate>
           </div>
