@@ -1,5 +1,8 @@
-import { X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { UserPlus, X } from 'lucide-react';
 import { useEscapeToClose } from '@/hooks/useEscapeToClose';
+import { PaidGate } from '@/components/entitlement';
+import { AddSubscriberForm } from './AddSubscriberForm';
 import { NotificationsGate } from './NotificationsGate';
 import { SubscriberList } from './SubscriberList';
 
@@ -23,6 +26,11 @@ export function AssetNotificationsModal({
   assetKey,
 }: AssetNotificationsModalProps) {
   useEscapeToClose(isOpen, onClose);
+  const [adding, setAdding] = useState(false);
+  // Reopening the modal starts with the add form closed.
+  useEffect(() => {
+    if (!isOpen) setAdding(false);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -75,8 +83,27 @@ export function AssetNotificationsModal({
                     >
                       Subscribers
                     </h3>
-                    {/* Section actions (add subscriber) go here. */}
+                    <PaidGate surface="notifications-subscriptions">
+                      <button
+                        type="button"
+                        data-testid="add-subscriber-toggle"
+                        aria-expanded={adding}
+                        onClick={() => setAdding((v) => !v)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                      >
+                        <UserPlus className="w-4 h-4" aria-hidden="true" />
+                        Add subscriber
+                      </button>
+                    </PaidGate>
                   </div>
+                  {adding && (
+                    <AddSubscriberForm
+                      assetId={assetId}
+                      assetName={assetName}
+                      onDone={() => setAdding(false)}
+                      onCancel={() => setAdding(false)}
+                    />
+                  )}
                   <SubscriberList assetId={assetId} assetName={assetName} />
                 </section>
                 {/* Further sections (alert history) follow as siblings. */}
