@@ -49,6 +49,17 @@ import { useOrgStore } from '@/stores/orgStore';
 import type { TabType } from '@/stores';
 import { DEFAULT_TAB } from '@/utils/tabRedirects';
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+// The header's notification bell reads alerts through TanStack Query, which
+// main.tsx provides in the real app.
+const renderApp = () =>
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <App />
+    </QueryClientProvider>
+  );
+
 /**
  * App's mount effect runs authStore.initialize(), which clears isAuthenticated
  * unless a non-expired token is present. Far-future exp, unsigned — nothing here
@@ -142,7 +153,7 @@ describe('App capability route gating', () => {
   it('upsells mustering without loading its chunk', async () => {
     setCapabilities([]);
     openTab('mustering');
-    render(<App />);
+    renderApp();
 
     await waitFor(() =>
       expect(screen.getByTestId('capability-upsell-mustering')).toBeInTheDocument()
@@ -156,7 +167,7 @@ describe('App capability route gating', () => {
   it('renders the upsell instead of the geofence surface, without loading it', async () => {
     setCapabilities([]);
     openTab('output-devices');
-    render(<App />);
+    renderApp();
 
     await waitFor(() =>
       expect(screen.getByTestId('capability-upsell-geofence')).toBeInTheDocument()
@@ -170,7 +181,7 @@ describe('App capability route gating', () => {
   it('upsells org geofence defaults too', async () => {
     setCapabilities([]);
     openTab('org-geofence-defaults');
-    render(<App />);
+    renderApp();
 
     await waitFor(() =>
       expect(screen.getByTestId('capability-upsell-geofence')).toBeInTheDocument()
@@ -181,7 +192,7 @@ describe('App capability route gating', () => {
   it('loads the real surfaces once the grants are present', async () => {
     setCapabilities(['geofence', 'mustering']);
     openTab('mustering');
-    render(<App />);
+    renderApp();
 
     await waitFor(
       () => expect(screen.getByTestId('mustering-screen')).toBeInTheDocument(),
@@ -194,7 +205,7 @@ describe('App capability route gating', () => {
   it('holds a gated route while the capability set is loading', async () => {
     setCapabilities(null);
     openTab('mustering');
-    render(<App />);
+    renderApp();
 
     await waitFor(() => expect(screen.queryByTestId('mustering-screen')).not.toBeInTheDocument());
     expect(loaded.mustering).toBe(0);
@@ -206,7 +217,7 @@ describe('App capability route gating', () => {
     setCapabilities([]);
     window.location.hash = '#kits';
     useUIStore.setState({ activeTab: 'kits' } as never);
-    render(<App />);
+    renderApp();
 
     await waitFor(() => expect(useUIStore.getState().activeTab).toBe(DEFAULT_TAB));
     expect(window.location.hash).toBe(`#${DEFAULT_TAB}`);
@@ -224,7 +235,7 @@ describe('App capability route gating', () => {
     setCapabilities(['kitting']);
     window.location.hash = '#kits';
     useUIStore.setState({ activeTab: 'kits' } as never);
-    render(<App />);
+    renderApp();
 
     // TRA-1093: this assertion went intermittently red in CI for months, and a
     // bare "Unable to find an element" is not enough to act on — three tickets

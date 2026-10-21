@@ -9,6 +9,7 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 import { Battery, BatteryLow, BatteryMedium, BatteryFull, Plug, Unplug, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { OrgSwitcher } from './OrgSwitcher';
+import { NotificationBell } from './notifications/NotificationBell';
 
 /**
  * Header title and subtitle per tab.
@@ -273,6 +274,8 @@ export default function Header({ onMenuToggle, isMobileMenuOpen = false }: Heade
               )}
               <span className="hidden sm:inline">{MOCK_TESTING ? mockReaderState : readerState}</span>
             </button>
+
+            <NotificationBell />
 
             {/* Auth UI - Always visible */}
             {isAuthenticated && user ? (
