@@ -2,7 +2,7 @@ import React from 'react';
 import { useUIStore, useDeviceStore, useOrgStore } from '@/stores';
 import type { TabType } from '@/stores';
 import { ReaderState } from '@/worker/types/reader';
-import { Package2, Search, Settings, HelpCircle, Package, MapPinned, BarChart3, RadioTower, Radio, Lock } from 'lucide-react';
+import { Package2, Search, Settings, HelpCircle, Package, MapPinned, BarChart3, RadioTower, Radio, Lock, Bell } from 'lucide-react';
 import { appVersion } from '@/version';
 import { capabilityEntryForRoute } from '@/components/capability/registry';
 import { NAV_LABELS } from '@/lib/routing/navLabels';
@@ -268,6 +268,15 @@ export default function TabNavigation() {
             onClick={() => handleTabClick('reports')}
             icon={<BarChart3 className="w-5 h-5" />}
             tooltip="View asset location reports and movement history"
+          />
+
+          <NavItem
+            id="notifications"
+            label="Notifications"
+            isActive={activeTab === 'notifications'}
+            onClick={() => handleTabClick('notifications')}
+            icon={<Bell className="w-5 h-5" />}
+            tooltip="Alerts sent to asset subscribers — who was notified, when, and how"
           />
 
           {/* Capability-gated. `absent` presentation: no trace without the grant. */}
