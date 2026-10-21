@@ -25,9 +25,12 @@ type Runtime struct {
 // *pgxpool.Pool backing Storage — Storage's own PgxPool interface exists for
 // pgxmock compatibility and is not sufficient here, since riverpgxv5.New
 // requires the concrete pgxpool type for its own maintenance queries).
-func NewRuntime(pool *pgxpool.Pool, adapter ChannelAdapter, store deliveryWorkerStore, metrics *Metrics) (*Runtime, error) {
+func NewRuntime(pool *pgxpool.Pool, adapter ChannelAdapter, store deliveryWorkerStore, metrics *Metrics, register ...func(*river.Workers)) (*Runtime, error) {
 	workers := river.NewWorkers()
 	river.AddWorker(workers, NewDeliveryWorker(store, adapter, metrics))
+	for _, add := range register {
+		add(workers)
+	}
 
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Queues: map[string]river.QueueConfig{
@@ -41,6 +44,17 @@ func NewRuntime(pool *pgxpool.Pool, adapter ChannelAdapter, store deliveryWorker
 	}
 
 	return &Runtime{Client: client}, nil
+}
+
+// NewInserter builds an insert-only River client: no queues and no workers,
+// so it never claims a job. With no worker bundle River does not check that an
+// inserted kind has a worker, so it can queue any job kind.
+func NewInserter(pool *pgxpool.Pool) (*river.Client[pgx.Tx], error) {
+	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct river inserter: %w", err)
+	}
+	return client, nil
 }
 
 func (r *Runtime) Start(ctx context.Context) error {
