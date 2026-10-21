@@ -40,6 +40,7 @@ export const ROUTE_REQUIRES_AUTH: ReadonlySet<TabType> = new Set<TabType>([
   'mustering',
   'reports',
   'reports-history',
+  'notifications',
   'scan-devices',
   'live-reads',
   'output-devices',

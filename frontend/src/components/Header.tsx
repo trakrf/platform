@@ -26,6 +26,7 @@ export const PAGE_TITLES = {
   locations: { title: "Locations", subtitle: "Manage your organization's locations" },
   reports: { title: "Reports", subtitle: "View asset locations and movement history" },
   'reports-history': { title: "Report History", subtitle: "Previously generated reports" },
+  notifications: { title: "Notifications", subtitle: "Alerts sent to asset subscribers" },
   'api-keys': { title: "API Keys", subtitle: "Manage programmatic access tokens" },
   'org-members': { title: "Members", subtitle: "Manage organization members" },
   'org-settings': { title: "Organization Settings", subtitle: "Configure your organization" },
