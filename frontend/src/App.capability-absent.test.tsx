@@ -46,6 +46,17 @@ import { useAuthStore } from '@/stores/authStore';
 import { useOrgStore } from '@/stores/orgStore';
 import { DEFAULT_TAB } from '@/utils/tabRedirects';
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+// The header's notification bell reads alerts through TanStack Query, which
+// main.tsx provides in the real app.
+const renderApp = () =>
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <App />
+    </QueryClientProvider>
+  );
+
 const FAR_FUTURE_JWT = `header.${btoa(JSON.stringify({ exp: 4102444800 }))}.sig`;
 
 function setCapabilities(capabilities: string[] | null) {
@@ -111,7 +122,7 @@ describe('App capability route gating — `absent` presentation', () => {
     setCapabilities([]);
     window.location.hash = '#mustering';
     useUIStore.setState({ activeTab: 'mustering' } as never);
-    render(<App />);
+    renderApp();
 
     await waitFor(() => expect(useUIStore.getState().activeTab).toBe(DEFAULT_TAB));
     expect(window.location.hash).toBe(`#${DEFAULT_TAB}`);
@@ -125,7 +136,7 @@ describe('App capability route gating — `absent` presentation', () => {
     setCapabilities(['mustering']);
     window.location.hash = '#mustering';
     useUIStore.setState({ activeTab: 'mustering' } as never);
-    render(<App />);
+    renderApp();
 
     await waitFor(() => expect(screen.getByTestId('mustering-screen')).toBeInTheDocument());
     expect(useUIStore.getState().activeTab).toBe('mustering');

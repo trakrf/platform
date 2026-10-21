@@ -30,6 +30,17 @@ import { useAuthStore } from '@/stores/authStore';
 import { useOrgStore } from '@/stores/orgStore';
 import type { TabType } from '@/stores';
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+// The header's notification bell reads alerts through TanStack Query, which
+// main.tsx provides in the real app.
+const renderApp = () =>
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <App />
+    </QueryClientProvider>
+  );
+
 const FAR_FUTURE_JWT = `header.${btoa(JSON.stringify({ exp: 4102444800 }))}.sig`;
 
 function signIn() {
@@ -95,7 +106,7 @@ describe('App signed-out routing', () => {
 
   it('shows the card instead of redirecting to login', async () => {
     openTab('reports');
-    render(<App />);
+    renderApp();
 
     await waitFor(() =>
       expect(screen.getByTestId('signed-out-upsell-reports')).toBeInTheDocument()
@@ -110,7 +121,7 @@ describe('App signed-out routing', () => {
   it('renders the real screen once signed in', async () => {
     signIn();
     openTab('assets');
-    render(<App />);
+    renderApp();
 
     await waitFor(() => expect(screen.getByTestId('assets-screen')).toBeInTheDocument());
     expect(screen.queryByTestId('signed-out-upsell-assets')).not.toBeInTheDocument();
@@ -118,7 +129,7 @@ describe('App signed-out routing', () => {
 
   it('leaves the public surfaces alone', async () => {
     openTab('scan');
-    render(<App />);
+    renderApp();
 
     await waitFor(() => expect(screen.getByTestId('scan-screen')).toBeInTheDocument());
     expect(screen.queryByTestId('signed-out-upsell-scan')).not.toBeInTheDocument();
@@ -126,7 +137,7 @@ describe('App signed-out routing', () => {
 
   it('answers auth before capability on a gated route', async () => {
     openTab('mustering');
-    render(<App />);
+    renderApp();
 
     // Generic card, not the capability upsell: with no org there is no
     // capability question to answer.
@@ -162,7 +173,7 @@ describe('App signed-out routing', () => {
       initialize: () => {},
     } as never);
     openTab('reports');
-    render(<App />);
+    renderApp();
 
     // First paint, token not yet resolved: must show the pending/loading
     // treatment, never the signed-out card — that flash is worse than the
