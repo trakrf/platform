@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Contact, Search, X } from 'lucide-react';
+import { Contact, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useUIStore } from '@/stores';
-import { useNotificationRecipients } from '@/hooks/notifications';
+import {
+  useNotificationRecipientMutations,
+  useNotificationRecipients,
+} from '@/hooks/notifications';
+import { useRecipientSubscriptionCounts } from '@/hooks/notifications/useRecipientSubscriptionCounts';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
-import { EmptyState } from '@/components/shared';
+import { ConfirmModal, EmptyState } from '@/components/shared';
+import { PaidGate } from '@/components/entitlement';
 import { NotificationsGate } from '@/components/notifications/NotificationsGate';
+import { ContactFormModal } from '@/components/notifications/ContactFormModal';
 import type { NotificationRecipient } from '@/types/notifications';
 
 const PILL_BASE = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border';
@@ -21,6 +28,24 @@ function ActivePill({ active }: { active: boolean }) {
   );
 }
 
+const ICON_BUTTON = 'p-1.5 text-gray-500 dark:text-gray-400';
+const CARD_BUTTON =
+  'flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium border rounded-lg transition-colors';
+
+type FormState = { mode: 'create' } | { mode: 'edit'; contact: NotificationRecipient } | null;
+
+function assetsPhrase(count: number) {
+  return `${count} asset${count === 1 ? '' : 's'}`;
+}
+
+function deleteMessage(name: string, count: number) {
+  const subscribed =
+    count === 0
+      ? 'They are not subscribed to any assets.'
+      : `They are subscribed to ${assetsPhrase(count)} and will stop receiving all alerts.`;
+  return `Delete ${name}? ${subscribed} Their alert history is kept.`;
+}
+
 function matches(recipient: NotificationRecipient, term: string) {
   return [recipient.name, recipient.email, recipient.phone].some((field) =>
     field?.toLowerCase().includes(term)
@@ -31,7 +56,11 @@ function matches(recipient: NotificationRecipient, term: string) {
 export default function ContactsScreen() {
   const { setActiveTab } = useUIStore();
   const { recipients, isLoading, error } = useNotificationRecipients();
+  const { counts, isLoading: countsLoading } = useRecipientSubscriptionCounts();
+  const { delete: deleteRecipient } = useNotificationRecipientMutations();
   const [search, setSearch] = useState('');
+  const [form, setForm] = useState<FormState>(null);
+  const [deleting, setDeleting] = useState<NotificationRecipient | null>(null);
 
   useEffect(() => {
     setActiveTab('notification-contacts');
@@ -41,6 +70,73 @@ export default function ContactsScreen() {
   const visible = useMemo(
     () => (term ? recipients.filter((r) => matches(r, term)) : recipients),
     [recipients, term]
+  );
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    try {
+      await deleteRecipient(deleting.id);
+      toast.success('Contact deleted');
+      setDeleting(null);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Failed to delete contact'));
+    }
+  };
+
+  const countOf = (id: number) => counts.get(id) ?? 0;
+  const renderCount = (id: number, label: (n: number) => string) =>
+    countsLoading ? (
+      <span aria-label="Loading subscription count">…</span>
+    ) : (
+      label(countOf(id))
+    );
+
+  const rowActions = (r: NotificationRecipient) => (
+    <PaidGate surface="notifications-contacts" silentImpression>
+      <div className="flex items-center justify-end gap-1">
+        <button
+          type="button"
+          onClick={() => setForm({ mode: 'edit', contact: r })}
+          className={`${ICON_BUTTON} hover:text-blue-600 dark:hover:text-blue-400`}
+          aria-label={`Edit ${r.name}`}
+        >
+          <Pencil className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setDeleting(r)}
+          className={`${ICON_BUTTON} hover:text-red-600 dark:hover:text-red-400`}
+          aria-label={`Delete ${r.name}`}
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+    </PaidGate>
+  );
+
+  const cardActions = (r: NotificationRecipient) => (
+    <PaidGate surface="notifications-contacts" silentImpression className="flex-1">
+      <div className="flex gap-1.5 sm:gap-2 flex-1">
+        <button
+          type="button"
+          onClick={() => setForm({ mode: 'edit', contact: r })}
+          className={`${CARD_BUTTON} text-gray-700 bg-gray-50 hover:bg-gray-100 dark:text-gray-400 dark:bg-gray-900/20 dark:hover:bg-gray-900/40 border-gray-200 dark:border-gray-800`}
+          aria-label={`Edit ${r.name}`}
+        >
+          <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <span>Edit</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setDeleting(r)}
+          className={`${CARD_BUTTON} text-red-700 bg-red-50 hover:bg-red-100 dark:text-red-400 dark:bg-red-900/20 dark:hover:bg-red-900/40 border-red-200 dark:border-red-800`}
+          aria-label={`Delete ${r.name}`}
+        >
+          <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <span>Delete</span>
+        </button>
+      </div>
+    </PaidGate>
   );
 
   const renderBody = () => {
@@ -61,6 +157,7 @@ export default function ContactsScreen() {
             icon={Contact}
             title="No contacts yet"
             description="Add the people who should receive asset alerts."
+            action={{ label: 'Add contact', onClick: () => setForm({ mode: 'create' }) }}
           />
         </div>
       );
@@ -90,6 +187,10 @@ export default function ContactsScreen() {
               <th className="px-3 font-medium">Email</th>
               <th className="px-3 font-medium">Phone</th>
               <th className="px-3 font-medium">Active</th>
+              <th className="px-3 font-medium">Subscribed assets</th>
+              <th className="px-3 font-medium text-right">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -105,6 +206,13 @@ export default function ContactsScreen() {
                 <td className="px-3">
                   <ActivePill active={r.is_active} />
                 </td>
+                <td
+                  data-testid={`contact-count-${r.id}`}
+                  className="px-3 text-gray-700 dark:text-gray-300"
+                >
+                  {renderCount(r.id, String)}
+                </td>
+                <td className="px-3 text-right whitespace-nowrap">{rowActions(r)}</td>
               </tr>
             ))}
           </tbody>
@@ -132,6 +240,12 @@ export default function ContactsScreen() {
                   {r.phone}
                 </p>
               )}
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">
+                {renderCount(r.id, (n) => `Subscribed to ${assetsPhrase(n)}`)}
+              </p>
+              <div className="flex pt-2 sm:pt-3 mt-2 border-t border-gray-200 dark:border-gray-700">
+                {cardActions(r)}
+              </div>
             </li>
           ))}
         </ul>
@@ -142,8 +256,8 @@ export default function ContactsScreen() {
   return (
     <div className="h-full flex flex-col p-2">
       <NotificationsGate>
-        <div className="flex items-center gap-2 mb-4">
-          <div className="relative flex-1 max-w-md">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
+          <div className="relative flex-1 sm:max-w-md">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-5 w-5 text-gray-400 dark:text-gray-500" />
             </div>
@@ -167,10 +281,36 @@ export default function ContactsScreen() {
               </button>
             )}
           </div>
+          <PaidGate surface="notifications-contacts">
+            <button
+              type="button"
+              data-testid="contacts-new"
+              onClick={() => setForm({ mode: 'create' })}
+              className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              New contact
+            </button>
+          </PaidGate>
         </div>
         <div className="flex-1 overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg">
           {renderBody()}
         </div>
+        <ContactFormModal
+          key={form?.mode === 'edit' ? form.contact.id : 'create'}
+          isOpen={form !== null}
+          mode={form?.mode ?? 'create'}
+          contact={form?.mode === 'edit' ? form.contact : undefined}
+          onClose={() => setForm(null)}
+        />
+        <ConfirmModal
+          isOpen={deleting !== null}
+          title="Delete contact"
+          message={deleting ? deleteMessage(deleting.name, countOf(deleting.id)) : ''}
+          confirmText="Delete"
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleting(null)}
+        />
       </NotificationsGate>
     </div>
   );
