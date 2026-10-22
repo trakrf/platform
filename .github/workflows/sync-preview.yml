@@ -2,7 +2,9 @@ name: Sync Preview Branch
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, closed]
+    # ready_for_review and converted_to_draft change whether a PR is a
+    # candidate, so they recompose preview like any other change to the set.
+    types: [opened, synchronize, reopened, closed, ready_for_review, converted_to_draft]
   push:
     branches: [main]
 
