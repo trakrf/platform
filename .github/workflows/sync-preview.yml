@@ -90,90 +90,72 @@ jobs:
             console.log(`Found ${prInfo.length} open PRs to merge`);
             return prInfo;
 
-      # Decide, before anything is merged, which PRs' migration numbers may reach
-      # preview's shared database. The rule lives in a tested script rather than
-      # here, so `just test` exercises it; see the header of that script.
-      - name: Plan composition by migration number
-        id: plan
+      # Decide which PRs' migration numbers may reach preview's shared database,
+      # and merge those. The rule and the merging live in a tested script rather
+      # than here, so `just test` exercises both; see the header of that script.
+      # A PR that conflicts is dropped and the rest re-planned without it, so its
+      # numbers never keep another PR out.
+      - name: Compose preview
+        id: compose
         env:
           PRS: ${{ steps.get-prs.outputs.result }}
         run: |
           candidates="$RUNNER_TEMP/candidates"
           : > "$candidates"
-          while read -r number branch; do
+          unfetched=()
+          while read -r number branch title; do
             [ -n "$number" ] || continue
-            # A branch that cannot be fetched (a fork's) is left out of the plan;
-            # its merge then fails and it is reported as a conflict, as before.
+            # A branch that cannot be fetched (a fork's) is left out and reported
+            # as a conflict, as it was when the merge itself failed.
             if git fetch -q origin "refs/heads/$branch:refs/remotes/origin/$branch"; then
-              echo "$number origin/$branch" >> "$candidates"
+              echo "$number origin/$branch $title" >> "$candidates"
             else
               echo "::warning::could not fetch $branch for PR #$number"
+              unfetched+=("$number")
             fi
-          done < <(jq -r '.[] | "\(.number) \(.branch)"' <<<"$PRS")
+          done < <(jq -r '.[] | "\(.number) \(.branch) \(.title)"' <<<"$PRS")
 
-          "$RUNNER_TEMP/preview-composition.sh" plan origin/main "$candidates" | tee "$RUNNER_TEMP/plan"
+          previous=""
+          if git rev-parse -q --verify origin/preview >/dev/null; then
+            previous=origin/preview
+          fi
+          # $previous is unquoted on purpose: empty means no previous build.
+          "$RUNNER_TEMP/preview-composition.sh" compose origin/main "$RUNNER_TEMP/candidates" $previous |
+            tee "$RUNNER_TEMP/composition"
+          for number in "${unfetched[@]}"; do echo "conflict $number"; done >> "$RUNNER_TEMP/composition"
 
-          excluded=$(jq -Rnc '[inputs | select(startswith("exclude "))
-            | capture("^exclude (?<number>[0-9]+) (?<reason>.*)$") | .number |= tonumber]' \
-            < "$RUNNER_TEMP/plan")
-          echo "excluded=$excluded" >> "$GITHUB_OUTPUT"
-
-      - name: Merge PRs into preview
+      - name: Read the composition
         id: merge-prs
         uses: actions/github-script@v7
-        env:
-          EXCLUDED: ${{ steps.plan.outputs.excluded }}
         with:
           script: |
+            const fs = require('fs');
             const prs = ${{ steps.get-prs.outputs.result }};
-            const excluded = JSON.parse(process.env.EXCLUDED || '[]');
-            const excludedNumbers = new Set(excluded.map(e => e.number));
-            const { exec: executeCommand } = require('child_process');
-            const util = require('util');
-            const execPromise = util.promisify(executeCommand);
-
-            // Helper function to escape shell arguments
-            const escapeShellArg = (arg) => {
-              return arg.replace(/'/g, "'\\''");
-            };
+            const byNumber = new Map(prs.map(pr => [pr.number, pr]));
+            const lines = fs.readFileSync(`${process.env.RUNNER_TEMP}/composition`, 'utf8')
+              .split('\n').filter(Boolean);
 
             const conflicts = [];
             const merged = [];
-
-            for (const pr of prs) {
-              if (excludedNumbers.has(pr.number)) {
-                console.log(`Skipping PR #${pr.number}: excluded by migration number`);
-                continue;
-              }
-              console.log(`Attempting to merge PR #${pr.number}: ${pr.title}`);
-
-              try {
-                // The plan step already fetched the branch.
-                const safeTitle = escapeShellArg(pr.title);
-                await execPromise(`git merge origin/${pr.branch} --no-edit -m 'Merge PR #${pr.number}: ${safeTitle}'`);
-                console.log(`Successfully merged PR #${pr.number}`);
-                merged.push(pr.number);
-              } catch (error) {
-                console.log(`Conflict detected with PR #${pr.number}`);
-                conflicts.push(pr);
-
-                // Abort the merge
-                try {
-                  await execPromise('git merge --abort');
-                } catch (e) {
-                  // Already aborted or not in merge state
-                }
+            const excluded = [];
+            for (const line of lines) {
+              let m;
+              if ((m = /^merged (\d+) /.exec(line))) {
+                merged.push(Number(m[1]));
+              } else if ((m = /^conflict (\d+)$/.exec(line))) {
+                conflicts.push(byNumber.get(Number(m[1])));
+              } else if ((m = /^exclude (\d+) (\d+) (.*)$/.exec(line))) {
+                excluded.push({ ...byNumber.get(Number(m[1])), version: Number(m[2]), reason: m[3] });
+              } else {
+                core.setFailed(`unreadable composition line: ${line}`);
+                return;
               }
             }
 
-            const excludedPRs = prs
-              .filter(pr => excludedNumbers.has(pr.number))
-              .map(pr => ({ ...pr, reason: excluded.find(e => e.number === pr.number).reason }));
-            const result = { conflicts, merged, excluded: excludedPRs };
+            const result = { conflicts, merged, excluded };
             core.setOutput('conflicts', JSON.stringify(conflicts));
             core.setOutput('merged', JSON.stringify(merged));
             core.setOutput('result', JSON.stringify(result));
-
             return result;
 
       - name: Write preview manifest
@@ -318,11 +300,19 @@ jobs:
                 const m = markerRe.exec(c.body || '');
                 if (m) last = m[1];
               }
-              return last;
+              return [number, last];
             };
 
+            // Each PR's comments are read once, all at the same time.
+            const numbers = [
+              ...mergeResult.excluded.map(pr => pr.number),
+              ...mergeResult.conflicts.map(pr => pr.number),
+              ...mergeResult.merged
+            ];
+            const last = new Map(await Promise.all(numbers.map(lastStatus)));
+
             const notify = async (number, status, body) => {
-              if (await lastStatus(number) === status) return;
+              if (last.get(number) === status) return;
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -331,8 +321,10 @@ jobs:
               });
             };
 
+            // The marker records the status, not the advice: "renumber above N"
+            // moves as other PRs come and go, and that alone is not news.
             for (const pr of mergeResult.excluded) {
-              await notify(pr.number, `excluded: ${pr.reason}`,
+              await notify(pr.number, `excluded: migration ${pr.version}`,
                 `⛔ **Left out of preview: migration number**\n\n` +
                 `This PR was not composed into preview because ${pr.reason}.\n\n` +
                 `Preview applies every open PR's migrations to one shared database, and golang-migrate ` +
@@ -348,8 +340,8 @@ jobs:
                 `PRs in preview: ${mergeResult.merged.join(', ') || 'none'}`);
             }
             for (const number of mergeResult.merged) {
-              const last = await lastStatus(number);
-              if (last && last !== 'included') {
+              const was = last.get(number);
+              if (was && was !== 'included') {
                 await notify(number, 'included', '✅ **Back in preview.** This PR is composed into preview again.');
               }
             }

@@ -86,13 +86,15 @@ out=$("$script" plan main "$work/candidates")
 expect "a new number above main is included" "include 10 4" "$out"
 expect "down files do not count as claims" "include 10 4"$'\n' "$out"
 expect "a number an earlier PR claimed is excluded, naming that PR" \
-    "exclude 11 migration 4 is already claimed by #10, which was opened earlier" "$out"
+    "exclude 11 4 migration 4 is already claimed by #10, which was opened earlier" "$out"
 expect "a number at or below main's highest is excluded" \
-    "exclude 12 migration 2 is not above main's highest (3)" "$out"
-expect "the exclusion says what number would be free" "renumber above 4" "$out"
+    "exclude 12 2 migration 2 is not above main's highest (3)" "$out"
+# Above every number main or ANY open PR holds, not only the earlier ones: a
+# number free of the earlier PRs can still be a later PR's.
+expect "the exclusion names a number no open PR holds" "collide with main's file; renumber above 5" "$out"
 expect "a later PR with its own number is still included" "include 13 5" "$out"
 expect "a PR without migrations is included" "include 14 -" "$out"
-lines=$(printf '%s\n' "$out" | wc -l)
+lines=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
 expect_status "one decision per candidate" 5 "$lines"
 
 # An excluded PR's numbers claim nothing: the PR after it may take them.
@@ -135,6 +137,86 @@ branch_adding pr40 000010_forty.up.sql
 printf '40 pr40\n' > "$work/candidates"
 out=$("$script" plan main "$work/candidates")
 expect "leading zeros do not make the number octal or a string" "include 40 10" "$out"
+
+# with_preview <branch>... — a `preview` branch: main plus those PR branches,
+# standing in for the previous build whose migrations preview has applied.
+with_preview() {
+    git checkout -q -B preview main
+    local b
+    for b in "$@"; do git merge -q --no-edit "$b"; done
+    git checkout -q main
+}
+
+# Preview's ledger is at the highest number any composed PR brought, not main's.
+# A newer PR's number above main's but below that is never run there.
+fresh_repo below-preview
+branch_adding pr60 000005_sixty.up.sql
+branch_adding pr61 000004_sixtyone.up.sql
+with_preview pr60
+printf '60 pr60\n61 pr61\n' > "$work/candidates"
+out=$("$script" plan main "$work/candidates" preview)
+expect "a PR preview already applied stays in" "include 60 5" "$out"
+expect "a new number below what preview applied is excluded" \
+    "exclude 61 4 migration 4 is not above the highest migration preview has applied (5)" "$out"
+out=$("$script" plan main "$work/candidates")
+expect "with no previous build, main's highest is the only floor" "include 61 4" "$out"
+
+# A contested number goes to the PR whose file preview already applied, even
+# when the other PR is older: evicting the applied one would wedge preview.
+fresh_repo held-wins
+branch_adding pr70 000004_seventy.up.sql
+branch_adding pr71 000004_seventyone.up.sql
+with_preview pr71
+printf '70 pr70\n71 pr71\n' > "$work/candidates"
+out=$("$script" plan main "$work/candidates" preview)
+expect "the PR preview applied keeps its number" "include 71 4" "$out"
+expect "the older PR is told preview applied the other" \
+    "exclude 70 4 migration 4 is already claimed by #71, which preview has applied" "$out"
+
+# A main-based PR stacked on another open PR carries that PR's file. The same
+# file is applied once; it is not a second claim.
+fresh_repo stacked-open
+branch_adding pr80 000004_eighty.up.sql
+git checkout -q -b pr81 pr80 && echo "-- 81" > backend/migrations/000005_eightyone.up.sql &&
+    git add -A && git commit -qm pr81 && git checkout -q main
+printf '80 pr80\n81 pr81\n' > "$work/candidates"
+out=$("$script" plan main "$work/candidates")
+expect "the parent keeps its number" "include 80 4" "$out"
+expect "the stacked PR sharing the parent's file is included" "include 81 4,5" "$out"
+
+# A migration the PR renames into place is still a new number on preview.
+fresh_repo renamed
+git checkout -q -b pr90 main && git mv backend/migrations/000003_tags.up.sql backend/migrations/000004_tags.up.sql &&
+    git commit -qm pr90 && git checkout -q main
+printf '90 pr90\n' > "$work/candidates"
+out=$("$script" plan main "$work/candidates")
+expect "a renamed-in migration's number is checked" "include 90 4" "$out"
+
+echo "compose"
+
+# A PR that conflicts never reaches preview, so its numbers must not keep a
+# later PR out. compose merges for real and re-plans without the conflict.
+fresh_repo compose
+echo "base" > app.txt && git add -A && git commit -qm app
+git checkout -q -b pr100 main && echo "-- 100" > backend/migrations/000004_hundred.up.sql &&
+    echo "pr100" > app.txt && git add -A && git commit -qm pr100 && git checkout -q main
+git checkout -q -b pr101 main && echo "pr101" > app.txt && git add -A && git commit -qm pr101 && git checkout -q main
+branch_adding pr102 000004_hundredtwo.up.sql
+git checkout -q -b composed main
+printf '101 pr101 Change app\n100 pr100 Conflicts with 101\n102 pr102 Takes four\n' > "$work/candidates"
+out=$("$script" compose main "$work/candidates")
+expect "the first PR merges" "merged 101 -" "$out"
+expect "the conflicting PR is reported" "conflict 100" "$out"
+expect "its number goes to the next PR" "merged 102 4" "$out"
+expect "the composed tree has the later PR's file" "000004_hundredtwo.up.sql" "$(git ls-tree --name-only HEAD backend/migrations/)"
+if git ls-tree --name-only HEAD backend/migrations/ | grep -q hundred.up; then
+    echo "  ✗ the conflicting PR's file is not in the composition"; fail=$((fail + 1))
+else
+    echo "  ✓ the conflicting PR's file is not in the composition"; pass=$((pass + 1))
+fi
+expect "the merge message names the PR and its title" "Merge PR #102: Takes four" "$(git log --format=%s -1)"
+lines=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
+expect_status "one line per candidate" 3 "$lines"
 
 echo "dropped"
 
@@ -188,6 +270,17 @@ else
     fail=$((fail + 1))
 fi
 expect "the job runs bash with pipefail" "shell: bash" "$wf_text"
+# The merging is the script's, so a conflict re-plans in tested code.
+expect "the workflow composes with the script, against the previous build" \
+    '"$RUNNER_TEMP/preview-composition.sh" compose origin/main "$RUNNER_TEMP/candidates" $previous' "$wf_text"
+if grep -q 'git merge origin/' "$wf"; then
+    echo "  ✗ the workflow does not merge PRs itself"; fail=$((fail + 1))
+else
+    echo "  ✓ the workflow does not merge PRs itself"; pass=$((pass + 1))
+fi
+# The marker holds what the PR's status is, not the advice, which moves as other
+# PRs come and go and would re-notify a PR whose status has not changed.
+expect "an exclusion's marker is its migration number only" 'excluded: migration ${pr.version}' "$wf_text"
 
 echo
 echo "$pass passed, $fail failed"
