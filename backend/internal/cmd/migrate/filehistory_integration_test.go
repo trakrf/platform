@@ -213,6 +213,48 @@ func TestFileHistory_RefusesAReusedNumberBeforeWriting(t *testing.T) {
 	}
 }
 
+// A migration merged after a higher number was applied: the ledger is at 3 and
+// the image now carries a 2 that never ran. golang-migrate would skip it; seeding
+// must not record it as applied either. Only an empty history is seeded.
+func TestFileHistory_RefusesAVersionMergedBelowTheLedger(t *testing.T) {
+	ctx := context.Background()
+	dbURL, pool := provisionFileHistoryDB(ctx, t)
+
+	if err := migrateWith(ctx, dbURL, fstest.MapFS{
+		"000001_base.up.sql":  table("base"),
+		"000003_early.up.sql": table("early"),
+	}); err != nil {
+		t.Fatalf("migrate the image without 2: %v", err)
+	}
+	before := readState(ctx, t, pool)
+
+	err := migrateWith(ctx, dbURL, fstest.MapFS{
+		"000001_base.up.sql":  table("base"),
+		"000002_late.up.sql":  table("late"),
+		"000003_early.up.sql": table("early"),
+	})
+	if err == nil {
+		t.Fatal("expected a version below the ledger that never ran to be refused")
+	}
+	t.Logf("operator sees:\n%v", err)
+	for _, want := range []string{"000002_late.up.sql", "never applied", "INSERT INTO trakrf.schema_migration_files"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal missing %q", want)
+		}
+	}
+
+	after := readState(ctx, t, pool)
+	if after.version != before.version || len(after.files) != len(before.files) {
+		t.Errorf("refusal wrote something: before %+v, after %+v", before, after)
+	}
+	if _, recorded := after.files[2]; recorded {
+		t.Error("the skipped version was recorded as applied")
+	}
+	if tableExists(ctx, t, pool, "late") {
+		t.Error("refusal applied a migration")
+	}
+}
+
 func TestFileHistory_RefusesAnEditedFile(t *testing.T) {
 	ctx := context.Background()
 	dbURL, pool := provisionFileHistoryDB(ctx, t)

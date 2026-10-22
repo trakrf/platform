@@ -37,7 +37,9 @@ type appliedFile struct {
 }
 
 // fileMismatch is an applied version whose file in this image is not the one
-// that was applied. image is nil when the image has no file at that version.
+// that was applied. image is nil when the image has no file at that version;
+// recorded is nil when nothing was applied there, which with an image file means
+// the version sits below the ledger and was skipped.
 type fileMismatch struct {
 	version  uint
 	recorded *appliedFile
@@ -106,7 +108,7 @@ func readFileHistory(ctx context.Context, pool *pgxpool.Pool) (map[uint]appliedF
 // not carry unchanged. applied is the ledger's version; nothing above it counts
 // as applied, so a row left above it by a forced-back ledger is not compared.
 //
-// Two checks, and both are about versions the database has already run:
+// Three checks, all about versions the database has already run:
 //
 //   - A recorded version must be in the image under the same name and digest.
 //     That is the reused-number case, and the PR-left-preview case where the
@@ -116,10 +118,14 @@ func readFileHistory(ctx context.Context, pool *pgxpool.Pool) (map[uint]appliedF
 //     there is nothing to do. Without it the failure is golang-migrate's
 //     `read down for version N .: file does not exist`, which says nothing
 //     about why.
+//   - Once anything is recorded, every image version up to completed (the
+//     ledger, less a dirty version that did not finish) must have a row. A
+//     version without one merged after a higher number was applied, and
+//     golang-migrate never runs a version below its ledger.
 //
-// An unrecorded version below the ledger is not a mismatch: it is a database
-// migrated before this table existed, and it is recorded trust-on-first-use.
-func compareFileHistory(recorded map[uint]appliedFile, image map[uint]migrations.File, applied uint) []fileMismatch {
+// An empty history is a database migrated before this table existed: its
+// unrecorded versions are seeded trust-on-first-use, not refused.
+func compareFileHistory(recorded map[uint]appliedFile, image map[uint]migrations.File, applied, completed uint) []fileMismatch {
 	var out []fileMismatch
 	for v, rec := range recorded {
 		if v > applied {
@@ -134,6 +140,14 @@ func compareFileHistory(recorded map[uint]appliedFile, image map[uint]migrations
 		if img.Filename != rec.filename || img.SHA256 != rec.sha256 {
 			r := rec
 			out = append(out, fileMismatch{version: v, recorded: &r, image: &img})
+		}
+	}
+	if len(recorded) > 0 {
+		for v, img := range image {
+			if _, ok := recorded[v]; !ok && v <= completed {
+				f := img
+				out = append(out, fileMismatch{version: v, image: &f})
+			}
 		}
 	}
 	if applied > 0 {
@@ -163,10 +177,13 @@ func fileMismatchError(mismatches []fileMismatch, applied uint) error {
 		"this image carries (ledger version %d)", len(mismatches), applied)
 	for _, m := range mismatches {
 		switch {
-		case m.recorded == nil:
+		case m.recorded == nil && m.image == nil:
 			fmt.Fprintf(&b, "\n  version %d: the ledger is at %d and this image has no file "+
 				"%d — the image is older than the database, or the change that applied it "+
 				"has left this build", m.version, applied, m.version)
+		case m.recorded == nil:
+			fmt.Fprintf(&b, "\n  version %d: this image has %s, which was never applied — it is below "+
+				"the ledger, so golang-migrate would skip it", m.version, m.image.Filename)
 		case m.image == nil:
 			fmt.Fprintf(&b, "\n  version %d: applied %s (sha256 %s); this image has no file %d",
 				m.version, m.recorded.filename, short(m.recorded.sha256), m.version)
@@ -185,6 +202,11 @@ func fileMismatchError(mismatches []fileMismatch, applied uint) error {
 		if m.image == nil {
 			fmt.Fprintf(&b, "\n      -- version %d: deploy an image that carries it, or reconcile by hand; "+
 				"there is no file here to record", m.version)
+			continue
+		}
+		if m.recorded == nil {
+			fmt.Fprintf(&b, "\n      INSERT INTO %s (version, filename, sha256) VALUES (%d, '%s', '%s');",
+				fileHistoryQualified(), m.version, m.image.Filename, m.image.SHA256)
 			continue
 		}
 		fmt.Fprintf(&b, "\n      UPDATE %s SET filename = '%s', sha256 = '%s' WHERE version = %d;",

@@ -284,13 +284,13 @@ func runURL(ctx context.Context, pgURL string, info buildinfo.Info, fsys fs.FS) 
 	if err != nil {
 		return err
 	}
-	if mismatches := compareFileHistory(recorded, image, applied); len(mismatches) > 0 {
-		return fileMismatchError(mismatches, applied)
-	}
 	// A dirty version did not finish, so it is not trusted as applied.
 	completed := applied
 	if dirty && completed > 0 {
 		completed--
+	}
+	if mismatches := compareFileHistory(recorded, image, applied, completed); len(mismatches) > 0 {
+		return fileMismatchError(mismatches, applied)
 	}
 
 	// Create the schema before golang-migrate looks for its ledger. This is the
@@ -306,12 +306,16 @@ func runURL(ctx context.Context, pgURL string, info buildinfo.Info, fsys fs.FS) 
 
 	// Trust on first use: a database migrated before the file history existed has
 	// its applied versions recorded from this image, which the preflight above
-	// has just shown carries the ledger's own version.
+	// has just shown carries the ledger's own version. Only an empty history is
+	// seeded; once it has rows, an unrecorded version below the ledger was
+	// skipped, and the preflight has refused it.
 	if err := ensureFileHistory(ctx, pool); err != nil {
 		return err
 	}
-	if err := recordFiles(ctx, pool, image, unrecordedUpTo(recorded, image, completed)); err != nil {
-		return err
+	if len(recorded) == 0 {
+		if err := recordFiles(ctx, pool, image, unrecordedUpTo(recorded, image, completed)); err != nil {
+			return err
+		}
 	}
 
 	db := stdlib.OpenDBFromPool(pool)
