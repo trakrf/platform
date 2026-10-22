@@ -231,6 +231,8 @@ func short(sum string) string {
 // on everything the migrate role creates. For this table that would let the
 // application rewrite the record this check trusts, so every write grant other
 // than the owner's is revoked. Read stays, as it does on the ledger.
+// database/sql/03-grants.sql re-runs the blanket grant after migrating, so it
+// names this table and revokes the same writes.
 func ensureFileHistory(ctx context.Context, pool *pgxpool.Pool) error {
 	table := fileHistoryQualified()
 	if _, err := pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS `+table+` (
