@@ -194,6 +194,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 
 	mqttCfg := ingest.ConfigFromEnv()
 	var alarmDispatcher alarm.Dispatcher
+	alarmMetrics := alarm.NewDeviceCallMetrics(prometheus.DefaultRegisterer)
 	// TRA-993: cloud reader-control RPC client. Only constructed when the broker
 	// is configured; nil otherwise so the reader-config endpoints report 503.
 	var readerClient *readercontrol.Client
@@ -209,7 +210,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 		// TRA-906: dedicated publish client on the same broker (reuses MQTT_URL).
 		alarmPublisher, stopPublisher := alarm.NewMQTTPublisher(mqttCfg, log)
 		defer stopPublisher()
-		alarmDispatcher = alarm.NewDispatcher(shellyClient, alarmPublisher, readerClient)
+		alarmDispatcher = alarm.NewDispatcher(shellyClient, alarmPublisher, readerClient).WithMetrics(alarmMetrics)
 
 		// TRA-901/943: geofence engine evaluates the membership-passing reads the
 		// subscriber derives, resolving each read's location to its output devices
@@ -255,7 +256,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 		defer close(reconcileStop)
 	} else {
 		// No broker: http-only dispatcher (nil mqtt → mqtt devices error clearly).
-		alarmDispatcher = alarm.NewDispatcher(shellyClient, nil, nil)
+		alarmDispatcher = alarm.NewDispatcher(shellyClient, nil, nil).WithMetrics(alarmMetrics)
 		log.Info().Msg("MQTT subscriber disabled (MQTT_URL unset)")
 	}
 
