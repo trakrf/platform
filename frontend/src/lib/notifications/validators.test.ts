@@ -4,6 +4,10 @@ import {
   validatePhone,
   validateEmail,
   validateContact,
+  splitPhone,
+  joinPhone,
+  validatePhoneParts,
+  validateContactForm,
 } from "./validators";
 
 describe("notification contact validators", () => {
@@ -125,6 +129,78 @@ describe("notification contact validators", () => {
       expect(
         validateContact({ name: "Jane", email: "", phone: "" }).contact,
       ).toBe("Enter an email or a phone number");
+    });
+  });
+});
+
+describe("split phone helpers", () => {
+  describe("splitPhone()", () => {
+    it.each([
+      ["+15551234567", "+1", "5551234567"],
+      ["+447911123456", "+44", "7911123456"],
+      ["+256772123456", "+256", "772123456"],
+      ["+79161234567", "+7", "9161234567"],
+      ["", "", ""],
+      [undefined, "", ""],
+    ])("%j -> %j + %j", (phone, code, number) => {
+      expect(splitPhone(phone)).toEqual({ code, number });
+    });
+  });
+
+  describe("joinPhone()", () => {
+    it.each([
+      ["+1", "555 123-4567", "+15551234567"],
+      ["44", "(7911) 123.456", "+447911123456"],
+      ["", "", ""],
+    ])("%j + %j -> %j", (code, number, expected) => {
+      expect(joinPhone({ code, number })).toBe(expected);
+    });
+
+    it("round-trips splitPhone()", () => {
+      expect(joinPhone(splitPhone("+256772123456"))).toBe("+256772123456");
+    });
+  });
+
+  describe("validatePhoneParts()", () => {
+    it.each([
+      ["both empty", "", ""],
+      ["valid", "+1", "5551234567"],
+      ["code without +", "44", "7911 123456"],
+    ])("accepts %s", (_label, code, number) => {
+      expect(validatePhoneParts({ code, number })).toEqual({});
+    });
+
+    it.each([
+      ["missing code", "", "5551234567", { phoneCode: "Enter the country code, e.g. +1" }],
+      ["code too long", "+1234", "5551234", { phoneCode: "Use 1 to 3 digits, e.g. +44" }],
+      ["code with letters", "+1a", "5551234567", { phoneCode: "Use 1 to 3 digits, e.g. +44" }],
+      ["missing number", "+1", "", { phoneNumber: "Enter the phone number" }],
+      ["letters in number", "+1", "555CALLNOW", { phoneNumber: "Use digits only" }],
+      ["leading 0", "+44", "07911123456", { phoneNumber: "Leave out the leading 0" }],
+      ["too short", "+1", "555123", { phoneNumber: "This number is too short" }],
+      ["too long", "+1", "5551234567890123", { phoneNumber: "This number is too long" }],
+    ])("rejects %s", (_label, code, number, expected) => {
+      expect(validatePhoneParts({ code, number })).toEqual(expected);
+    });
+  });
+
+  describe("validateContactForm()", () => {
+    it("accepts a phone-only contact", () => {
+      expect(
+        validateContactForm({ name: "Ann", email: "", phoneCode: "+1", phoneNumber: "5551234567" })
+      ).toEqual({});
+    });
+
+    it("puts phone errors on the part that is wrong", () => {
+      expect(
+        validateContactForm({ name: "Ann", email: "", phoneCode: "+1", phoneNumber: "12" })
+      ).toEqual({ phoneNumber: "This number is too short" });
+    });
+
+    it("still requires an email or a phone", () => {
+      expect(
+        validateContactForm({ name: "", email: "", phoneCode: "", phoneNumber: "" })
+      ).toEqual({ name: "Name is required", contact: "Enter an email or a phone number" });
     });
   });
 });

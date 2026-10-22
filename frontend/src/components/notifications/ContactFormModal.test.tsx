@@ -51,6 +51,10 @@ const contact: NotificationRecipient = {
 
 const type = (testId: string, value: string) =>
   fireEvent.change(screen.getByTestId(testId), { target: { value } });
+const typePhone = (code: string, number: string) => {
+  type('contact-phone-code', code);
+  type('contact-phone-number', number);
+};
 const submit = () => fireEvent.click(screen.getByTestId('contact-submit'));
 
 describe('ContactFormModal', () => {
@@ -91,7 +95,7 @@ describe('ContactFormModal', () => {
   it('creates a contact with phone only, normalized', async () => {
     render(<ContactFormModal isOpen mode="create" onClose={onClose} />);
     type('contact-name', 'Jane Smith');
-    type('contact-phone', '+1 (555) 123-4567');
+    typePhone('+1', '(555) 123-4567');
     submit();
 
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
@@ -105,7 +109,7 @@ describe('ContactFormModal', () => {
     render(<ContactFormModal isOpen mode="create" onClose={onClose} />);
     type('contact-name', 'Jane Smith');
     type('contact-email', 'jane@example.com');
-    type('contact-phone', '+44 20 7946 0958');
+    typePhone('+44', '20 7946 0958');
     submit();
 
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
@@ -126,18 +130,61 @@ describe('ContactFormModal', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('blocks submit on an invalid phone and shows the error on blur', async () => {
+  it('shows every error on submit, then updates them as the user types', async () => {
+    render(<ContactFormModal isOpen mode="create" onClose={onClose} />);
+    submit();
+
+    expect(await screen.findByText('Name is required')).toBeInTheDocument();
+    expect(screen.getByText('Enter an email or a phone number')).toBeInTheDocument();
+
+    type('contact-name', 'Jane Smith');
+    expect(screen.queryByText('Name is required')).not.toBeInTheDocument();
+    type('contact-email', 'jane@');
+    expect(screen.getByText('Enter a valid email address')).toBeInTheDocument();
+    expect(notificationsApi.createRecipient).not.toHaveBeenCalled();
+  });
+
+  it('checks a field only once it is left', () => {
+    render(<ContactFormModal isOpen mode="create" onClose={onClose} />);
+    type('contact-email', 'jane@');
+    expect(screen.queryByText('Enter a valid email address')).not.toBeInTheDocument();
+
+    fireEvent.blur(screen.getByTestId('contact-email'));
+    expect(screen.getByText('Enter a valid email address')).toBeInTheDocument();
+  });
+
+  it('checks the phone when focus leaves both parts, not between them', () => {
+    render(<ContactFormModal isOpen mode="create" onClose={onClose} />);
+    const code = screen.getByTestId('contact-phone-code');
+    const number = screen.getByTestId('contact-phone-number');
+
+    type('contact-phone-code', '44');
+    expect(code).toHaveValue('+44');
+    fireEvent.blur(code, { relatedTarget: number });
+    expect(screen.queryByText('Enter the phone number')).not.toBeInTheDocument();
+
+    fireEvent.blur(number, { relatedTarget: null });
+    expect(screen.getByText('Enter the phone number')).toBeInTheDocument();
+    expect(number).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('blocks submit on an invalid phone and puts the error on the wrong part', async () => {
     render(<ContactFormModal isOpen mode="create" onClose={onClose} />);
     type('contact-name', 'Jane Smith');
-    type('contact-phone', '555-1234');
-    fireEvent.blur(screen.getByTestId('contact-phone'));
-    expect(screen.getByText(/international format: \+<country code>/)).toBeInTheDocument();
-
+    typePhone('', '07911123456');
     submit();
-    await waitFor(() =>
-      expect(screen.getByTestId('contact-phone')).toHaveAttribute('aria-invalid', 'true')
-    );
+
+    expect(await screen.findByText('Enter the country code, e.g. +1')).toBeInTheDocument();
+    expect(screen.getByText('Leave out the leading 0')).toBeInTheDocument();
+    expect(screen.getByTestId('contact-phone-code')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.queryByText(/without the leading 0/)).not.toBeInTheDocument();
     expect(notificationsApi.createRecipient).not.toHaveBeenCalled();
+  });
+
+  it('edit splits the stored phone into its two parts', () => {
+    render(<ContactFormModal isOpen mode="edit" contact={contact} onClose={onClose} />);
+    expect(screen.getByTestId('contact-phone-code')).toHaveValue('+1');
+    expect(screen.getByTestId('contact-phone-number')).toHaveValue('5551234567');
   });
 
   it('edit sends only the changed fields', async () => {
@@ -187,7 +234,7 @@ describe('ContactFormModal', () => {
     });
     render(<ContactFormModal isOpen mode="create" onClose={onClose} />);
     type('contact-name', 'Jane Smith');
-    type('contact-phone', '+15551234567');
+    typePhone('+1', '5551234567');
     submit();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('invalid phone');

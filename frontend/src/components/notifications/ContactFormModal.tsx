@@ -6,11 +6,13 @@ import { useNotificationRecipientMutations } from '@/hooks/notifications';
 import { useEscapeToClose } from '@/hooks/useEscapeToClose';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import {
-  normalizePhone,
-  validateContact,
+  joinPhone,
+  splitPhone,
+  validateContactForm,
   type ContactErrors,
-  type ContactInput,
+  type ContactFormInput,
 } from '@/lib/notifications/validators';
+import { PhoneInput } from './PhoneInput';
 import type {
   CreateNotificationRecipientRequest,
   NotificationRecipient,
@@ -24,8 +26,9 @@ interface ContactFormModalProps {
   onClose: () => void;
 }
 
-type Field = keyof ContactInput;
-type FormErrors = ContactErrors & { form?: string };
+type TextField = 'name' | 'email';
+type Touched = Partial<Record<TextField | 'phone', boolean>>;
+type ServerErrors = Pick<ContactErrors, 'email' | 'phoneNumber'> & { form?: string };
 
 // The backend cannot clear a field, so an existing email or phone can only be
 // replaced, never emptied.
@@ -41,10 +44,9 @@ const inputClass = (hasError: boolean) =>
   }`;
 const LABEL = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2';
 const FIELD_ERROR = 'mt-1 text-sm text-red-600 dark:text-red-400';
-const PLACEHOLDERS: Record<Field, string> = {
+const PLACEHOLDERS: Record<TextField, string> = {
   name: 'e.g., Jane Smith',
   email: 'name@example.com',
-  phone: '+15551234567',
 };
 
 // Outer gate returns null when closed so the stateful body unmounts each
@@ -66,45 +68,59 @@ function conflictField(detail: string, sent: { email?: string; phone?: string })
 }
 
 function ContactFormModalBody({ isOpen, mode, contact, onClose }: ContactFormModalProps) {
-  const [values, setValues] = useState<ContactInput>({
+  const initialPhone = splitPhone(contact?.phone);
+  const [values, setValues] = useState<ContactFormInput>({
     name: contact?.name ?? '',
     email: contact?.email ?? '',
-    phone: contact?.phone ?? '',
+    phoneCode: initialPhone.code,
+    phoneNumber: initialPhone.number,
   });
   const [isActive, setIsActive] = useState(contact?.is_active ?? true);
-  const [errors, setErrors] = useState<FormErrors>({});
+  // Errors show for a field once it has been left, and for every field after a
+  // submit attempt; from then on they update as the user types.
+  const [touched, setTouched] = useState<Touched>({});
+  const [submitted, setSubmitted] = useState(false);
+  const [serverErrors, setServerErrors] = useState<ServerErrors>({});
   const [loading, setLoading] = useState(false);
   const { create, update } = useNotificationRecipientMutations();
 
   useEscapeToClose(isOpen, onClose, loading);
 
-  const validate = (input: ContactInput): ContactErrors => {
-    const result = validateContact(input);
+  const validate = (input: ContactFormInput): ContactErrors => {
+    const result = validateContactForm(input);
     if (mode === 'edit' && contact) {
       if (contact.email && !input.email.trim()) result.email = CANNOT_REMOVE;
-      if (contact.phone && !input.phone.trim()) result.phone = CANNOT_REMOVE;
+      if (contact.phone && !joinPhone({ code: input.phoneCode, number: input.phoneNumber })) {
+        result.phoneNumber = CANNOT_REMOVE;
+      }
     }
     return result;
   };
 
-  const handleChange = (field: Field, value: string) => {
-    setValues((prev) => ({ ...prev, [field]: value }));
-    setErrors((prev) => ({
-      ...prev,
-      [field]: undefined,
-      form: undefined,
-      ...(field !== 'name' && { contact: undefined }),
-    }));
+  const found = validate(values);
+  const show = (field: TextField | 'phone') => submitted || !!touched[field];
+  const errors: ContactErrors & { form?: string } = {
+    name: show('name') ? found.name : undefined,
+    email: serverErrors.email ?? (show('email') ? found.email : undefined),
+    phoneCode: show('phone') ? found.phoneCode : undefined,
+    phoneNumber: serverErrors.phoneNumber ?? (show('phone') ? found.phoneNumber : undefined),
+    contact:
+      submitted || (touched.email && touched.phone) ? found.contact : undefined,
+    form: serverErrors.form,
   };
 
-  const handleBlur = (field: Field) => {
-    setErrors((prev) => ({ ...prev, [field]: validate(values)[field] }));
+  const handleChange = (patch: Partial<ContactFormInput>) => {
+    setValues((prev) => ({ ...prev, ...patch }));
+    setServerErrors({});
   };
+
+  const handleBlur = (field: TextField | 'phone') =>
+    setTouched((prev) => ({ ...prev, [field]: true }));
 
   const buildPayload = () => {
     const name = values.name.trim();
     const email = values.email.trim();
-    const phone = normalizePhone(values.phone);
+    const phone = joinPhone({ code: values.phoneCode, number: values.phoneNumber });
     if (mode === 'create') {
       const data: CreateNotificationRecipientRequest = { name };
       if (email) data.email = email;
@@ -121,8 +137,7 @@ function ContactFormModalBody({ isOpen, mode, contact, onClose }: ContactFormMod
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const found = validate(values);
-    setErrors(found);
+    setSubmitted(true);
     if (Object.values(found).some(Boolean)) return;
 
     const payload = buildPayload();
@@ -145,10 +160,10 @@ function ContactFormModalBody({ isOpen, mode, contact, onClose }: ContactFormMod
       const message = getApiErrorMessage(err, 'Failed to save contact. Please try again.');
       const status = (err as { response?: { status?: number } })?.response?.status;
       const field = status === 409 ? conflictField(message, payload) : null;
-      if (field === 'email') setErrors({ email: 'Another contact already uses this email' });
+      if (field === 'email') setServerErrors({ email: 'Another contact already uses this email' });
       else if (field === 'phone')
-        setErrors({ phone: 'Another contact already uses this phone number' });
-      else setErrors({ form: message });
+        setServerErrors({ phoneNumber: 'Another contact already uses this phone number' });
+      else setServerErrors({ form: message });
     } finally {
       setLoading(false);
     }
@@ -158,7 +173,7 @@ function ContactFormModalBody({ isOpen, mode, contact, onClose }: ContactFormMod
     if (e.target === e.currentTarget && !loading) onClose();
   };
 
-  const textField = (field: Field, label: string, extra: React.ReactNode = null) => (
+  const textField = (field: TextField, label: string) => (
     <div>
       <label htmlFor={`contact-${field}`} className={LABEL}>
         {label}
@@ -167,9 +182,9 @@ function ContactFormModalBody({ isOpen, mode, contact, onClose }: ContactFormMod
       <input
         id={`contact-${field}`}
         data-testid={`contact-${field}`}
-        type={field === 'email' ? 'email' : field === 'phone' ? 'tel' : 'text'}
+        type={field === 'email' ? 'email' : 'text'}
         value={values[field]}
-        onChange={(e) => handleChange(field, e.target.value)}
+        onChange={(e) => handleChange({ [field]: e.target.value })}
         onBlur={() => handleBlur(field)}
         disabled={loading}
         aria-invalid={!!errors[field]}
@@ -177,7 +192,6 @@ function ContactFormModalBody({ isOpen, mode, contact, onClose }: ContactFormMod
         placeholder={PLACEHOLDERS[field]}
       />
       {errors[field] && <p className={FIELD_ERROR}>{errors[field]}</p>}
-      {extra}
     </div>
   );
 
@@ -214,13 +228,14 @@ function ContactFormModalBody({ isOpen, mode, contact, onClose }: ContactFormMod
 
           {textField('name', 'Name')}
           {textField('email', 'Email')}
-          {textField(
-            'phone',
-            'Phone',
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              International format with country code
-            </p>
-          )}
+          <PhoneInput
+            id="contact-phone"
+            value={{ code: values.phoneCode, number: values.phoneNumber }}
+            onChange={({ code, number }) => handleChange({ phoneCode: code, phoneNumber: number })}
+            onBlur={() => handleBlur('phone')}
+            errors={{ phoneCode: errors.phoneCode, phoneNumber: errors.phoneNumber }}
+            disabled={loading}
+          />
           {errors.contact && (
             <p role="alert" className={FIELD_ERROR}>
               {errors.contact}
