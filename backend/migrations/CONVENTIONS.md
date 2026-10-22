@@ -42,9 +42,10 @@ number reads as already applied.
 So:
 
 - **Pick a number above main's highest and above every open PR's.** The
-  `sync-preview` workflow leaves out a PR whose number is at or below main's
-  highest, or already claimed by an earlier-opened PR, and comments on the PR
-  saying which number to move above. Left out, its migrations never reach
+  `sync-preview` workflow leaves out a PR whose new number is at or below
+  main's highest or the highest preview has applied, or is already claimed by
+  another PR's file — the one preview applied, else the earlier-opened one —
+  and comments on the PR saying which number to move above. Left out, its migrations never reach
   preview's database, so renumbering then costs nothing.
 - **Once a PR is in preview, merge it with its numbers unchanged.** If main
   takes the number first, preview's database must be reconciled alongside the
@@ -58,6 +59,6 @@ So:
   names both files and the statement that re-points the record once the schema
   has been checked against the image's file.
 
-History: TRA-1287. Preview applied PR #688's provisional 000042/000043; main
+History: preview applied an open PR's provisional 000042/000043; main
 later gave 42 and 43 to other files and preview skipped them for over two
 weeks, then the PR's renumbered 000050 re-ran its `CREATE TABLE` and wedged.

@@ -8,7 +8,7 @@ Tracking: TRA-1287 (this record), ADR 0003 (explicit schema placement), TRA-1077
 
 golang-migrate's whole ledger is one `(version, dirty)` row. A database at 43
 is "done through 43", whichever file 43 was when it ran. `checksums.txt`
-(TRA-1077) stops an applied file being edited inside one history, but nothing
+stops an applied file being edited inside one history, but nothing
 stopped a number being applied as one file by one build and given to a
 different file by the next.
 
@@ -29,7 +29,9 @@ provisional 49 did the same to main's 49.
    privileges would otherwise let the application rewrite it.
 2. **It is seeded trust-on-first-use**, on every environment including prod,
    from the image that first runs with it. That is exact on prod, whose applied
-   files are all guarded by `checksums.txt`.
+   files are all guarded by `checksums.txt`. Only an empty record is seeded:
+   once it has rows, an image version below the ledger with no row was merged
+   after a higher number ran, and is refused rather than recorded.
 3. **Migrate refuses, before writing anything, when an applied version's file
    is missing from the image or differs in name or SHA-256** — a third
    preflight beside the stray-ledger and ownership checks, with the same
@@ -39,9 +41,10 @@ provisional 49 did the same to main's 49.
    re-points the record, which is correct only once the schema has been checked
    against the image's file. The runner never repairs itself.
 5. **Preview keeps provisional numbers out of its database** to begin with:
-   `sync-preview` leaves out a PR whose migration number is not above main's or
-   is claimed by an earlier PR, and fails when a rebuild drops a migration the
-   previous build carried.
+   `sync-preview` leaves out a PR whose new migration number is not above
+   main's highest and the previous preview build's, or is claimed by another
+   PR's file, and fails when a rebuild drops a migration the previous build
+   carried. The PR whose file preview applied keeps a contested number.
 
 Timestamp-based versions were ruled out: golang-migrate will not apply a
 version below the current one, so a PR merged after a newer-stamped one would
