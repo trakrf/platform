@@ -1,0 +1,18 @@
+generic:
+  email:
+    subject: "Asset activity: {{.AssetName}}"
+    body: "{{.AssetName}} ({{.AssetKey}}): activity at {{.LocationName}} at {{.OccurredAt}} UTC."
+  sms:
+    body: "TrakRF: {{.AssetName}}: activity at {{.LocationName}} at {{.OccurredAt}} UTC."
+alarm:
+  email:
+    subject: "Alarm: {{.AssetName}}"
+    body: "{{.AssetName}} ({{.AssetKey}}) triggered an alarm at {{.LocationName}} at {{.OccurredAt}} UTC."
+  sms:
+    body: "TrakRF: {{.AssetName}} triggered an alarm at {{.LocationName}} at {{.OccurredAt}} UTC."
+location_change:
+  email:
+    subject: "Location update: {{.AssetName}}"
+    body: "{{.AssetName}} ({{.AssetKey}}) was seen at {{.LocationName}} at {{.OccurredAt}} UTC."
+  sms:
+    body: "TrakRF: {{.AssetName}} was seen at {{.LocationName}} at {{.OccurredAt}} UTC."
