@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"strings"
 
@@ -207,6 +208,12 @@ func Run(ctx context.Context, info buildinfo.Info) error {
 // CLI, which meant the schema bootstrap, the ledger pin and the split-history
 // preflight all had to be duplicated there — or, as in TRA-1069, not be.
 func RunURL(ctx context.Context, pgURL string, info buildinfo.Info) error {
+	return runURL(ctx, pgURL, info, migrations.FS)
+}
+
+// runURL is RunURL against an explicit migration directory, so the file-history
+// tests can present the database with a different image than the one embedded.
+func runURL(ctx context.Context, pgURL string, info buildinfo.Info, fsys fs.FS) error {
 	log := logger.Get()
 
 	config, err := pgxpool.ParseConfig(pgURL)
@@ -256,6 +263,36 @@ func RunURL(ctx context.Context, pgURL string, info buildinfo.Info) error {
 		return ownershipDriftError(drifts, currentRole(ctx, pool))
 	}
 
+	// Third preflight, also before any write: every version the database has
+	// applied must still be the file this image carries at that version. Without
+	// it a reused number is skipped silently, and a version whose file left the
+	// image fails only as golang-migrate's "file does not exist".
+	image, err := imageFiles(fsys)
+	if err != nil {
+		return fmt.Errorf("failed to read migration files: %w", err)
+	}
+	ledger, err := findLedger(ctx, pool, ledgerSchema)
+	if err != nil {
+		return err
+	}
+	var applied uint
+	var dirty bool
+	if ledger != nil && ledger.version > 0 {
+		applied, dirty = uint(ledger.version), ledger.dirty
+	}
+	recorded, err := readFileHistory(ctx, pool)
+	if err != nil {
+		return err
+	}
+	// A dirty version did not finish, so it is not trusted as applied.
+	completed := applied
+	if dirty && completed > 0 {
+		completed--
+	}
+	if mismatches := compareFileHistory(recorded, image, applied, completed); len(mismatches) > 0 {
+		return fileMismatchError(mismatches, applied)
+	}
+
 	// Create the schema before golang-migrate looks for its ledger. This is the
 	// one thing that cannot be left to a migration: the driver resolves the ledger
 	// location, and creates the table, before migration 000001 runs. Without this
@@ -267,10 +304,24 @@ func RunURL(ctx context.Context, pgURL string, info buildinfo.Info) error {
 		return fmt.Errorf("failed to ensure schema %s exists: %w", appSchema, err)
 	}
 
+	// Trust on first use: a database migrated before the file history existed has
+	// its applied versions recorded from this image, which the preflight above
+	// has just shown carries the ledger's own version. Only an empty history is
+	// seeded; once it has rows, an unrecorded version below the ledger was
+	// skipped, and the preflight has refused it.
+	if err := ensureFileHistory(ctx, pool); err != nil {
+		return err
+	}
+	if len(recorded) == 0 {
+		if err := recordFiles(ctx, pool, image, unrecordedUpTo(recorded, image, completed)); err != nil {
+			return err
+		}
+	}
+
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()
 
-	source, err := iofs.New(migrations.FS, ".")
+	source, err := iofs.New(fsys, ".")
 	if err != nil {
 		return fmt.Errorf("failed to create migration source: %w", err)
 	}
@@ -289,6 +340,22 @@ func RunURL(ctx context.Context, pgURL string, info buildinfo.Info) error {
 	log.Info().Str("version", info.Version).Str("commit", info.Commit).Msg("Starting migrations")
 
 	err = m.Up()
+
+	// Record what this run applied, including the clean part of a run that then
+	// failed, so the next run compares those versions too.
+	if v, d, verr := m.Version(); verr == nil {
+		reached := v
+		if d && reached > 0 {
+			reached--
+		}
+		if rerr := recordFiles(ctx, pool, image, appliedBetween(image, completed, reached)); rerr != nil {
+			if err != nil && !errors.Is(err, migrate.ErrNoChange) {
+				return fmt.Errorf("migration failed: %w (and recording applied files failed: %v)", err, rerr)
+			}
+			return rerr
+		}
+	}
+
 	switch err {
 	case nil:
 		migrationVersion, dirty, _ := m.Version()
