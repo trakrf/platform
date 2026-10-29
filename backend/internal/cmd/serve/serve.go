@@ -324,7 +324,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// 2s test-fire pulse: long enough for an operator to see the strobe, short
 	// enough not to leave the relay latched after a confidence check.
 	outputDevicesHandler := outputdeviceshandler.NewHandler(store, alarmDispatcher, 2*time.Second)
-	notificationRecipientsHandler := notificationrecipientshandler.NewHandler(store)
+	notificationRecipientsHandler := notificationrecipientshandler.NewHandler(store, routingConfig.PhoneRegion)
 	// TRA-993: pass a true-nil RPCClient interface when reader control is disabled
 	// so the handler's nil check (→503) fires rather than a non-nil interface
 	// wrapping a nil *Client.
