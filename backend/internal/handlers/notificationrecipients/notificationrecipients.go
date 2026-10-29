@@ -13,6 +13,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/middleware"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/models/notificationrecipient"
+	"github.com/trakrf/platform/backend/internal/notification/phone"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
 )
@@ -25,11 +26,41 @@ var validate = func() *validator.Validate {
 }()
 
 type Handler struct {
-	storage *storage.Storage
+	storage     *storage.Storage
+	phoneRegion string
 }
 
-func NewHandler(storage *storage.Storage) *Handler {
-	return &Handler{storage: storage}
+// NewHandler takes the region assumed for phone numbers entered without a
+// country code: the same one the delivery planner uses (TRA-1300).
+func NewHandler(storage *storage.Storage, phoneRegion string) *Handler {
+	return &Handler{storage: storage, phoneRegion: phoneRegion}
+}
+
+const invalidPhoneDetail = "phone must be a valid phone number in E.164 format, e.g. +15551234567"
+
+// normalizePhone rewrites a submitted phone number to E.164 in place, so one
+// number is stored one way and the per-org unique index cannot be dodged by
+// formatting it differently (TRA-1300). Nil is left alone.
+func normalizePhone(p *string, region string) error {
+	if p == nil {
+		return nil
+	}
+	e164, err := phone.NormalizeE164(*p, region)
+	if err != nil {
+		return err
+	}
+	*p = e164
+	return nil
+}
+
+// respondPhone writes the error response for a failed normalizePhone. An
+// unknown region is a server misconfiguration, not the caller's fault.
+func respondPhone(w http.ResponseWriter, r *http.Request, err error, reqID string) {
+	if errors.Is(err, phone.ErrInvalidNumber) {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, invalidPhoneDetail, reqID)
+		return
+	}
+	httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, "phone region is misconfigured", reqID)
 }
 
 type dataResponse[T any] struct {
@@ -87,6 +118,10 @@ func (h *Handler) CreateRecipient(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, "email or phone is required", reqID)
 		return
 	}
+	if err := normalizePhone(req.Phone, h.phoneRegion); err != nil {
+		respondPhone(w, r, err, reqID)
+		return
+	}
 	rec, err := h.storage.CreateNotificationRecipient(r.Context(), orgID, req)
 	if err != nil {
 		h.respondStorage(w, r, err, reqID)
@@ -139,6 +174,10 @@ func (h *Handler) UpdateRecipient(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := validate.Struct(req); err != nil {
 		httputil.RespondValidationError(w, r, err, reqID)
+		return
+	}
+	if err := normalizePhone(req.Phone, h.phoneRegion); err != nil {
+		respondPhone(w, r, err, reqID)
 		return
 	}
 	rec, err := h.storage.UpdateNotificationRecipient(r.Context(), orgID, id, req)

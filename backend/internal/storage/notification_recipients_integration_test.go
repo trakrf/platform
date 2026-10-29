@@ -277,3 +277,19 @@ func TestNotificationSubscriptions_TriggerRejectsRetargeting(t *testing.T) {
 	require.True(t, errors.As(err, &pgErr))
 	require.Equal(t, "23514", pgErr.Code)
 }
+
+// The handler normalizes phones to E.164 (TRA-1300); this is the index that
+// then makes one number one contact per org.
+func TestNotificationRecipients_DuplicatePhoneIsConflict(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+
+	_, err := db.Store.CreateNotificationRecipient(ctx, orgID, notificationrecipient.CreateRecipientRequest{Name: "A", Phone: strPtr("+15551230003")})
+	require.NoError(t, err)
+
+	_, err = db.Store.CreateNotificationRecipient(ctx, orgID, notificationrecipient.CreateRecipientRequest{Name: "B", Phone: strPtr("+15551230003")})
+	var pgErr *pgconn.PgError
+	require.True(t, errors.As(err, &pgErr))
+	require.Equal(t, "23505", pgErr.Code)
+}
