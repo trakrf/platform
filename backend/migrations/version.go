@@ -1,6 +1,8 @@
 package migrations
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"sort"
@@ -33,8 +35,12 @@ type migration struct {
 }
 
 // all returns every embedded up-migration, ordered by version.
-func all() ([]migration, error) {
-	entries, err := fs.ReadDir(FS, ".")
+func all() ([]migration, error) { return allIn(FS) }
+
+// allIn is all over an arbitrary migration directory, so the same parsing and
+// the same duplicate refusal apply to a test fixture as to the embedded set.
+func allIn(fsys fs.FS) ([]migration, error) {
+	entries, err := fs.ReadDir(fsys, ".")
 	if err != nil {
 		return nil, fmt.Errorf("reading embedded migrations: %w", err)
 	}
@@ -70,6 +76,47 @@ func all() ([]migration, error) {
 
 	sort.Slice(out, func(i, j int) bool { return out[i].version < out[j].version })
 	return out, nil
+}
+
+// File is one up-migration and the identity it is recorded under once applied.
+type File struct {
+	Version  uint
+	Filename string // "000040_users_must_change_password.up.sql"
+	SHA256   string // hex, of the file's bytes — the same digest checksums.txt records
+}
+
+// UpFiles returns every up-migration in fsys with its digest, ordered by version.
+//
+// It exists so the migrate command can remember which file it applied at each
+// version. golang-migrate stores only the number, so a version later reused by
+// a different file reads as already done and is skipped without an error.
+// Hashing here, with checksums.txt's algorithm, gives one file one identity
+// wherever it is compared.
+func UpFiles(fsys fs.FS) ([]File, error) {
+	ms, err := allIn(fsys)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]File, 0, len(ms))
+	for _, m := range ms {
+		name := m.name + upSuffix
+		sum, err := fileSHA256(fsys, name)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, File{Version: m.version, Filename: name, SHA256: sum})
+	}
+	return out, nil
+}
+
+// fileSHA256 is the hex SHA-256 of one file's bytes.
+func fileSHA256(fsys fs.FS, name string) (string, error) {
+	body, err := fs.ReadFile(fsys, name)
+	if err != nil {
+		return "", fmt.Errorf("reading %s: %w", name, err)
+	}
+	sum := sha256.Sum256(body)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 // Latest is the highest version in the embedded set — the schema version this
