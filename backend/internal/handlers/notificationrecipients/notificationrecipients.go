@@ -1,5 +1,6 @@
-// Package notificationrecipients serves org-scoped notification contacts and
-// the asset subscriptions that link them (TRA-1275). Session-authenticated
+// Package notificationrecipients serves org-scoped notification contacts, the
+// asset subscriptions that link them (TRA-1275), and the history of alerts
+// sent to them. Session-authenticated
 // management endpoints, not part of the public API.
 package notificationrecipients
 
@@ -81,6 +82,8 @@ func (h *Handler) RegisterRoutes(r chi.Router, paidGate func(http.Handler) http.
 	r.Get("/api/v1/assets/{asset_id}/notification-subscriptions", h.ListSubscriptions)
 	r.With(paidGate).Post("/api/v1/assets/{asset_id}/notification-subscriptions", h.CreateSubscription)
 	r.With(paidGate).Patch("/api/v1/assets/{asset_id}/notification-subscriptions/{subscription_id}", h.UpdateSubscription)
+
+	r.Get("/api/v1/notification-alerts", h.ListAlerts)
 }
 
 func (h *Handler) ListRecipients(w http.ResponseWriter, r *http.Request) {
