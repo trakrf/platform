@@ -471,6 +471,7 @@ Ask the site's IT for, in order of preference: DHCP with a reservation for the
 reader's MAC, plain DHCP, or (only if they insist) a static address with
 gateway, DNS and optionally their NTP server. Either way, outbound **TCP 8883**
 (broker) and **UDP 123** (NTP) must be allowed.
+If it goes silent on site, send them the [network check](cs463-network-check.md).
 
 Switch while the reader is still on your bench router, so you can watch it move:
 
