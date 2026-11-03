@@ -1,6 +1,9 @@
 package serve
 
 import (
+	"context"
+	"sync"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
@@ -68,4 +71,18 @@ func newNotificationDelivery(d notificationDeliveryDeps) (*outbox.Runtime, error
 		return nil, err
 	}
 	return outbox.NewRuntime(d.Pool, adapter, d.Store, outboxMetrics, routing.RegisterTriggerWorker(planner))
+}
+
+// stopOnce returns a func that calls stop on its first call only and reports
+// a failure to onErr. The normal shutdown and the deferred early-return path
+// share it, so the runtime is stopped once and logged once.
+func stopOnce(stop func(context.Context) error, onErr func(error)) func(context.Context) {
+	var once sync.Once
+	return func(ctx context.Context) {
+		once.Do(func() {
+			if err := stop(ctx); err != nil {
+				onErr(err)
+			}
+		})
+	}
 }

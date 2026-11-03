@@ -4,6 +4,7 @@ package serve
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -75,7 +76,7 @@ func TestNotificationDelivery_SecondBuildOnSameRegistryFails(t *testing.T) {
 	_, err := newNotificationDelivery(deliveryDeps(db, reg))
 	require.NoError(t, err)
 	_, err = newNotificationDelivery(deliveryDeps(db, reg))
-	require.Error(t, err, "a second build must not silently double-register")
+	require.Error(t, err, "a second build on the same registry must fail")
 }
 
 func TestNotificationDelivery_RuntimeRunsTriggerWorker(t *testing.T) {
@@ -120,4 +121,17 @@ func TestNotificationDelivery_RuntimeRunsTriggerWorker(t *testing.T) {
 			`SELECT state FROM trakrf.river_job WHERE kind = $1`, routing.TriggerJobArgs{}.Kind()).Scan(&state)
 		return err == nil && state == "completed"
 	}, 15*time.Second, 100*time.Millisecond, "the runtime must run the trigger job to completion")
+}
+
+func TestStopOnce_StopsAndReportsOnce(t *testing.T) {
+	calls, reports := 0, 0
+	boom := errors.New("boom")
+	stop := stopOnce(func(context.Context) error { calls++; return boom }, func(err error) {
+		require.ErrorIs(t, err, boom)
+		reports++
+	})
+	stop(context.Background())
+	stop(context.Background())
+	require.Equal(t, 1, calls)
+	require.Equal(t, 1, reports)
 }

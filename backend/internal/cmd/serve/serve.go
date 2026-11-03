@@ -127,8 +127,9 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 
 	// The delivery stack: planner, channel adapter and the queue runtime that
 	// runs trigger and delivery jobs. Config and templates are checked here so
-	// a bad phone region or a broken template refuses to start. Detection still
-	// queues through the insert-only client the stack builds for it.
+	// a bad phone region or a broken template refuses to start. The runtime runs
+	// trigger and delivery jobs; producing triggers from detection is not wired
+	// yet.
 	routingConfig, err := routing.ConfigFromEnv()
 	if err != nil {
 		return err
@@ -151,6 +152,17 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	if err := deliveryRuntime.Start(context.WithoutCancel(ctx)); err != nil {
 		return err
 	}
+	// Every return below this point, not just the normal shutdown, must stop
+	// the runtime before store.Close() closes its pool, or a failed boot would
+	// leave sends running against a closed pool. Defers run in reverse order.
+	stopDeliveryRuntime := stopOnce(deliveryRuntime.Stop, func(err error) {
+		log.Error().Err(err).Msg("Notification delivery runtime stop error")
+	})
+	defer func() {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stopCancel()
+		stopDeliveryRuntime(stopCtx)
+	}()
 	log.Info().
 		Str("phone_region", routingConfig.PhoneRegion).
 		Bool("email_enabled", emailConfig.Enabled).
@@ -384,9 +396,7 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// HTTP first so no request queues work into a stopping runtime, then the
 	// runtime drains on the same budget. Stop runs even if Shutdown failed.
 	shutdownErr := server.Shutdown(shutdownCtx)
-	if err := deliveryRuntime.Stop(shutdownCtx); err != nil {
-		log.Error().Err(err).Msg("Notification delivery runtime stop error")
-	}
+	stopDeliveryRuntime(shutdownCtx)
 	if shutdownErr != nil {
 		log.Error().Err(shutdownErr).Msg("Shutdown error")
 		return shutdownErr
