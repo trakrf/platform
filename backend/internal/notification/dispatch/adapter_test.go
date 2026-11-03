@@ -250,3 +250,213 @@ func TestNew_RequiresSuppressions(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func rawCmd(t *testing.T, ch notificationdelivery.Channel, payloadCh notificationdelivery.Channel, to string) outbox.Command {
+	return outbox.Command{DeliveryID: "d-1", OrgID: 7, Channel: ch,
+		Payload: payload(t, routing.DeliveryMessage{Channel: payloadCh, To: to, Subject: "s", Body: "line1\nline2"})}
+}
+
+func TestAdapter_UnknownChannelIsPermanentMismatch(t *testing.T) {
+	fe, fs, chk := &fakeEmail{}, &fakeSMS{}, &fakeChecker{}
+	a, _ := newAdapter(t, fe, fs, chk)
+	_, err := a.Send(context.Background(), rawCmd(t, "fax", "fax", "123"))
+	assertPermanent(t, err, "channel_mismatch")
+	if len(fe.calls)+len(fs.calls) != 0 || chk.calls != 0 {
+		t.Fatal("sent or looked up")
+	}
+}
+
+func TestAdapter_NullAndEmptyObjectPayloads(t *testing.T) {
+	for _, tc := range []struct{ name, payload, reason string }{
+		{"null", "null", "channel_mismatch"},
+		{"empty object", "{}", "channel_mismatch"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fe, chk := &fakeEmail{}, &fakeChecker{}
+			a, _ := newAdapter(t, fe, nil, chk)
+			_, err := a.Send(context.Background(), outbox.Command{DeliveryID: "d-1", Channel: notificationdelivery.ChannelEmail, Payload: []byte(tc.payload)})
+			assertPermanent(t, err, tc.reason)
+			if len(fe.calls) != 0 || chk.calls != 0 {
+				t.Fatal("sent or looked up")
+			}
+		})
+	}
+}
+
+func TestAdapter_NilSMSSenderLogsAndEmailStillSends(t *testing.T) {
+	chk := &fakeChecker{}
+	a, buf := newAdapter(t, &fakeEmail{sub: email.Submission{ProviderMessageID: "re_1"}}, nil, chk)
+	_, err := a.Send(context.Background(), smsCmd(t))
+	assertPermanent(t, err, "disabled")
+	out := buf.String()
+	if !strings.Contains(out, `"error_kind":"disabled"`) || !strings.Contains(out, `"channel":"sms"`) ||
+		strings.Contains(out, addrPhone) || strings.Contains(out, "line1") {
+		t.Fatalf("bad log: %s", out)
+	}
+	if chk.calls != 0 {
+		t.Fatal("checker called")
+	}
+	res, err := a.Send(context.Background(), emailCmd(t, "s"))
+	if err != nil || res.ProviderMessageID != "re_1" {
+		t.Fatalf("email: %v %+v", err, res)
+	}
+}
+
+func TestAdapter_ProviderPermanentErrors(t *testing.T) {
+	cases := []struct {
+		name   string
+		send   func(t *testing.T) (*dispatch.Adapter, *bytes.Buffer, outbox.Command)
+		reason string
+	}{}
+	for _, k := range []email.ErrorKind{email.ErrorInvalid, email.ErrorDisabled, email.ErrorPermanent} {
+		k := k
+		cases = append(cases, struct {
+			name   string
+			send   func(t *testing.T) (*dispatch.Adapter, *bytes.Buffer, outbox.Command)
+			reason string
+		}{"email " + string(k), func(t *testing.T) (*dispatch.Adapter, *bytes.Buffer, outbox.Command) {
+			a, buf := newAdapter(t, &fakeEmail{err: &email.ProviderError{Kind: k}}, nil, &fakeChecker{})
+			return a, buf, emailCmd(t, "s")
+		}, string(k)})
+	}
+	cases = append(cases, struct {
+		name   string
+		send   func(t *testing.T) (*dispatch.Adapter, *bytes.Buffer, outbox.Command)
+		reason string
+	}{"sms permanent", func(t *testing.T) (*dispatch.Adapter, *bytes.Buffer, outbox.Command) {
+		a, buf := newAdapter(t, nil, &fakeSMS{err: &sms.ProviderError{Kind: sms.ErrorPermanent}}, &fakeChecker{})
+		return a, buf, smsCmd(t)
+	}, "permanent"})
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a, buf, cmd := tc.send(t)
+			_, err := a.Send(context.Background(), cmd)
+			assertPermanent(t, err, tc.reason)
+			if !strings.Contains(buf.String(), `"error_kind":"`+tc.reason+`"`) || !strings.Contains(buf.String(), `"level":"error"`) {
+				t.Fatalf("log: %s", buf.String())
+			}
+		})
+	}
+}
+
+func TestAdapter_OutcomeUnknownIsRetryableAndNotLogged(t *testing.T) {
+	fe := &fakeEmail{err: &email.ProviderError{Kind: email.ErrorTimeout, OutcomeUnknown: true}}
+	a, buf := newAdapter(t, fe, nil, &fakeChecker{})
+	_, err := a.Send(context.Background(), emailCmd(t, "s"))
+	if got := outbox.ClassifyOutcome(err); got != outbox.DeliveryRetryableFailure {
+		t.Fatalf("classify = %v", got)
+	}
+	var pe *outbox.ProviderError
+	if !errors.As(err, &pe) || pe.Kind != outbox.ErrorOutcomeUnknown {
+		t.Fatalf("provider error = %+v", pe)
+	}
+	if r := asDispatchErr(t, err).ErrorReason(); r != "" {
+		t.Fatalf("reason = %q", r)
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("logged: %s", buf.String())
+	}
+}
+
+func TestAdapter_TransientErrorsAreRetryableAndSilent(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		mk   func(t *testing.T) (*dispatch.Adapter, *bytes.Buffer, outbox.Command)
+	}{
+		{"email", func(t *testing.T) (*dispatch.Adapter, *bytes.Buffer, outbox.Command) {
+			a, b := newAdapter(t, &fakeEmail{err: &email.ProviderError{Kind: email.ErrorTransient}}, nil, &fakeChecker{})
+			return a, b, emailCmd(t, "s")
+		}},
+		{"sms", func(t *testing.T) (*dispatch.Adapter, *bytes.Buffer, outbox.Command) {
+			a, b := newAdapter(t, nil, &fakeSMS{err: &sms.ProviderError{Kind: sms.ErrorTransient}}, &fakeChecker{})
+			return a, b, smsCmd(t)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, buf, cmd := tc.mk(t)
+			_, err := a.Send(context.Background(), cmd)
+			if outbox.ClassifyOutcome(err) != outbox.DeliveryRetryableFailure {
+				t.Fatalf("err = %v", err)
+			}
+			if r := asDispatchErr(t, err).ErrorReason(); r != "" {
+				t.Fatalf("reason = %q", r)
+			}
+			if buf.Len() != 0 {
+				t.Fatalf("logged: %s", buf.String())
+			}
+		})
+	}
+}
+
+func TestAdapter_SuppressionCheckReceivesOrgChannelAndAddress(t *testing.T) {
+	for _, tc := range []struct {
+		cmd  func(t *testing.T) outbox.Command
+		ch   notificationdelivery.Channel
+		addr string
+	}{
+		{func(t *testing.T) outbox.Command { return emailCmd(t, "s") }, notificationdelivery.ChannelEmail, addrEmail},
+		{smsCmd, notificationdelivery.ChannelSMS, addrPhone},
+	} {
+		t.Run(string(tc.ch), func(t *testing.T) {
+			chk := &fakeChecker{}
+			a, _ := newAdapter(t, &fakeEmail{}, &fakeSMS{}, chk)
+			cmd := tc.cmd(t)
+			if _, err := a.Send(context.Background(), cmd); err != nil {
+				t.Fatal(err)
+			}
+			if chk.calls != 1 || chk.gotOrg != cmd.OrgID || chk.gotChannel != tc.ch || chk.gotAddr != tc.addr {
+				t.Fatalf("checker: %+v", chk)
+			}
+		})
+	}
+}
+
+func TestAdapter_SubjectAndBodyHandling(t *testing.T) {
+	for _, tc := range []struct{ name, in, want string }{
+		{"empty", "", ""},
+		{"whitespace only", " \t\r\n ", ""},
+		{"unicode", "Alerte élévation — 日本語 \U0001F6A8", "Alerte élévation — 日本語 \U0001F6A8"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fe := &fakeEmail{}
+			a, _ := newAdapter(t, fe, nil, &fakeChecker{})
+			if _, err := a.Send(context.Background(), emailCmd(t, tc.in)); err != nil {
+				t.Fatal(err)
+			}
+			if fe.calls[0].Subject != tc.want || fe.calls[0].Text != "line1\nline2" {
+				t.Fatalf("got %+v", fe.calls[0])
+			}
+		})
+	}
+}
+
+type ctxKey struct{}
+
+type ctxEmail struct{ got any }
+
+func (c *ctxEmail) SendEmail(ctx context.Context, _ email.Command) (email.Submission, error) {
+	c.got = ctx.Value(ctxKey{})
+	return email.Submission{}, nil
+}
+
+type ctxSMS struct{ got any }
+
+func (c *ctxSMS) SendSMS(ctx context.Context, _ sms.Command) (sms.Submission, error) {
+	c.got = ctx.Value(ctxKey{})
+	return sms.Submission{}, nil
+}
+
+func TestAdapter_ContextReachesSenders(t *testing.T) {
+	ce, cs := &ctxEmail{}, &ctxSMS{}
+	a, _ := newAdapter(t, ce, cs, &fakeChecker{})
+	ctx := context.WithValue(context.Background(), ctxKey{}, "marker")
+	if _, err := a.Send(ctx, emailCmd(t, "s")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Send(ctx, smsCmd(t)); err != nil {
+		t.Fatal(err)
+	}
+	if ce.got != "marker" || cs.got != "marker" {
+		t.Fatalf("ctx not passed: %v %v", ce.got, cs.got)
+	}
+}

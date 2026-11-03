@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/trakrf/platform/backend/internal/notification/email"
@@ -26,6 +27,8 @@ func TestMapEmailError(t *testing.T) {
 		{"canceled", &email.ProviderError{Kind: email.ErrorCanceled}, outbox.ErrorTransient, ""},
 		{"unknown", &email.ProviderError{Kind: email.ErrorUnknown}, outbox.ErrorTransient, ""},
 		{"raw", errors.New("x"), outbox.ErrorTransient, ""},
+		{"typed nil", (*email.ProviderError)(nil), outbox.ErrorTransient, ""},
+		{"wrapped invalid", fmt.Errorf("x: %w", &email.ProviderError{Kind: email.ErrorInvalid}), outbox.ErrorPermanent, "invalid"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -49,6 +52,8 @@ func TestMapSMSError(t *testing.T) {
 		{"transient", &sms.ProviderError{Kind: sms.ErrorTransient}, outbox.ErrorTransient, ""},
 		{"other kind", &sms.ProviderError{Kind: "weird"}, outbox.ErrorTransient, ""},
 		{"raw", errors.New("x"), outbox.ErrorTransient, ""},
+		{"typed nil", (*sms.ProviderError)(nil), outbox.ErrorTransient, ""},
+		{"wrapped rejected", fmt.Errorf("x: %w", &sms.ProviderError{Kind: sms.ErrorRejected}), outbox.ErrorPermanent, "rejected"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

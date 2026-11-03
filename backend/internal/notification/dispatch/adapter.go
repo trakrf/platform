@@ -64,6 +64,8 @@ func (a *Adapter) Send(ctx context.Context, cmd outbox.Command) (outbox.Result, 
 
 	suppressed, err := a.supp.IsSuppressed(ctx, cmd.OrgID, cmd.Channel, msg.To)
 	if err != nil {
+		// Wrapping err is PII-safe only because storage.IsSuppressed omits the
+		// address from its error text; keep it that way.
 		return outbox.Result{}, fmt.Errorf("notification suppression check failed: %w", err)
 	}
 	if suppressed {
