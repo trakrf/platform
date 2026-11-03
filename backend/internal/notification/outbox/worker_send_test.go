@@ -152,7 +152,7 @@ func TestDeliveryWorker_FailureRecording(t *testing.T) {
 		attempt   int
 		wantState notificationdelivery.State
 		wantKind  string
-		wantCance bool
+		wantCancel bool
 	}{
 		{"reason found through wrapping", wrapped, 1, notificationdelivery.StatePermanentlyFailed, "opted_out", true},
 		{"reason on retryable branch", retryReason, 1, notificationdelivery.StateInFlight, "x", false},
@@ -169,8 +169,8 @@ func TestDeliveryWorker_FailureRecording(t *testing.T) {
 
 			require.Error(t, workErr)
 			var cancelErr *river.JobCancelError
-			require.Equal(t, tt.wantCance, errors.As(workErr, &cancelErr))
-			if !tt.wantCance {
+			require.Equal(t, tt.wantCancel, errors.As(workErr, &cancelErr))
+			if !tt.wantCancel {
 				require.Equal(t, tt.err, workErr, "the original error must be returned for River's own retry logic")
 			}
 			require.Equal(t, 1, store.updateCalls)
