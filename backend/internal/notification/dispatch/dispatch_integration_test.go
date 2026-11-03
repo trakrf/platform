@@ -4,6 +4,8 @@ package dispatch_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -144,6 +146,7 @@ type deliveryRow struct {
 }
 
 // delivery reads the org's single delivery row; ok is false until it exists.
+// Any error other than "no row yet" fails the test.
 func (f *e2eFixture) delivery(t *testing.T) (deliveryRow, bool) {
 	t.Helper()
 	var d deliveryRow
@@ -151,39 +154,70 @@ func (f *e2eFixture) delivery(t *testing.T) (deliveryRow, bool) {
 		SELECT id, state, attempt_count, last_error_kind, provider_message_id, river_job_id
 		FROM trakrf.notification_deliveries WHERE org_id = $1`, f.orgID).
 		Scan(&d.ID, &d.State, &d.Attempts, &d.ErrorKind, &d.ProviderID, &d.RiverJobID)
-	if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return deliveryRow{}, false
 	}
+	require.NoError(t, err)
 	return d, true
+}
+
+// poll runs check every 100ms for up to 10s. check returns whether it is done
+// and a description of what it last saw, which the failure message reports.
+func poll(t *testing.T, what string, check func() (bool, string)) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		ok, seen := check()
+		if ok {
+			return
+		}
+		if time.Now().After(deadline) {
+			require.FailNowf(t, "timed out", "%s; last seen: %s", what, seen)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func (f *e2eFixture) waitDelivery(t *testing.T, done func(deliveryRow) bool) deliveryRow {
 	t.Helper()
 	var got deliveryRow
-	require.Eventually(t, func() bool {
+	poll(t, "delivery never reached the wanted state", func() (bool, string) {
 		d, ok := f.delivery(t)
 		got = d
-		return ok && done(d)
-	}, 10*time.Second, 100*time.Millisecond)
+		if !ok {
+			return false, "no delivery row"
+		}
+		kind := "<nil>"
+		if d.ErrorKind != nil {
+			kind = *d.ErrorKind
+		}
+		return done(d), fmt.Sprintf("state=%q attempts=%d error_kind=%s", d.State, d.Attempts, kind)
+	})
 	return got
 }
 
-func (f *e2eFixture) jobState(t *testing.T, jobID int64) string {
+// jobState reads a river job's state; ok is false if the job row is absent.
+func (f *e2eFixture) jobState(t *testing.T, jobID int64) (string, bool) {
 	t.Helper()
 	var s string
-	require.NoError(t, f.db.AdminPool.QueryRow(context.Background(),
-		`SELECT state::text FROM trakrf.river_job WHERE id = $1`, jobID).Scan(&s))
-	return s
+	err := f.db.AdminPool.QueryRow(context.Background(),
+		`SELECT state::text FROM trakrf.river_job WHERE id = $1`, jobID).Scan(&s)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false
+	}
+	require.NoError(t, err)
+	return s, true
 }
 
 func (f *e2eFixture) jobStateEventually(t *testing.T, jobID int64, want string) {
 	t.Helper()
-	require.Eventually(t, func() bool {
-		var s string
-		err := f.db.AdminPool.QueryRow(context.Background(),
-			`SELECT state::text FROM trakrf.river_job WHERE id = $1`, jobID).Scan(&s)
-		return err == nil && s == want
-	}, 10*time.Second, 100*time.Millisecond)
+	poll(t, fmt.Sprintf("river job %d never reached %q", jobID, want), func() (bool, string) {
+		s, ok := f.jobState(t, jobID)
+		if !ok {
+			return false, "no river_job row"
+		}
+		return s == want, fmt.Sprintf("state=%q", s)
+	})
 }
 
 func TestDispatch_EndToEnd_Delivered(t *testing.T) {
@@ -198,6 +232,7 @@ func TestDispatch_EndToEnd_Delivered(t *testing.T) {
 	require.Equal(t, "re_e2e", *d.ProviderID)
 	require.Nil(t, d.ErrorKind)
 	require.NotNil(t, d.RiverJobID)
+	f.jobStateEventually(t, *d.RiverJobID, "completed")
 
 	cmds := sender.sent()
 	require.Len(t, cmds, 1)
@@ -255,6 +290,8 @@ func TestDispatch_EndToEnd_TransientErrorRetries(t *testing.T) {
 	d := f.waitDelivery(t, func(d deliveryRow) bool { return d.State == "in_flight" && d.Attempts >= 1 })
 	require.NotNil(t, d.ErrorKind)
 	require.Equal(t, "transient", *d.ErrorKind)
+	require.Nil(t, d.ProviderID)
+	require.NotEmpty(t, sender.sent())
 	require.NotNil(t, d.RiverJobID)
 	f.jobStateEventually(t, *d.RiverJobID, "retryable")
 }
