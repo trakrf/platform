@@ -53,6 +53,9 @@ func (a *Adapter) Send(ctx context.Context, cmd outbox.Command) (outbox.Result, 
 	if len(cmd.Payload) == 0 || json.Unmarshal(cmd.Payload, &msg) != nil {
 		return outbox.Result{}, a.fail(cmd, permanent(reasonInvalidPayload))
 	}
+	if msg.Channel == "" || msg.To == "" {
+		return outbox.Result{}, a.fail(cmd, permanent(reasonInvalidPayload))
+	}
 	if msg.Channel != cmd.Channel ||
 		(cmd.Channel != notificationdelivery.ChannelEmail && cmd.Channel != notificationdelivery.ChannelSMS) {
 		return outbox.Result{}, a.fail(cmd, permanent(reasonChannelMismatch))

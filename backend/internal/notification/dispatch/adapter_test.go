@@ -268,8 +268,9 @@ func TestAdapter_UnknownChannelIsPermanentMismatch(t *testing.T) {
 
 func TestAdapter_NullAndEmptyObjectPayloads(t *testing.T) {
 	for _, tc := range []struct{ name, payload, reason string }{
-		{"null", "null", "channel_mismatch"},
-		{"empty object", "{}", "channel_mismatch"},
+		{"null", "null", "invalid_payload"},
+		{"empty object", "{}", "invalid_payload"},
+		{"empty To", `{"channel":"email","body":"b"}`, "invalid_payload"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fe, chk := &fakeEmail{}, &fakeChecker{}
