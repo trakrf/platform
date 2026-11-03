@@ -3,6 +3,7 @@ package outbox_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -37,12 +38,35 @@ func (e reasonErr) Unwrap() error       { return &outbox.ProviderError{Kind: e.k
 
 func newSendWorker(t *testing.T, state notificationdelivery.State, payload []byte, adapter *recordingAdapter) (*outbox.DeliveryWorker, *fakeDeliveryWorkerStore) {
 	t.Helper()
-	metrics, err := outbox.NewMetrics(prometheus.NewRegistry())
+	worker, store, _ := newSendWorkerWithRegistry(t, state, payload, adapter)
+	return worker, store
+}
+
+func newSendWorkerWithRegistry(t *testing.T, state notificationdelivery.State, payload []byte, adapter *recordingAdapter) (*outbox.DeliveryWorker, *fakeDeliveryWorkerStore, *prometheus.Registry) {
+	t.Helper()
+	registry := prometheus.NewRegistry()
+	metrics, err := outbox.NewMetrics(registry)
 	require.NoError(t, err)
 	store := &fakeDeliveryWorkerStore{delivery: &notificationdelivery.NotificationDelivery{
 		ID: 7, DeliveryID: "d-1", Channel: notificationdelivery.ChannelEmail, State: state, Payload: payload,
 	}}
-	return outbox.NewDeliveryWorker(store, adapter, metrics), store
+	return outbox.NewDeliveryWorker(store, adapter, metrics), store, registry
+}
+
+// counterTotal sums every counter sample in the registry.
+func counterTotal(t *testing.T, registry *prometheus.Registry) float64 {
+	t.Helper()
+	families, err := registry.Gather()
+	require.NoError(t, err)
+	var total float64
+	for _, family := range families {
+		for _, m := range family.GetMetric() {
+			if m.GetCounter() != nil {
+				total += m.GetCounter().GetValue()
+			}
+		}
+	}
+	return total
 }
 
 func TestDeliveryWorker_CommandCarriesSavedPayload(t *testing.T) {
@@ -59,22 +83,14 @@ func TestDeliveryWorker_SkipsFinishedRows(t *testing.T) {
 	for _, state := range []notificationdelivery.State{notificationdelivery.StateDelivered, notificationdelivery.StatePermanentlyFailed} {
 		t.Run(string(state), func(t *testing.T) {
 			adapter := &recordingAdapter{}
-			worker, store := newSendWorker(t, state, []byte(`{}`), adapter)
+			worker, store, registry := newSendWorkerWithRegistry(t, state, []byte(`{}`), adapter)
 
 			require.NoError(t, worker.Work(context.Background(), newTestJob(1, 6)))
 			require.Equal(t, 0, adapter.calls)
 			require.Equal(t, 0, store.updateCalls)
+			require.Zero(t, counterTotal(t, registry), "a skipped row must record no metric")
 		})
 	}
-}
-
-func TestDeliveryWorker_InFlightRowIsStillSent(t *testing.T) {
-	adapter := &recordingAdapter{}
-	worker, store := newSendWorker(t, notificationdelivery.StateInFlight, []byte(`{}`), adapter)
-
-	require.NoError(t, worker.Work(context.Background(), newTestJob(2, 6)))
-	require.Equal(t, 1, adapter.calls)
-	require.Equal(t, notificationdelivery.StateDelivered, store.gotState)
 }
 
 func TestDeliveryWorker_PermanentFailureRecordsReason(t *testing.T) {
@@ -106,4 +122,84 @@ func TestDeliveryWorker_RetryableFailureKeepsKind(t *testing.T) {
 	require.Equal(t, notificationdelivery.StateInFlight, store.gotState)
 	require.NotNil(t, store.gotErrorKind)
 	require.Equal(t, "outcome_unknown", *store.gotErrorKind)
+}
+
+func TestDeliveryWorker_PendingAndInFlightRowsAreSent(t *testing.T) {
+	for _, state := range []notificationdelivery.State{notificationdelivery.StatePending, notificationdelivery.StateInFlight} {
+		t.Run(string(state), func(t *testing.T) {
+			adapter := &recordingAdapter{result: outbox.Result{ProviderMessageID: "pm-1"}}
+			worker, store, registry := newSendWorkerWithRegistry(t, state, []byte(`{}`), adapter)
+
+			require.NoError(t, worker.Work(context.Background(), newTestJob(1, 6)))
+			require.Equal(t, 1, adapter.calls)
+			require.Equal(t, notificationdelivery.StateDelivered, store.gotState)
+			require.NotNil(t, store.gotProviderMessageID)
+			require.Equal(t, "pm-1", *store.gotProviderMessageID)
+			require.Nil(t, store.gotErrorKind)
+			require.Equal(t, float64(1), counterTotal(t, registry))
+		})
+	}
+}
+
+func TestDeliveryWorker_FailureRecording(t *testing.T) {
+	boom := errors.New("boom")
+	wrapped := fmt.Errorf("adapter: %w", reasonErr{kind: outbox.ErrorPermanent, reason: "opted_out"})
+	retryReason := reasonErr{kind: outbox.ErrorTransient, reason: "x"}
+
+	tests := []struct {
+		name      string
+		err       error
+		attempt   int
+		wantState notificationdelivery.State
+		wantKind  string
+		wantCance bool
+	}{
+		{"reason found through wrapping", wrapped, 1, notificationdelivery.StatePermanentlyFailed, "opted_out", true},
+		{"reason on retryable branch", retryReason, 1, notificationdelivery.StateInFlight, "x", false},
+		{"retryable reason on last attempt", retryReason, 6, notificationdelivery.StatePermanentlyFailed, "x", false},
+		{"empty reason falls through to kind", reasonErr{kind: outbox.ErrorOutcomeUnknown}, 1, notificationdelivery.StateInFlight, "outcome_unknown", false},
+		{"non-provider error is transient", boom, 1, notificationdelivery.StateInFlight, "transient", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			adapter := &recordingAdapter{err: tt.err}
+			worker, store := newSendWorker(t, notificationdelivery.StatePending, []byte(`{}`), adapter)
+
+			workErr := worker.Work(context.Background(), newTestJob(tt.attempt, 6))
+
+			require.Error(t, workErr)
+			var cancelErr *river.JobCancelError
+			require.Equal(t, tt.wantCance, errors.As(workErr, &cancelErr))
+			if !tt.wantCance {
+				require.Equal(t, tt.err, workErr, "the original error must be returned for River's own retry logic")
+			}
+			require.Equal(t, 1, store.updateCalls)
+			require.Equal(t, tt.wantState, store.gotState)
+			require.NotNil(t, store.gotErrorKind)
+			require.Equal(t, tt.wantKind, *store.gotErrorKind)
+			require.Nil(t, store.gotProviderMessageID)
+		})
+	}
+}
+
+func TestDeliveryWorker_GetErrorIsReturnedWithoutSendOrUpdate(t *testing.T) {
+	adapter := &recordingAdapter{}
+	worker, store := newSendWorker(t, notificationdelivery.StatePending, nil, adapter)
+	getErr := errors.New("get failed")
+	store.getErr = getErr
+
+	require.ErrorIs(t, worker.Work(context.Background(), newTestJob(1, 6)), getErr)
+	require.Equal(t, 0, adapter.calls)
+	require.Equal(t, 0, store.updateCalls)
+}
+
+func TestDeliveryWorker_UpdateErrorAfterSuccessfulSendIsReturned(t *testing.T) {
+	adapter := &recordingAdapter{result: outbox.Result{ProviderMessageID: "pm-1"}}
+	worker, store := newSendWorker(t, notificationdelivery.StatePending, []byte(`{}`), adapter)
+	updateErr := errors.New("update failed")
+	store.updateErr = updateErr
+
+	require.ErrorIs(t, worker.Work(context.Background(), newTestJob(1, 6)), updateErr, "River must retry so the audit row catches up")
+	require.Equal(t, 1, adapter.calls)
+	require.Equal(t, 1, store.updateCalls)
 }
