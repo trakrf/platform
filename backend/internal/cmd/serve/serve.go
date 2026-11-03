@@ -40,7 +40,6 @@ import (
 	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/mustering"
 	"github.com/trakrf/platform/backend/internal/notification"
-	"github.com/trakrf/platform/backend/internal/notification/outbox"
 	"github.com/trakrf/platform/backend/internal/notification/resend"
 	"github.com/trakrf/platform/backend/internal/notification/routing"
 	"github.com/trakrf/platform/backend/internal/notification/twilio"
@@ -126,44 +125,37 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	}
 	log.Info().Bool("enabled", emailConfig.Enabled).Msg("Notification email integration configured")
 
-	// The delivery planner turns a detected alarm or move into queued
-	// deliveries. Built at boot so a bad phone region or a broken template
-	// refuses to start; detection wires it in later, and the queue runtime
-	// that would run its trigger jobs is not started yet.
+	// The delivery stack: planner, channel adapter and the queue runtime that
+	// runs trigger and delivery jobs. Config and templates are checked here so
+	// a bad phone region or a broken template refuses to start. Detection still
+	// queues through the insert-only client the stack builds for it.
 	routingConfig, err := routing.ConfigFromEnv()
 	if err != nil {
 		return err
 	}
-	templates, err := routing.NewTemplateRenderer()
-	if err != nil {
-		return err
-	}
-	jobInserter, err := outbox.NewInserter(store.Pool().(*pgxpool.Pool))
-	if err != nil {
-		return err
-	}
-	planningMetrics, err := routing.NewMetrics(prometheus.DefaultRegisterer)
-	if err != nil {
-		return err
-	}
-	outboxMetrics, err := outbox.NewMetrics(prometheus.DefaultRegisterer)
-	if err != nil {
-		return err
-	}
-	deliveryPlanner, err := routing.NewDeliveryPlanner(routing.Deps{
-		Store:         store,
-		Jobs:          jobInserter,
-		Renderer:      templates,
-		Metrics:       planningMetrics,
-		OutboxMetrics: outboxMetrics,
-		PhoneRegion:   routingConfig.PhoneRegion,
-		Log:           *log,
+	deliveryRuntime, err := newNotificationDelivery(notificationDeliveryDeps{
+		Store:    store,
+		Pool:     store.Pool().(*pgxpool.Pool),
+		Email:    emailRuntime.Sender,
+		SMS:      smsRuntime.Sender,
+		Routing:  routingConfig,
+		Registry: prometheus.DefaultRegisterer,
+		Log:      *log,
 	})
 	if err != nil {
 		return err
 	}
-	_ = deliveryPlanner
-	log.Info().Str("phone_region", routingConfig.PhoneRegion).Msg("notification delivery planner constructed")
+	// Not the serve context: cancelling a River start context is an abrupt
+	// shutdown that cancels running jobs, and ctx is cancelled on SIGTERM.
+	// Stop below drains them instead.
+	if err := deliveryRuntime.Start(context.WithoutCancel(ctx)); err != nil {
+		return err
+	}
+	log.Info().
+		Str("phone_region", routingConfig.PhoneRegion).
+		Bool("email_enabled", emailConfig.Enabled).
+		Bool("sms_enabled", smsConfig.Enabled()).
+		Msg("notification delivery runtime started")
 
 	// Say it at boot as well as on /health (TRA-1190). The endpoint is what a
 	// test suite can check; this line is what a developer actually sees, and
@@ -389,9 +381,15 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Error().Err(err).Msg("Shutdown error")
-		return err
+	// HTTP first so no request queues work into a stopping runtime, then the
+	// runtime drains on the same budget. Stop runs even if Shutdown failed.
+	shutdownErr := server.Shutdown(shutdownCtx)
+	if err := deliveryRuntime.Stop(shutdownCtx); err != nil {
+		log.Error().Err(err).Msg("Notification delivery runtime stop error")
+	}
+	if shutdownErr != nil {
+		log.Error().Err(shutdownErr).Msg("Shutdown error")
+		return shutdownErr
 	}
 
 	<-serverErr
