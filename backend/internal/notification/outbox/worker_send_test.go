@@ -147,11 +147,11 @@ func TestDeliveryWorker_FailureRecording(t *testing.T) {
 	retryReason := reasonErr{kind: outbox.ErrorTransient, reason: "x"}
 
 	tests := []struct {
-		name      string
-		err       error
-		attempt   int
-		wantState notificationdelivery.State
-		wantKind  string
+		name       string
+		err        error
+		attempt    int
+		wantState  notificationdelivery.State
+		wantKind   string
 		wantCancel bool
 	}{
 		{"reason found through wrapping", wrapped, 1, notificationdelivery.StatePermanentlyFailed, "opted_out", true},
