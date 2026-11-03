@@ -393,10 +393,17 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// HTTP first so no request queues work into a stopping runtime, then the
-	// runtime drains on the same budget. Stop runs even if Shutdown failed.
+	// The runtime stops concurrently with HTTP, not after it: Shutdown waits
+	// for open SSE streams and can use the whole budget, which would leave the
+	// runtime an expired context and abandon running sends. Its own soft-stop
+	// timeout (3s) keeps it inside the same 5s. Stop runs even if Shutdown fails.
+	runtimeStopped := make(chan struct{})
+	go func() {
+		defer close(runtimeStopped)
+		stopDeliveryRuntime(shutdownCtx)
+	}()
 	shutdownErr := server.Shutdown(shutdownCtx)
-	stopDeliveryRuntime(shutdownCtx)
+	<-runtimeStopped
 	if shutdownErr != nil {
 		log.Error().Err(shutdownErr).Msg("Shutdown error")
 		return shutdownErr

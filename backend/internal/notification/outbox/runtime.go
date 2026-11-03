@@ -3,6 +3,7 @@ package outbox
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -36,8 +37,12 @@ func NewRuntime(pool *pgxpool.Pool, adapter ChannelAdapter, store deliveryWorker
 		Queues: map[string]river.QueueConfig{
 			river.QueueDefault: {MaxWorkers: 10},
 		},
-		Workers:     workers,
-		RetryPolicy: NewRetryLadder(),
+		Workers: workers,
+		// Under serve's 5s shutdown budget: after a soft Stop, a send still
+		// running at 3s has its context cancelled and is recorded as a quick
+		// retry, instead of being abandoned mid-send when the process exits.
+		SoftStopTimeout: 3 * time.Second,
+		RetryPolicy:     NewRetryLadder(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct river client: %w", err)
