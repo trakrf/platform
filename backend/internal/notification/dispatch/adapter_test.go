@@ -268,8 +268,9 @@ func TestAdapter_UnknownChannelIsPermanentMismatch(t *testing.T) {
 
 func TestAdapter_NullAndEmptyObjectPayloads(t *testing.T) {
 	for _, tc := range []struct{ name, payload, reason string }{
-		{"null", "null", "channel_mismatch"},
-		{"empty object", "{}", "channel_mismatch"},
+		{"null", "null", "invalid_payload"},
+		{"empty object", "{}", "invalid_payload"},
+		{"empty To", `{"channel":"email","body":"b"}`, "invalid_payload"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fe, chk := &fakeEmail{}, &fakeChecker{}
@@ -432,17 +433,17 @@ func TestAdapter_SubjectAndBodyHandling(t *testing.T) {
 
 type ctxKey struct{}
 
-type ctxEmail struct{ got any }
+type ctxEmail struct{ got string }
 
 func (c *ctxEmail) SendEmail(ctx context.Context, _ email.Command) (email.Submission, error) {
-	c.got = ctx.Value(ctxKey{})
+	c.got, _ = ctx.Value(ctxKey{}).(string)
 	return email.Submission{}, nil
 }
 
-type ctxSMS struct{ got any }
+type ctxSMS struct{ got string }
 
 func (c *ctxSMS) SendSMS(ctx context.Context, _ sms.Command) (sms.Submission, error) {
-	c.got = ctx.Value(ctxKey{})
+	c.got, _ = ctx.Value(ctxKey{}).(string)
 	return sms.Submission{}, nil
 }
 
