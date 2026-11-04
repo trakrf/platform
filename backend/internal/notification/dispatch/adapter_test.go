@@ -433,17 +433,17 @@ func TestAdapter_SubjectAndBodyHandling(t *testing.T) {
 
 type ctxKey struct{}
 
-type ctxEmail struct{ got any }
+type ctxEmail struct{ got string }
 
 func (c *ctxEmail) SendEmail(ctx context.Context, _ email.Command) (email.Submission, error) {
-	c.got = ctx.Value(ctxKey{})
+	c.got, _ = ctx.Value(ctxKey{}).(string)
 	return email.Submission{}, nil
 }
 
-type ctxSMS struct{ got any }
+type ctxSMS struct{ got string }
 
 func (c *ctxSMS) SendSMS(ctx context.Context, _ sms.Command) (sms.Submission, error) {
-	c.got = ctx.Value(ctxKey{})
+	c.got, _ = ctx.Value(ctxKey{}).(string)
 	return sms.Submission{}, nil
 }
 
