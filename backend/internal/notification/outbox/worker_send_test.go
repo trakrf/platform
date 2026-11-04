@@ -203,3 +203,29 @@ func TestDeliveryWorker_UpdateErrorAfterSuccessfulSendIsReturned(t *testing.T) {
 	require.Equal(t, 1, adapter.calls)
 	require.Equal(t, 1, store.updateCalls)
 }
+
+// cancellingAdapter stands in for a provider that accepts the message just as
+// the server starts shutting down and cancels the job's context.
+type cancellingAdapter struct{ cancel context.CancelFunc }
+
+func (a cancellingAdapter) Send(ctx context.Context, cmd outbox.Command) (outbox.Result, error) {
+	a.cancel()
+	return outbox.Result{ProviderMessageID: "pm-1"}, nil
+}
+
+func TestDeliveryWorker_SavesDeliveredStateWhenCancelledAfterSend(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	metrics, err := outbox.NewMetrics(registry)
+	require.NoError(t, err)
+	store := &fakeDeliveryWorkerStore{delivery: &notificationdelivery.NotificationDelivery{
+		ID: 7, DeliveryID: "d-1", Channel: notificationdelivery.ChannelEmail, State: notificationdelivery.StatePending,
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	worker := outbox.NewDeliveryWorker(store, cancellingAdapter{cancel: cancel}, metrics)
+
+	require.NoError(t, worker.Work(ctx, newTestJob(1, 6)), "a sent message must not be retried")
+	require.Equal(t, notificationdelivery.StateDelivered, store.gotState)
+	require.NotNil(t, store.gotProviderMessageID)
+	require.Equal(t, "pm-1", *store.gotProviderMessageID)
+}

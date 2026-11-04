@@ -58,6 +58,10 @@ func (s *fakeDeliveryWorkerStore) GetNotificationDeliveryByRiverJobID(ctx contex
 
 func (s *fakeDeliveryWorkerStore) UpdateNotificationDeliveryState(ctx context.Context, orgID int, id int64, state notificationdelivery.State, errorKind, providerMessageID *string) error {
 	s.updateCalls++
+	// Like the real database, a save on a cancelled context does not happen.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	s.gotState = state
 	s.gotErrorKind = errorKind
 	s.gotProviderMessageID = providerMessageID
