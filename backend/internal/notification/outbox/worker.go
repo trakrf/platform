@@ -139,7 +139,9 @@ func (w *DeliveryWorker) Work(ctx context.Context, job *river.Job[DeliveryJobArg
 		errorKindPtr = &kind
 	}
 
-	if updateErr := w.store.UpdateNotificationDeliveryState(ctx, job.Args.OrgID, delivery.ID, state, errorKindPtr, providerMessageIDPtr); updateErr != nil {
+	// The send already happened, so record it even if shutdown cancelled the
+	// job meanwhile. Otherwise River retries and the message goes out twice.
+	if updateErr := w.store.UpdateNotificationDeliveryState(context.WithoutCancel(ctx), job.Args.OrgID, delivery.ID, state, errorKindPtr, providerMessageIDPtr); updateErr != nil {
 		return updateErr
 	}
 
