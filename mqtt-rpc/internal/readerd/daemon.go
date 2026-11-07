@@ -37,6 +37,9 @@ type Daemon struct {
 	// publish is the transport seam (topic, payload) -> error; the real impl wraps
 	// the paho client, tests can inject a fake.
 	publish func(topic string, payload []byte) error
+
+	updater Updater       // optional remote self-update (SetUpdater)
+	stopCh  chan struct{} // closed by Stop
 }
 
 // New builds a Daemon. It does not connect; call Start.
@@ -46,17 +49,19 @@ func New(cfg Config, adapter Adapter, log *zerolog.Logger) *Daemon {
 		adapter: adapter,
 		log:     log.With().Str("component", "readerd").Logger(),
 		now:     time.Now,
+		stopCh:  make(chan struct{}),
 	}
 }
 
 // statusPayload is the retained presence document published on the status topic.
 type statusPayload struct {
-	Online bool   `json:"online"`
-	At     string `json:"at,omitempty"`
+	Online  bool   `json:"online"`
+	At      string `json:"at,omitempty"`
+	Version string `json:"version,omitempty"`
 }
 
 func (d *Daemon) onlinePayload() []byte {
-	b, _ := json.Marshal(statusPayload{Online: true, At: d.now().UTC().Format(time.RFC3339)})
+	b, _ := json.Marshal(statusPayload{Online: true, At: d.now().UTC().Format(time.RFC3339), Version: d.cfg.Version})
 	return b
 }
 
@@ -91,6 +96,13 @@ func (d *Daemon) Start() error {
 				return
 			}
 			d.log.Info().Str("rpc_topic", rpcTopic).Str("status_topic", statusTopic).Msg("connected; rpc subscribed, online published")
+			if d.updater != nil && d.updater.OnProbation() {
+				go func() {
+					if err := d.selfTest(); err != nil {
+						d.log.Warn().Err(err).Msg("update self-test publish failed")
+					}
+				}()
+			}
 		}).
 		SetConnectionLostHandler(func(_ mqtt.Client, err error) {
 			d.log.Warn().Err(err).Msg("mqtt connection lost; auto-reconnecting")
@@ -116,6 +128,9 @@ func (d *Daemon) Start() error {
 	// Do not wait on the connect token: with ConnectRetry it only completes once a
 	// connection succeeds, so waiting would hang on a down broker at boot.
 	d.client.Connect()
+	if d.updater != nil && d.updater.OnProbation() {
+		go d.probationLoop()
+	}
 	d.log.Info().Str("client_id", d.cfg.Broker.RPCClientID).Str("broker", redactBrokerURL(d.cfg.Broker.URL)).Msg("readerd connecting")
 	return nil
 }
@@ -138,6 +153,11 @@ func redactBrokerURL(raw string) string {
 
 // Stop publishes the retained offline status (best-effort) then disconnects.
 func (d *Daemon) Stop() {
+	select {
+	case <-d.stopCh:
+	default:
+		close(d.stopCh)
+	}
 	if d.client == nil || !d.client.IsConnected() {
 		return
 	}
@@ -185,7 +205,9 @@ func (d *Daemon) handleMessage(_ mqtt.Client, m mqtt.Message) {
 	go func() {
 		if err := d.publish(replyTopic, reply); err != nil {
 			d.log.Error().Err(err).Str("reply_topic", replyTopic).Msg("publish rpc reply failed")
+			return
 		}
+		d.answered()
 	}()
 }
 
@@ -222,7 +244,10 @@ func (d *Daemon) dispatch(ctx context.Context, req readerrpc.Request) readerrpc.
 		if err != nil {
 			return readerrpc.NewError(req, readerrpc.CodeInternal, err.Error())
 		}
-		return d.result(req, caps)
+		return d.result(req, d.withDaemonInfo(caps))
+
+	case readerrpc.MethodDaemonUpdate:
+		return d.daemonUpdate(req)
 
 	case readerrpc.MethodGetOperProfile:
 		var p readerrpc.OperProfileParams

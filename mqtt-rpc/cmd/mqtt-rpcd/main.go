@@ -19,6 +19,7 @@ import (
 
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerd"
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerd/cs463"
+	"github.com/trakrf/platform/mqtt-rpc/internal/update"
 )
 
 // reconcileTimeout bounds the startup golden-config reconcile (a handful of /API
@@ -41,6 +42,25 @@ func main() {
 	cfg, err := readerd.LoadConfig()
 	if err != nil {
 		logger.Fatal().Err(err).Msg("load config")
+	}
+	cfg.Version = version
+
+	// Remote self-update. CheckPending runs first, before anything touches the
+	// reader: if this process is a fresh update on probation, it commits only
+	// after answering an RPC through the broker (see readerd.selfTest) — never on
+	// reconcile, which a wedged vendor app would fail.
+	restart := make(chan struct{}, 1)
+	upd := update.New(update.Layout{Dir: update.DefaultDir}, version, func() {
+		select {
+		case restart <- struct{}{}:
+		default:
+		}
+	}, logger)
+	if err := upd.CheckPending(); err != nil {
+		logger.Error().Err(err).Msg("read update state")
+	}
+	if upd.OnProbation() {
+		logger.Warn().Msg("this build is an update on probation; it commits after answering an rpc through the broker, else the guard rolls it back")
 	}
 
 	// The daemon runs on the reader and talks to the reader's localhost servlet
@@ -78,6 +98,7 @@ func main() {
 	}
 
 	d := readerd.New(cfg, adapter, &logger)
+	d.SetUpdater(upd)
 	if err := d.Start(); err != nil {
 		logger.Fatal().Err(err).Msg("start daemon")
 	}
@@ -89,8 +110,14 @@ func main() {
 		Str("reader_url", baseURL).
 		Msg("mqtt-rpcd running")
 
-	<-ctx.Done()
-	logger.Info().Msg("mqtt-rpcd shutting down")
+	select {
+	case <-ctx.Done():
+		logger.Info().Msg("mqtt-rpcd shutting down")
+	case <-restart:
+		// Exit cleanly; systemd (Restart=always) starts the binary the active
+		// link now points at, and the guard's ExecStartPre counts the start.
+		logger.Info().Msg("mqtt-rpcd exiting to restart onto the updated version")
+	}
 }
 
 func envOr(key, def string) string {

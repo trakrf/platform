@@ -51,6 +51,8 @@ type Config struct {
 	AntennaCount int
 	// Reconcile, when true (default), runs the golden-config reconcile on startup.
 	Reconcile bool
+	// Version is the daemon build version, reported in capabilities and status.
+	Version string
 }
 
 // cloudServerEntry mirrors one object in the reader's CloudServer config array.
