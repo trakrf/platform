@@ -66,13 +66,14 @@ func main() {
 	// The daemon runs on the reader and talks to the reader's localhost servlet
 	// API. URL/user/pass are overridable via env; pass is the only secret.
 	baseURL := envOr("READER_API_URL", "http://localhost")
-	user := envOr("READER_API_USER", "root")
+	user := envOr("READER_API_USER", "trakrf")
 	pass := os.Getenv("READER_API_PASS")
 	client := cs463.New(baseURL, user, pass, 0)
 
 	adapter := cs463.NewAdapter(client, cs463.AdapterConfig{
 		AntennaCount: cfg.AntennaCount,
 		EventID:      cfg.EventID,
+		Logger:       &logger,
 	})
 
 	// Converge the reader to the golden TrakRF mqtt-rpc config before serving RPC.

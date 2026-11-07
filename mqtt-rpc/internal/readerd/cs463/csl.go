@@ -177,8 +177,8 @@ func (c *Client) LoginServlet(ctx context.Context) error {
 }
 
 // LogoutServlet ends the web-UI session by issuing GET /Logout, which carries the
-// JSESSIONID cookie via the client's cookie jar. The CS463 allows only one root
-// login at a time and the web (cookie) session occupies that single slot just as
+// JSESSIONID cookie via the client's cookie jar. The CS463 allows only one session
+// per user at a time and the web (cookie) session occupies that slot just as
 // the /API session_id does; releasing the web session here frees the slot so a
 // subsequent /API login can succeed (verified on hardware). Best-effort: the
 // reader replies 200 or a redirect; both 2xx and 3xx are treated as success.
@@ -199,8 +199,9 @@ func (c *Client) LogoutServlet(ctx context.Context) error {
 	return nil
 }
 
-// ForceLogout clears any held session (root-only command). It is invoked only on
-// an operator-confirmed force.
+// ForceLogout clears every held reader session, for ALL users — a person in the
+// vendor UI included. It needs no root: the daemon's own user can issue it. It is
+// invoked only on an operator-confirmed force, and the adapter logs it at warn.
 func (c *Client) ForceLogout(ctx context.Context) error {
 	params := url.Values{"command": {"forceLogout"}, "username": {c.user}, "password": {c.pass}}
 	var ack xmlAck
@@ -271,7 +272,7 @@ func (c *Client) EnableEvent(ctx context.Context, session, eventID string, enabl
 // DirectIOOutput drives a general purpose output port high or low.
 //
 // Unlike the session-bound runIO_output, this command carries username/password
-// inline and BYPASSES the reader's single-root-session lock — verified on
+// inline and BYPASSES the reader's one-session-per-user lock — verified on
 // hardware while the web UI held the session. That property matters for an
 // alarm: firing must not fail because someone left a browser open on the reader.
 //

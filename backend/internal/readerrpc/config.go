@@ -36,8 +36,8 @@ type ReaderConfig struct {
 }
 
 // OperProfileParams are the params for Reader.GetOperProfile. Force requests a
-// force-logout-then-proceed when the reader's single root session is held by
-// another client (see BusyError).
+// force-logout-then-proceed when the reader session for the daemon's user is
+// held by another client (see BusyError).
 type OperProfileParams struct {
 	Force bool `json:"force,omitempty"`
 }
