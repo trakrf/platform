@@ -3,9 +3,11 @@ package detection
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/rs/zerolog"
@@ -15,35 +17,19 @@ import (
 	"github.com/trakrf/platform/backend/internal/storage"
 )
 
-type fakeSavepoint struct {
-	pgx.Tx
-	commitErr  error
-	committed  bool
-	rolledBack bool
-}
-
-func (f *fakeSavepoint) Commit(context.Context) error {
-	if f.commitErr == nil {
-		f.committed = true
-	}
-	return f.commitErr
-}
-func (f *fakeSavepoint) Rollback(context.Context) error { f.rolledBack = true; return nil }
-
+// fakeTx records the SQL sent. failOn makes any statement with that prefix fail.
 type fakeTx struct {
 	pgx.Tx
-	beginErr  error
-	saves     []*fakeSavepoint
-	commitErr error
+	sql    []string
+	failOn string
 }
 
-func (f *fakeTx) Begin(context.Context) (pgx.Tx, error) {
-	if f.beginErr != nil {
-		return nil, f.beginErr
+func (f *fakeTx) Exec(_ context.Context, q string, _ ...any) (pgconn.CommandTag, error) {
+	f.sql = append(f.sql, q)
+	if f.failOn != "" && strings.HasPrefix(q, f.failOn) {
+		return pgconn.CommandTag{}, errors.New("sql failed: " + q)
 	}
-	sp := &fakeSavepoint{commitErr: f.commitErr}
-	f.saves = append(f.saves, sp)
-	return sp, nil
+	return pgconn.CommandTag{}, nil
 }
 
 type fakeStage struct {
@@ -79,11 +65,13 @@ func TestRun_StageFailureRollsBackOnlyItsSavepoint(t *testing.T) {
 	r := newPipe(a, b).Begin()
 
 	require.NoError(t, r.Detect(context.Background(), tx, storage.DetectInput{}))
-	require.Len(t, tx.saves, 2)
-	assert.True(t, tx.saves[0].rolledBack)
-	assert.False(t, tx.saves[0].committed)
-	assert.True(t, tx.saves[1].committed)
-	assert.False(t, tx.saves[1].rolledBack)
+	assert.Equal(t, []string{
+		"SAVEPOINT detection_stage",
+		"ROLLBACK TO SAVEPOINT detection_stage",
+		"RELEASE SAVEPOINT detection_stage",
+		"SAVEPOINT detection_stage",
+		"RELEASE SAVEPOINT detection_stage",
+	}, tx.sql)
 }
 
 func TestRun_CommittedReportsRowsKeptPerStage(t *testing.T) {
@@ -121,19 +109,21 @@ func TestRun_SavepointBeginFailureIsCounted(t *testing.T) {
 	a := &fakeStage{name: "sp_begin_stage"}
 	before := counterValue(t, metricStageErrors.WithLabelValues("sp_begin_stage"))
 	r := newPipe(a).Begin()
-	require.NoError(t, r.Detect(context.Background(), &fakeTx{beginErr: errors.New("no savepoint")}, storage.DetectInput{}))
+	require.NoError(t, r.Detect(context.Background(), &fakeTx{failOn: "SAVEPOINT"}, storage.DetectInput{}))
 	assert.False(t, a.called)
 	assert.Equal(t, before+1, counterValue(t, metricStageErrors.WithLabelValues("sp_begin_stage")))
 	r.Committed()
 	assert.Empty(t, a.commits)
 }
 
-func TestRun_SavepointCommitFailureCountsAsStageFailure(t *testing.T) {
+func TestRun_SavepointReleaseFailureRollsBackAndReportsNotKept(t *testing.T) {
 	a := &fakeStage{name: "a"}
+	tx := &fakeTx{failOn: "RELEASE"}
 	r := newPipe(a).Begin()
-	require.NoError(t, r.Detect(context.Background(), &fakeTx{commitErr: errors.New("x")}, storage.DetectInput{}))
+	require.NoError(t, r.Detect(context.Background(), tx, storage.DetectInput{}))
 	r.Committed()
 	assert.Equal(t, []bool{false}, a.commits)
+	assert.Contains(t, tx.sql, "ROLLBACK TO SAVEPOINT detection_stage")
 }
 
 func counterValue(t *testing.T, c prometheus.Counter) float64 {

@@ -56,32 +56,45 @@ type Run struct {
 	results []stageResult
 }
 
+const savepointName = "detection_stage"
+
 // Detect is a storage.DetectFunc. A stage error never fails the scan: that
-// stage's savepoint rolls back and the next stage still runs.
+// stage's work is rolled back to a named savepoint and the next stage still
+// runs. Savepoints are issued as SQL on the outer tx rather than through
+// tx.Begin, because pgx marks a nested tx closed even when RELEASE fails, which
+// would leave the aborted state in place and lose the scan.
 func (r *Run) Detect(ctx context.Context, tx pgx.Tx, in storage.DetectInput) error {
 	for _, st := range r.p.stages {
-		sp, err := tx.Begin(ctx)
-		if err != nil {
+		if _, err := tx.Exec(ctx, "SAVEPOINT "+savepointName); err != nil {
 			r.fail(st, err, "detection savepoint begin failed")
 			continue
 		}
-		pending, err := st.Detect(ctx, sp, in)
+		pending, err := st.Detect(ctx, tx, in)
 		if err == nil {
-			if err = sp.Commit(ctx); err != nil {
-				r.fail(st, err, "detection savepoint commit failed")
+			if _, err = tx.Exec(ctx, "RELEASE SAVEPOINT "+savepointName); err != nil {
+				r.fail(st, err, "detection savepoint release failed")
 			}
 		} else {
 			r.fail(st, err, "detection stage failed")
 		}
 		kept := err == nil
 		if !kept {
-			if rbErr := sp.Rollback(ctx); rbErr != nil {
-				r.p.log.Error().Err(rbErr).Str("stage", st.Name()).Msg("detection savepoint rollback failed")
-			}
+			r.discard(ctx, tx, st)
 		}
 		r.results = append(r.results, stageResult{pending: pending, rowsKept: kept})
 	}
 	return nil
+}
+
+// discard undoes a failed stage's writes and clears the savepoint so the next
+// stage can reuse the name.
+func (r *Run) discard(ctx context.Context, tx pgx.Tx, st Stage) {
+	if _, err := tx.Exec(ctx, "ROLLBACK TO SAVEPOINT "+savepointName); err != nil {
+		r.p.log.Error().Err(err).Str("stage", st.Name()).Msg("detection savepoint rollback failed")
+	}
+	if _, err := tx.Exec(ctx, "RELEASE SAVEPOINT "+savepointName); err != nil {
+		r.p.log.Error().Err(err).Str("stage", st.Name()).Msg("detection savepoint cleanup failed")
+	}
 }
 
 func (r *Run) fail(st Stage, err error, msg string) {
