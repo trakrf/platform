@@ -86,6 +86,9 @@ type Capabilities struct {
 	TxPower         TxPowerCap `json:"tx_power"`
 	Supports        []string   `json:"supports"`
 	Unsupported     []string   `json:"unsupported"`
+	// Daemon is the on-reader daemon's own version and last update result. It
+	// is filled in by the daemon, not the reader adapter.
+	Daemon *DaemonInfo `json:"daemon,omitempty"`
 }
 
 // Status is the response to Reader.GetStatus and the status-topic payload.
