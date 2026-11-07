@@ -10,11 +10,15 @@
 // epc). Membership is implicit — only membership-passing reads ever reach
 // Evaluate. Firing writes an alarm_events row and drives the device; both are
 // best-effort and never block ingestion or the authoritative asset_scans write.
+// Evaluate does both after the scan commits, and writes no notification trigger.
+// Stage is the path for the MQTT subscriber: it writes the alarm and its trigger
+// inside the scan transaction and drives after commit.
 //
 // Deciding and driving are separate steps: decide changes only in-memory state
 // and returns fires, and driveFire makes the network calls. A caller that decides
 // inside a transaction can therefore drive after commit, or undo the fires if the
-// transaction rolls back.
+// transaction rolls back; Stage does this. decide's lookups still run while that
+// transaction is open, so it bounds them with lookupTimeout.
 package geofence
 
 import (
@@ -29,6 +33,11 @@ import (
 	"github.com/trakrf/platform/backend/internal/readerrpc"
 	"github.com/trakrf/platform/backend/internal/storage"
 )
+
+// lookupTimeout bounds each pooled lookup in decide. decide can run inside the
+// scan transaction, so a stalled lookup would hold it open and spend the
+// message's shared time limit, which would lose the scan.
+const lookupTimeout = 2 * time.Second
 
 // engineStore is the storage surface the engine needs; *storage.Storage
 // satisfies it. Narrowed so unit tests can inject a fake.
@@ -160,17 +169,22 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 
 // decide applies each read's output devices and modes and returns the reads that
 // fired, one fire per read. A read that drives an output, or that a busy output
-// dropped, fires; presence reads fire only on the 0->1 edge. It updates latch, pulse and presence state but drives nothing and writes
-// no alarm. Its org-default and device lookups each run on their own pooled
-// connection, not on a caller's transaction: called inside one, they see none of
-// its uncommitted writes, and it stays open and holds its connection while they
-// wait for theirs.
+// dropped, fires; presence reads fire only on the 0->1 edge. It updates latch,
+// pulse and presence state but drives nothing and writes no alarm.
+//
+// Its lookups do not use a caller's transaction: each runs on its own pooled
+// connection, so called inside a transaction they see none of its uncommitted
+// writes, and that transaction stays open while they wait. Each lookup is bounded
+// by lookupTimeout, which caps that wait at one timeout for the org defaults plus
+// one per distinct location in the message. ctx itself gets no timeout here, so
+// cancelling a lookup never reaches a query on the caller's transaction, which
+// pgx would answer by closing the connection and losing the transaction.
 func (e *Engine) decide(ctx context.Context, orgID int, receivedAt time.Time, reads []storage.ResolvedRead) (fires []fire, refreshes []outputdevice.OutputDevice) {
 	// Org-default tuning tier (TRA-955). Fetched once per message — cheaper than
 	// the per-read device lookup below, and runtime-fresh (UI edits take effect on
 	// the next message, no restart). Best-effort: a lookup error falls back to the
 	// system/code defaults rather than dropping the message.
-	orgDefaults, err := e.store.GetOrgGeofenceDefaults(ctx, orgID)
+	orgDefaults, err := e.orgDefaults(ctx, orgID)
 	if err != nil {
 		e.log.Warn().Err(err).Int("org_id", orgID).Msg("org geofence defaults lookup failed; using system defaults")
 		orgDefaults = organization.GeofenceDefaults{}
@@ -182,6 +196,7 @@ func (e *Engine) decide(ctx context.Context, orgID int, receivedAt time.Time, re
 	// every present tag.
 	inGrace := e.withinStartupGrace(receivedAt)
 
+	located := map[int]deviceLookup{}
 	for _, rd := range reads {
 		metricEvaluated.Inc()
 
@@ -198,15 +213,17 @@ func (e *Engine) decide(ctx context.Context, orgID int, receivedAt time.Time, re
 			continue
 		}
 
-		devices, err := e.store.ListOutputDevicesForLocation(ctx, orgID, *rd.LocationID)
-		if err != nil {
-			e.log.Error().Err(err).Int("org_id", orgID).Int("location_id", *rd.LocationID).Msg("output device lookup failed")
-			metricFireErrors.Inc()
+		lookup, done := located[*rd.LocationID]
+		if !done {
+			lookup = e.devicesAt(ctx, orgID, *rd.LocationID)
+			located[*rd.LocationID] = lookup
+		}
+		if !lookup.ok {
 			continue
 		}
 
 		f := fire{read: rd, receivedAt: receivedAt}
-		for _, dev := range devices {
+		for _, dev := range lookup.devices {
 			// Collapse the three tuning tiers (system/code -> org default ->
 			// per-output override) for this device (TRA-955).
 			tuning := Resolve(e.cfg, orgDefaults, dev)
@@ -283,8 +300,37 @@ func (e *Engine) decide(ctx context.Context, orgID int, receivedAt time.Time, re
 	return fires, refreshes
 }
 
-// driveFire turns on every output of a fire; a fire with no drives does nothing. Best-effort: a failed drive is
-// logged and metriced by drive, and the other outputs still drive.
+// orgDefaults reads the org tuning tier, bounded by lookupTimeout.
+func (e *Engine) orgDefaults(ctx context.Context, orgID int) (organization.GeofenceDefaults, error) {
+	lookupCtx, cancel := context.WithTimeout(ctx, lookupTimeout)
+	defer cancel()
+	return e.store.GetOrgGeofenceDefaults(lookupCtx, orgID)
+}
+
+// deviceLookup is one location's outputs for the length of a decide call. A failed
+// lookup is kept too, so a stall costs one timeout per location, not one per read.
+type deviceLookup struct {
+	devices []outputdevice.OutputDevice
+	ok      bool
+}
+
+// devicesAt lists a location's outputs, bounded by lookupTimeout. A failure is
+// logged and metriced here and leaves ok false.
+func (e *Engine) devicesAt(ctx context.Context, orgID, locationID int) deviceLookup {
+	lookupCtx, cancel := context.WithTimeout(ctx, lookupTimeout)
+	defer cancel()
+	devices, err := e.store.ListOutputDevicesForLocation(lookupCtx, orgID, locationID)
+	if err != nil {
+		e.log.Error().Err(err).Int("org_id", orgID).Int("location_id", locationID).Msg("output device lookup failed")
+		metricFireErrors.Inc()
+		return deviceLookup{}
+	}
+	return deviceLookup{devices: devices, ok: true}
+}
+
+// driveFire turns on every output of a fire; a fire with no drives does nothing.
+// Best-effort: a failed drive is logged and metriced by drive, and the other
+// outputs still drive.
 func (e *Engine) driveFire(ctx context.Context, orgID int, f fire) {
 	for _, d := range f.drives {
 		ok := e.drive(ctx, orgID, d.dev, true, d.offAfter)
@@ -347,13 +393,17 @@ func (e *Engine) recordFire(ctx context.Context, orgID int, f fire, tagScanID in
 		e.log.Error().Err(err).Int("org_id", orgID).Str("epc", rd.EPC).Msg("alarm_events write failed")
 		metricEventWriteErrors.Inc()
 	}
+	e.noteFired(orgID, f)
+}
 
+// noteFired logs and metrics a fire.
+func (e *Engine) noteFired(orgID int, f fire) {
 	metricFired.Inc()
 	e.log.Info().
 		Int("org_id", orgID).
-		Int("asset_id", rd.AssetID).
-		Int("scan_point_id", rd.ScanPointID).
-		Str("epc", rd.EPC).
-		Int("rssi", rd.RSSI).
+		Int("asset_id", f.read.AssetID).
+		Int("scan_point_id", f.read.ScanPointID).
+		Str("epc", f.read.EPC).
+		Int("rssi", f.read.RSSI).
 		Msg("geofence rule fired")
 }
