@@ -31,23 +31,25 @@ type notificationDeliveryDeps struct {
 // newNotificationDelivery builds the inserter, routing metrics, one set of
 // outbox metrics (shared by the planner and the runtime, since a second
 // registration on the same registry fails), the planner, the dispatch adapter
-// and the runtime with the trigger worker registered. It starts nothing.
-func newNotificationDelivery(d notificationDeliveryDeps) (*outbox.Runtime, error) {
+// and the runtime with the trigger worker registered. It starts nothing. The
+// returned inserter is the insert-only client, for queueing triggers from
+// detection.
+func newNotificationDelivery(d notificationDeliveryDeps) (*outbox.Runtime, outbox.JobInserter, error) {
 	templates, err := routing.NewTemplateRenderer()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	jobInserter, err := outbox.NewInserter(d.Pool)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	planningMetrics, err := routing.NewMetrics(d.Registry)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	outboxMetrics, err := outbox.NewMetrics(d.Registry)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	planner, err := routing.NewDeliveryPlanner(routing.Deps{
 		Store:         d.Store,
@@ -59,7 +61,7 @@ func newNotificationDelivery(d notificationDeliveryDeps) (*outbox.Runtime, error
 		Log:           d.Log,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	adapter, err := dispatch.New(dispatch.Deps{
 		Email:        d.Email,
@@ -68,9 +70,13 @@ func newNotificationDelivery(d notificationDeliveryDeps) (*outbox.Runtime, error
 		Log:          d.Log,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return outbox.NewRuntime(d.Pool, adapter, d.Store, outboxMetrics, routing.RegisterTriggerWorker(planner))
+	runtime, err := outbox.NewRuntime(d.Pool, adapter, d.Store, outboxMetrics, routing.RegisterTriggerWorker(planner))
+	if err != nil {
+		return nil, nil, err
+	}
+	return runtime, jobInserter, nil
 }
 
 // stopOnce returns a func that calls stop on its first call only and reports

@@ -37,7 +37,7 @@ func deliveryDeps(db *testutil.TestDB, reg prometheus.Registerer) notificationDe
 func TestNotificationDelivery_BootsWithOneSetOfOutboxMetrics(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	reg := prometheus.NewRegistry()
-	rt, err := newNotificationDelivery(deliveryDeps(db, reg))
+	rt, _, err := newNotificationDelivery(deliveryDeps(db, reg))
 	require.NoError(t, err)
 	require.NoError(t, rt.Start(context.Background()))
 	stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -50,7 +50,7 @@ func TestNotificationDelivery_BootsWithOneSetOfOutboxMetrics(t *testing.T) {
 
 func TestNotificationDelivery_SurvivesStartContextCancel(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
-	rt, err := newNotificationDelivery(deliveryDeps(db, prometheus.NewRegistry()))
+	rt, _, err := newNotificationDelivery(deliveryDeps(db, prometheus.NewRegistry()))
 	require.NoError(t, err)
 	startCtx, cancelStart := context.WithCancel(context.Background())
 	require.NoError(t, rt.Start(context.WithoutCancel(startCtx)))
@@ -64,7 +64,7 @@ func TestNotificationDelivery_BuildsWithEmailAndNoSMS(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	d := deliveryDeps(db, prometheus.NewRegistry())
 	d.Email = fakeEmailSender{}
-	rt, err := newNotificationDelivery(d)
+	rt, _, err := newNotificationDelivery(d)
 	require.NoError(t, err)
 	require.NotNil(t, rt)
 	require.NotNil(t, rt.Client)
@@ -73,9 +73,9 @@ func TestNotificationDelivery_BuildsWithEmailAndNoSMS(t *testing.T) {
 func TestNotificationDelivery_SecondBuildOnSameRegistryFails(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	reg := prometheus.NewRegistry()
-	_, err := newNotificationDelivery(deliveryDeps(db, reg))
+	_, _, err := newNotificationDelivery(deliveryDeps(db, reg))
 	require.NoError(t, err)
-	_, err = newNotificationDelivery(deliveryDeps(db, reg))
+	_, _, err = newNotificationDelivery(deliveryDeps(db, reg))
 	require.Error(t, err, "a second build on the same registry must fail")
 }
 
@@ -83,7 +83,7 @@ func TestNotificationDelivery_RuntimeRunsTriggerWorker(t *testing.T) {
 	ctx := context.Background()
 	db := testutil.SetupTestDBFull(t)
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
-	rt, err := newNotificationDelivery(deliveryDeps(db, prometheus.NewRegistry()))
+	rt, inserter, err := newNotificationDelivery(deliveryDeps(db, prometheus.NewRegistry()))
 	require.NoError(t, err)
 	require.NoError(t, rt.Start(context.Background()))
 	t.Cleanup(func() {
@@ -92,8 +92,6 @@ func TestNotificationDelivery_RuntimeRunsTriggerWorker(t *testing.T) {
 		_ = rt.Stop(stopCtx)
 	})
 
-	inserter, err := outbox.NewInserter(db.AppPool)
-	require.NoError(t, err)
 	// A real alarm with no subscribers: the planner loads it and queues nothing.
 	asset := testutil.CreateTestAsset(t, db.AdminPool, orgID, "ASSET-SERVE-RUNTIME")
 	topic := "trakrf.id/serve-runtime/reads"
