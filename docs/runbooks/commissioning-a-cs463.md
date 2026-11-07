@@ -10,10 +10,11 @@ the command that ran. The daemon's own contract and golden config live in
 [`deploy/edge/mqtt-rpc/README.md`](../../deploy/edge/mqtt-rpc/README.md). This
 page links to them rather than restating them.
 
-**The order matters.** Register the reader in the platform (§6) before you build
-its CloudServer (§7), because registration decides the MQTT topic. Build the
-CloudServer before you install the daemon (§8), because the daemon exits without
-it.
+**The order matters.** Switch to DHCP right after SSH and the clock (§3), so
+later checks run on the address the reader ships with. Register it in the
+platform (§6) before building its CloudServer (§7), because registration decides
+the topic; build the CloudServer before installing the daemon (§8), which exits
+without it.
 
 ---
 
@@ -81,6 +82,7 @@ With `READER_PASS=csl` (the factory default, about to change):
 | MAC, IP | `getNetworkConfig` | Ethernet MAC carries the CSL OUI `00:05:7B`; `dhcpmode="0"` (static) |
 | Clock | `getDateTime` | `UTCDateTime` is correct (see §3) |
 | Hostname | `ssh … hostname` | `csl-` + the last four MAC octets |
+| Link | `ssh … cat /sys/class/net/eth0/speed` | **`1000`**, and no `Link is Down` in `journalctl -b -k` after boot. The PHY is gigabit, and a cable with one bad pair drops it to 10 Mbps after a few up/down cycles. Swap the cable before suspecting the reader: a bad cable looks exactly like a bad port |
 
 **Do not flash firmware as part of commissioning.** A CSL reflash wipes `/opt`,
 where the daemon lives, and the adapter works around specific `1.3.23`
@@ -135,7 +137,7 @@ working), add the daemon's `trakrf` user (§8), and an operator account if asked
 
 ---
 
-## 3. SSH access and the clock
+## 3. SSH, the clock and DHCP
 
 **SSH.** Reach the reader through the router and give it an alias, so the
 installer's `install.sh <alias>` works unchanged:
@@ -145,7 +147,11 @@ Host cs463-xxyyzz
     HostName 192.168.25.160
     User root
     ProxyJump <router>
+    HostKeyAlias cs463-xxyyzz
 ```
+
+`HostKeyAlias` keys the host key to the reader, not the address: every factory
+reader is `192.168.25.160`, and the address changes below.
 
 Install the operator's public key in `/home/root/.ssh/authorized_keys` (root's
 home on this image is `/home/root`), then confirm `ssh -o BatchMode=yes
@@ -163,6 +169,35 @@ wrong clock, and a fresh boot reports 2019 until NTP answers.
 `GMT+08:00`). It only changes the vendor UI's display: the OS clock is UTC and
 read timestamps are epoch-microseconds UTC, and localisation belongs in the
 platform. This build's `/API` ignores the `dst` flag anyway.
+
+### Switch Ethernet to DHCP now
+
+**Ship on DHCP, never on the factory static address.** `192.168.25.160` will
+not exist on a customer network, and a reader that can't reach anything can only
+be recovered on site. DHCP at least has a chance of working out of the box.
+
+Ask the site's IT for, in order: DHCP with a reservation for the reader's MAC,
+plain DHCP, or (only if they insist) a static address with gateway and DNS.
+Outbound **TCP 8883** (broker) and **UDP 123** (NTP) must be allowed. If it goes
+silent on site, send them the [network check](cs463-network-check.md).
+
+Switch while the reader is still on your bench router, so you can watch it move:
+
+1. On the bench router, reserve an address for the reader's MAC, so you know
+   where it will land (on OpenWrt: a `dhcp` `host` entry with `mac` and `ip`).
+2. Run the switch **on the reader against `localhost`**, so the request does
+   not depend on the address it is about to drop:
+
+   ```sh
+   ssh cs463-xxyyzz '… curl -s "http://localhost/API?session_id=$S&command=setNetworkConfig&type=ethernet&dhcpmode=1"'
+   ```
+
+   It takes effect immediately; no reboot. Your SSH session to the old address
+   hangs, which is expected.
+3. Find the lease on the router (`/tmp/dhcp.leases` on OpenWrt), and point the
+   SSH alias and any tunnel at the new address.
+4. Confirm `ssh cs463-xxyyzz true` on the new address, and re-run the link check
+   (§1). Switching later, under a running daemon, costs one `warn` and a reconnect.
 
 ---
 
@@ -441,7 +476,7 @@ same path; it shows "Reader did not respond" until this works.
 
 `systemctl show mqtt-rpcd -p NRestarts` is `0`. The journal has `golden-config
 reconcile complete`, `connected; rpc subscribe…`, no `"level":"error"`, and no
-`"level":"warn"` you can't account for (a network change, §11, leaves one).
+`"level":"warn"` you can't account for.
 
 ## 10. Soak
 
@@ -459,41 +494,6 @@ then compare in the morning:
 
 ## 11. Before it ships
 
-### Switch Ethernet to DHCP
-
-**Ship on DHCP, never on the factory static address.** `192.168.25.160` will
-not exist on a customer network, and a reader that can't reach anything can
-only be recovered by someone on site. DHCP at least has a chance of working out
-of the box.
-
-Ask the site's IT for, in order of preference: DHCP with a reservation for the
-reader's MAC, plain DHCP, or (only if they insist) a static address with
-gateway, DNS and optionally their NTP server. Either way, outbound **TCP 8883**
-(broker) and **UDP 123** (NTP) must be allowed.
-If it goes silent on site, send them the [network check](cs463-network-check.md).
-
-Switch while the reader is still on your bench router, so you can watch it move:
-
-1. On the bench router, reserve an address for the reader's MAC, so you know
-   where it will land (on OpenWrt: a `dhcp` `host` entry with `mac` and `ip`).
-2. Run the switch **on the reader against `localhost`**, so the request does
-   not depend on the address it is about to drop:
-
-   ```sh
-   ssh cs463-xxyyzz '… curl -s "http://localhost/API?session_id=$S&command=setNetworkConfig&type=ethernet&dhcpmode=1"'
-   ```
-
-   It takes effect immediately; no reboot. Your SSH session to the old address
-   hangs, which is expected.
-3. Find the lease on the router (`/tmp/dhcp.leases` on OpenWrt), and point the
-   SSH alias and any tunnel at the new address.
-4. Re-verify (§9). Both broker connections should be back from the new address
-   (`netstat -tn | grep 8883` shows two); the daemon logs one `warn` for the
-   socket that died with the old address and reconnects within seconds. Reads
-   resumed after a 9-second gap when this was done.
-
-### Final credential check
-
-Re-run the table in §2: `csl` must be refused on the `/API`, the web form and
-SSH. `listUsers` shows only `root`, `trakrf` and any operator account, and the
-password manager holds every password.
+Re-run the §1 link check (still `1000`, no new drops) and the §2 table (`csl`
+refused on the `/API`, the web form and SSH). `listUsers` shows only `root`,
+`trakrf` and any operator account, and the password manager holds every password.
