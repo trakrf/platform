@@ -110,6 +110,45 @@ func TestFireUndo_ReleasesPulse(t *testing.T) {
 	}
 }
 
+func TestFireUndo_RestoresPulseDroppedTagInSameMessage(t *testing.T) {
+	s := &fakeStore{devices: []outputdevice.OutputDevice{dev(11, pulse5s)}}
+	e := newTestEngine(Config{RSSIThreshold: -65, LatchTTL: time.Minute}, s, &fakeDriver{})
+	defer e.Stop()
+
+	at := time.Unix(1000, 0)
+	fires := e.decide(context.Background(), 42, at, reads(read("EPC1", -50), read("EPC2", -50)))
+	if len(fires) != 1 || fires[0].read.EPC != "EPC1" {
+		t.Fatalf("EPC1 must fire and EPC2 must be dropped by its pulse, got %+v", fires)
+	}
+	fires[0].undo()
+
+	if got := e.decide(context.Background(), 42, at, reads(read("EPC2", -50))); len(got) != 1 {
+		t.Fatalf("with the pulse undone the dropped tag must fire, got %d", len(got))
+	}
+}
+
+func TestFireUndo_KeepsDropFromEarlierPulse(t *testing.T) {
+	s := &fakeStore{devices: []outputdevice.OutputDevice{dev(11, pulse5s), dev(12, nil)}}
+	e := newTestEngine(Config{RSSIThreshold: -65, LatchTTL: time.Minute}, s, &fakeDriver{})
+	defer e.Stop()
+
+	// EPC1's pulse on output 11 stands. EPC2 arrives in a later message, so it is
+	// dropped on 11 and fires only on 12.
+	at := time.Unix(1000, 0)
+	e.decide(context.Background(), 42, at, reads(read("EPC1", -50)))
+	fires := e.decide(context.Background(), 42, at.Add(time.Second), reads(read("EPC2", -50)))
+	if len(fires) != 1 || len(fires[0].drives) != 1 || fires[0].drives[0].dev.ID != 12 {
+		t.Fatalf("EPC2 must fire on output 12 only, got %+v", fires)
+	}
+	fires[0].undo()
+
+	// Past the pulse, output 12 fires again but the drop on 11 is left in place.
+	again := e.decide(context.Background(), 42, at.Add(6*time.Second), reads(read("EPC2", -50)))
+	if len(again) != 1 || len(again[0].drives) != 1 || again[0].drives[0].dev.ID != 12 {
+		t.Fatalf("a drop by an earlier pulse must stay latched, got %+v", again)
+	}
+}
+
 func TestFireUndo_PresenceForgetsOutput(t *testing.T) {
 	s := &fakeStore{devices: []outputdevice.OutputDevice{dev(11, map[string]any{"mode": "presence"})}}
 	d := &fakeDriver{}

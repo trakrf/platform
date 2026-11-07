@@ -129,8 +129,10 @@ type fire struct {
 }
 
 // undo restores the latch, pulse and presence state this fire changed, newest
-// first, so the next read fires again. Reads that only refreshed the latch have
-// no fire and are not undone: they are still true sightings.
+// first, so the next read fires again. That includes tags this fire's pulse
+// dropped in the same message, which would otherwise stay latched with no fire to
+// show for it. Reads that only refreshed the latch are not undone: they are still
+// true sightings.
 func (f fire) undo() {
 	for i := len(f.undos) - 1; i >= 0; i-- {
 		f.undos[i]()
@@ -151,7 +153,10 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 
 // decide applies each read's output devices and modes and returns the reads that
 // fired. It updates latch, pulse and presence state but drives nothing and writes
-// no alarm, so it is safe to call inside a transaction.
+// no alarm. Its org-default and device lookups each run on their own pooled
+// connection, not on a caller's transaction: called inside one, they see none of
+// its uncommitted writes, and it stays open and holds its connection while they
+// wait for theirs.
 func (e *Engine) decide(ctx context.Context, orgID int, receivedAt time.Time, reads []storage.ResolvedRead) []fire {
 	// Org-default tuning tier (TRA-955). Fetched once per message — cheaper than
 	// the per-read device lookup below, and runtime-fresh (UI edits take effect on
@@ -170,6 +175,11 @@ func (e *Engine) decide(ctx context.Context, orgID int, receivedAt time.Time, re
 	inGrace := e.withinStartupGrace(receivedAt)
 
 	var fires []fire
+	// Per output, the latch restores of tags dropped by a pulse this message
+	// started. The fire holding the pulse runs them, so undoing it frees those tags
+	// too. A pulse from an earlier message has no entry: it stands, and so do its
+	// drops.
+	pulseDrops := map[int]*[]func(){}
 	for _, rd := range reads {
 		metricEvaluated.Inc()
 
@@ -244,10 +254,18 @@ func (e *Engine) decide(ctx context.Context, orgID int, receivedAt time.Time, re
 			pulse := time.Duration(tuning.AutoOffSeconds) * time.Second
 			if !e.pulses.tryStart(orgID, dev.ID, receivedAt, pulse) {
 				metricSuppressed.WithLabelValues("pulse_active").Inc()
+				if drops := pulseDrops[dev.ID]; drops != nil {
+					*drops = append(*drops, func() { e.latch.restore(key, lastSeen, seen) })
+				}
 				continue
 			}
+			drops := &[]func(){}
+			pulseDrops[dev.ID] = drops
 			f.drives = append(f.drives, fireDrive{dev: dev, offAfter: tuning.AutoOffSeconds, pulse: pulse})
 			f.undos = append(f.undos, func() {
+				for _, restore := range *drops {
+					restore()
+				}
 				e.latch.restore(key, lastSeen, seen)
 				e.pulses.release(orgID, dev.ID, receivedAt, pulse)
 			})
