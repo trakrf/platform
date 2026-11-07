@@ -1,0 +1,148 @@
+#!/bin/sh
+# mqtt-rpcd-guard — rollback guard for mqtt-rpcd remote updates.
+#
+# This script is the stable half of the updater. mqtt-rpcd replaces itself over
+# the air; this script is installed only by install.sh and is NEVER updated over
+# the air, so a broken daemon build can never break its own rollback.
+#
+# The daemon arms it by writing update/pending (target=, from=). It disarms it by
+# committing, which it does only after answering an RPC through the broker.
+#
+#   start              ExecStartPre of mqtt-rpcd.service. Counts unit starts
+#                      while an update is pending; past GUARD_MAX_STARTS the new
+#                      build is crash-looping, so the link goes back to `from`
+#                      before systemd execs it.
+#   tick               Run by mqtt-rpcd-guard.timer. Counts ticks while pending;
+#                      at GUARD_MAX_TICKS the new build never committed (never
+#                      reached the broker), so roll back and restart.
+#   list               Print the installed versions; `*` marks the active one.
+#   rollback <version> Operator recovery over SSH: point the link at <version>,
+#                      drop any pending update, restart.
+#
+# State format is shared with mqtt-rpc/internal/update/state.go — change both.
+set -u
+
+DIR="${GUARD_DIR:-/opt/trakrf}"
+SYSTEMCTL="${GUARD_SYSTEMCTL:-systemctl}"
+MAX_STARTS="${GUARD_MAX_STARTS:-5}"
+MAX_TICKS="${GUARD_MAX_TICKS:-4}"
+SYNC="${GUARD_SYNC:-sync}"
+
+STATE="$DIR/update"
+PENDING="$STATE/pending"
+LINK="$DIR/mqtt-rpcd"
+
+log() { echo "mqtt-rpcd-guard: $*" >&2; }
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+field() { sed -n "s/^$1=//p" "$2" 2>/dev/null | head -n 1; }
+
+valid_version() {
+	case "$1" in
+	'' | . | .. | *[!A-Za-z0-9._+-]*) return 1 ;;
+	esac
+	[ "${#1}" -le 64 ]
+}
+
+count() {
+	n=$(cat "$1" 2>/dev/null)
+	case "$n" in '' | *[!0-9]*) n=0 ;; esac
+	echo "$n"
+}
+
+bump() {
+	n=$(($(count "$1") + 1))
+	echo "$n" >"$1.tmp" && mv -f "$1.tmp" "$1"
+	echo "$n"
+}
+
+active_version() {
+	t=$(readlink "$LINK" 2>/dev/null) || return 1
+	echo "${t#versions/mqtt-rpcd-}"
+}
+
+# point_at <version>: atomically repoint the active-version symlink.
+point_at() {
+	rm -f "$DIR/.mqtt-rpcd.link"
+	ln -s "versions/mqtt-rpcd-$1" "$DIR/.mqtt-rpcd.link" && mv -f "$DIR/.mqtt-rpcd.link" "$LINK"
+}
+
+# write_last <state> <target> <reason>
+write_last() {
+	mkdir -p "$STATE"
+	printf 'state=%s\ntarget=%s\nreason=%s\nat=%s\n' "$1" "$2" "$3" "$(now)" >"$STATE/last.tmp" &&
+		mv -f "$STATE/last.tmp" "$STATE/last"
+}
+
+clear_counters() { rm -f "$STATE/starts" "$STATE/ticks"; }
+
+# auto_rollback <reason>: claim the pending update and point back at `from`.
+# Returns non-zero if there was nothing to claim (the daemon committed first).
+auto_rollback() {
+	claim="$STATE/rollback.claim"
+	mv "$PENDING" "$claim" 2>/dev/null || return 1
+	target=$(field target "$claim")
+	from=$(field from "$claim")
+	if valid_version "$from" && [ -f "$DIR/versions/mqtt-rpcd-$from" ]; then
+		point_at "$from"
+		write_last rolled_back "$target" "$1"
+		log "rolled back $target -> $from ($1)"
+	else
+		write_last failed "$target" "${1}_no_from"
+		log "cannot roll back $target: version '$from' is not installed ($1)"
+	fi
+	rm -f "$claim"
+	clear_counters
+	"$SYNC"
+	return 0
+}
+
+mode="${1:-}"
+case "$mode" in
+start)
+	[ -f "$PENDING" ] || exit 0
+	n=$(bump "$STATE/starts")
+	if [ "$n" -gt "$MAX_STARTS" ]; then
+		auto_rollback crash_loop || true
+	fi
+	exit 0
+	;;
+tick)
+	[ -f "$PENDING" ] || exit 0
+	n=$(bump "$STATE/ticks")
+	if [ "$n" -ge "$MAX_TICKS" ]; then
+		if auto_rollback no_commit && [ -f "$STATE/last" ] && [ "$(field state "$STATE/last")" = rolled_back ]; then
+			"$SYSTEMCTL" restart mqtt-rpcd
+		fi
+	fi
+	exit 0
+	;;
+list)
+	active=$(active_version || echo "")
+	for f in "$DIR"/versions/mqtt-rpcd-*; do
+		[ -f "$f" ] || continue
+		v="${f##*/mqtt-rpcd-}"
+		if [ "$v" = "$active" ]; then echo "* $v"; else echo "  $v"; fi
+	done
+	exit 0
+	;;
+rollback)
+	v="${2:-}"
+	if ! valid_version "$v" || [ ! -f "$DIR/versions/mqtt-rpcd-$v" ]; then
+		log "version '$v' is not installed; run: $0 list"
+		exit 1
+	fi
+	was=$(active_version || echo unknown)
+	rm -f "$PENDING"
+	clear_counters
+	point_at "$v" || exit 1
+	write_last rolled_back "$was" manual
+	"$SYNC"
+	log "rolled back $was -> $v (manual)"
+	"$SYSTEMCTL" restart mqtt-rpcd
+	exit 0
+	;;
+*)
+	echo "usage: $0 start|tick|list|rollback <version>" >&2
+	exit 2
+	;;
+esac
