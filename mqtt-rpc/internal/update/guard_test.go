@@ -82,6 +82,8 @@ func TestGuard_StartCountsAndRollsBackOnCrashLoop(t *testing.T) {
 	assert.Equal(t, "v2", last.Target)
 	assert.Equal(t, "crash_loop", last.Error)
 	assert.NoFileExists(t, filepath.Join(l.StateDir(), "starts"))
+	assert.NoFileExists(t, l.VersionPath("v2"), "a build that failed probation is removed: it must not take a retention slot or be a rollback target")
+	assert.FileExists(t, l.VersionPath("v1"))
 }
 
 func TestGuard_TickRollsBackWhenNoCommitAndRestarts(t *testing.T) {
@@ -99,6 +101,7 @@ func TestGuard_TickRollsBackWhenNoCommitAndRestarts(t *testing.T) {
 	assert.Equal(t, "restart mqtt-rpcd\n", calls)
 	last, _ := ReadLast(l)
 	assert.Equal(t, "no_commit", last.Error)
+	assert.NoFileExists(t, l.VersionPath("v2"))
 }
 
 func TestGuard_MissingFromClearsWithoutSwap(t *testing.T) {
@@ -137,6 +140,7 @@ func TestGuard_ManualRollbackToANamedVersion(t *testing.T) {
 	assert.Equal(t, readerrpc.UpdateStateRolledBack, last.State)
 	assert.Equal(t, "v3", last.Target, "target is the version rolled away from")
 	assert.Equal(t, "manual", last.Error)
+	assert.FileExists(t, l.VersionPath("v3"), "a manual rollback keeps the version, so the operator can go back to it")
 }
 
 func TestGuard_ManualRollbackClearsAPendingUpdate(t *testing.T) {

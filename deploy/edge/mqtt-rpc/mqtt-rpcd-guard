@@ -85,7 +85,12 @@ auto_rollback() {
 	if valid_version "$from" && [ -f "$DIR/versions/mqtt-rpcd-$from" ]; then
 		point_at "$from"
 		write_last rolled_back "$target" "$1"
-		log "rolled back $target -> $from ($1)"
+		# A build that failed probation is never a rollback target and must not
+		# push a good version out of retention.
+		if valid_version "$target" && [ "$target" != "$from" ]; then
+			rm -f "$DIR/versions/mqtt-rpcd-$target"
+		fi
+		log "rolled back $target -> $from ($1); removed $target"
 	else
 		write_last failed "$target" "${1}_no_from"
 		log "cannot roll back $target: version '$from' is not installed ($1)"
