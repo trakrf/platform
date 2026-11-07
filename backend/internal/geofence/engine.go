@@ -10,6 +10,11 @@
 // epc). Membership is implicit — only membership-passing reads ever reach
 // Evaluate. Firing writes an alarm_events row and drives the device; both are
 // best-effort and never block ingestion or the authoritative asset_scans write.
+//
+// Deciding and driving are separate steps: decide changes only in-memory state
+// and returns fires, and driveFire makes the network calls. A caller that decides
+// inside a transaction can therefore drive after commit, or undo the fires if the
+// transaction rolls back.
 package geofence
 
 import (
@@ -106,13 +111,57 @@ func (e *Engine) withinStartupGrace(receivedAt time.Time) bool {
 	return now < e.graceUntil.Load()
 }
 
+// fireDrive is one output a fire turns on.
+type fireDrive struct {
+	dev      outputdevice.OutputDevice
+	offAfter int           // device-side auto-off handed to the driver; 0 for presence
+	pulse    time.Duration // pulse-guard window this drive marked; 0 if it marked none
+}
+
+// fire is a read that decide resolved to an alarm. It holds the read to record,
+// the drives to make, and the steps that take back the in-memory state the
+// decision changed. A caller either drives a fire or undoes it. A fire may have
+// no drives: a read dropped because its output is still pulsing is still an
+// alarm, and sets dropped.
+type fire struct {
+	read       storage.ResolvedRead
+	receivedAt time.Time
+	drives     []fireDrive
+	dropped    bool // an output was busy pulsing, so this read was not driven on it
+	undos      []func()
+}
+
+// undo restores the latch, pulse and presence state this fire changed, newest
+// first, so the next read fires again. A fire undoes only its own state: a read
+// dropped by a busy output restores its own latch and does not touch the pulse
+// that dropped it. Reads that only refreshed the latch are not undone: they are
+// still true sightings.
+func (f fire) undo() {
+	for i := len(f.undos) - 1; i >= 0; i-- {
+		f.undos[i]()
+	}
+}
+
 // Evaluate runs the rule decision over every membership-passing read of one MQTT
-// message. It never returns an error: side effects are best-effort and failures
-// are logged + metriced so a slow/broken output path can never lose a scan or
-// kill ingestion. For each read it resolves the location's active output devices
-// and applies each device's mode. receivedAt (server time) is both the
-// dedup/presence timestamp and the alarm's FiredAt.
+// message, then drives and records each fire. It never returns an error: side
+// effects are best-effort and failures are logged + metriced so a slow/broken
+// output path can never lose a scan or kill ingestion. receivedAt (server time) is
+// both the dedup/presence timestamp and the alarm's FiredAt.
 func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, receivedAt time.Time, reads []storage.ResolvedRead) {
+	for _, f := range e.decide(ctx, orgID, receivedAt, reads) {
+		e.driveFire(ctx, orgID, f)
+		e.recordFire(ctx, orgID, f, tagScanID, receivedAt)
+	}
+}
+
+// decide applies each read's output devices and modes and returns the reads that
+// fired, one fire per read. A read that drives an output, or that a busy output
+// dropped, fires; presence reads fire only on the 0->1 edge. It updates latch, pulse and presence state but drives nothing and writes
+// no alarm. Its org-default and device lookups each run on their own pooled
+// connection, not on a caller's transaction: called inside one, they see none of
+// its uncommitted writes, and it stays open and holds its connection while they
+// wait for theirs.
+func (e *Engine) decide(ctx context.Context, orgID int, receivedAt time.Time, reads []storage.ResolvedRead) []fire {
 	// Org-default tuning tier (TRA-955). Fetched once per message — cheaper than
 	// the per-read device lookup below, and runtime-fresh (UI edits take effect on
 	// the next message, no restart). Best-effort: a lookup error falls back to the
@@ -129,6 +178,7 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 	// every present tag.
 	inGrace := e.withinStartupGrace(receivedAt)
 
+	var fires []fire
 	for _, rd := range reads {
 		metricEvaluated.Inc()
 
@@ -152,7 +202,7 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 			continue
 		}
 
-		firedAny := false
+		f := fire{read: rd, receivedAt: receivedAt}
 		for _, dev := range devices {
 			// Collapse the three tuning tiers (system/code -> org default ->
 			// per-output override) for this device (TRA-955).
@@ -176,14 +226,17 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 						metricSuppressed.WithLabelValues("startup_grace").Inc()
 						continue
 					}
-					firedAny = true
-					e.drive(ctx, orgID, dev, true, 0)
+					f.drives = append(f.drives, fireDrive{dev: dev})
+					f.undos = append(f.undos, func() { e.presence.forget(orgID, dev.ID) })
 				}
 				continue
 			}
 
-			// Egress: fire ON, then latch for the re-arm window.
-			if !e.latch.admit(latchKey(orgID, dev.ID, rd.EPC), receivedAt, ttl) {
+			// Egress: fire ON, then latch for the re-arm window. The snapshot lets
+			// undo put back what admit is about to overwrite.
+			key := latchKey(orgID, dev.ID, rd.EPC)
+			lastSeen, seen := e.latch.snapshot(key)
+			if !e.latch.admit(key, receivedAt, ttl) {
 				metricSuppressed.WithLabelValues("latched").Inc()
 				continue
 			}
@@ -193,24 +246,39 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 				metricSuppressed.WithLabelValues("startup_grace").Inc()
 				continue
 			}
-			// Drop the fire while this output is still pulsing from an earlier tag:
-			// a second ON would restart or be swallowed by the device-side auto-off,
-			// depending on transport. The latch has admitted this tag, so it will
-			// not re-fire while it stays present.
+			// While this output is still pulsing from an earlier tag, drive nothing: a
+			// second ON would restart or be swallowed by the device-side auto-off,
+			// depending on transport. The read is still an alarm, so the fire is
+			// kept without a drive. The latch has admitted this tag, so it will not
+			// re-fire while it stays present; the fire's undo puts that back.
 			pulse := time.Duration(tuning.AutoOffSeconds) * time.Second
 			if !e.pulses.tryStart(orgID, dev.ID, receivedAt, pulse) {
 				metricSuppressed.WithLabelValues("pulse_active").Inc()
+				f.dropped = true
+				f.undos = append(f.undos, func() { e.latch.restore(key, lastSeen, seen) })
 				continue
 			}
-			firedAny = true
-			if !e.drive(ctx, orgID, dev, true, tuning.AutoOffSeconds) {
-				// A failed ON must not hold the output busy for the whole window.
+			f.drives = append(f.drives, fireDrive{dev: dev, offAfter: tuning.AutoOffSeconds, pulse: pulse})
+			f.undos = append(f.undos, func() {
+				e.latch.restore(key, lastSeen, seen)
 				e.pulses.release(orgID, dev.ID, receivedAt, pulse)
-			}
+			})
 		}
 
-		if firedAny {
-			e.recordFire(ctx, orgID, tagScanID, receivedAt, rd)
+		if len(f.drives) > 0 || f.dropped {
+			fires = append(fires, f)
+		}
+	}
+	return fires
+}
+
+// driveFire turns on every output of a fire; a fire with no drives does nothing. Best-effort: a failed drive is
+// logged and metriced by drive, and the other outputs still drive.
+func (e *Engine) driveFire(ctx context.Context, orgID int, f fire) {
+	for _, d := range f.drives {
+		if !e.drive(ctx, orgID, d.dev, true, d.offAfter) {
+			// A failed ON must not hold the output busy for the whole window.
+			e.pulses.release(orgID, d.dev.ID, f.receivedAt, d.pulse)
 		}
 	}
 }
@@ -226,19 +294,25 @@ func (e *Engine) drive(ctx context.Context, orgID int, dev outputdevice.OutputDe
 	return true
 }
 
-// recordFire writes the durable alarm_events row for a read that drove at least
-// one device on, and logs/metrics the fire. Best-effort: a write error never
-// blocks ingestion.
-func (e *Engine) recordFire(ctx context.Context, orgID int, tagScanID int64, receivedAt time.Time, rd storage.ResolvedRead) {
-	if err := e.store.InsertAlarmEvent(ctx, orgID, storage.AlarmEventRow{
-		AssetID:     rd.AssetID,
-		ScanPointID: rd.ScanPointID,
-		LocationID:  rd.LocationID,
-		EPC:         rd.EPC,
-		RSSI:        rd.RSSI,
+// alarmRow builds the alarm_events row for a fire.
+func (e *Engine) alarmRow(f fire, tagScanID int64, receivedAt time.Time) storage.AlarmEventRow {
+	return storage.AlarmEventRow{
+		AssetID:     f.read.AssetID,
+		ScanPointID: f.read.ScanPointID,
+		LocationID:  f.read.LocationID,
+		EPC:         f.read.EPC,
+		RSSI:        f.read.RSSI,
 		TagScanID:   tagScanID,
 		FiredAt:     receivedAt,
-	}); err != nil {
+	}
+}
+
+// recordFire writes the durable alarm_events row for a fired read, whether or not
+// it drove a device, and logs/metrics the fire. Best-effort: a write error never
+// blocks ingestion.
+func (e *Engine) recordFire(ctx context.Context, orgID int, f fire, tagScanID int64, receivedAt time.Time) {
+	rd := f.read
+	if err := e.store.InsertAlarmEvent(ctx, orgID, e.alarmRow(f, tagScanID, receivedAt)); err != nil {
 		e.log.Error().Err(err).Int("org_id", orgID).Str("epc", rd.EPC).Msg("alarm_events write failed")
 		metricEventWriteErrors.Inc()
 	}

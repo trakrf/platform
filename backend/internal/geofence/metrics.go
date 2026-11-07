@@ -15,7 +15,7 @@ var (
 
 	metricFired = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "geofence_alarms_fired_total",
-		Help: "Geofence boundary alarms fired (post-dedup).",
+		Help: "Geofence boundary alarms recorded (post-dedup), including reads whose output was already pulsing and was not driven.",
 	})
 
 	metricSuppressed = promauto.NewCounterVec(prometheus.CounterOpts{

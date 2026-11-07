@@ -78,6 +78,30 @@ func (l *latch) admit(key string, now time.Time, ttl time.Duration) bool {
 	return nowNanos-prev > ttl.Nanoseconds() // re-armed after absence
 }
 
+// snapshot reports key's last sighting, and ok=false if it has no entry. Take it
+// before admit so restore can put the key back.
+func (l *latch) snapshot(key string) (lastSeen int64, ok bool) {
+	v, ok := l.seen.Load(key)
+	if !ok {
+		return 0, false
+	}
+	return v.(*latchEntry).lastSeen.Load(), true
+}
+
+// restore puts key back to a snapshot: it removes an entry that did not exist,
+// and otherwise resets lastSeen. An entry swept since the snapshot stays gone,
+// since an absent key fires just as an aged-out one does. The entry keeps the ttl
+// admit gave it, which is the output's current age-out.
+func (l *latch) restore(key string, lastSeen int64, ok bool) {
+	if !ok {
+		l.seen.Delete(key)
+		return
+	}
+	if v, found := l.seen.Load(key); found {
+		v.(*latchEntry).lastSeen.Store(lastSeen)
+	}
+}
+
 func (l *latch) sweepLoop() {
 	defer close(l.done)
 	if l.sweepInt <= 0 {
