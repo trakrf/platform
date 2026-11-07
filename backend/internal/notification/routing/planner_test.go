@@ -235,6 +235,48 @@ func TestPlan_LocationChangeTriggerUsesOnlyLocationChangeSource(t *testing.T) {
 	assert.Nil(t, e.AlarmEventID)
 }
 
+func planCrossing(t *testing.T, occ notificationevent.Occurrence, locations map[int]string) (*harness, DeliveryMessage) {
+	t.Helper()
+	r, err := NewTemplateRenderer()
+	require.NoError(t, err)
+	h := newHarness(t, r)
+	occ.Source, occ.SourceID, occ.AssetID, occ.OccurredAt = notificationevent.SourceLocationChange, 9, 7, occurredAt
+	h.store.occ = occ
+	h.store.locations = locations
+	h.store.subs = []notificationrecipient.Subscriber{smsSub(2, "(555) 123-4567")}
+	_, err = h.planner.Plan(context.Background(), Trigger{OrgID: 1, Source: notificationevent.SourceLocationChange, SourceID: 9})
+	require.NoError(t, err)
+	require.Len(t, h.store.deliveries, 1)
+	var msg DeliveryMessage
+	require.NoError(t, json.Unmarshal(h.store.deliveries[0].Payload, &msg))
+	return h, msg
+}
+
+func intp(v int) *int { return &v }
+
+func TestPlanner_CrossingUsesCrossingTemplate(t *testing.T) {
+	_, msg := planCrossing(t, notificationevent.Occurrence{
+		LocationID: intp(4), FromLocationID: intp(3), Origin: notificationevent.OriginReaderCrossing,
+	}, map[int]string{3: "Dock 3", 4: "Dock 4"})
+	assert.Contains(t, msg.Body, "moved from Dock 3 to Dock 4")
+	assert.Equal(t, notificationevent.SourceLocationChange, msg.Source)
+}
+
+func TestPlanner_ReaderMoveKeepsSeenAt(t *testing.T) {
+	_, msg := planCrossing(t, notificationevent.Occurrence{
+		LocationID: intp(4), FromLocationID: intp(3), Origin: notificationevent.OriginReader,
+	}, map[int]string{3: "Dock 3", 4: "Dock 4"})
+	assert.Contains(t, msg.Body, "was seen at Dock 4")
+	assert.NotContains(t, msg.Body, "moved from")
+}
+
+func TestPlanner_DeletedFromLocationReadsUnknown(t *testing.T) {
+	_, msg := planCrossing(t, notificationevent.Occurrence{
+		LocationID: intp(4), FromLocationID: intp(3), Origin: notificationevent.OriginReaderCrossing,
+	}, map[int]string{4: "Dock 4"})
+	assert.Contains(t, msg.Body, "moved from an unknown location to Dock 4")
+}
+
 func TestPlan_InvalidTriggerTouchesNothing(t *testing.T) {
 	h := newHarness(t, nil)
 	_, err := h.planner.Plan(context.Background(), Trigger{OrgID: 0, Source: notificationevent.SourceAlarm, SourceID: 1})

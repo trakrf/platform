@@ -12,7 +12,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/storage"
 )
 
-var sampleData = TemplateData{"Forklift 7", "ASSET-0007", "Dock 3", "2026-10-20 14:05"}
+var sampleData = TemplateData{"Forklift 7", "ASSET-0007", "Dock 3", "Dock 4", "2026-10-20 14:05"}
 
 const genericOnly = `
 generic:
@@ -119,4 +119,27 @@ generic:
 func TestNewTemplateRenderer_EmbeddedIsValid(t *testing.T) {
 	_, err := NewTemplateRenderer()
 	assert.NoError(t, err)
+}
+
+func TestRender_Crossing(t *testing.T) {
+	r, err := NewTemplateRenderer()
+	require.NoError(t, err)
+	d := TemplateData{AssetName: "Forklift 7", AssetKey: "ASSET-0007", FromLocationName: "Dock 3", LocationName: "Dock 4", OccurredAt: "2026-10-20 14:05"}
+
+	got, err := r.Render(crossingSource, notificationdelivery.ChannelSMS, d)
+	require.NoError(t, err)
+	assert.Equal(t, "TrakRF: Forklift 7 moved from Dock 3 to Dock 4 at 2026-10-20 14:05 UTC.", got.Body)
+
+	got, err = r.Render(crossingSource, notificationdelivery.ChannelEmail, d)
+	require.NoError(t, err)
+	assert.Equal(t, "Moved: Forklift 7", got.Subject)
+}
+
+func TestParseTemplates_AcceptsCrossingKey(t *testing.T) {
+	_, err := parseTemplates([]byte(genericOnly + `
+location_crossing:
+  sms:
+    body: "{{.FromLocationName}} to {{.LocationName}}"
+`))
+	require.NoError(t, err)
 }

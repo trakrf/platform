@@ -19,23 +19,30 @@ var templatesYAML []byte
 
 const genericKey = "generic"
 
+// crossingSource keys the wording for a gate crossing. It is a template key
+// only: stored messages keep the location_change source.
+const crossingSource = notificationevent.Source("location_crossing")
+
+const unknownLocation = "an unknown location"
+
 // TemplateData is everything a message template may mention. Values are
 // inserted as plain text; they are never parsed as templates themselves.
 type TemplateData struct {
-	AssetName, AssetKey, LocationName, OccurredAt string
+	AssetName, AssetKey, LocationName, FromLocationName, OccurredAt string
 }
 
 // newTemplateData builds the template inputs. An empty locationName reads as
 // an unknown location; the time is shown in UTC.
 func newTemplateData(asset storage.AssetIdentity, locationName string, at time.Time) TemplateData {
 	if locationName == "" {
-		locationName = "an unknown location"
+		locationName = unknownLocation
 	}
 	return TemplateData{
-		AssetName:    asset.Name,
-		AssetKey:     asset.ExternalKey,
-		LocationName: locationName,
-		OccurredAt:   at.UTC().Format("2006-01-02 15:04"),
+		AssetName:        asset.Name,
+		AssetKey:         asset.ExternalKey,
+		LocationName:     locationName,
+		FromLocationName: unknownLocation,
+		OccurredAt:       at.UTC().Format("2006-01-02 15:04"),
 	}
 }
 
@@ -79,11 +86,11 @@ func parseTemplates(data []byte) (*TemplateRenderer, error) {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
 
-	sample := TemplateData{"Forklift 7", "ASSET-0007", "Dock 3", "2026-10-20 14:05"}
+	sample := TemplateData{"Forklift 7", "ASSET-0007", "Dock 3", "Dock 4", "2026-10-20 14:05"}
 	r := &TemplateRenderer{byKey: map[string]compiled{}}
 	for source, channels := range raw {
 		switch source {
-		case genericKey, string(notificationevent.SourceAlarm), string(notificationevent.SourceLocationChange):
+		case genericKey, string(notificationevent.SourceAlarm), string(notificationevent.SourceLocationChange), string(crossingSource):
 		default:
 			return nil, fmt.Errorf("templates: unknown source %q", source)
 		}
