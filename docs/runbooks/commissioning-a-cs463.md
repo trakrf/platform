@@ -1,8 +1,8 @@
 # Commissioning a CS463
 
 Takes a factory-fresh CSL CS463 to a reader that publishes reads to a TrakRF
-environment, with `mqtt-rpcd` running on it. Reads only: GPO output devices are
-a separate step on top of this one.
+environment, with `mqtt-rpcd` running on it. Reads only: an alarm on a GPO port
+is a [separate step](cs463-alarm-output.md) on top of this one.
 
 Every step here was executed on a real reader. Where a step has a command, it is
 the command that ran. The daemon's own contract and golden config live in
@@ -47,7 +47,7 @@ You need:
 - **The environment's broker credential** (`username` / `password` from the
   `trakrf-mosquitto-auth` secret in the environment's namespace). It is a shared
   credential; there is no per-reader one yet.
-- **A password manager entry** to receive two new passwords in §2.
+- **A password manager entry** to receive three new passwords in §2.
 
 ### Talking to the `/API` without leaking a password
 
@@ -65,9 +65,9 @@ curl -s "$B?session_id=$S&command=getReaderVersion"
 curl -s "$B?session_id=$S&command=logout"
 ```
 
-The reader allows **one root session at a time**, and the web UI's session
-counts against the same slot. Log out when you are done, or the daemon's
-reconcile in §8 is refused (`-10`, already logged in from another address).
+The reader allows **one session per user**, the web UI's included. Log out when
+you are done, or your next `root` login is refused (`-10`, already logged in from
+another address). The daemon has its own user (§8), so you never block it.
 
 ---
 
@@ -91,10 +91,9 @@ bench exercise first, not a field one.
 **The serial number is not exposed over `/API`** on this build; read it off the
 label if the record needs it.
 
-**Choose the external key now:** `cs463-` + the last three MAC octets, lower
-case (MAC `00:05:7B:xx:yy:zz` → `cs463-xxyyzz`). It becomes the scan device's
-key, the MQTT client id, and part of the topic, and it is derivable from the
-reader itself without a label.
+**Choose the reader key now:** `cs463-` + the last three MAC octets, lower case
+(`00:05:7B:xx:yy:zz` → `cs463-xxyyzz`). It becomes the reader ID, the MQTT client
+id and the SSH alias, and is derivable from the reader without a label.
 
 ---
 
@@ -104,8 +103,8 @@ The web/API `root` and the SSH `root` both ship as `csl`. They are separate
 accounts; change both. The device has no local firewall, so these passwords are
 the whole of its access control.
 
-Generate two strong passwords, **save them to the password manager first**, then
-apply them:
+Generate three strong passwords (web root, SSH root, and the daemon's `trakrf`
+user), **save them to the password manager first**, then apply them:
 
 ```sh
 # SSH root: chpasswd reads stdin, so the password never reaches argv
@@ -116,8 +115,7 @@ printf 'url = "%s?session_id=%s&command=setUserPassword&username=root&password=%
     "$B" "$S" "$NEW_WEB_PASS" | curl -s --config -
 ```
 
-Keep the generated passwords alphanumeric: the web one travels in a query
-string.
+Keep the generated passwords alphanumeric: they travel in query strings.
 
 **Then prove the old one is dead, on every interface.** An `OK:` from the set
 command is not evidence that `csl` stopped working:
@@ -131,7 +129,9 @@ command is not evidence that `csl` stopped working:
 For SSH, force password auth so a key doesn't mask the result:
 `ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password <reader>`.
 
-The web password is also the daemon's `READER_API_PASS` (§8).
+**Then fix the users** ([CS463 user accounts](cs463-user-accounts.md)): delete
+the factory `ExampleUser1PWDcsl` (password `csl`, which the root change leaves
+working), add the daemon's `trakrf` user (§8), and an operator account if asked.
 
 ---
 
@@ -221,7 +221,7 @@ In the customer's org, **Scan Devices → Create**:
 
 | Field | Value |
 |---|---|
-| Name | the external key, `cs463-xxyyzz` |
+| Name | a label; the place reads best, e.g. `cs463-dock-door-3`. The topic is the unique key |
 | Type | CSL CS463 |
 | Transport | MQTT |
 | Publish Topic | `<org_slug>/<place>` — the form pre-fills `<org_slug>/` and refuses anything else |
@@ -274,12 +274,12 @@ via `curl --config -`, as in §0):
 | `desc` | `Managed by TrakRF mqtt-rpc daemon` |
 | `type` | `MQTT` |
 | `server_ip` / `server_port` | the broker host / `8883` |
-| `client_id` | the external key, `cs463-xxyyzz` — unique per physical unit; the broker evicts a duplicate |
+| `client_id` | the reader key, `cs463-xxyyzz` — unique per physical unit; the broker evicts a duplicate |
 | `username` / `password` | the environment's broker credential |
 | `enable_ssl` / `ssl_version` | `true` / `TLSv1.2` |
 | `two_way_authentication` | `false` |
 | `topic` | the registered `publish_topic`, verbatim |
-| `clean_session` | `false` |
+| `clean_session` | `true` — reads are QoS 0 and fire-and-forget; nothing should be held for a reader across a disconnect |
 | `qos` | `0` |
 
 Then upload the CA bundle with `setServerCertificate`. The PEM is the **POST
@@ -321,11 +321,11 @@ trips the reader's reflected-power guard (§9) and halts inventory.
 
 **Seed the env file before installing.** `install.sh` creates
 `/opt/trakrf/mqtt-rpcd.env` from the example only if it is absent, then starts
-the daemon at once. Writing it first means the first start already has the real
-password:
+the daemon at once, so the first start already uses the `trakrf` user from §2
+(without `READER_API_USER` it logs in as `root`):
 
 ```sh
-printf 'READER_API_PASS=%s\n' "$NEW_WEB_PASS" \
+printf 'READER_API_USER=trakrf\nREADER_API_PASS=%s\n' "$TRAKRF_PASS" \
   | ssh cs463-xxyyzz 'umask 077; mkdir -p /opt/trakrf; cat > /opt/trakrf/mqtt-rpcd.env'
 ```
 
@@ -340,10 +340,9 @@ sh deploy/edge/mqtt-rpc/install.sh cs463-xxyyzz    # not executable: run it with
 It ends with `mqtt-rpcd active (NRestarts=0)`, or fails with the journal if the
 daemon could not stay up.
 
-**Never run `/opt/trakrf/mqtt-rpcd --version`** (or any flag). The binary takes
-no arguments and starts a second daemon, which fights the real one for its MQTT
-client id. Read the version from the journal instead: every line carries
-`"version":"…"`.
+**Never run `/opt/trakrf/mqtt-rpcd --version`** (or any flag). It takes no
+arguments and starts a second daemon that fights the real one for its MQTT client
+id. Read the version from the journal: every line carries `"version":"…"`.
 
 ### Expect a slow first connection after a boot
 
@@ -496,4 +495,5 @@ Switch while the reader is still on your bench router, so you can watch it move:
 ### Final credential check
 
 Re-run the table in §2: `csl` must be refused on the `/API`, the web form and
-SSH, and the password manager must hold both passwords.
+SSH. `listUsers` shows only `root`, `trakrf` and any operator account, and the
+password manager holds every password.
