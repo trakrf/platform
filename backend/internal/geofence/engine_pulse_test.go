@@ -37,11 +37,11 @@ func TestEvaluate_EgressDropsOverlappingPulse(t *testing.T) {
 		read("EPC1", -50), read("EPC2", -50),
 	})
 
-	if d.onCount() != 1 || len(s.rows) != 1 {
-		t.Fatalf("two tags together must give one ON + one alarm row, got on=%d rows=%d", d.onCount(), len(s.rows))
+	if d.onCount() != 1 || len(s.rows) != 2 {
+		t.Fatalf("two tags together must give one ON + two alarm rows, got on=%d rows=%d", d.onCount(), len(s.rows))
 	}
-	if s.rows[0].EPC != "EPC1" {
-		t.Fatalf("the first tag must be the one that fires, got %s", s.rows[0].EPC)
+	if s.rows[0].EPC != "EPC1" || s.rows[1].EPC != "EPC2" {
+		t.Fatalf("both tags must be recorded in read order, got %+v", s.rows)
 	}
 	if got := pulseActiveDrops(t) - before; got != 1 {
 		t.Fatalf("expected one pulse_active drop, got %v", got)
@@ -57,11 +57,11 @@ func TestEvaluate_EgressFiresAgainAfterPulseEnds(t *testing.T) {
 	at := time.Unix(1000, 0)
 	e.Evaluate(context.Background(), 42, 1, at, []storage.ResolvedRead{read("EPC1", -50)})
 	e.Evaluate(context.Background(), 42, 2, at.Add(2*time.Second), []storage.ResolvedRead{read("EPC2", -50)})
-	if d.onCount() != 1 {
-		t.Fatalf("a tag inside the 5s pulse must be dropped, got on=%d", d.onCount())
+	if d.onCount() != 1 || len(s.rows) != 2 || s.rows[1].EPC != "EPC2" {
+		t.Fatalf("a tag inside the 5s pulse gets its alarm row but no second ON, got on=%d rows=%+v", d.onCount(), s.rows)
 	}
 	e.Evaluate(context.Background(), 42, 3, at.Add(5*time.Second), []storage.ResolvedRead{read("EPC3", -50)})
-	if d.onCount() != 2 || len(s.rows) != 2 {
+	if d.onCount() != 2 || len(s.rows) != 3 {
 		t.Fatalf("a tag once the pulse has ended must fire, got on=%d rows=%d", d.onCount(), len(s.rows))
 	}
 }
