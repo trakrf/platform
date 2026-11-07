@@ -74,7 +74,7 @@ func (d *Daemon) answered() {
 		d.log.Error().Err(err).Msg("update commit failed; the guard will roll back if this persists")
 		return
 	}
-	d.log.Info().Str("version", d.cfg.Version).Msg("update committed: answered an rpc through the broker")
+	d.log.Info().Msg("update committed: answered an rpc through the broker")
 }
 
 // daemonUpdate handles Daemon.Update.
