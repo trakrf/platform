@@ -257,11 +257,20 @@ func (s *Subscriber) persist(ctx context.Context, route storage.ScanRoute, tagSc
 		return s.store.PersistReads(ctx, route.OrgID, route.ScanDeviceID, tagScanID, receivedAt, reads)
 	}
 	run := s.detector.Begin()
+	// A deferred check, so a panic that escapes the scan transaction still reports
+	// the rollback. committed is set before Committed runs: a panic in a drive must
+	// not undo a scan that did commit.
+	committed := false
+	defer func() {
+		if !committed {
+			run.RolledBack()
+		}
+	}()
 	res, err := s.store.PersistReadsDetect(ctx, route.OrgID, route.ScanDeviceID, tagScanID, receivedAt, reads, run.Detect)
 	if err != nil {
-		run.RolledBack()
 		return res, err
 	}
+	committed = true
 	run.Committed()
 	return res, nil
 }

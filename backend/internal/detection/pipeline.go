@@ -4,6 +4,8 @@ package detection
 
 import (
 	"context"
+	"fmt"
+	"runtime/debug"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/prometheus/client_golang/prometheus"
@@ -58,8 +60,8 @@ type Run struct {
 
 const savepointName = "detection_stage"
 
-// Detect is a storage.DetectFunc. A stage error never fails the scan: that
-// stage's work is rolled back to a named savepoint and the next stage still
+// Detect is a storage.DetectFunc. A stage error or panic never fails the scan:
+// that stage's work is rolled back to a named savepoint and the next stage still
 // runs. Savepoints are issued as SQL on the outer tx rather than through
 // tx.Begin, because pgx marks a nested tx closed even when RELEASE fails, which
 // would leave the aborted state in place and lose the scan.
@@ -69,7 +71,7 @@ func (r *Run) Detect(ctx context.Context, tx pgx.Tx, in storage.DetectInput) err
 			r.fail(st, err, "detection savepoint begin failed")
 			continue
 		}
-		pending, err := st.Detect(ctx, tx, in)
+		pending, err := detectSafely(ctx, tx, st, in)
 		if err == nil {
 			if _, err = tx.Exec(ctx, "RELEASE SAVEPOINT "+savepointName); err != nil {
 				r.fail(st, err, "detection savepoint release failed")
@@ -84,6 +86,18 @@ func (r *Run) Detect(ctx context.Context, tx pgx.Tx, in storage.DetectInput) err
 		r.results = append(r.results, stageResult{pending: pending, rowsKept: kept})
 	}
 	return nil
+}
+
+// detectSafely runs one stage, turning a panic into an error. A stage that holds
+// state its Pending must settle recovers its own panic, because a panic that gets
+// here carries no Pending.
+func detectSafely(ctx context.Context, tx pgx.Tx, st Stage, in storage.DetectInput) (pending Pending, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			err = fmt.Errorf("stage panicked: %v\n%s", p, debug.Stack())
+		}
+	}()
+	return st.Detect(ctx, tx, in)
 }
 
 // discard undoes a failed stage's writes and clears the savepoint so the next
