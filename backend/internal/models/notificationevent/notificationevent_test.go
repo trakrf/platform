@@ -97,3 +97,31 @@ func TestNotificationEventValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestLocationChangeValidate_ReaderCrossing(t *testing.T) {
+	cases := []struct {
+		name  string
+		edit  func(*LocationChange)
+		valid bool
+	}{
+		{"scan point and origin location", func(c *LocationChange) {}, true},
+		{"without a scan point", func(c *LocationChange) { c.ScanPointID = nil }, false},
+		{"without an origin location", func(c *LocationChange) { c.FromLocationID = nil }, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := validChange()
+			c.Origin = OriginReaderCrossing
+			c.ScanPointID = ptr(9)
+			c.FromLocationID = ptr(4)
+			tc.edit(&c)
+			err := c.Validate()
+			if tc.valid && err != nil {
+				t.Fatalf("Validate() = %v, want nil", err)
+			}
+			if !tc.valid && !errors.Is(err, ErrInvalid) {
+				t.Fatalf("Validate() = %v, want ErrInvalid", err)
+			}
+		})
+	}
+}
