@@ -1,0 +1,14 @@
+[Unit]
+Description=Run the mqtt-rpcd rollback guard every 5 minutes
+
+[Timer]
+# While an update is on probation the guard counts these ticks; at 4 it rolls
+# back (15-20 min after the update). That covers the first broker connect after
+# a reboot, which can take ~7 min on a CS463. With nothing pending a tick does
+# nothing.
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

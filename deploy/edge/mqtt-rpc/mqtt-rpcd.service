@@ -4,6 +4,11 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
+# The rollback guard counts starts while a remote update is on probation and
+# repoints /opt/trakrf/mqtt-rpcd at the previous version on a crash loop. The
+# leading "-" means it can never stop the daemon from starting.
+ExecStartPre=-/opt/trakrf/mqtt-rpcd-guard start
+# A symlink to /opt/trakrf/versions/mqtt-rpcd-<active version>.
 ExecStart=/opt/trakrf/mqtt-rpcd
 EnvironmentFile=-/opt/trakrf/mqtt-rpcd.env
 Restart=always
