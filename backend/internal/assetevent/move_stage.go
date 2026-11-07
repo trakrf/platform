@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"github.com/trakrf/platform/backend/internal/detection"
 	"github.com/trakrf/platform/backend/internal/models/notificationevent"
@@ -14,7 +16,7 @@ import (
 
 // moveStore is the storage surface the move stage needs.
 type moveStore interface {
-	PreviousAssetLocations(ctx context.Context, orgID int, assetIDs []int, before time.Time) (map[int]storage.PreviousLocation, error)
+	PreviousAssetLocationsTx(ctx context.Context, tx pgx.Tx, orgID int, assetIDs []int, before time.Time) (map[int]storage.PreviousLocation, error)
 }
 
 // changeRecorder records a detected location change and queues its alert.
@@ -28,12 +30,13 @@ type changeRecorder interface {
 type MoveStage struct {
 	store moveStore
 	rec   changeRecorder
+	log   zerolog.Logger
 }
 
 var _ detection.Stage = (*MoveStage)(nil)
 
 func NewMoveStage(store moveStore, rec changeRecorder) *MoveStage {
-	return &MoveStage{store: store, rec: rec}
+	return &MoveStage{store: store, rec: rec, log: log.With().Str("component", "assetevent").Logger()}
 }
 
 func (s *MoveStage) Name() string { return "reader_move" }
@@ -66,9 +69,12 @@ func (s *MoveStage) Detect(ctx context.Context, tx pgx.Tx, in storage.DetectInpu
 	// Stored rows sit on the truncated minute and the lookup is strictly
 	// before it, so the row just stored cannot be its own predecessor.
 	at := in.ReceivedAt.Truncate(storage.ScanGranularity)
-	prev, err := s.store.PreviousAssetLocations(ctx, in.OrgID, assetIDs, at)
+	start := time.Now()
+	prev, err := s.store.PreviousAssetLocationsTx(ctx, tx, in.OrgID, assetIDs, at)
+	metricLookupSeconds.Observe(time.Since(start).Seconds())
 	if err != nil {
 		metricLookupErrors.Inc()
+		s.log.Error().Err(err).Int("org_id", in.OrgID).Msg("previous-location lookup failed; no reader moves recorded for this message")
 		return detection.Pending{}, fmt.Errorf("previous location lookup failed: %w", err)
 	}
 
@@ -92,6 +98,7 @@ func (s *MoveStage) Detect(ctx context.Context, tx pgx.Tx, in storage.DetectInpu
 			DetectedAt:     at,
 		})
 		if err != nil {
+			s.log.Error().Err(err).Int("org_id", in.OrgID).Int("asset_id", c.assetID).Msg("recording reader move failed")
 			return detection.Pending{}, fmt.Errorf("failed to record move for asset %d: %w", c.assetID, err)
 		}
 	}
