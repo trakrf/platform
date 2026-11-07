@@ -206,3 +206,30 @@ func (s *Storage) DeleteScanPoint(ctx context.Context, orgID, id int) (bool, err
 	}
 	return rowsAffected > 0, nil
 }
+
+// ScanDeviceLocationIDsTx returns the distinct locations of a device's live scan
+// points, on a caller's transaction that already carries the org context.
+// Soft-deleted scan points and scan points with no location are left out.
+func (s *Storage) ScanDeviceLocationIDsTx(ctx context.Context, tx pgx.Tx, orgID, scanDeviceID int) ([]int, error) {
+	rows, err := tx.Query(ctx,
+		`SELECT DISTINCT location_id
+		 FROM trakrf.scan_points
+		 WHERE org_id = $1 AND scan_device_id = $2 AND deleted_at IS NULL AND location_id IS NOT NULL
+		 ORDER BY location_id`, orgID, scanDeviceID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list scan device locations: %w", err)
+	}
+	defer rows.Close()
+	ids := []int{}
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to read scan device location: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to list scan device locations: %w", err)
+	}
+	return ids, nil
+}
