@@ -22,15 +22,16 @@ type fakeMoveStore struct {
 	calls  int
 }
 
-func (f *fakeMoveStore) PreviousAssetLocations(_ context.Context, _ int, _ []int, before time.Time) (map[int]storage.PreviousLocation, error) {
+func (f *fakeMoveStore) PreviousAssetLocationsTx(_ context.Context, _ pgx.Tx, _ int, _ []int, before time.Time) (map[int]storage.PreviousLocation, error) {
 	f.calls++
 	f.before = before
 	return f.prev, f.err
 }
 
 type fakeChangeRecorder struct {
-	got []notificationevent.LocationChange
-	err error
+	got  []notificationevent.LocationChange
+	err  error
+	skip bool // report the change as already recorded
 }
 
 func (f *fakeChangeRecorder) RecordChange(_ context.Context, _ pgx.Tx, c notificationevent.LocationChange) (bool, error) {
@@ -38,7 +39,7 @@ func (f *fakeChangeRecorder) RecordChange(_ context.Context, _ pgx.Tx, c notific
 		return false, f.err
 	}
 	f.got = append(f.got, c)
-	return true, nil
+	return !f.skip, nil
 }
 
 func moveInput(reads ...storage.ResolvedRead) storage.DetectInput {
@@ -142,4 +143,42 @@ func TestMoveStage_LookupErrorReturnsError(t *testing.T) {
 	require.Error(t, err)
 	assert.Empty(t, rec.got)
 	assert.Equal(t, before+1, lookupErrors())
+}
+
+func TestMoveStage_AlreadyRecordedIsNotAnError(t *testing.T) {
+	store := &fakeMoveStore{prev: map[int]storage.PreviousLocation{}}
+	rec := &fakeChangeRecorder{skip: true}
+	_, err := NewMoveStage(store, rec).Detect(context.Background(), nil, moveInput(
+		storage.ResolvedRead{AssetID: 1, ScanPointID: 4, LocationID: intp(20), Stored: true}))
+	require.NoError(t, err)
+}
+
+func TestMoveStage_RecordErrorReturnsError(t *testing.T) {
+	store := &fakeMoveStore{prev: map[int]storage.PreviousLocation{}}
+	rec := &fakeChangeRecorder{err: errors.New("insert failed")}
+	_, err := NewMoveStage(store, rec).Detect(context.Background(), nil, moveInput(
+		storage.ResolvedRead{AssetID: 1, ScanPointID: 4, LocationID: intp(20), Stored: true}))
+	require.ErrorContains(t, err, "insert failed")
+}
+
+func TestMoveStage_PreviousSightingWithoutLocationRecordsNilFrom(t *testing.T) {
+	store := &fakeMoveStore{prev: map[int]storage.PreviousLocation{1: {LocationID: nil}}}
+	rec := &fakeChangeRecorder{}
+	_, err := NewMoveStage(store, rec).Detect(context.Background(), nil, moveInput(
+		storage.ResolvedRead{AssetID: 1, ScanPointID: 4, LocationID: intp(20), Stored: true}))
+	require.NoError(t, err)
+	require.Len(t, rec.got, 1)
+	assert.Nil(t, rec.got[0].FromLocationID)
+}
+
+func TestMoveStage_NotStoredThenStoredReadForOneAsset(t *testing.T) {
+	store := &fakeMoveStore{prev: map[int]storage.PreviousLocation{}}
+	rec := &fakeChangeRecorder{}
+	_, err := NewMoveStage(store, rec).Detect(context.Background(), nil, moveInput(
+		storage.ResolvedRead{AssetID: 1, ScanPointID: 4, LocationID: intp(20), Stored: false},
+		storage.ResolvedRead{AssetID: 1, ScanPointID: 5, LocationID: intp(21), Stored: true}))
+	require.NoError(t, err)
+	require.Len(t, rec.got, 1)
+	assert.Equal(t, 21, rec.got[0].ToLocationID)
+	assert.Equal(t, 5, *rec.got[0].ScanPointID)
 }
