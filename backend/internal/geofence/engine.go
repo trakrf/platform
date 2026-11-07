@@ -118,21 +118,24 @@ type fireDrive struct {
 	pulse    time.Duration // pulse-guard window this drive marked; 0 if it marked none
 }
 
-// fire is a read that decide resolved to drive at least one output. It holds the
-// read to record, the drives to make, and the steps that take back the in-memory
-// state the decision changed. A caller either drives a fire or undoes it.
+// fire is a read that decide resolved to an alarm. It holds the read to record,
+// the drives to make, and the steps that take back the in-memory state the
+// decision changed. A caller either drives a fire or undoes it. A fire may have
+// no drives: a read dropped because its output is still pulsing is still an
+// alarm, and sets dropped.
 type fire struct {
 	read       storage.ResolvedRead
 	receivedAt time.Time
 	drives     []fireDrive
+	dropped    bool // an output was busy pulsing, so this read was not driven on it
 	undos      []func()
 }
 
 // undo restores the latch, pulse and presence state this fire changed, newest
-// first, so the next read fires again. That includes tags this fire's pulse
-// dropped in the same message, which would otherwise stay latched with no fire to
-// show for it. Reads that only refreshed the latch are not undone: they are still
-// true sightings.
+// first, so the next read fires again. A fire undoes only its own state: a read
+// dropped by a busy output restores its own latch and does not touch the pulse
+// that dropped it. Reads that only refreshed the latch are not undone: they are
+// still true sightings.
 func (f fire) undo() {
 	for i := len(f.undos) - 1; i >= 0; i-- {
 		f.undos[i]()
@@ -152,7 +155,8 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 }
 
 // decide applies each read's output devices and modes and returns the reads that
-// fired. It updates latch, pulse and presence state but drives nothing and writes
+// fired, one fire per read. A read that drives an output, or that a busy output
+// dropped, fires; presence reads fire only on the 0->1 edge. It updates latch, pulse and presence state but drives nothing and writes
 // no alarm. Its org-default and device lookups each run on their own pooled
 // connection, not on a caller's transaction: called inside one, they see none of
 // its uncommitted writes, and it stays open and holds its connection while they
@@ -175,11 +179,6 @@ func (e *Engine) decide(ctx context.Context, orgID int, receivedAt time.Time, re
 	inGrace := e.withinStartupGrace(receivedAt)
 
 	var fires []fire
-	// Per output, the latch restores of tags dropped by a pulse this message
-	// started. The fire holding the pulse runs them, so undoing it frees those tags
-	// too. A pulse from an earlier message has no entry: it stands, and so do its
-	// drops.
-	pulseDrops := map[int]*[]func(){}
 	for _, rd := range reads {
 		metricEvaluated.Inc()
 
@@ -247,38 +246,33 @@ func (e *Engine) decide(ctx context.Context, orgID int, receivedAt time.Time, re
 				metricSuppressed.WithLabelValues("startup_grace").Inc()
 				continue
 			}
-			// Drop the fire while this output is still pulsing from an earlier tag:
-			// a second ON would restart or be swallowed by the device-side auto-off,
-			// depending on transport. The latch has admitted this tag, so it will
-			// not re-fire while it stays present.
+			// While this output is still pulsing from an earlier tag, drive nothing: a
+			// second ON would restart or be swallowed by the device-side auto-off,
+			// depending on transport. The read is still an alarm, so the fire is
+			// kept without a drive. The latch has admitted this tag, so it will not
+			// re-fire while it stays present; the fire's undo puts that back.
 			pulse := time.Duration(tuning.AutoOffSeconds) * time.Second
 			if !e.pulses.tryStart(orgID, dev.ID, receivedAt, pulse) {
 				metricSuppressed.WithLabelValues("pulse_active").Inc()
-				if drops := pulseDrops[dev.ID]; drops != nil {
-					*drops = append(*drops, func() { e.latch.restore(key, lastSeen, seen) })
-				}
+				f.dropped = true
+				f.undos = append(f.undos, func() { e.latch.restore(key, lastSeen, seen) })
 				continue
 			}
-			drops := &[]func(){}
-			pulseDrops[dev.ID] = drops
 			f.drives = append(f.drives, fireDrive{dev: dev, offAfter: tuning.AutoOffSeconds, pulse: pulse})
 			f.undos = append(f.undos, func() {
-				for _, restore := range *drops {
-					restore()
-				}
 				e.latch.restore(key, lastSeen, seen)
 				e.pulses.release(orgID, dev.ID, receivedAt, pulse)
 			})
 		}
 
-		if len(f.drives) > 0 {
+		if len(f.drives) > 0 || f.dropped {
 			fires = append(fires, f)
 		}
 	}
 	return fires
 }
 
-// driveFire turns on every output of a fire. Best-effort: a failed drive is
+// driveFire turns on every output of a fire; a fire with no drives does nothing. Best-effort: a failed drive is
 // logged and metriced by drive, and the other outputs still drive.
 func (e *Engine) driveFire(ctx context.Context, orgID int, f fire) {
 	for _, d := range f.drives {
@@ -313,8 +307,8 @@ func (e *Engine) alarmRow(f fire, tagScanID int64, receivedAt time.Time) storage
 	}
 }
 
-// recordFire writes the durable alarm_events row for a read that drove at least
-// one device on, and logs/metrics the fire. Best-effort: a write error never
+// recordFire writes the durable alarm_events row for a fired read, whether or not
+// it drove a device, and logs/metrics the fire. Best-effort: a write error never
 // blocks ingestion.
 func (e *Engine) recordFire(ctx context.Context, orgID int, f fire, tagScanID int64, receivedAt time.Time) {
 	rd := f.read
