@@ -157,8 +157,10 @@ func (u *Updater) run(p readerrpc.DaemonUpdateParams) {
 		_ = os.Remove(tmp)
 		msg := strings.ReplaceAll(err.Error(), "\n", " ")
 		u.Log.Error().Err(err).Str("to", p.Version).Msg("update failed; nothing replaced")
-		u.setState(readerrpc.UpdateStateFailed, msg)
+		// Persist before publishing the state: anyone who sees "failed" must be
+		// able to rely on it surviving a daemon restart.
 		_ = writeLast(u.Layout, readerrpc.UpdateStateFailed, p.Version, msg)
+		u.setState(readerrpc.UpdateStateFailed, msg)
 	}
 
 	if err := u.download(p.URL, tmp, p.SHA256); err != nil {
