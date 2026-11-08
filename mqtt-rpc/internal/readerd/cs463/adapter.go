@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rs/zerolog"
+
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
 )
 
@@ -45,6 +47,9 @@ type AdapterConfig struct {
 	// re-armed (disable then enable) after every profile write so inventory
 	// resumes on the new configuration.
 	EventID string
+	// Logger receives operator-relevant warnings (e.g. a forced logout). Nil
+	// discards them.
+	Logger *zerolog.Logger
 }
 
 // reconcileOps is the slice of reader operations the golden-config reconcile needs:
@@ -66,6 +71,7 @@ type Adapter struct {
 	ops readerOps
 	rec reconcileOps // set when ops also satisfies reconcileOps (the real *Client)
 	cfg AdapterConfig
+	log zerolog.Logger
 
 	// gpoPortsMu guards ONLY the gpoPorts map's lookup/lazy-create step — it is
 	// never held across a reader HTTP call. Each port gets its OWN portGPO
@@ -97,7 +103,10 @@ var _ readerOps = (*Client)(nil)
 // satisfies reconcileOps (the real *Client does), the adapter can run the golden
 // config reconcile; SetOperProfile-only fakes that do not are simply not reconcilable.
 func NewAdapter(ops readerOps, cfg AdapterConfig) *Adapter {
-	a := &Adapter{ops: ops, cfg: cfg, gpoPorts: make(map[int]*portGPO)}
+	a := &Adapter{ops: ops, cfg: cfg, log: zerolog.Nop(), gpoPorts: make(map[int]*portGPO)}
+	if cfg.Logger != nil {
+		a.log = *cfg.Logger
+	}
 	if r, ok := ops.(reconcileOps); ok {
 		a.rec = r
 	}
@@ -271,7 +280,7 @@ func (a *Adapter) GetOperProfile(ctx context.Context, force bool) (readerrpc.Rea
 // pending_reload (effective next inventory cycle). force force-logs-out a held
 // single session first.
 //
-// The CS463 permits only ONE root login at a time; the /API session_id and the
+// The CS463 permits only ONE login per user at a time; the /API session_id and the
 // web-UI cookie session both consume that slot, so phases are strictly sequenced
 // and each releases its session before the next opens one. Do NOT hold the /API
 // session across the Phase B form login.
@@ -425,7 +434,7 @@ func (a *Adapter) GetStatus(ctx context.Context) (readerrpc.Status, error) {
 }
 
 // GpoSet drives a general purpose output. It deliberately takes NO reader
-// session: directIOOutput authenticates inline and bypasses the single-root-session
+// session: directIOOutput authenticates inline and bypasses the one-session-per-user
 // lock, so an alarm fires even while an operator has the reader's web UI open.
 //
 // pulseMs > 0 with on==true arms a one-shot — the port is driven now and released
@@ -550,6 +559,13 @@ func (a *Adapter) login(ctx context.Context, force bool) (string, error) {
 	if !force {
 		return "", busyErr(holderIP)
 	}
+	// The daemon logs in as its own reader user, so a held slot for that user
+	// is normally the daemon's own leftover session. But forceLogout is not
+	// per-user: it ends ALL reader sessions, a person in the vendor UI included.
+	// It stays the operator-confirmed last resort (force=true) and is never
+	// silent. Waiting out the session timeout instead does not fit the 10 s RPC
+	// budget, so it is not attempted.
+	a.log.Warn().Str("held_by", holderIP).Msg("reader session held; force=true, so forcing logout of all reader sessions (vendor UI included)")
 	if err := a.ops.ForceLogout(ctx); err != nil {
 		return "", fmt.Errorf("cs463: force logout: %w", err)
 	}

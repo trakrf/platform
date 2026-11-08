@@ -39,8 +39,8 @@ const (
 	CodeInternal       = -32603
 )
 
-// CodeReaderBusy signals the reader's single root session is held by another
-// client. It is outside the JSON-RPC reserved range (-32768..-32000).
+// CodeReaderBusy signals the reader session for the daemon's user is held by
+// another client. It is outside the JSON-RPC reserved range (-32768..-32000).
 const CodeReaderBusy = -33001
 
 // Request is an inbound JSON-RPC request frame. Src names the topic the caller

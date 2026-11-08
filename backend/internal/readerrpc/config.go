@@ -36,8 +36,8 @@ type ReaderConfig struct {
 }
 
 // OperProfileParams are the params for Reader.GetOperProfile. Force requests a
-// force-logout-then-proceed when the reader's single root session is held by
-// another client (see BusyError).
+// force-logout-then-proceed when the reader session for the daemon's user is
+// held by another client (see BusyError).
 type OperProfileParams struct {
 	Force bool `json:"force,omitempty"`
 }
@@ -86,6 +86,9 @@ type Capabilities struct {
 	TxPower         TxPowerCap `json:"tx_power"`
 	Supports        []string   `json:"supports"`
 	Unsupported     []string   `json:"unsupported"`
+	// Daemon is the on-reader daemon's own version and last update result. It
+	// is filled in by the daemon, not the reader adapter.
+	Daemon *DaemonInfo `json:"daemon,omitempty"`
 }
 
 // Status is the response to Reader.GetStatus and the status-topic payload.

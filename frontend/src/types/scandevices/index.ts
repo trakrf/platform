@@ -142,6 +142,46 @@ export interface ReaderCapabilities {
   tx_power: ReaderTxPowerCap;
   supports: string[];
   unsupported: string[];
+  daemon?: DaemonInfo;
+}
+
+// The on-reader daemon's own version and its last remote update (TRA-1317).
+// `pending`: the new build is running but has not committed yet; the reader's
+// rollback guard is still armed.
+export type DaemonUpdateState =
+  | 'downloading'
+  | 'installing'
+  | 'pending'
+  | 'committed'
+  | 'rolled_back'
+  | 'failed';
+
+export interface DaemonUpdateInfo {
+  state: DaemonUpdateState;
+  /** The version the update was aimed at (for a manual rollback: the version left). */
+  target?: string;
+  /** Why it failed or rolled back, e.g. crash_loop, no_commit, sha256 mismatch. */
+  error?: string;
+  at?: string;
+}
+
+export interface DaemonInfo {
+  version: string;
+  update?: DaemonUpdateInfo;
+}
+
+export interface ReaderSoftware {
+  /** Null for a daemon too old to report its version. */
+  daemon: DaemonInfo | null;
+  supports_update: boolean;
+}
+
+export interface ReaderSoftwareResponse {
+  data: ReaderSoftware;
+}
+
+export interface StartReaderUpdateResponse {
+  data: { accepted: boolean; from: string; to: string };
 }
 
 /** One antenna's enablement + transmit power. antenna is 1-based. */

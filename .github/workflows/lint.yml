@@ -85,6 +85,10 @@ jobs:
         timeout-minutes: 10
         run: just test
 
+      - name: Test mqtt-rpc (reader daemon + deploy scripts)
+        timeout-minutes: 10
+        run: just test-mqtt-rpc
+
       # ── The e2e gate (TRA-1253 item 2, ADR 0022) ────────────────────────────
       #
       # These steps live INSIDE lint-test rather than in a job of their own, for

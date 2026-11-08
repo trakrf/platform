@@ -44,6 +44,7 @@ import (
 	"github.com/trakrf/platform/backend/internal/notification/routing"
 	"github.com/trakrf/platform/backend/internal/notification/twilio"
 	"github.com/trakrf/platform/backend/internal/readercontrol"
+	"github.com/trakrf/platform/backend/internal/readerrelease"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
 	"github.com/trakrf/platform/backend/internal/services/email"
 	orgsservice "github.com/trakrf/platform/backend/internal/services/orgs"
@@ -337,6 +338,11 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 		readerRPC = readerClient
 	}
 	readerConfigHandler := readerconfighandler.NewHandler(store, readerRPC)
+	if readerClient != nil {
+		// TRA-1317: remote mqtt-rpcd updates. The cloud only relays the signed
+		// manifest; the reader verifies it against its own compiled-in keys.
+		readerConfigHandler.WithSoftware(readerClient, readerrelease.NewSource(os.Getenv("MQTT_RPCD_RELEASE_BASE_URL")))
+	}
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), info, startTime)
 	// TRA-924: Live Reads is now served by the org-enforced SSE endpoint, so the

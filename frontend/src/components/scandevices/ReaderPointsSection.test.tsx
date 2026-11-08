@@ -11,6 +11,11 @@ vi.mock('./AntennaSettingsPanel', () => ({
     <div data-testid="antenna-settings-panel">antennas:{deviceId}</div>
   ),
 }));
+vi.mock('./ReaderSoftwarePanel', () => ({
+  ReaderSoftwarePanel: ({ deviceId }: { deviceId: number }) => (
+    <div data-testid="reader-software-panel">software:{deviceId}</div>
+  ),
+}));
 vi.mock('./SinglePointLocationField', () => ({
   SinglePointLocationField: ({ device }: { device: ScanDevice }) => (
     <div data-testid="single-point-field">location:{device.id}</div>
@@ -44,6 +49,7 @@ describe('ReaderPointsSection', () => {
   it('renders the consolidated antenna settings panel for a multi-point CS463', () => {
     render(<ReaderPointsSection device={device({ type: 'csl_cs463', transport: 'mqtt' })} />);
     expect(screen.getByTestId('antenna-settings-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('reader-software-panel')).toHaveTextContent('software:10');
     expect(screen.queryByTestId('single-point-field')).not.toBeInTheDocument();
   });
 
@@ -51,11 +57,13 @@ describe('ReaderPointsSection', () => {
     render(<ReaderPointsSection device={device({ type: 'gl_s10', transport: 'mqtt' })} />);
     expect(screen.getByTestId('single-point-field')).toBeInTheDocument();
     expect(screen.queryByTestId('antenna-settings-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('reader-software-panel')).not.toBeInTheDocument();
   });
 
   it('renders no location control for a web_ble handheld', () => {
     render(<ReaderPointsSection device={device({ type: 'csl_cs108', transport: 'web_ble' })} />);
     expect(screen.queryByTestId('antenna-settings-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('reader-software-panel')).not.toBeInTheDocument();
     expect(screen.queryByTestId('single-point-field')).not.toBeInTheDocument();
     expect(screen.getByText(/handheld/i)).toBeInTheDocument();
   });

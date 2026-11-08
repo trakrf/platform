@@ -1,0 +1,6 @@
+[Unit]
+Description=trakrf mqtt-rpcd update rollback guard (no-commit check)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/trakrf/mqtt-rpcd-guard tick
