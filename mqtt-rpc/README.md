@@ -257,7 +257,8 @@ for diagnosis.
 {"online": false}
 ```
 It is published when the health changes and on every reconnect, and not on
-every probe.
+every probe. To read it: `MQTT_URL=… mqtt-rpcctl status -base <base topic>`
+prints the retained document, and `-watch` prints one line per change.
 
 ---
 

@@ -6,9 +6,10 @@
 //	mqtt-rpcctl sign   -version V -binary PATH -url URL [-key FILE] [-out FILE]
 //	mqtt-rpcctl call   -base TOPIC -method M [-params JSON] [-ca FILE]
 //	mqtt-rpcctl update -base TOPIC -manifest FILE|URL [-ca FILE]
+//	mqtt-rpcctl status -base TOPIC [-watch] [-ca FILE]
 //
 // sign reads the key from -key or, if absent, from $MQTT_RPCD_SIGNING_KEY.
-// call/update read the broker URL (with credentials) from $MQTT_URL so they never
+// call/update/status read the broker URL (with credentials) from $MQTT_URL so they never
 // appear on a command line. -base is the reader's base topic, e.g.
 // trakrf.id/cs463-212.
 package main
@@ -51,6 +52,8 @@ func main() {
 		err = cmdCall(os.Args[2:])
 	case "update":
 		err = cmdUpdate(os.Args[2:])
+	case "status":
+		err = cmdStatus(os.Args[2:])
 	default:
 		usage()
 	}
@@ -61,7 +64,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: mqtt-rpcctl keygen|sign|call|update [flags]  (see -h on each)")
+	fmt.Fprintln(os.Stderr, "usage: mqtt-rpcctl keygen|sign|call|update|status [flags]  (see -h on each)")
 	os.Exit(2)
 }
 
@@ -142,30 +145,13 @@ func cmdUpdate(args []string) error {
 
 // rpc sends one request to <base>/rpc and prints the reply frame.
 func rpc(base, caFile, method string, params json.RawMessage) error {
-	brokerURL := os.Getenv("MQTT_URL")
-	if brokerURL == "" {
-		return errors.New("set MQTT_URL (e.g. mqtts://user:pass@mqtt.preview.gke.trakrf.id:8883)")
-	}
 	nonce := make([]byte, 6)
 	_, _ = rand.Read(nonce)
-	id := hex.EncodeToString(nonce)
-	replyTopic := "trakrf-cli/" + id + "/reply"
+	replyTopic := "trakrf-cli/" + hex.EncodeToString(nonce) + "/reply"
 
-	opts := mqtt.NewClientOptions().AddBroker(brokerURL).SetClientID("mqtt-rpcctl-" + id).SetCleanSession(true)
-	if caFile != "" {
-		pem, err := os.ReadFile(caFile)
-		if err != nil {
-			return err
-		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(pem) {
-			return fmt.Errorf("no certificates in %s", caFile)
-		}
-		opts.SetTLSConfig(&tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12})
-	}
-	c := mqtt.NewClient(opts)
-	if tok := c.Connect(); !tok.WaitTimeout(20*time.Second) || tok.Error() != nil {
-		return fmt.Errorf("connect: %v", tok.Error())
+	c, err := connect(caFile)
+	if err != nil {
+		return err
 	}
 	defer c.Disconnect(250)
 
@@ -188,4 +174,32 @@ func rpc(base, caFile, method string, params json.RawMessage) error {
 	case <-time.After(15 * time.Second):
 		return errors.New("no reply within 15s (daemon offline?)")
 	}
+}
+
+// connect opens a broker connection from $MQTT_URL, which carries the
+// credentials so they never appear on a command line.
+func connect(caFile string) (mqtt.Client, error) {
+	brokerURL := os.Getenv("MQTT_URL")
+	if brokerURL == "" {
+		return nil, errors.New("set MQTT_URL (e.g. mqtts://user:pass@mqtt.preview.gke.trakrf.id:8883)")
+	}
+	nonce := make([]byte, 6)
+	_, _ = rand.Read(nonce)
+	opts := mqtt.NewClientOptions().AddBroker(brokerURL).SetClientID("mqtt-rpcctl-" + hex.EncodeToString(nonce)).SetCleanSession(true)
+	if caFile != "" {
+		pem, err := os.ReadFile(caFile)
+		if err != nil {
+			return nil, err
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(pem) {
+			return nil, fmt.Errorf("no certificates in %s", caFile)
+		}
+		opts.SetTLSConfig(&tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12})
+	}
+	c := mqtt.NewClient(opts)
+	if tok := c.Connect(); !tok.WaitTimeout(20*time.Second) || tok.Error() != nil {
+		return nil, fmt.Errorf("connect: %v", tok.Error())
+	}
+	return c, nil
 }
