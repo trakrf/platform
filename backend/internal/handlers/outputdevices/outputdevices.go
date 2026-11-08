@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
+	"github.com/trakrf/platform/backend/internal/geofence"
 	"github.com/trakrf/platform/backend/internal/middleware"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
 	"github.com/trakrf/platform/backend/internal/models/outputdevice"
@@ -143,6 +144,18 @@ func (h *Handler) scanDeviceFKError(ctx context.Context, orgID int, scanDeviceID
 	return "", nil
 }
 
+// tuningError checks dev's effective tuning against the org defaults
+// (geofence.OutputTuningError): an egress output with no resolved auto-off has
+// no OFF edge and latches on forever (TRA-1273), and no on-time may exceed the
+// reader's ceiling. Same (msg, err) contract as scanDeviceFKError.
+func (h *Handler) tuningError(ctx context.Context, orgID int, dev outputdevice.OutputDevice) (msg string, err error) {
+	org, err := h.storage.GetOrgGeofenceDefaults(ctx, orgID)
+	if err != nil {
+		return "", err
+	}
+	return geofence.OutputTuningError(org, dev), nil
+}
+
 // isHTTPURL reports whether s is an absolute http(s) URL with a host. This is
 // the transport-aware replacement for the former `url` struct validator.
 func isHTTPURL(s string) bool {
@@ -253,6 +266,13 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
 			return
 		}
+	}
+	if msg, err := h.tuningError(r.Context(), orgID, outputdevice.OutputDevice{Metadata: req.Metadata}); err != nil {
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
+		return
+	} else if msg != "" {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
+		return
 	}
 	device, err := h.storage.CreateOutputDevice(r.Context(), orgID, req)
 	if err != nil {
@@ -375,6 +395,19 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Metadata is replaced whole when sent, so the merged device carries either
+	// the new object or the stored one.
+	merged := *existing
+	if req.Metadata != nil {
+		merged.Metadata = *req.Metadata
+	}
+	if msg, err := h.tuningError(r.Context(), orgID, merged); err != nil {
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
+		return
+	} else if msg != "" {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
+		return
+	}
 	device, err := h.storage.UpdateOutputDevice(r.Context(), orgID, id, req)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
@@ -388,10 +421,13 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary  Delete an output device
+// @Description Drives the output off first: a pin left on after its row is gone cannot be released from the app. If the off cannot be delivered the row is kept (502) so Reset still works later; force=true deletes anyway.
 // @Tags     outputdevices,internal
 // @ID       outputdevices.delete
 // @Param    output_device_id path int true "Alarm device id"
+// @Param    force query bool false "Delete even if the output could not be driven off"
 // @Success  204
+// @Failure  502 {object} modelerrors.ErrorResponse
 // @Router   /api/v1/output-devices/{output_device_id} [delete]
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
@@ -400,12 +436,16 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		httputil.RespondMissingOrgContext(w, r, reqID)
 		return
 	}
-	id, err := httputil.ParseSurrogateID("output_device_id", chi.URLParam(r, "output_device_id"))
-	if err != nil {
-		httputil.RespondPathParamError(w, r, err, reqID)
+	device, found := h.load(w, r, orgID, reqID)
+	if !found {
 		return
 	}
-	ok, err := h.storage.DeleteOutputDevice(r.Context(), orgID, id)
+	if err := h.actuator.Set(r.Context(), *device, false, 0); err != nil && r.URL.Query().Get("force") != "true" {
+		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal,
+			"could not turn the output off before deleting it, so it was kept: "+err.Error(), reqID)
+		return
+	}
+	ok, err := h.storage.DeleteOutputDevice(r.Context(), orgID, device.ID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
 		return
