@@ -18,6 +18,16 @@
 #   list               Print the installed versions; `*` marks the active one.
 #   rollback <version> Operator recovery over SSH: point the link at <version>,
 #                      drop any pending update, restart.
+#   recover            The on-site operator's one command (the `recover` SSH
+#                      login runs it and nothing else): fetch the newest daemon
+#                      release from GitHub, check it against its manifest's
+#                      sha256, switch to it, then reboot cleanly. The reboot
+#                      happens even when nothing could be fetched, because it
+#                      also clears a wedged vendor app.
+#
+# recover checks the hash but not the Ed25519 signature: the reader's OpenSSL
+# (1.0.2) cannot verify one. It trusts HTTPS to a fixed github.com URL, as an
+# SSH install trusts the operator's laptop; the URL never comes from the broker.
 #
 # State format is shared with mqtt-rpc/internal/update/state.go — change both.
 set -u
@@ -27,12 +37,21 @@ SYSTEMCTL="${GUARD_SYSTEMCTL:-systemctl}"
 MAX_STARTS="${GUARD_MAX_STARTS:-5}"
 MAX_TICKS="${GUARD_MAX_TICKS:-4}"
 SYNC="${GUARD_SYNC:-sync}"
+LOGGER="${GUARD_LOGGER:-logger}"
+RELEASES_API="${GUARD_RELEASES_API:-https://api.github.com/repos/trakrf/platform/releases?per_page=30}"
+RELEASE_BASE="${GUARD_RELEASE_BASE:-https://github.com/trakrf/platform/releases/download}"
+PROTO="${GUARD_PROTO:-=https}"
 
 STATE="$DIR/update"
 PENDING="$STATE/pending"
 LINK="$DIR/mqtt-rpcd"
 
 log() { echo "mqtt-rpcd-guard: $*" >&2; }
+# say: a line for the operator, also kept in the journal.
+say() {
+	echo "$*" >&2
+	"$LOGGER" -t mqtt-rpcd-guard "recover: $*" 2>/dev/null || true
+}
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 field() { sed -n "s/^$1=//p" "$2" 2>/dev/null | head -n 1; }
 
@@ -123,6 +142,84 @@ auto_rollback() {
 	return 0
 }
 
+# fetch <url> [curl args...]: https only (and no downgrade on redirect).
+fetch() {
+	u="$1"
+	shift
+	curl -fsSL --proto "$PROTO" --proto-redir "$PROTO" --retry 2 --connect-timeout 20 --max-time 300 "$@" "$u"
+}
+
+sha_of() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1; }
+
+# json_str <key>: the first "key": "value" string in stdin.
+json_str() {
+	grep -o "\"$1\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -n 1 | sed 's/.*:[[:space:]]*"//; s/"$//'
+}
+
+# newest_release: print the version of the newest mqtt-rpcd-* release. GitHub
+# lists releases newest first; its /latest skips prereleases, which these are.
+newest_release() {
+	doc=$(fetch "$RELEASES_API") || {
+		say "Could not reach GitHub. Check that the network cable is plugged in and that this reader can reach the internet."
+		return 1
+	}
+	tag=$(printf '%s\n' "$doc" | grep -o '"tag_name"[[:space:]]*:[[:space:]]*"mqtt-rpcd-[^"]*"' | head -n 1 | sed 's/.*"mqtt-rpcd-//; s/"$//')
+	if ! valid_version "$tag"; then
+		say "GitHub lists no usable mqtt-rpcd release."
+		return 1
+	fi
+	echo "$tag"
+}
+
+# install_release <version>: make versions/mqtt-rpcd-<version> an intact copy of
+# that release. An installed copy is kept only if its hash matches the manifest.
+install_release() {
+	v="$1"
+	url="$RELEASE_BASE/mqtt-rpcd-$v"
+	man=$(fetch "$url/manifest.json") || {
+		say "Could not download the manifest for $v."
+		return 1
+	}
+	mver=$(printf '%s\n' "$man" | json_str version)
+	sum=$(printf '%s\n' "$man" | json_str sha256)
+	if [ "$mver" != "$v" ]; then
+		say "The manifest for $v names version '$mver'; not using it."
+		return 1
+	fi
+	case "$sum" in *[!0-9a-f]* | '') sum=bad ;; esac
+	if [ "${#sum}" -ne 64 ]; then
+		say "The manifest for $v has no usable sha256; not using it."
+		return 1
+	fi
+	dest="$DIR/versions/mqtt-rpcd-$v"
+	if [ -f "$dest" ] && [ "$(sha_of "$dest")" = "$sum" ]; then
+		say "$v is already on this reader and intact."
+		return 0
+	fi
+	tmp="$DIR/versions/.mqtt-rpcd-$v.download"
+	rm -f "$tmp"
+	say "Downloading $v..."
+	if ! fetch "$url/mqtt-rpcd-linux-armv7" -o "$tmp"; then
+		rm -f "$tmp"
+		say "The download of $v failed."
+		return 1
+	fi
+	if [ "$(sha_of "$tmp")" != "$sum" ]; then
+		rm -f "$tmp"
+		say "The download of $v does not match its manifest's sha256; not using it."
+		return 1
+	fi
+	chmod 755 "$tmp"
+	"$SYNC"
+	mv -f "$tmp" "$dest" || {
+		rm -f "$tmp"
+		say "Could not put $v in place."
+		return 1
+	}
+	"$SYNC"
+	return 0
+}
+
 mode="${1:-}"
 case "$mode" in
 start)
@@ -172,11 +269,40 @@ rollback)
 	write_last rolled_back "$was" manual
 	"$SYNC"
 	log "rolled back $was -> $v (manual)"
+	if [ "$v" = legacy ]; then
+		log "warning: legacy is the daemon from before remote updates. It has no remote update support: this reader takes no updates over RPC until install.sh runs again."
+	fi
 	"$SYSTEMCTL" restart mqtt-rpcd
 	exit 0
 	;;
+recover)
+	say "TrakRF reader recovery on $(hostname 2>/dev/null) at $(now)"
+	say "Network: link $(cat /sys/class/net/eth0/speed 2>/dev/null || echo unknown) Mbps, address $(ip -4 -o addr show eth0 2>/dev/null | awk '{print $4}' | head -n 1)"
+	was=$(active_version || echo unknown)
+	say "The daemon is on $was."
+	rc=1
+	if v=$(newest_release) && install_release "$v"; then
+		if [ "$v" = "$was" ]; then
+			say "The daemon is already on the newest release, $v."
+			rc=0
+		elif point_at "$v"; then
+			rm -f "$PENDING" "$CLAIM"
+			clear_counters
+			write_last rolled_back "$was" recover
+			say "Switched the daemon from $was to $v."
+			rc=0
+		else
+			say "Could not switch the daemon to $v."
+		fi
+	fi
+	[ "$rc" -eq 0 ] || say "Nothing on this reader was changed."
+	"$SYNC"
+	say "Restarting the reader cleanly now. It will be back in about 5 minutes. You can close this window."
+	"$SYSTEMCTL" reboot
+	exit "$rc"
+	;;
 *)
-	echo "usage: $0 start|tick|list|rollback <version>" >&2
+	echo "usage: $0 start|tick|list|rollback <version>|recover" >&2
 	exit 2
 	;;
 esac
