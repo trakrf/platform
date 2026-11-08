@@ -61,18 +61,22 @@ func TestParseAlertQuery_AllFilters(t *testing.T) {
 	require.Equal(t, 20, f.Offset)
 }
 
-func TestParseAlertQuery_DateBoundsCoverWholeDays(t *testing.T) {
-	f, err := parse(t, "from=2026-10-01&to=2026-10-01")
-	require.NoError(t, err)
-	require.Equal(t, time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), *f.From)
-	require.Equal(t, time.Date(2026, 10, 2, 0, 0, 0, 0, time.UTC), *f.To, "a bare to date includes that whole day")
-}
-
 func TestParseAlertQuery_InstantToIsInclusive(t *testing.T) {
 	f, err := parse(t, "from=2026-10-01T08:00:00Z&to=2026-10-01T09:00:00-04:00")
 	require.NoError(t, err)
 	require.Equal(t, time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC), f.From.UTC())
 	require.Equal(t, time.Date(2026, 10, 1, 13, 0, 0, 1000, time.UTC), f.To.UTC())
+}
+
+func TestParseAlertQuery_EqualFromAndToIsOneInstant(t *testing.T) {
+	_, err := parse(t, "from=2026-10-01T08:00:00Z&to=2026-10-01T08:00:00Z")
+	require.NoError(t, err)
+}
+
+func TestParseAlertQuery_RejectsBareDates(t *testing.T) {
+	_, err := parse(t, "from=2026-10-01&to=2026-10-01")
+	require.ElementsMatch(t, []string{"from", "to"}, fieldsOf(t, err),
+		"a bare date has no zone, so it cannot mean the viewer's day")
 }
 
 func TestParseAlertQuery_RejectsBadValues(t *testing.T) {
@@ -82,7 +86,26 @@ func TestParseAlertQuery_RejectsBadValues(t *testing.T) {
 		fieldsOf(t, err))
 }
 
+func TestParseAlertQuery_RejectsEmptyValues(t *testing.T) {
+	_, err := parse(t, "asset_id=&recipient_id=&type=&channel=&from=&to=&page=&per_page=")
+	require.ElementsMatch(t,
+		[]string{"asset_id", "recipient_id", "type", "channel", "from", "to", "page", "per_page"},
+		fieldsOf(t, err), "a present but empty filter must not widen the list to the whole org")
+}
+
+func TestParseAlertQuery_BoundsErrorsCarryParams(t *testing.T) {
+	_, err := parse(t, "per_page=101&page=0")
+	var lpe *httputil.ListParamError
+	require.True(t, errors.As(err, &lpe))
+	params := map[string]map[string]any{}
+	for _, f := range lpe.Fields {
+		params[f.Field] = f.Params
+	}
+	require.Equal(t, map[string]any{"max": float64(100)}, params["per_page"])
+	require.Equal(t, map[string]any{"min": float64(1)}, params["page"])
+}
+
 func TestParseAlertQuery_RejectsToBeforeFrom(t *testing.T) {
-	_, err := parse(t, "from=2026-10-05&to=2026-10-01")
+	_, err := parse(t, "from=2026-10-05T00:00:00Z&to=2026-10-01T00:00:00Z")
 	require.Equal(t, []string{"to"}, fieldsOf(t, err))
 }

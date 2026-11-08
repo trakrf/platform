@@ -1,7 +1,6 @@
 // Package notificationrecipients serves org-scoped notification contacts, the
-// asset subscriptions that link them (TRA-1275), and the history of alerts
-// sent to them. Session-authenticated
-// management endpoints, not part of the public API.
+// asset subscriptions that link them, and the history of alerts sent to them.
+// Session-authenticated management endpoints, not part of the public API.
 package notificationrecipients
 
 import (
