@@ -60,11 +60,13 @@ type Health struct {
 	AutoRebootsExhausted bool `json:"auto_reboots_exhausted"`
 	// GoldenConfig is one of the Golden* states.
 	GoldenConfig string `json:"golden_config"`
-	// CloudServerFault says, when non-empty, why the reader's own app will not
-	// publish reads through the golden CloudServer: a trust bundle CSL cannot
-	// use, or drift from qos 0 / cleanSession / TLSv1.2. Faults join with "; ".
-	// The daemon stays connected either way, so nothing else shows it; a
-	// missing bundle makes the vendor app go silent, with no log line at all.
+	// CloudServerFault lists, when non-empty, what is wrong with the golden
+	// CloudServer the reader's own app publishes reads through. Some faults stop
+	// reads: a trust bundle CSL cannot use, or a broker chain that does not
+	// reach its first certificate. Others are drift from qos 0 / cleanSession /
+	// TLSv1.2. Faults join with "; ". The daemon stays connected either way, so
+	// nothing else shows them; a missing bundle makes the vendor app go silent,
+	// with no log line at all.
 	CloudServerFault string `json:"cloudserver_fault,omitempty"`
 }
 

@@ -257,11 +257,13 @@ for diagnosis.
 // MQTT Last Will (the daemon died without Stop):
 {"online": false}
 ```
-`cloudserver_fault` names every way the golden CloudServer would stop the
-reader's own app publishing reads: a trust bundle CSL cannot use, or drift from
-qos 0, cleanSession or TLSv1.2. The rules and the reasons for them are in
-`deploy/edge/mqtt-rpc/README.md` ("The golden CloudServer"). It is re-checked on
-every probe, independently of `/API`.
+`cloudserver_fault` lists what is wrong with the golden CloudServer the
+reader's own app publishes through. A trust bundle CSL cannot use, or a broker
+chain that does not reach the bundle's first certificate, stops reads. Drift
+from qos 0, cleanSession or TLSv1.2 is listed too. The rules and the reasons
+for them are in `deploy/edge/mqtt-rpc/README.md` ("The golden CloudServer").
+The entry is re-checked on every probe, independently of `/API`, and the chain
+on every broker handshake.
 
 It is published when the health changes and on every reconnect, and not on
 every probe. To read it: `MQTT_URL=… mqtt-rpcctl status -base <base topic>`

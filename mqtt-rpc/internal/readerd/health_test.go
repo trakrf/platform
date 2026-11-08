@@ -1,6 +1,7 @@
 package readerd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -319,6 +320,25 @@ func TestMonitor_CarriesCloudServerFault(t *testing.T) {
 	r.run(H, DefaultHealthPolicy().Interval)
 	if got := r.last().CloudServerFault; got != "" {
 		t.Fatalf("cloudserver_fault after the fix = %q, want empty", got)
+	}
+}
+
+// Not every fault stops reads (cleanSession false at qos 0 is drift), so the
+// log names a config fault rather than claiming reads have stopped. A steady
+// fault is logged once, not every 30 s.
+func TestMonitor_CloudServerFaultLoggedOnceAsAConfigFault(t *testing.T) {
+	r := newRig(t, DefaultHealthPolicy(), false)
+	var logs bytes.Buffer
+	r.m.log = zerolog.New(&logs)
+	r.m.deps.CloudServer = func() string { return "cleanSession is false; golden is true" }
+
+	r.run(H, 5*DefaultHealthPolicy().Interval)
+	out := logs.String()
+	if n := strings.Count(out, "golden cloudserver config fault"); n != 1 {
+		t.Fatalf("logged %d times, want once:\n%s", n, out)
+	}
+	if strings.Contains(out, "will not publish reads") {
+		t.Fatalf("log claims reads stopped for config drift:\n%s", out)
 	}
 }
 

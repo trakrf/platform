@@ -189,7 +189,7 @@ func (m *Monitor) checkCloudServer(h *readerrpc.Health) {
 	if fault == "" {
 		m.log.Info().Str("was", h.CloudServerFault).Msg("golden cloudserver fault cleared")
 	} else {
-		m.log.Error().Str("fault", fault).Msg("golden cloudserver will not publish reads")
+		m.log.Error().Str("fault", fault).Msg("golden cloudserver config fault")
 	}
 	h.CloudServerFault = fault
 }
