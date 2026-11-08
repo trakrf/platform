@@ -57,7 +57,14 @@ check-contributing:
 
 lint: check-contributing (frontend "lint") (backend "lint") (cli "lint")
 
-test: test-ops test-release-guards test-db-init test-env-drift test-bootstrap (frontend "test") (backend "test") (cli "test")
+test: test-ops test-release-guards test-db-init test-env-drift test-bootstrap test-mqtt-rpc (frontend "test") (backend "test") (cli "test")
+
+# The on-reader daemon (its own Go module) and its deploy scripts. Customer
+# readers keep whatever updater and rollback guard they were installed with, so
+# this is the gate that matters most before a release (TRA-1317).
+test-mqtt-rpc:
+    cd mqtt-rpc && go vet ./... && go test -race ./...
+    shellcheck -s sh deploy/edge/mqtt-rpc/mqtt-rpcd-guard deploy/edge/mqtt-rpc/install.sh deploy/edge/mqtt-rpc/rollback.sh
 
 build: (frontend "build") (backend "build") (cli "build")
 
