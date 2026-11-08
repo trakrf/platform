@@ -267,3 +267,33 @@ func TestHealthInvalidValuesError(t *testing.T) {
 		})
 	}
 }
+
+// TRA-1138: an ON with no pulse gets this on-time. 30 s by default; it may be
+// shortened, never raised past the 60 s hard cap.
+func TestGpoDefaultOn(t *testing.T) {
+	brokerEnv(t)
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.GpoDefaultOn != 30*time.Second {
+		t.Errorf("GpoDefaultOn = %s, want 30s", cfg.GpoDefaultOn)
+	}
+
+	t.Setenv("READERD_GPO_DEFAULT_ON", "20s")
+	if cfg, err = LoadConfig(); err != nil || cfg.GpoDefaultOn != 20*time.Second {
+		t.Errorf("READERD_GPO_DEFAULT_ON=20s gave %s, %v; want 20s", cfg.GpoDefaultOn, err)
+	}
+}
+
+func TestGpoDefaultOnInvalidValuesError(t *testing.T) {
+	for _, v := range []string{"soon", "0s", "-5s", "61s", "5m"} {
+		t.Run(v, func(t *testing.T) {
+			brokerEnv(t)
+			t.Setenv("READERD_GPO_DEFAULT_ON", v)
+			if _, err := LoadConfig(); err == nil {
+				t.Errorf("READERD_GPO_DEFAULT_ON=%s must error", v)
+			}
+		})
+	}
+}

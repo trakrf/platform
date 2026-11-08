@@ -22,6 +22,9 @@ const (
 	connectRetryInterval = 5 * time.Second
 	publishTimeout       = 5 * time.Second
 	rpcTimeout           = 10 * time.Second
+	// safeStateTimeout bounds the start and stop output sweeps (four ports,
+	// each bounded again by the adapter).
+	safeStateTimeout = 15 * time.Second
 )
 
 // Daemon is the on-reader MQTT JSON-RPC control endpoint. It subscribes to the
@@ -71,6 +74,10 @@ func New(cfg Config, adapter Adapter, log *zerolog.Logger) *Daemon {
 // connection self-heals via AutoReconnect + ConnectRetry; OnConnect publishes the
 // retained online status and (re)subscribes the RPC topic.
 func (d *Daemon) Start() error {
+	// Before serving anything: clear an output left on by a crash, a kill -9 or
+	// the previous version. Not final; the daemon goes on to serve Gpo.Set.
+	d.outputsOff(false)
+
 	statusTopic := readerrpc.StatusTopic(d.cfg.Broker.BaseTopic)
 	rpcTopic := readerrpc.RPCTopic(d.cfg.Broker.BaseTopic)
 
@@ -160,13 +167,16 @@ func redactBrokerURL(raw string) string {
 	return u.String()
 }
 
-// Stop publishes the retained offline status (best-effort) then disconnects.
+// Stop drives every output off, then publishes the retained offline status
+// (best-effort) and disconnects. The outputs go first and do not depend on the
+// broker: a shutdown is exactly when no OFF from the cloud will arrive.
 func (d *Daemon) Stop() {
 	select {
 	case <-d.stopCh:
 	default:
 		close(d.stopCh)
 	}
+	d.outputsOff(true)
 	if d.client == nil || !d.client.IsConnected() {
 		return
 	}
@@ -176,6 +186,16 @@ func (d *Daemon) Stop() {
 	}
 	d.client.Disconnect(250)
 	d.log.Info().Msg("readerd disconnected")
+}
+
+// outputsOff runs the adapter's output safe state. A failure is already logged
+// per port by the adapter; it never stops a start or a stop.
+func (d *Daemon) outputsOff(final bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), safeStateTimeout)
+	defer cancel()
+	if err := d.adapter.OutputsOff(ctx, final); err != nil {
+		d.log.Error().Err(err).Bool("final", final).Msg("outputs safe state incomplete; an output may still be on")
+	}
 }
 
 // loadTLS builds a TLS config trusting the CA bundle at path.
@@ -293,7 +313,7 @@ func (d *Daemon) dispatch(ctx context.Context, req readerrpc.Request) readerrpc.
 		return d.result(req, readerrpc.GpoSetResult{
 			Port:   p.Port,
 			On:     p.On,
-			Pulsed: p.On && p.PulseMs > 0,
+			Pulsed: p.On, // every ON arms a release; none latches
 		})
 
 	case readerrpc.MethodGetStatus:

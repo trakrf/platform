@@ -123,6 +123,21 @@ programmatic verification without hardware indicators):
 | GPO4 | `gpio176` |
 | GPI 1–4 | `gpio203`, `gpio46`, `gpio7`, `gpio8` |
 
+The same map holds on the Frederick units (checked on `cs463-8405de`). The lines
+are exported `out` at boot, `active_low=0`, `root:root 0644`.
+
+**Writing the value file drives the physical output with no vendor app
+involved** — confirmed by eye on cs463-212 GPO2, 2026-11-08. mqtt-rpcd runs as
+root and uses this for every OFF, so an off lands while `/API` is wedged. It
+never exports a line or writes an ON this way.
+
+**`directIOOutput` acks before the pin moves.** The vendor queues the write to
+a single `GPIOController_WorkerThread` and applies it about 30 ms after the
+`<Ack>` (`writeOutputPort … State n` in `CS463System.log`). A sysfs write made
+inside that window is overwritten by the queued one. A reader with live tags
+and an output device also has the cloud writing the same pins; take the tags
+away before reading anything into a sysfs value.
+
 **Reader power.** 12 V DC via an externally-threaded 5.5 × 2.5 mm barrel jack
 (the supplied adapter carries the mating female collar — the manual says *"When
 using AC adaptor, please remember to screw tight"*), **or** PoE+ 802.3at from a
