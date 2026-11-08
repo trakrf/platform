@@ -23,7 +23,13 @@ permissions:
 
 jobs:
   lint-test:
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest. When that label moved to Ubuntu 26.04 the
+    # "Install Playwright browser" step below began failing with "Playwright
+    # does not support chromium on ubuntu26.04-x64": the pinned
+    # @playwright/test has no chromium build for 26.04. This job is the only
+    # one that installs a browser. Move it to 26.04 in the same change that
+    # bumps @playwright/test to a release that lists ubuntu26.04-x64.
+    runs-on: ubuntu-24.04
     # Without this the job inherits the 360-minute Actions default. A hung test
     # runner would then occupy a runner for six hours and emit no signal about
     # what happened — see TRA-1050. The job takes ~5 min when healthy.
