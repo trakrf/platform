@@ -206,8 +206,11 @@ build arrives over RPC, and a bad build must never strand the reader.
    check it: mqtt-rpcd has no flags, so running it starts a second daemon.
 4. **Probation → commit.** The new daemon sends itself `Reader.GetCapabilities`
    through the broker (to its own `<base>/rpc`, reply to `<base>/selftest`) every
-   30 s. Once it has answered an RPC through the broker — that one or any cloud
-   RPC — and its own updater preflight passes, it commits (removes `pending`).
+   30 s. Once it has been up 3 minutes and answers an RPC through the broker —
+   that one or any cloud RPC — and its own updater preflight passes, it commits
+   (removes `pending`). The uptime floor catches a build that connects and then
+   crashes (a crash resets it, so the start count rolls it back) or wedges (the
+   answers stop, so the tick count does).
    The commit criterion is deliberately **not** "reconcile succeeded": a wedged
    vendor app (`/API` answering 200 with an empty body) would otherwise roll back
    the very build sent to fix it.
@@ -215,11 +218,15 @@ build arrives over RPC, and a bad build must never strand the reader.
    trusted to undo itself. `deploy/edge/mqtt-rpc/mqtt-rpcd-guard` (POSIX sh,
    installed only by `install.sh`, never updated over the air):
    - `ExecStartPre` counts starts while pending; more than 5 = crash loop.
-   - A 5-minute timer counts ticks while pending; 4 = no commit (15–20 min,
-     enough for the ~7 min first broker connect after a boot).
-   - Either repoints the link at `from`, deletes the failed version, records
-     `update/last` and restarts. Commit and rollback both claim `pending` by
-     rename, so exactly one wins.
+   - A 5-minute timer counts ticks while pending; 4 = no commit. Every start
+     resets the tick count, so each boot gets the full 15–20 min — enough for the
+     ~7 min first broker connect after a boot.
+   - Either repoints the link at `from` and, only once the link has verifiably
+     moved and been synced, deletes the failed version, records `update/last` and
+     restarts. If the link cannot be moved, nothing is deleted or recorded and
+     `pending` stays armed for the next run; a rollback interrupted mid-way
+     resumes. Commit and rollback both claim `pending` by rename, so exactly one
+     wins.
 
 `update/last` is reported in `GetCapabilities().daemon.update`:
 `committed`, `rolled_back` (`error`: `crash_loop` | `no_commit` | `manual`) or
@@ -232,6 +239,9 @@ password.
 `linux/armv7` static, signs, and publishes a GitHub **prerelease**
 `mqtt-rpcd-<version>` with `mqtt-rpcd-linux-armv7` and `manifest.json`.
 `<version>` is `git describe --tags --match 'v[0-9]*'` of the built commit.
+`mqtt-rpcctl sign` refuses a binary whose `-X main.version` (read from its Go
+build info) is not the version being signed, so release builds must not use
+`-trimpath`, which drops that info.
 The backend resolves versions under `MQTT_RPCD_RELEASE_BASE_URL` (default
 `https://github.com/trakrf/platform/releases/download`).
 
@@ -248,10 +258,18 @@ either is accepted.
   It signs a release if the CI key is lost or compromised.
 
 **Rotation:** ship a build trusting `{old, new}` signed by the old key; once every
-reader runs it, ship one trusting `{new, offline}` signed by the new key. Readers
-only ever trust the keys of the build they run, so a key that leaves the list
-stops working fleet-wide as soon as the fleet has updated. `mqtt-rpcctl keygen`
-makes a key pair.
+reader runs it, ship one trusting `{new, offline}` signed by the new key.
+`mqtt-rpcctl keygen` makes a key pair.
+
+**Rotation is not revocation.** Downgrades are allowed and every release stays
+public, so whoever holds a retired key *and* can publish on the broker can
+replay an older genuine release that still trusts that key, then install a build
+signed with it. Dropping a key from the list only retires it for honest use.
+Revoking a compromised key needs a further build with a rollback floor (a
+minimum version or a key epoch) — not implemented. The release URL is not
+signed either, so a replayed manifest can point the reader's download at any
+https URL; the download is hashed and fails closed, but the reader does make the
+request. Broker publish rights are therefore part of the trust boundary.
 
 ### Recovery, cheapest first
 1. Automatic: the guard (above).
