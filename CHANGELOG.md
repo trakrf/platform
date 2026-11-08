@@ -7,6 +7,256 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-09
+
+Nine weeks of `main`, 335 commits across 84 pull requests, fourteen migrations
+(`000041`–`000054`). Prod moves from `v1.5.0` (schema version 40) to schema
+version 54.
+
+Most of the visible change is about lapsed subscriptions and fixed readers. An
+org whose subscription has run out now loses capture and webhooks after a grace
+period, and its admins are warned on the way there. A CS463 reader can be put on
+a new daemon build from the app, and rolls itself back if that build is bad. Asset
+history lists where an asset stayed, not one row per minute of it sitting there.
+
+Most of the migrations, and most of the backend diff, are notification delivery:
+email and SMS senders, a durable outbox on the River job queue, subscriptions,
+opt-outs and a delivery planner. **It ships dark.** Nothing on `main` produces a
+notification trigger yet, so no notification can be sent, whatever the
+configuration. It is here because it is merged, not because it is on.
+
+### Upgrading
+
+**Lapsed orgs are cut off at deploy, and their admins are emailed at deploy**
+(TRA-1047, `000049`, `000050`). `trakrf.org_is_entitled` now treats
+`expires_at + grace` as the cutoff, and the paid-write gate, webhook delivery and
+the MQTT topic list all read it. An org past that point stops being captured on
+the next reconcile: its readers keep publishing and see no error, and those QoS 0
+reads are discarded, not replayed later. Grace is the `app.subscription_grace_period`
+database setting, three days when unset. An hourly job emails org admins at 14
+days before expiry, 3 days before, at expiry and at cutoff. On the first run after
+deploy, every org inside 14 days of expiry, or cut off in the last 7 days, gets
+its email straight away. Check which prod orgs have an `expires_at` before you
+promote. A `NULL` expiry is still perpetual, and an org with an active
+`subscriptions` row is entitled whatever `subscription_enabled` says.
+
+**The notification job runtime always starts, so its tables are a boot
+dependency** (`000043`). River's tables (`trakrf.river_job`, `river_queue`,
+`river_leader` and the rest) are created by the migrate role, and the app role
+gets them through the same default privileges as every other migration-created
+table. Without those grants the backend fails at boot, not on first use.
+
+**Notification settings are off by default, and two of them can refuse a boot.**
+Notification email stays off unless `NOTIFICATION_EMAIL_ENABLED=true`, which then
+requires `NOTIFICATION_EMAIL_FROM` and `RESEND_WEBHOOK_SECRET`. `RESEND_API_KEY`
+alone still only drives transactional email. Twilio SMS is off when all six
+`TWILIO_*` settings are empty. A *partial* Twilio config refuses to boot.
+`NOTIFICATION_DEFAULT_PHONE_REGION` defaults to `US`, and a value that is not a
+valid region refuses to boot. Message templates are also checked at boot. Prod
+needs none of these set to deploy.
+
+**Backend logs change format and level** (TRA-1284). The logger chose its profile
+from `ENVIRONMENT`, which nothing sets, so prod and preview both ran the dev
+profile: debug level, console output with ANSI escapes, caller and stack on every
+line, `env=dev`. It now reads `APP_ENV`, fails closed, and prod gets **JSON at
+`info`**. The DBG lines go, and the INF lines ops reads stay: startup,
+`mqtt subscriber connecting`, `Request completed`, `api.write`. `LOG_LEVEL` still
+overrides the level. Nine `log/slog` call sites in `httputil`, `health` and
+`storage` still print plain text, not JSON.
+
+**Remote reader updates need outbound access to GitHub** (TRA-1317). The backend
+fetches the signed release manifest from this repo's GitHub releases. A reader
+downloads from `github.com`, `api.github.com` and
+`release-assets.githubusercontent.com` on 443. Releases are signed in CI with the
+`MQTT_RPCD_SIGNING_KEY` Actions secret.
+
+**`/metrics` is not on the public ingress** (infra TRA-1268). It now carries
+per-route HTTP histograms (below), and the existing ServiceMonitor scrapes it from
+inside the cluster.
+
+| migration | what it does |
+| -- | -- |
+| `000041`, `000042` | platform-owned inboxes for verified SMS and email provider callbacks |
+| `000043` | River's job-queue tables |
+| `000044` | `notification_deliveries`, the org-scoped audit record of each send |
+| `000045`–`000047` | notification recipients and asset subscriptions; trigger `search_path` pinned; subscriptions switch off instead of being deleted |
+| `000048` | delivery routing columns and `notification_suppressions` (opt-outs) |
+| `000049`, `000050` | subscription grace and cutoff, `subscription_notices` |
+| `000051`, `000054` | `notification_events`, linked to the alarm or location change that caused each one |
+| `000052` | `sms_callback_events.event_key` BYTEA → lowercase hex TEXT; existing rows convert to what the new code writes |
+| `000053` | each opt-out links to the provider callback that created it |
+
+### Security
+
+- **A reader takes only a signed build, and only an org admin can start an update**
+  (TRA-1317, #765). The daemon checks an Ed25519 signature over the version and
+  sha256 against keys compiled into the running binary, and refuses plain http,
+  before it downloads anything. The backend's update endpoint sits behind both
+  the paid gate and an admin check.
+- **The logger's redaction settings are removed, because they never did anything**
+  (TRA-1284). `SanitizeEmails`, `SanitizeIPs` and `MaxBodySize` were read nowhere,
+  so the prod profile claimed a redaction that never happened. PII stays out of
+  log lines at the call site, as the notification code does: it logs ids, never
+  addresses.
+
+### Added
+
+- **Update a CS463's reader software from the app** (TRA-1317, #765). A "Reader
+  software" panel under the CS463 antenna settings shows the daemon version and the
+  last update result. It starts an update, then follows it until the reader commits,
+  rolls back or fails. A new build commits only after it has been up for 3 minutes
+  and answered an RPC through the broker. Otherwise a guard on the reader, which
+  remote updates never replace, rolls it back to the previous build. Backed by
+  `GET /scan-devices/{id}/reader-software` and `POST …/reader-software/update`.
+  The daemon side ships separately; see below.
+- **Lapsed-subscription notices and status** (TRA-1047). Every screen shows a
+  notice under the header in the last 14 days before expiry, during grace and
+  after cutoff. The cutoff banner says readers may look online while nothing is
+  recorded. The superadmin org list shows Active / Grace / Cut off and how many
+  fixed readers are not being recorded. The backend logs a WARN naming the org and
+  device when a cutoff drops a reader's topic.
+- **Capture TID and USER memory during inventory** (TRA-1251). A new **Capture all
+  tag data** setting, off by default. With it on, a scan reads each tag's TID and
+  USER banks, and the PC word, TID and User Data go into the Share, CSV, Excel and
+  PDF exports. It is opt-in because bank data comes only in normal-mode responses,
+  and normal mode is slower than compact mode. Verified on a CS108: a bank the tag
+  refuses costs only that bank's data, never the tag.
+- **Per-route HTTP latency on `/metrics`** (TRA-494).
+  `http_request_duration_seconds` and `http_requests_total`, labelled by method,
+  chi route template and status, plus `http_requests_in_flight`. Labels are
+  bounded, a handler that panics counts as a 500, and health checks, `/metrics`
+  and the two SSE streams are left out.
+- **The public API spec points integrators at the Markdown docs** (TRA-862, #680)
+  through an `llms-api.txt` link. The spec, the CLI's vendored copy and the typed
+  client are regenerated.
+- **Notification delivery groundwork, shipped dark** (TRA-1201, TRA-1267, TRA-1192,
+  TRA-1275, TRA-1277). This is the backend for alerting an asset's subscribers by
+  email or SMS. It has a Twilio sender with signed STOP/START callbacks (#645), a
+  Resend sender with signed, idempotent callbacks (#682–#690), and a durable
+  outbox on River (#692–#705). An outbox insert happens in the caller's
+  transaction. Retries follow a fixed 1s / 5s / 30s / 5m / 30m ladder, and an
+  "outcome unknown" send is retried through the provider's idempotency key, never
+  re-sent blind. It also has recipients and asset subscriptions (#706–#710), opt-outs
+  that are case-insensitive and fail closed (#712, #714, #720), and E.164 phone
+  normalisation, so a STOP matches however the number was typed (#725). A planner
+  turns one alarm or location change into one event plus a delivery per eligible
+  subscriber, all-or-nothing (#713, #715–#717, #726–#734). A channel adapter checks
+  opt-outs again at send time (#749–#752). A send the provider accepted is still
+  recorded as sent when shutdown cancels the job, so it is never sent twice (#753).
+  The only route exposed is the session-authenticated recipients and subscriptions
+  API, with mutations behind the paid gate. It is not in the public spec and no
+  frontend uses it.
+
+#### Reader daemon (`mqtt-rpcd`, released on its own `mqtt-rpcd-v*` tags)
+
+These ship with the daemon, not with this release. They are listed here because
+the remote update above is what installs them.
+
+- **A wedged vendor app is detected and recovered without a site visit**
+  (TRA-1041, #769, ADR 0025). The CS463 vendor app can come up answering every
+  `/API` call with HTTP 200 and an empty body. The radio keeps reading, systemd says
+  `active`, and no reads reach the cloud. The daemon probes `/API` every 30s and
+  judges health by the parsed body. After 6 minutes unhealthy it restarts the
+  vendor app. If that fails it does a clean reboot, at most twice until `/API` has
+  stayed healthy for an hour. Golden-config reconcile now runs whenever `/API`
+  becomes healthy, where before it ran once at startup and always lost the boot
+  race. The retained `<base>/status` document carries the health state. Backend
+  and app consumption of that block is follow-up work. The same PR stops the
+  reader-API password leaking into the journal and RPC error replies through a
+  printed `*url.Error`.
+- **An on-site `recover` login** (TRA-1317, #766). An SSH login with no shell:
+  it fetches the newest daemon release, checks its sha256, switches to it and
+  reboots cleanly. This is the fallback when remote update stops working on a
+  customer reader. `update-to-release.sh` moves an installed reader onto a
+  published release over the same RPC path the app uses.
+
+### Changed
+
+- **Asset history lists stays, not scans** (TRA-1265). Scans have been stored once
+  per asset per minute since 1.5.0, so a parked tag showed in Reports as about 10k
+  identical one-minute entries over 7 days. Each item of
+  `GET /api/v1/assets/{asset_id}/history` is now an unbroken run at one location.
+  `event_observed_at` is when the stay began. `duration_seconds` runs until the
+  asset was first seen anywhere else, and is `null` while the stay is ongoing.
+  `total_count` and paging count stays. `from`/`to` choose which stays are listed
+  but don't clip them. The response shape is unchanged and the public spec
+  describes the new meaning. The query reads the per-minute aggregate: 90 days
+  went from 8.6s to 157ms on preview.
+- **Lapsed orgs stop being captured and stop receiving webhooks** (TRA-1047). See
+  Upgrading. Reactivating an org resubscribes its readers on the next reconcile,
+  with no restart. Data retention for cancelled orgs is not part of this.
+- **Transmit power reads `dBm EIRP`, and 30 is labelled as the regulatory cap**
+  (TRA-391, #674). The sled reaches +31.5 dBm EIRP where that is permitted. Raising
+  the cap needs a region setting the app does not have, not a constant edit. Both
+  sliders now take their range from one source, instead of six hardcoded values
+  that included the gradient-fill divisor.
+
+### Fixed
+
+- **A failed connect could not be retried without reloading the page** (TRA-1250,
+  #656, #657). The device singleton was assigned before bring-up and never cleared
+  when bring-up failed, so every later attempt got `Device already connected`. The
+  same PR feeds the BLE packet-history buffer, which the reassembly error dump had
+  always printed as `(0 captured)` because nothing wrote to it.
+- **One unanswered `START_INVENTORY` left the reader in `Error`** (TRA-1262). The
+  start sequence had no retry schedule, which means exactly one attempt. It now
+  retries, as the stop path and the Locate mask write already did. Across the soak
+  arm, `Failed to start scanning` was in every failed rep and in none of the 27
+  passes.
+- **A barcode scan could leave the reader stuck in Barcode mode** (TRA-1244). The
+  end-of-scan path awaited an unguarded stop, so a rejection skipped the mode
+  restore. Capture and unmount now return the reader through one helper, which
+  restores the mode even when the stop rejects.
+- **The asset panel's Download History CSV button did nothing** (TRA-1266). It
+  only logged to the console. It now fetches every stay in the chosen range, not
+  just the loaded pages, and opens the same export dialog as the Asset History tab.
+- **Two tags entering an egress zone together drove one output twice** (TRA-1119).
+  On a Shelly the pulse ran longer. On a CS463 the second GPO pulse was swallowed.
+  While an output is inside a pulse, later fires for that output are now dropped
+  and counted as `geofence_alarms_suppressed_total{reason="pulse_active"}`. Manual
+  Test/Reset and presence mode are not affected.
+- **The inventory CSV never carried an asset's description** (TRA-1251). The
+  header was declared, but the column was always written empty. Excel and PDF had
+  it.
+- **Reader daemon commands were serialised 5 seconds apart** (#699; ships with
+  `mqtt-rpcd`). Each RPC reply waited for the broker's ack inside the MQTT
+  callback, so two GPO outputs bound to one reader switched about 5s apart. Replies
+  now publish off the callback, and command order is kept.
+
+### Internal
+
+No runtime behaviour.
+
+The non-hardware half of the Playwright suite now gates CI inside `lint-test`
+(TRA-1253, #668, ADR 0022), after its instruments were made able to fail and the
+suite was driven to green on hardware (#666). That work deleted a console monitor
+that could fail nothing and was double-counting two measured signals (#667). It
+also gave the console allowlist a red state, after 15 of its 16 entries turned out
+to match nothing (TRA-1224). Playwright moves 1.56 → 1.65 and `lint-test` to Node
+22, back on `ubuntu-latest` (TRA-1327).
+
+Hardware test access is now arbitrated by `ble-radio-lock` rather than by
+convention (TRA-1241), and `ble-mcp-test` moved 0.16 → 0.18 (TRA-1194, TRA-1255),
+along with removing a vestigial frontend lockfile that pinned 0.7.3 (TRA-1194).
+The soak harness's rep counters now report failures that name no test, and their
+owner was fixed (TRA-1243, #675, #676). The harness also names the cause of a
+lost `CONNECTED` and makes sure that signal reaches the log (TRA-1259, #670, #671,
+still open). New guards cover the trigger bring-up window, the mode change that
+revokes a simulated trigger level (TRA-1247, ADR 0016 restated, ADR 0019 recorded),
+the inventory/locate handler boundary (TRA-1254), and the stop's quiet window
+(TRA-1199).
+
+Also: `.env.local` resolves from the repo root at five call sites, not three
+(TRA-1195). The hardware captures are in version control, after a bare `data/`
+ignore rule had kept them on one machine (TRA-1215, ADR 0021). CSL's retry policy
+was derived from vendor source (TRA-1215). The Go toolchain moves to 1.26, as
+River requires, and `pgx` to 5.10 (#696, #705). `mqtt-rpc` tests run in
+`just validate` and `lint-test` (#765). `just backend smoke-test` honours
+`BACKEND_PORT` (#709). A slow-runner flake in a lazy-route test is fixed (#711).
+There are runbook corrections from the 1.5.0 release (TRA-1142) and soak-arm
+preconditions (#672, #673), plus ADRs 0024 and 0025 (proposed) for the reader
+update and health model.
+
 ## [1.5.0] - 2026-09-04
 
 Three weeks of `main`, 294 commits across 74 pull requests, one migration
