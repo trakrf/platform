@@ -14,6 +14,7 @@ package cs463
 import (
 	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -108,7 +109,7 @@ func (c *Client) do(ctx context.Context, params url.Values, out any) error {
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("cs463: request to %s: %w", c.baseURL, err)
+		return fmt.Errorf("cs463: request to %s: %w", c.baseURL, withoutURL(err))
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
@@ -312,6 +313,18 @@ func (c *Client) DirectIOOutput(ctx context.Context, port int, on bool) error {
 }
 
 // --- helpers --------------------------------------------------------------
+
+// withoutURL strips the request URL from a transport error. The sessionless
+// commands (directIOOutput, directIOInput, forceLogout, login) carry the password
+// in the query string, and *url.Error prints the whole URL — into the journal, an
+// RPC error reply and the status topic. The caller already names the base URL.
+func withoutURL(err error) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		return fmt.Errorf("%s: %w", ue.Op, ue.Err)
+	}
+	return err
+}
 
 func parseSessionID(ack string) string {
 	// Ack looks like "OK: session_id=42add4cd".

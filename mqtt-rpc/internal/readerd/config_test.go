@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 const multiServerCloudServer = `[
@@ -217,5 +218,52 @@ func TestReconcileInvalidErrors(t *testing.T) {
 	t.Setenv("READERD_RECONCILE", "notabool")
 	if _, err := LoadConfig(); err == nil {
 		t.Error("invalid READERD_RECONCILE must error")
+	}
+}
+
+func TestHealthDefaults(t *testing.T) {
+	brokerEnv(t)
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if !cfg.AutoRecover {
+		t.Error("auto-recovery must default on")
+	}
+	if cfg.WedgeAfter != DefaultHealthPolicy().WedgeAfter {
+		t.Errorf("WedgeAfter = %s, want the policy default", cfg.WedgeAfter)
+	}
+}
+
+func TestHealthOverrides(t *testing.T) {
+	brokerEnv(t)
+	t.Setenv("READERD_AUTO_RECOVERY", "false")
+	t.Setenv("READERD_WEDGE_AFTER", "10m")
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.AutoRecover {
+		t.Error("READERD_AUTO_RECOVERY=false must disable recovery actions")
+	}
+	if cfg.WedgeAfter != 10*time.Minute {
+		t.Errorf("WedgeAfter = %s, want 10m", cfg.WedgeAfter)
+	}
+}
+
+func TestHealthInvalidValuesError(t *testing.T) {
+	for _, kv := range [][2]string{
+		{"READERD_AUTO_RECOVERY", "maybe"},
+		{"READERD_WEDGE_AFTER", "soon"},
+		// Shorter than a boot takes to serve would flag every boot as wedged.
+		{"READERD_WEDGE_AFTER", "2m"},
+	} {
+		t.Run(kv[0]+"="+kv[1], func(t *testing.T) {
+			brokerEnv(t)
+			t.Setenv(kv[0], kv[1])
+			if _, err := LoadConfig(); err == nil {
+				t.Errorf("%s=%s must error", kv[0], kv[1])
+			}
+		})
 	}
 }

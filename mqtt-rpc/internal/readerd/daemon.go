@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"sync"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -43,6 +44,13 @@ type Daemon struct {
 
 	started     time.Time     // process start, for the commit uptime floor
 	commitAfter time.Duration // minimum uptime before a probation commit
+
+	// publishRetained is the retained-status seam, set by Start (status.go).
+	publishRetained func(topic string, payload []byte) error
+
+	statusMu sync.Mutex
+	health   *readerrpc.Health // latest from the health monitor
+	reason   string            // set by GoingDown before a planned reboot
 }
 
 // New builds a Daemon. It does not connect; call Start.
@@ -57,23 +65,6 @@ func New(cfg Config, adapter Adapter, log *zerolog.Logger) *Daemon {
 		started:     time.Now(),
 		commitAfter: DefaultCommitAfter,
 	}
-}
-
-// statusPayload is the retained presence document published on the status topic.
-type statusPayload struct {
-	Online  bool   `json:"online"`
-	At      string `json:"at,omitempty"`
-	Version string `json:"version,omitempty"`
-}
-
-func (d *Daemon) onlinePayload() []byte {
-	b, _ := json.Marshal(statusPayload{Online: true, At: d.now().UTC().Format(time.RFC3339), Version: d.cfg.Version})
-	return b
-}
-
-func offlinePayload() []byte {
-	b, _ := json.Marshal(statusPayload{Online: false})
-	return b
 }
 
 // Start connects to the broker in the background and returns immediately. The
@@ -92,7 +83,7 @@ func (d *Daemon) Start() error {
 		SetConnectRetryInterval(connectRetryInterval).
 		// Last Will: if the daemon drops without a clean Stop, the broker publishes
 		// the retained offline document so the cloud sees the reader go away.
-		SetBinaryWill(statusTopic, offlinePayload(), 1, true).
+		SetBinaryWill(statusTopic, lastWillPayload(), 1, true).
 		SetOnConnectHandler(func(c mqtt.Client) {
 			if tok := c.Publish(statusTopic, 1, true, d.onlinePayload()); tok.WaitTimeout(publishTimeout) && tok.Error() != nil {
 				d.log.Error().Err(tok.Error()).Str("topic", statusTopic).Msg("publish online status failed")
@@ -125,6 +116,18 @@ func (d *Daemon) Start() error {
 	d.client = mqtt.NewClient(opts)
 	d.publish = func(topic string, payload []byte) error {
 		tok := d.client.Publish(topic, 1, false, payload)
+		if !tok.WaitTimeout(publishTimeout) {
+			return fmt.Errorf("readerd: publish to %s timed out (broker unreachable?)", topic)
+		}
+		return tok.Error()
+	}
+	d.publishRetained = func(topic string, payload []byte) error {
+		// IsConnectionOpen, not IsConnected: with ConnectRetry, IsConnected is
+		// true while still connecting, and a publish then waits out its timeout.
+		if !d.client.IsConnectionOpen() {
+			return nil // OnConnect publishes the current document
+		}
+		tok := d.client.Publish(topic, 1, true, payload)
 		if !tok.WaitTimeout(publishTimeout) {
 			return fmt.Errorf("readerd: publish to %s timed out (broker unreachable?)", topic)
 		}
@@ -168,7 +171,7 @@ func (d *Daemon) Stop() {
 		return
 	}
 	statusTopic := readerrpc.StatusTopic(d.cfg.Broker.BaseTopic)
-	if tok := d.client.Publish(statusTopic, 1, true, offlinePayload()); tok.WaitTimeout(publishTimeout) && tok.Error() != nil {
+	if tok := d.client.Publish(statusTopic, 1, true, d.offlinePayload()); tok.WaitTimeout(publishTimeout) && tok.Error() != nil {
 		d.log.Warn().Err(tok.Error()).Msg("publish offline status failed")
 	}
 	d.client.Disconnect(250)

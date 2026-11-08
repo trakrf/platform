@@ -21,6 +21,7 @@ This cross-builds a static armv7 binary and installs:
 | `/etc/systemd/system/mqtt-rpcd.service` | runs the guard as `ExecStartPre`, then the daemon |
 | `/etc/systemd/system/mqtt-rpcd-guard.{service,timer}` | guard tick every 5 min |
 | `/opt/trakrf/update/` | update state shared by the daemon and the guard |
+| `/opt/trakrf/recovery/auto-reboots.json` | the daemon's automatic-reboot count for a wedged vendor app (created on first use; see `/mqtt-rpc/README.md` "Reader-API health and wedge recovery") |
 | `/opt/trakrf/mqtt-rpcd.env` | credentials — seeded once, never touched by updates |
 | user `recover`, `/etc/sudoers.d/trakrf-recover`, a `Match User recover` block in `/etc/ssh/sshd_config` | the on-site operator's recovery login (below); starts locked |
 

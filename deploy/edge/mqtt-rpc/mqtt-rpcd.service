@@ -1,6 +1,9 @@
 [Unit]
 Description=trakrf mqtt-rpcd — MQTT-RPC reader control daemon (CS463)
-After=network-online.target
+# Ordering after the vendor app only narrows the boot race: GlassFish is
+# "active" minutes before /API answers. The daemon's health monitor is what
+# waits for /API content before reconciling.
+After=network-online.target embeddedglassfish.service
 Wants=network-online.target
 
 [Service]
