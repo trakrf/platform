@@ -80,6 +80,10 @@ type cloudServerEntry struct {
 	EnableSSL      bool   `json:"enableSSL"`
 	ServerCertFile string `json:"serverCertFile"`
 	Topic          string `json:"topic"`
+	// Read by CheckCloudServer only; the daemon's own connection ignores them.
+	CleanSession bool   `json:"cleanSession"`
+	QoS          int    `json:"qos"`
+	SSLVersion   string `json:"sslVersion"`
 }
 
 // eventEntry mirrors one object in the reader's EventList config array.
