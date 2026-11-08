@@ -26,7 +26,7 @@ shared Go package — so a port to another language changes nothing here.
 |---|---|---|
 | `trakrf.id/{client_id}/rpc` | cloud → daemon | RPC requests (daemon subscribes) |
 | *(the request's `src`)* | daemon → cloud | response, routed to the caller's `src` topic |
-| `trakrf.id/{client_id}/status` | daemon → cloud | retained online/offline status + MQTT LWT |
+| `trakrf.id/{client_id}/status` | daemon → cloud | retained status document (presence, version, reader-API health) + MQTT LWT; see "Reader-API health and wedge recovery" |
 
 The daemon connects with a **distinct** MQTT client id (`{client_id}-rpc`) so it
 never evicts the reader's own reads connection.
@@ -97,10 +97,13 @@ live test covers the wire + the firmware behavior the fakes can't.
 
 ## Golden-config reconcile (TRA-1002)
 
-On startup the daemon **converges the reader to the golden `TrakRF mqtt-rpc`-named
+Once the reader's `/API` answers, the daemon **converges the reader to the golden `TrakRF mqtt-rpc`-named
 entities** — the exact ingest wiring validated in TRA-994 — so every reader provably
 has what ingest needs, idempotently and safe to re-run. The golden definitions are
 owned as code (`internal/readerd/cs463/golden.go`); reconcile is list-then-add-or-mod.
+The health monitor decides when it runs: when `/API` first answers after the daemon
+starts, again after every outage, and every 5 min while one keeps failing. See
+"Reader-API health and wedge recovery".
 
 ### Owned entities (all `TrakRF mqtt-rpc`-prefixed — the name *is* the ownership claim)
 | Entity | Name | Reconciled |
@@ -145,7 +148,7 @@ activation mechanism); on reboot the reader activates the enabled event's profil
 inventory still needs the startup re-arm (above) to begin publishing.
 
 ### Config
-- `READERD_RECONCILE` — `true` (default) runs reconcile on startup; `false` pins config.
+- `READERD_RECONCILE` — `true` (default) runs reconcile whenever `/API` is healthy and the config is not yet applied; `false` pins config.
 - `READERD_CLOUDSERVER_ID` — defaults to `TrakRF mqtt-rpc MQTT Server`.
 
 ### Bench verification (cs463-212, 2026-06-17) — VALIDATED on live hardware
@@ -180,6 +183,81 @@ To re-run on a reader: `CS463_LIVE=1 CS463_IP=… CS463_WEB_PASS=… go test ./i
 Open (non-blocking): **partial-failure policy** — reconcile aborts on first entity
 error (logged, non-fatal to RPC); revisit if a real reader ever needs
 best-effort-continue.
+
+---
+
+## Reader-API health and wedge recovery
+
+The CS463 vendor app can come up **answering every `/API` request with HTTP 200
+and an empty body**. When it does, the radio keeps reading, systemd says
+`active`, the daemon stays on the broker, and no reads reach the cloud. Clean
+reboots have caused it as well as power cuts. GlassFish's classloader throws
+`NullPointerException` in `WebDirContext.lookupFromJars` on every request. The
+daemon detects this itself and recovers from it.
+
+### Probe
+Every 30 s the daemon sends `GET /API?command=directIOInput&username=…&password=…`.
+It is sessionless, so it never takes the reader's single session slot (a
+`command=login` probe would). It mutates nothing, and it goes through the same
+servlet path that fails. **The reply is judged on its parsed body, never on its
+status code:**
+
+| `api` | Means |
+|---|---|
+| `healthy` | `<CSL><Command>directIOInput</Command>` with `<Input …/>`, or with `<Error …/>` (a wrong password still means the servlet is serving, and no restart fixes a credential) |
+| `degraded` | a 2xx that is empty, unparseable, or names another command. **This is the wedge.** |
+| `unreachable` | no connection, or a non-2xx (nginx answers 502 while GlassFish is down or still deploying) |
+| `unknown` | not probed yet |
+
+Detection rests only on `/API` content. It does not scrape `lookupFromJars` from
+the log, and a slow broker connection after a boot is not a wedge.
+
+### Recovery ladder
+`/API` unhealthy for **6 min** without a break (`READERD_WEDGE_AFTER`; a boot
+takes about 3 min to serve) marks the reader `wedged`. Then, once per episode:
+
+1. **Restart the vendor app.** `systemctl stop embeddedglassfish`, then SIGTERM
+   whatever is left in the unit's cgroup, then SIGKILL after 30 s, then `start`.
+   `systemctl restart` alone is not enough here. The vendor init script stops
+   only the pid in a pidfile that is not always written, and the generated unit
+   is `KillMode=process` with no main pid, so a plain restart can start a second
+   java beside the first. If a process survives SIGKILL, the daemon does not
+   start the app.
+2. **Still unhealthy 6 min later: a clean reboot.** The daemon records the
+   reboot, publishes the retained status offline with `reason: "auto-recovery"`,
+   then runs `sync` and `systemctl reboot`. It never power-resets.
+
+**Boot-loop cap:** at most **2** automatic reboots, counted in
+`/opt/trakrf/recovery/auto-reboots.json`, which survives the reboots it counts.
+The count resets after **1 h** of continuous health, measured on the process
+clock. It is not a wall-clock window, because the CS463 RTC has booted at 2019
+before NTP corrected it, and a timestamp window would then expire every entry.
+Past the cap, or if the file cannot be read, the daemon stays up and reports
+`auto_reboots_exhausted: true`, and a person decides.
+
+Every unhealthy → healthy transition (two or more failed probes) re-runs the
+golden-config reconcile, because an app restart stops inventory and the
+reconcile re-arms it.
+
+`READERD_AUTO_RECOVERY=false` keeps the probe, the status and the reconcile
+retry, but takes no recovery action. Use it on a bench that has to hold a wedge
+for diagnosis.
+
+### Status document (retained `<base>/status`)
+```jsonc
+{"online": true, "at": "2026-11-08T17:40:00Z", "version": "v1.5.0-330-g…",
+ "health": {"api": "degraded", "since": "2026-11-08T17:31:00Z",
+            "detail": "http 200 with an empty body", "wedged": true,
+            "recovery": "app_restart",            // or "reboot"; absent while healthy
+            "auto_reboots": 1, "auto_reboots_exhausted": false,
+            "golden_config": "pending"}}          // "applied" | "pending" | "off"
+// before an automatic reboot, and after it via Stop:
+{"online": false, "reason": "auto-recovery", "version": "…", "health": {…}}
+// MQTT Last Will (the daemon died without Stop):
+{"online": false}
+```
+It is published when the health changes and on every reconnect, and not on
+every probe.
 
 ---
 
