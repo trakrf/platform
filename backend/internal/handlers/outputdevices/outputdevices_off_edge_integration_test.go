@@ -111,6 +111,19 @@ func TestOffEdge_LegacyRows(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 }
 
+// Test-fire's backend OFF is a second message; if it is lost, the ON must
+// still expire on the device rather than latch.
+func TestTestFire_OnCarriesADeviceSideOffTimer(t *testing.T) {
+	drv := &fakeDriver{}
+	r, orgID := newTestServer(t, drv)
+	id := createDevice(t, r, orgID, "http://192.168.50.66")
+
+	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices/"+itoa(id)+"/test", nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Len(t, drv.offAfters, 2)
+	require.Equal(t, 1, drv.offAfters[0], "ON: the test pulse (0 here) rounded up to the 1 s minimum")
+}
+
 func TestDelete_DrivesTheOutputOffFirst(t *testing.T) {
 	drv := &fakeDriver{}
 	r, orgID := newTestServer(t, drv)

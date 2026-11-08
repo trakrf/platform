@@ -40,12 +40,14 @@ type setCall struct {
 }
 
 type fakeDriver struct {
-	calls   []setCall
-	failURL string
+	calls     []setCall
+	offAfters []int // offAfterSec of each call, parallel to calls
+	failURL   string
 }
 
-func (d *fakeDriver) Set(_ context.Context, dev outputdevice.OutputDevice, on bool, _ int) error {
+func (d *fakeDriver) Set(_ context.Context, dev outputdevice.OutputDevice, on bool, offAfterSec int) error {
 	d.calls = append(d.calls, setCall{dev.BaseURL, dev.SwitchID, on})
+	d.offAfters = append(d.offAfters, offAfterSec)
 	if dev.BaseURL == d.failURL {
 		return errors.New("device unreachable")
 	}

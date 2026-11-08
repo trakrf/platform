@@ -6,6 +6,7 @@ package outputdevices
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -476,10 +477,12 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	// Backend-driven pulse for the manual test action: on, hold, off. offAfterSec
-	// is 0 here (we drive the off ourselves) — the device-side toggle_after timer
-	// is the geofence fire path's concern, not this synchronous diagnostic.
-	if err := h.actuator.Set(ctx, *device, true, 0); err != nil {
+	// Backend-driven pulse for the manual test action: on, hold, off. The ON also
+	// arms the device-side timer for the same hold, so a lost or failed OFF
+	// cannot leave the output latched on (TRA-1273): the OFF is a second
+	// message, and alarm outputs fail toward off.
+	offAfter := max(1, int(math.Ceil(h.testPulse.Seconds())))
+	if err := h.actuator.Set(ctx, *device, true, offAfter); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal, "output device unreachable: "+err.Error(), reqID)
 		return
 	}
