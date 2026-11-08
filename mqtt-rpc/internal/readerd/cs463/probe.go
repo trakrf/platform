@@ -26,6 +26,23 @@ type xmlProbe struct {
 	Error *xmlError `xml:"Error"`
 }
 
+// apiProber is the content-checking probe; the real *Client implements it.
+type apiProber interface {
+	ProbeAPI(ctx context.Context) (state, detail string)
+}
+
+var _ apiProber = (*Client)(nil)
+
+// ProbeHealth reports the reader API's health (readerrpc.API*) for the daemon's
+// health monitor. Ops that cannot probe report APIUnknown.
+func (a *Adapter) ProbeHealth(ctx context.Context) (state, detail string) {
+	p, ok := a.ops.(apiProber)
+	if !ok {
+		return readerrpc.APIUnknown, "reader ops cannot probe"
+	}
+	return p.ProbeAPI(ctx)
+}
+
 // ProbeAPI reports whether the reader's /API is actually processing requests,
 // as one of the readerrpc.API* states, plus a short reason.
 //

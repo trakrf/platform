@@ -113,23 +113,6 @@ func NewAdapter(ops readerOps, cfg AdapterConfig) *Adapter {
 	return a
 }
 
-// apiProber is the content-checking probe; the real *Client implements it.
-type apiProber interface {
-	ProbeAPI(ctx context.Context) (state, detail string)
-}
-
-var _ apiProber = (*Client)(nil)
-
-// ProbeHealth reports the reader API's health (readerrpc.API*) for the daemon's
-// health monitor. Ops that cannot probe report APIUnknown.
-func (a *Adapter) ProbeHealth(ctx context.Context) (state, detail string) {
-	p, ok := a.ops.(apiProber)
-	if !ok {
-		return readerrpc.APIUnknown, "reader ops cannot probe"
-	}
-	return p.ProbeAPI(ctx)
-}
-
 // Reconcile converges the reader to the golden TrakRF mqtt-rpc entities and starts
 // inventory. It runs in a single /API login window (all entity writes are /API,
 // unlike the SetOperProfile servlet path): verify the pre-created CloudServer + Operation
