@@ -48,6 +48,12 @@ type fakeOps struct {
 	mu       sync.Mutex
 	gpoCalls []gpoCall
 	gpoErr   error
+	// gpoOffErr, when set, fails only off writes: the vendor app wedged
+	// after the port was energised.
+	gpoOffErr error
+	// ioOrder records every GPO write, /API and sysfs, as "api|sysfs:port:on",
+	// in the order they happened.
+	ioOrder []string
 	// gpoOffDelay, when set, simulates slow reader-side HTTP latency on the
 	// RELEASE (off) write only — used to widen the window in which a stale,
 	// in-flight release can be observed racing a superseding command's write
@@ -149,6 +155,10 @@ func (f *fakeOps) DirectIOOutput(ctx context.Context, port int, on bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.gpoCalls = append(f.gpoCalls, gpoCall{port: port, on: on})
+	f.ioOrder = append(f.ioOrder, "api:"+strconv.Itoa(port)+":"+strconv.FormatBool(on))
+	if !on && f.gpoOffErr != nil {
+		return f.gpoOffErr
+	}
 	return f.gpoErr
 }
 

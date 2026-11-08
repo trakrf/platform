@@ -69,6 +69,9 @@ func main() {
 		AntennaCount: cfg.AntennaCount,
 		EventID:      cfg.EventID,
 		Logger:       &logger,
+		// Every GPO off also goes through the kernel's GPIO lines, so it lands
+		// while the vendor app is wedged. Start and Stop drive all four off.
+		GPO: cs463.SysfsGPO(),
 	})
 
 	// The golden-config reconcile runs from the health monitor, whenever /API

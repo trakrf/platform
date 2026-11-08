@@ -54,6 +54,9 @@ type fakeAdapter struct {
 	lastGpoPort  int
 	lastGpoOn    bool
 	lastGpoPulse int
+
+	outputsOff    []bool // the final flag of each OutputsOff call
+	outputsOffErr error
 }
 
 func (f *fakeAdapter) GetCapabilities(_ context.Context) (readerrpc.Capabilities, error) {
@@ -84,6 +87,11 @@ func (f *fakeAdapter) GpoSet(_ context.Context, port int, on bool, pulseMs int) 
 	f.lastGpoOn = on
 	f.lastGpoPulse = pulseMs
 	return f.gpoErr
+}
+
+func (f *fakeAdapter) OutputsOff(_ context.Context, final bool) error {
+	f.outputsOff = append(f.outputsOff, final)
+	return f.outputsOffErr
 }
 
 func newTestDaemon(a *fakeAdapter) *Daemon {

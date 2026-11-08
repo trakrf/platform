@@ -25,4 +25,11 @@ type Adapter interface {
 	// second request. Implementations own that timer so the OFF edge does not
 	// depend on a follow-up message arriving.
 	GpoSet(ctx context.Context, port int, on bool, pulseMs int) error
+
+	// OutputsOff is the outputs' safe state: cancel every pending release and
+	// drive every output off, logging each one's result. The daemon calls it
+	// when it starts and when it stops (final), because a release timer dies
+	// with the process and a halted reader holds its last output state.
+	// After a final call every ON is refused.
+	OutputsOff(ctx context.Context, final bool) error
 }
