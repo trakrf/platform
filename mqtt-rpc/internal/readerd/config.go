@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
 )
 
 // Default on-reader file locations and identifiers. The reader's own EmbeddedGlassFish
@@ -62,6 +64,10 @@ type Config struct {
 	// WedgeAfter is how long /API must stay unhealthy before it counts as
 	// wedged (READERD_WEDGE_AFTER, a Go duration, at least minWedgeAfter).
 	WedgeAfter time.Duration
+	// GpoDefaultOn is the on-time of a Gpo.Set ON that names no pulse
+	// (READERD_GPO_DEFAULT_ON, a Go duration, default readerrpc.GpoDefaultOn,
+	// at most readerrpc.GpoMaxOn).
+	GpoDefaultOn time.Duration
 }
 
 // minWedgeAfter: a boot takes about 3 min to serve /API. A shorter grace would
@@ -232,6 +238,17 @@ func LoadConfig() (Config, error) {
 			return Config{}, fmt.Errorf("readerd: READERD_WEDGE_AFTER %s is shorter than a boot takes to serve (minimum %s)", d, minWedgeAfter)
 		}
 		cfg.WedgeAfter = d
+	}
+	cfg.GpoDefaultOn = readerrpc.GpoDefaultOn
+	if v := os.Getenv("READERD_GPO_DEFAULT_ON"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("readerd: invalid READERD_GPO_DEFAULT_ON %q: %w", v, err)
+		}
+		if d <= 0 || d > readerrpc.GpoMaxOn {
+			return Config{}, fmt.Errorf("readerd: READERD_GPO_DEFAULT_ON %s must be above 0 and at most the %s hard cap", d, readerrpc.GpoMaxOn)
+		}
+		cfg.GpoDefaultOn = d
 	}
 
 	// AntennaCount.

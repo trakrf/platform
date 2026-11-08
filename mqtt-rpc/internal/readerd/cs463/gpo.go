@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
 )
 
 // gpoReleaseTimeout bounds the deferred off-command of a one-shot GPO pulse. It
@@ -98,8 +100,9 @@ type portGPO struct {
 // session: directIOOutput authenticates inline and bypasses the one-session-per-user
 // lock, so an alarm fires even while an operator has the reader's web UI open.
 //
-// pulseMs > 0 with on==true arms a one-shot — the port is driven now and released
-// after the delay by a timer HERE in the daemon, mirroring the Shelly toggle_after
+// Every ON arms a one-shot: the port is driven now and released after pulseMs —
+// or the default on-time when pulseMs is 0, and never more than the hard cap
+// (onTime) — by a timer HERE in the daemon, mirroring the Shelly toggle_after
 // behaviour the geofence engine already relies on. The off edge is timed on the
 // reader host and does not depend on a second message from the backend — but it
 // lives in THIS process's memory, so it dies with the daemon. That is why the
@@ -145,12 +148,11 @@ func (a *Adapter) GpoSet(ctx context.Context, port int, on bool, pulseMs int) er
 	if a.gpoClosed.Load() {
 		return fmt.Errorf("cs463: gpo port %d: daemon is stopping; outputs are held off", port)
 	}
+	onTime := a.onTime(port, pulseMs)
 	if err := a.ops.DirectIOOutput(ctx, port, true); err != nil {
 		return err
 	}
-	if pulseMs <= 0 {
-		return nil
-	}
+	pulseMs = int(onTime / time.Millisecond)
 
 	// Arm the fresh release timer and publish it to p.timer BEFORE releasing
 	// the lock. This is deliberate, not incidental: time.AfterFunc's callback
@@ -163,7 +165,7 @@ func (a *Adapter) GpoSet(ctx context.Context, port int, on bool, pulseMs int) er
 	// can never observe `timer` (or p.timer) in a partially-written state —
 	// it simply blocks until this critical section finishes.
 	var timer *time.Timer
-	timer = time.AfterFunc(time.Duration(pulseMs)*time.Millisecond, func() {
+	timer = a.afterFunc(onTime, func() {
 		p.mu.Lock()
 		defer p.mu.Unlock()
 		// Identity check BEFORE the OFF write, under the SAME lock a
@@ -194,6 +196,24 @@ func (a *Adapter) GpoSet(ctx context.Context, port int, on bool, pulseMs int) er
 	})
 	p.timer = timer
 	return nil
+}
+
+// onTime is how long an ON stays on. No ON latches (TRA-1138): a missing pulse
+// gets the default on-time, and nothing passes the hard cap, whatever the
+// cloud asks for — an output configured for a longer auto-off is cut to the
+// cap here too.
+func (a *Adapter) onTime(port, pulseMs int) time.Duration {
+	if pulseMs <= 0 {
+		return a.defaultOn
+	}
+	d := time.Duration(pulseMs) * time.Millisecond
+	if d > readerrpc.GpoMaxOn {
+		a.log.Warn().Int("port", port).Int("requested_ms", pulseMs).
+			Int64("capped_ms", readerrpc.GpoMaxOn.Milliseconds()).
+			Msg("gpo on-time above the hard cap; capped")
+		return readerrpc.GpoMaxOn
+	}
+	return d
 }
 
 // driveOff turns one port off by every path there is, and succeeds when the

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/rs/zerolog"
 
@@ -48,6 +49,9 @@ type AdapterConfig struct {
 	// GPO is the kernel path to the outputs, below the vendor app (see gpo.go).
 	// Every OFF goes through it as well as /API. Nil means /API only.
 	GPO GPOLines
+	// DefaultOn is the on-time of a Gpo.Set ON that names no pulse. Zero means
+	// readerrpc.GpoDefaultOn; anything above readerrpc.GpoMaxOn is cut to it.
+	DefaultOn time.Duration
 }
 
 // reconcileOps is the slice of reader operations the golden-config reconcile needs:
@@ -83,6 +87,10 @@ type Adapter struct {
 	// is refused, so an RPC still in flight cannot re-energise an output the
 	// stop sweep just turned off.
 	gpoClosed atomic.Bool
+	// defaultOn is the resolved on-time for an ON with no pulse (see GpoSet).
+	defaultOn time.Duration
+	// afterFunc arms release timers; time.AfterFunc outside tests.
+	afterFunc func(time.Duration, func()) *time.Timer
 }
 
 // Compile-time assertion: the transport Client satisfies readerOps. (That
@@ -95,9 +103,17 @@ var _ readerOps = (*Client)(nil)
 // satisfies reconcileOps (the real *Client does), the adapter can run the golden
 // config reconcile; SetOperProfile-only fakes that do not are simply not reconcilable.
 func NewAdapter(ops readerOps, cfg AdapterConfig) *Adapter {
-	a := &Adapter{ops: ops, cfg: cfg, log: zerolog.Nop(), gpoPorts: make(map[int]*portGPO), gpo: cfg.GPO}
+	a := &Adapter{ops: ops, cfg: cfg, log: zerolog.Nop(), gpoPorts: make(map[int]*portGPO), gpo: cfg.GPO,
+		defaultOn: cfg.DefaultOn, afterFunc: time.AfterFunc}
 	if cfg.Logger != nil {
 		a.log = *cfg.Logger
+	}
+	if a.defaultOn <= 0 {
+		a.defaultOn = readerrpc.GpoDefaultOn
+	}
+	if a.defaultOn > readerrpc.GpoMaxOn {
+		a.log.Warn().Dur("configured", a.defaultOn).Dur("cap", readerrpc.GpoMaxOn).Msg("gpo default on-time above the cap; using the cap")
+		a.defaultOn = readerrpc.GpoMaxOn
 	}
 	if r, ok := ops.(reconcileOps); ok {
 		a.rec = r

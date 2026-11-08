@@ -20,10 +20,10 @@ type Adapter interface {
 	SetOperProfile(ctx context.Context, cfg readerrpc.ReaderConfig, force bool) (readerrpc.SetConfigResult, error)
 	GetStatus(ctx context.Context) (readerrpc.Status, error)
 
-	// GpoSet drives one general purpose output. A pulseMs > 0 with on==true
-	// requests a one-shot: drive on now, release after the delay, without a
-	// second request. Implementations own that timer so the OFF edge does not
-	// depend on a follow-up message arriving.
+	// GpoSet drives one general purpose output. Every ON is a one-shot: drive
+	// on now, release after pulseMs (the daemon default when 0, never more than
+	// readerrpc.GpoMaxOn), without a second request. Implementations own that
+	// timer so the OFF edge does not depend on a follow-up message arriving.
 	GpoSet(ctx context.Context, port int, on bool, pulseMs int) error
 
 	// OutputsOff is the outputs' safe state: cancel every pending release and

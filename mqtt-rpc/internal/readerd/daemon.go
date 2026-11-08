@@ -313,7 +313,7 @@ func (d *Daemon) dispatch(ctx context.Context, req readerrpc.Request) readerrpc.
 		return d.result(req, readerrpc.GpoSetResult{
 			Port:   p.Port,
 			On:     p.On,
-			Pulsed: p.On && p.PulseMs > 0,
+			Pulsed: p.On, // every ON arms a release; none latches
 		})
 
 	case readerrpc.MethodGetStatus:

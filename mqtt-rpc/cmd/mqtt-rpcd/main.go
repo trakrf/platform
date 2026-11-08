@@ -72,6 +72,9 @@ func main() {
 		// Every GPO off also goes through the kernel's GPIO lines, so it lands
 		// while the vendor app is wedged. Start and Stop drive all four off.
 		GPO: cs463.SysfsGPO(),
+		// No ON latches: one with no pulse gets this on-time, and every ON is
+		// capped at readerrpc.GpoMaxOn.
+		DefaultOn: cfg.GpoDefaultOn,
 	})
 
 	// The golden-config reconcile runs from the health monitor, whenever /API

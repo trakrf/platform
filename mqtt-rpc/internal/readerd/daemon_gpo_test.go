@@ -1,12 +1,35 @@
 package readerd
 
 import (
+	"encoding/json"
 	"errors"
 	"reflect"
 	"testing"
 
 	"github.com/rs/zerolog"
+
+	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
 )
+
+// Every ON now arms a release (no latch), so the reply says pulsed for an ON
+// that named no pulse too.
+func TestHandleRPC_GpoSetOnIsAlwaysPulsed(t *testing.T) {
+	for _, pulse := range []int{0, 5000} {
+		a := &fakeAdapter{}
+		d := newTestDaemon(a)
+		params, _ := json.Marshal(readerrpc.GpoSetParams{Port: 2, On: true, PulseMs: pulse})
+		payload, _ := json.Marshal(readerrpc.Request{ID: 1, Src: "reply/1", Method: readerrpc.MethodGpoSet, Params: params})
+
+		_, reply := d.handleRPC(payload)
+		var got readerrpc.GpoSetResult
+		if err := json.Unmarshal(decodeResponse(t, reply).Result, &got); err != nil {
+			t.Fatalf("pulse %d: unmarshal result: %v", pulse, err)
+		}
+		if !got.Pulsed {
+			t.Errorf("pulse %d: Pulsed = false, want true", pulse)
+		}
+	}
+}
 
 // Stop must drive the outputs off even when the broker is already gone: a
 // shutdown that cannot reach the cloud is exactly when no OFF will arrive.

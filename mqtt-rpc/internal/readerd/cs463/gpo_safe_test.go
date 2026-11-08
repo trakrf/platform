@@ -202,7 +202,7 @@ func TestOutputsOff_FinalRefusesLaterOn(t *testing.T) {
 // One port failing must not stop the sweep reaching the rest, and every port's
 // result is logged — the failure included.
 func TestOutputsOff_LogsEachPortAndReportsFailure(t *testing.T) {
-	var buf bytes.Buffer
+	var buf syncBuffer
 	log := zerolog.New(&buf)
 	f := &fakeOps{gpoOffErr: errors.New("api down")}
 	l := &fakeLines{f: f, setErr: errors.New("not exported")}
@@ -224,7 +224,7 @@ func TestOutputsOff_LogsEachPortAndReportsFailure(t *testing.T) {
 }
 
 func TestOutputsOff_LogsSuccessPerPort(t *testing.T) {
-	var buf bytes.Buffer
+	var buf syncBuffer
 	log := zerolog.New(&buf)
 	f := &fakeOps{}
 	a := newSafeAdapter(f, &fakeLines{f: f}, &log)
@@ -303,6 +303,24 @@ func TestSysfsGPO_UnexportedLine(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "gpio2")); !os.IsNotExist(err) {
 		t.Error("Set created the gpio2 directory; it must never export a line")
 	}
+}
+
+// syncBuffer is a log sink a release goroutine can write while the test reads.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 func contains(xs []string, s string) bool {
