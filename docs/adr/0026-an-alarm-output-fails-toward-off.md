@@ -45,10 +45,17 @@ reader. An off that only goes through `/API` fails exactly when it is needed.
 ## Consequences
 
 - **A genuine alarm can be cut short.** If the connection drops during a real
-  event, the output stops within its on-time. Until the backend re-sends ON
-  while a tag is in view, every presence alarm is a fixed 30 s sound. This is
-  accepted. A horn that sticks on erodes trust in every later alarm, and people
-  start unplugging them.
+  event, the output stops within its on-time. This is accepted. A horn that
+  sticks on erodes trust in every later alarm, and people start unplugging them.
+- **The backend holds a wanted presence output on by re-sending ON.** Every
+  presence ON carries the 30 s on-time, and it is re-sent every 10 s while a tag
+  stays in view, so two refreshes in a row can be lost before the output drops.
+  The refresh rides on incoming reads, so it stops when the reads do.
+  (`geofence/presence.go` `presenceRefreshEvery`)
+- **The same bounds hold where no daemon runs.** A Shelly has nothing between it
+  and the cloud, so the backend dispatcher applies them: an ON with no on-time
+  gets 30 s, and a longer one is cut to 60 s. (`alarm/dispatcher.go`
+  `onTimeSeconds`)
 - A new output type, a new reader family, or a "latch until reset" mode must
   meet the same three rules. A setting that lets an output stay on past 60 s
   needs this ADR superseded first.
