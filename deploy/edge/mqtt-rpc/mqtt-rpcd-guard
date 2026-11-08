@@ -60,10 +60,13 @@ active_version() {
 	echo "${t#versions/mqtt-rpcd-}"
 }
 
-# point_at <version>: atomically repoint the active-version symlink.
+# point_at <version>: atomically repoint the active-version symlink, and fail
+# unless the link now really points there.
 point_at() {
 	rm -f "$DIR/.mqtt-rpcd.link"
-	ln -s "versions/mqtt-rpcd-$1" "$DIR/.mqtt-rpcd.link" && mv -f "$DIR/.mqtt-rpcd.link" "$LINK"
+	ln -s "versions/mqtt-rpcd-$1" "$DIR/.mqtt-rpcd.link" 2>/dev/null &&
+		mv -f "$DIR/.mqtt-rpcd.link" "$LINK" 2>/dev/null
+	[ "$(readlink "$LINK" 2>/dev/null)" = "versions/mqtt-rpcd-$1" ]
 }
 
 # write_last <state> <target> <reason>
@@ -75,36 +78,60 @@ write_last() {
 
 clear_counters() { rm -f "$STATE/starts" "$STATE/ticks"; }
 
+CLAIM="$STATE/rollback.claim"
+
+# resume_claim: a rollback interrupted after claiming pending (power cut) left
+# rollback.claim behind. Turn it back into pending so it is retried.
+resume_claim() {
+	if [ -f "$CLAIM" ] && [ ! -f "$PENDING" ]; then
+		mv "$CLAIM" "$PENDING" 2>/dev/null || true
+	fi
+}
+
 # auto_rollback <reason>: claim the pending update and point back at `from`.
-# Returns non-zero if there was nothing to claim (the daemon committed first).
+# Returns 0 only when the link was moved (the caller restarts). Every failure
+# leaves the target in place and pending armed, so the next run retries:
+# nothing is deleted or recorded for a rollback that did not happen.
 auto_rollback() {
-	claim="$STATE/rollback.claim"
-	mv "$PENDING" "$claim" 2>/dev/null || return 1
-	target=$(field target "$claim")
-	from=$(field from "$claim")
-	if valid_version "$from" && [ -f "$DIR/versions/mqtt-rpcd-$from" ]; then
-		point_at "$from"
-		write_last rolled_back "$target" "$1"
-		# A build that failed probation is never a rollback target and must not
-		# push a good version out of retention.
-		if valid_version "$target" && [ "$target" != "$from" ]; then
-			rm -f "$DIR/versions/mqtt-rpcd-$target"
-		fi
-		log "rolled back $target -> $from ($1); removed $target"
-	else
+	mv "$PENDING" "$CLAIM" 2>/dev/null || return 1 # the daemon committed first
+	target=$(field target "$CLAIM")
+	from=$(field from "$CLAIM")
+	if ! valid_version "$from" || [ ! -f "$DIR/versions/mqtt-rpcd-$from" ]; then
 		write_last failed "$target" "${1}_no_from"
 		log "cannot roll back $target: version '$from' is not installed ($1)"
+		rm -f "$CLAIM"
+		clear_counters
+		"$SYNC"
+		return 1
 	fi
-	rm -f "$claim"
+	if ! point_at "$from"; then
+		mv "$CLAIM" "$PENDING" 2>/dev/null
+		log "could not repoint the link at $from; will retry ($1)"
+		return 1
+	fi
+	"$SYNC" # the link swap is durable before anything is deleted
+	write_last rolled_back "$target" "$1"
+	# A build that failed probation is never a rollback target and must not push
+	# a good version out of retention.
+	if valid_version "$target" && [ "$target" != "$from" ]; then
+		rm -f "$DIR/versions/mqtt-rpcd-$target"
+	fi
+	rm -f "$CLAIM"
 	clear_counters
 	"$SYNC"
+	log "rolled back $target -> $from ($1); removed $target"
 	return 0
 }
 
 mode="${1:-}"
 case "$mode" in
 start)
+	resume_claim
 	[ -f "$PENDING" ] || exit 0
+	# Every start (a reboot included) gets a full no-commit window: the first
+	# broker connect after a boot can take ~7 min. Crash loops are bounded by
+	# the start count instead.
+	rm -f "$STATE/ticks"
 	n=$(bump "$STATE/starts")
 	if [ "$n" -gt "$MAX_STARTS" ]; then
 		auto_rollback crash_loop || true
@@ -112,12 +139,11 @@ start)
 	exit 0
 	;;
 tick)
+	resume_claim
 	[ -f "$PENDING" ] || exit 0
 	n=$(bump "$STATE/ticks")
-	if [ "$n" -ge "$MAX_TICKS" ]; then
-		if auto_rollback no_commit && [ -f "$STATE/last" ] && [ "$(field state "$STATE/last")" = rolled_back ]; then
-			"$SYSTEMCTL" restart mqtt-rpcd
-		fi
+	if [ "$n" -ge "$MAX_TICKS" ] && auto_rollback no_commit; then
+		"$SYSTEMCTL" restart mqtt-rpcd
 	fi
 	exit 0
 	;;
@@ -137,9 +163,12 @@ rollback)
 		exit 1
 	fi
 	was=$(active_version || echo unknown)
-	rm -f "$PENDING"
+	if ! point_at "$v"; then
+		log "could not repoint the link at $v; nothing changed"
+		exit 1
+	fi
+	rm -f "$PENDING" "$CLAIM"
 	clear_counters
-	point_at "$v" || exit 1
 	write_last rolled_back "$was" manual
 	"$SYNC"
 	log "rolled back $was -> $v (manual)"

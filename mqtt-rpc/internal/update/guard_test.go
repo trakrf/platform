@@ -25,9 +25,14 @@ func runGuard(t *testing.T, l Layout, args ...string) (out string, exitCode int,
 	t.Helper()
 	script, err := filepath.Abs(guardScript)
 	require.NoError(t, err)
-	calls := filepath.Join(l.Dir, "systemctl.calls")
-	stub := filepath.Join(l.Dir, "systemctl")
+	// The stub and its call log live beside the install, not in it, so a test
+	// can make the install dir read-only without silently losing recorded calls.
+	bin := l.Dir + "-bin"
+	require.NoError(t, os.MkdirAll(bin, 0o755))
+	calls := filepath.Join(bin, "systemctl.calls")
+	stub := filepath.Join(bin, "systemctl")
 	require.NoError(t, os.WriteFile(stub, []byte("#!/bin/sh\necho \"$*\" >> "+calls+"\n"), 0o755))
+	_ = os.Remove(calls)
 
 	cmd := exec.Command("sh", append([]string{script}, args...)...)
 	cmd.Env = append(os.Environ(), "GUARD_DIR="+l.Dir, "GUARD_SYSTEMCTL="+stub, "GUARD_SYNC=true")
@@ -118,6 +123,64 @@ func TestGuard_MissingFromClearsWithoutSwap(t *testing.T) {
 	last, _ := ReadLast(l)
 	assert.Equal(t, readerrpc.UpdateStateFailed, last.State)
 	assert.Equal(t, "no_commit_no_from", last.Error)
+}
+
+// A rollback that cannot repoint the link (full disk, I/O error, read-only dir)
+// must change nothing it cannot finish: deleting the target or dropping pending
+// there leaves a dangling link and no guard — a stranded reader.
+func TestGuard_FailedRepointKeepsTargetAndPendingForARetry(t *testing.T) {
+	l := installed(t, "v2", "v1")
+	require.NoError(t, WritePending(l, Pending{Target: "v2", From: "v1"}))
+	require.NoError(t, os.WriteFile(filepath.Join(l.StateDir(), "ticks"), []byte("3\n"), 0o644))
+	require.NoError(t, os.Chmod(l.Dir, 0o555)) // the link can't be replaced; versions/ and update/ still can
+	t.Cleanup(func() { _ = os.Chmod(l.Dir, 0o755) })
+
+	_, code, calls := runGuard(t, l, "tick")
+	require.Equal(t, 0, code)
+	require.NoError(t, os.Chmod(l.Dir, 0o755))
+
+	assert.Equal(t, "v2", activeOf(t, l))
+	assert.FileExists(t, l.VersionPath("v2"), "the running build must not be deleted when the link still points at it")
+	_, ok, _ := ReadPending(l)
+	assert.True(t, ok, "pending stays armed so the next tick retries")
+	assert.Empty(t, calls, "no restart onto a rollback that did not happen")
+	if last, ok := ReadLast(l); ok {
+		assert.NotEqual(t, readerrpc.UpdateStateRolledBack, last.State)
+	}
+
+	_, _, calls = runGuard(t, l, "tick")
+	assert.Equal(t, "v1", activeOf(t, l), "the retry succeeds once the link can be written")
+	assert.Equal(t, "restart mqtt-rpcd\n", calls)
+}
+
+// A power cut after the guard claimed pending but before it finished leaves
+// rollback.claim behind; the next run must resume it, not forget the update.
+func TestGuard_ResumesAnInterruptedRollbackClaim(t *testing.T) {
+	l := installed(t, "v2", "v1")
+	require.NoError(t, WritePending(l, Pending{Target: "v2", From: "v1"}))
+	require.NoError(t, os.Rename(l.Pending(), filepath.Join(l.StateDir(), "rollback.claim")))
+
+	_, code, _ := runGuard(t, l, "start")
+	require.Equal(t, 0, code)
+	p, ok, _ := ReadPending(l)
+	require.True(t, ok, "the claim is turned back into pending")
+	assert.Equal(t, "v2", p.Target)
+	assert.NoFileExists(t, filepath.Join(l.StateDir(), "rollback.claim"))
+}
+
+// Each unit start (a reboot included) gets a full no-commit window: the first
+// broker connect after a boot can take ~7 min, and carried-over ticks from
+// before the reboot must not roll back a good build mid-connect. Crash loops are
+// bounded by the start count instead.
+func TestGuard_StartResetsTheTickCount(t *testing.T) {
+	l := installed(t, "v2", "v1")
+	require.NoError(t, WritePending(l, Pending{Target: "v2", From: "v1"}))
+	require.NoError(t, os.WriteFile(filepath.Join(l.StateDir(), "ticks"), []byte("3\n"), 0o644))
+
+	_, _, _ = runGuard(t, l, "start")
+	_, _, calls := runGuard(t, l, "tick")
+	assert.Empty(t, calls)
+	assert.Equal(t, "v2", activeOf(t, l))
 }
 
 func TestGuard_GarbageCounterIsTreatedAsZero(t *testing.T) {
