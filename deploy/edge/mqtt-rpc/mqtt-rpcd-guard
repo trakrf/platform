@@ -31,6 +31,9 @@
 #
 # State format is shared with mqtt-rpc/internal/update/state.go — change both.
 set -u
+# Run by systemd, from an SSH login and through sudo: don't depend on any of
+# them for a PATH that reaches ip, curl and sha256sum.
+PATH="/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
 DIR="${GUARD_DIR:-/opt/trakrf}"
 SYSTEMCTL="${GUARD_SYSTEMCTL:-systemctl}"
