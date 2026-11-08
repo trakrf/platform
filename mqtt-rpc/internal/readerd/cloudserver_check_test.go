@@ -221,6 +221,22 @@ func TestCheckCloudServer_RealLetsEncryptBundles(t *testing.T) {
 	}
 }
 
+// Fields read only for the report must never stop the daemon: a firmware that
+// writes them with another JSON type gets a fault, and broker discovery still
+// succeeds.
+func TestCheckCloudServer_OddlyTypedGoldenFieldIsAFaultNotAStartupError(t *testing.T) {
+	root := pemOf(newCert(t, "Root X1", nil, checkNow.AddDate(9, 0, 0)))
+	src := csFixture(t, func(e map[string]any) { e["qos"] = "0" }, root)
+	data, err := os.ReadFile(src.File)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parseCloudServer(data, src.ServerID, src.CertDir); err != nil {
+		t.Fatalf("parseCloudServer: %v — a report-only field must not fail discovery", err)
+	}
+	wantOneFault(t, CheckCloudServer(src, checkNow), "qos")
+}
+
 func TestCheckCloudServer_UnreadableFileIsAFault(t *testing.T) {
 	src := CloudServerSource{File: filepath.Join(t.TempDir(), "absent"), ServerID: "x", CertDir: "/nowhere"}
 	wantOneFault(t, CheckCloudServer(src, checkNow), "CloudServer")

@@ -40,11 +40,11 @@ func CheckCloudServer(src CloudServerSource, now time.Time) []string {
 	if err != nil {
 		return []string{fmt.Sprintf("cannot read the CloudServer config: %v", err)}
 	}
-	var entries []cloudServerEntry
+	var entries []checkedEntry
 	if err := json.Unmarshal(data, &entries); err != nil {
 		return []string{fmt.Sprintf("cannot parse the CloudServer config: %v", err)}
 	}
-	var e *cloudServerEntry
+	var e *checkedEntry
 	for i := range entries {
 		if entries[i].ServerID == src.ServerID && entries[i].Type == "MQTT" {
 			e = &entries[i]
@@ -56,22 +56,47 @@ func CheckCloudServer(src CloudServerSource, now time.Time) []string {
 	}
 
 	var faults []string
-	if !e.CleanSession {
-		faults = append(faults, "cleanSession is false; golden is true")
+	if v, ok := decodeAs[bool](e.CleanSession); !ok || !v {
+		faults = append(faults, fmt.Sprintf("cleanSession is %s; golden is true", rawOrAbsent(e.CleanSession)))
 	}
-	if e.QoS != 0 {
-		faults = append(faults, fmt.Sprintf("qos is %d; golden is 0", e.QoS))
+	if v, ok := decodeAs[int](e.QoS); len(e.QoS) > 0 && (!ok || v != 0) {
+		faults = append(faults, fmt.Sprintf("qos is %s; golden is 0", rawOrAbsent(e.QoS)))
 	}
 	if !e.EnableSSL {
 		return faults // plaintext broker: no TLS, so no bundle and no TLS version
 	}
-	if e.SSLVersion != goldenSSLVersion {
-		faults = append(faults, fmt.Sprintf("sslVersion is %q; golden is %q, the CS463's ceiling", e.SSLVersion, goldenSSLVersion))
+	if v, ok := decodeAs[string](e.SSLVersion); !ok || v != goldenSSLVersion {
+		faults = append(faults, fmt.Sprintf("sslVersion is %s; golden is %q, the CS463's ceiling", rawOrAbsent(e.SSLVersion), goldenSSLVersion))
 	}
 	if e.ServerCertFile != "" {
 		faults = append(faults, checkTrustBundle(filepath.Join(src.CertDir, e.ServerID, e.ServerCertFile), now)...)
 	}
 	return faults
+}
+
+// checkedEntry is a CloudServer entry plus the fields only this check reads.
+// Those stay raw so an unexpected JSON type is a fault here, and never a
+// parse error in LoadConfig, which would stop the daemon.
+type checkedEntry struct {
+	cloudServerEntry
+	CleanSession json.RawMessage `json:"cleanSession"`
+	QoS          json.RawMessage `json:"qos"`
+	SSLVersion   json.RawMessage `json:"sslVersion"`
+}
+
+// decodeAs decodes raw as T; ok is false when it is absent or another type.
+func decodeAs[T any](raw json.RawMessage) (v T, ok bool) {
+	if len(raw) == 0 {
+		return v, false
+	}
+	return v, json.Unmarshal(raw, &v) == nil
+}
+
+func rawOrAbsent(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return "absent"
+	}
+	return string(raw)
 }
 
 // checkTrustBundle judges the bundle the way CSL reads it: CSL trusts the FIRST
