@@ -51,7 +51,9 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # 22, not 20: Playwright 1.65 is no longer tested on Node 20, and
+          # Node 20 is past end of life. 22 is what local dev runs.
+          node-version: '22'
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
