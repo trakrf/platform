@@ -250,12 +250,19 @@ for diagnosis.
             "detail": "http 200 with an empty body", "wedged": true,
             "recovery": "app_restart",            // or "reboot"; absent while healthy
             "auto_reboots": 1, "auto_reboots_exhausted": false,
-            "golden_config": "pending"}}          // "applied" | "pending" | "off"
+            "golden_config": "pending",           // "applied" | "pending" | "off"
+            "cloudserver_fault": "cleanSession is false; golden is true"}}  // absent when clean
 // before an automatic reboot, and after it via Stop:
 {"online": false, "reason": "auto-recovery", "version": "…", "health": {…}}
 // MQTT Last Will (the daemon died without Stop):
 {"online": false}
 ```
+`cloudserver_fault` names every way the golden CloudServer would stop the
+reader's own app publishing reads: a trust bundle CSL cannot use, or drift from
+qos 0, cleanSession or TLSv1.2. The rules and the reasons for them are in
+`deploy/edge/mqtt-rpc/README.md` ("The golden CloudServer"). It is re-checked on
+every probe, independently of `/API`.
+
 It is published when the health changes and on every reconnect, and not on
 every probe. To read it: `MQTT_URL=… mqtt-rpcctl status -base <base topic>`
 prints the retained document, and `-watch` prints one line per change.

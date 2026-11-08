@@ -31,6 +31,34 @@ binaries keeps its old binary as version `legacy` until it ages out of retention
 (newest 3 versions are kept); `legacy` has no updater, so rolling back to it ends
 remote updates for that reader.
 
+## The golden CloudServer
+The one entity the daemon cannot create is `TrakRF mqtt-rpc MQTT Server`. It
+holds the broker credential and a trust bundle, so it is set up by hand when the
+reader is commissioned. The reader's own app publishes reads through it. Each
+rule below has stopped a CS463 publishing reads while the daemon stayed
+connected and everything looked healthy:
+
+| Setting | Golden | Why |
+|---|---|---|
+| `serverCertFile` bundle | **trust anchors only**, a self-signed root **first** | CSL loads only the **first** certificate in the file. A bundle that leads with the broker's issuing intermediate works until the broker's certificate is renewed under a sibling intermediate, and then every handshake fails. Let's Encrypt rotates between its intermediates routinely. Lead with `ISRG Root X1`; any cross-signs after it are harmless. Never put a leaf or an intermediate first. |
+| the bundle file itself | present | If the config names a file that has been deleted, the app publishes nothing **and logs nothing**. |
+| `cleanSession` | `true` | |
+| `qos` | `0` | |
+| `sslVersion` | `TLSv1.2` | It is the newest the CS463 offers, so it is a ceiling, not a choice. **Never make the broker require TLS 1.3** while CS463s are in the fleet: every reader drops at once, without a word. |
+
+Check a bundle before uploading it: the first `subject` must equal its `issuer`.
+
+```sh
+openssl x509 -in bundle.pem -noout -subject -issuer -enddate
+```
+
+The daemon checks all of this every 30 s, the same way CSL reads it. It logs the
+fault and publishes it as `health.cloudserver_fault` in the retained
+`<base>/status`. It reports and never rewrites the entry. A firmware update that
+replaces `/opt/EmbeddedGlassFish` can revert the entry, and the check sees that
+too. If the bundle is unusable, the daemon trusts the system roots for its own
+broker connection, so the reader stays reachable to fix it.
+
 ## Bringing a reader onto a release before it leaves (while SSH still works)
 Per reader, from a machine on the reader's network with this repo, Go and
 python3. The reader must already be commissioned: golden CloudServer, the
