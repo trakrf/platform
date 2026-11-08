@@ -58,14 +58,15 @@ func NewHandler(storage *storage.Storage, rpc RPCClient) *Handler {
 	return &Handler{storage: storage, rpc: rpc}
 }
 
-// RegisterRoutes mounts the endpoints inside the session-auth group. The read is
-// open; the set is paid-gated (it mutates reader hardware config), matching the
-// scan-device mutation policy.
-func (h *Handler) RegisterRoutes(r chi.Router, paidGate func(http.Handler) http.Handler) {
+// RegisterRoutes mounts the endpoints inside the session-auth group. The reads
+// are open; the set is paid-gated (it mutates reader hardware config), matching
+// the scan-device mutation policy. Starting a daemon update — which can also
+// downgrade, and restarts reader software — additionally requires an org admin.
+func (h *Handler) RegisterRoutes(r chi.Router, paidGate, adminGate func(http.Handler) http.Handler) {
 	r.Get("/api/v1/scan-devices/{scan_device_id}/reader-config", h.Get)
 	r.With(paidGate).Patch("/api/v1/scan-devices/{scan_device_id}/reader-config", h.Set)
 	r.Get("/api/v1/scan-devices/{scan_device_id}/reader-software", h.GetSoftware)
-	r.With(paidGate).Post("/api/v1/scan-devices/{scan_device_id}/reader-software/update", h.UpdateSoftware)
+	r.With(paidGate, adminGate).Post("/api/v1/scan-devices/{scan_device_id}/reader-software/update", h.UpdateSoftware)
 }
 
 // baseTopicForDevice derives a reader's RPC base topic from its publish_topic by

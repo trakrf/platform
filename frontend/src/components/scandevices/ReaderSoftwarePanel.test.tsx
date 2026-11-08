@@ -120,6 +120,14 @@ describe('ReaderSoftwarePanel', () => {
     expect(screen.getByText(/an update is already in progress/)).toBeInTheDocument();
   });
 
+  it('tells a non-admin why the update was not started', () => {
+    setup({
+      software: { daemon: { version: 'v1' }, supports_update: true },
+      startError: { response: { status: 403, data: {} } },
+    });
+    expect(screen.getByText(/only an org admin/i)).toBeInTheDocument();
+  });
+
   it('reports an unreachable reader without crashing', () => {
     setup({ error: new Error('502') });
     expect(screen.getByText(/could not reach the reader/i)).toBeInTheDocument();

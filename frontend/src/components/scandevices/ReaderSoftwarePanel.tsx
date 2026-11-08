@@ -37,6 +37,7 @@ function startErrorText(err: unknown): string | null {
   const status = e.response?.status;
   if (status === 422 && e.response?.data?.reason)
     return `The reader refused: ${e.response.data.reason}`;
+  if (status === 403) return 'Only an org admin can update reader software.';
   if (status === 404) return 'No release with that version.';
   return 'Could not start the update. Is the reader online?';
 }
