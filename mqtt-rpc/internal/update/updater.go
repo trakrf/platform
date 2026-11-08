@@ -37,6 +37,8 @@ type Updater struct {
 	MaxBytes       int64
 	GuardTimerUnit string
 
+	swap func(Layout, string) error // SwapLink; a seam for failure tests
+
 	mu        sync.Mutex
 	busy      bool
 	attempt   *readerrpc.UpdateInfo // this process's own attempt, if any
@@ -54,6 +56,7 @@ func New(l Layout, running string, restart func(), log zerolog.Logger) *Updater 
 		Log:            log.With().Str("component", "update").Logger(),
 		MaxBytes:       defaultMaxBytes,
 		GuardTimerUnit: DefaultGuardTimerUnit,
+		swap:           SwapLink,
 	}
 }
 
@@ -180,7 +183,15 @@ func (u *Updater) run(p readerrpc.DaemonUpdateParams) {
 		fail(err)
 		return
 	}
-	if err := SwapLink(u.Layout, p.Version); err != nil {
+	if err := u.swap(u.Layout, p.Version); err != nil {
+		// The rename may have landed even though the call failed (e.g. the
+		// directory fsync). If the link already points at the new build, it is
+		// the build on probation: keep the guard armed and restart onto it.
+		if active, aerr := ActiveVersion(u.Layout); aerr == nil && active == p.Version {
+			u.Log.Warn().Err(err).Str("to", p.Version).Msg("link swap reported an error but the link moved; restarting under probation")
+			u.Restart()
+			return
+		}
 		_ = os.Remove(u.Layout.Pending())
 		fail(err)
 		return

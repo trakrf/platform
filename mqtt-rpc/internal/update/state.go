@@ -126,6 +126,13 @@ func CheckPending(l Layout, running string) (bool, error) {
 	if p.Target == running {
 		return true, nil
 	}
+	// The link already points at the target, yet this process reports another
+	// version: the build was installed under a label that does not match its
+	// compiled-in version. It is still the build on probation, and only the
+	// guard may decide its fate — it cannot commit (Preflight sees the mismatch).
+	if active, err := ActiveVersion(l); err == nil && active == p.Target {
+		return false, nil
+	}
 	if err := os.Remove(l.Pending()); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return false, err
 	}
