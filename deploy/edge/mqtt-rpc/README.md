@@ -24,7 +24,9 @@ This cross-builds a static armv7 binary and installs:
 
 After this, every later update can arrive over RPC alone (`Daemon.Update`; see
 `/mqtt-rpc/README.md` "Remote update"). A reader installed before versioned
-binaries keeps its old binary as version `legacy`.
+binaries keeps its old binary as version `legacy` until it ages out of retention
+(newest 3 versions are kept); `legacy` has no updater, so rolling back to it ends
+remote updates for that reader.
 
 ## Recovering from a bad update
 1. **Automatic.** A build that crash-loops (more than 5 starts) or never commits

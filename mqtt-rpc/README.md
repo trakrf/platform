@@ -48,12 +48,15 @@ never evicts the reader's own reads connection.
 
 ### Methods
 **Portable core** (identical value-semantics across readers):
-- `Reader.GetCapabilities` → `{contract_version, reader_model, antennas, tx_power:{min_dbm,max_dbm,per_antenna}, supports[], unsupported[]}`
+- `Reader.GetCapabilities` → `{contract_version, reader_model, antennas, tx_power:{min_dbm,max_dbm,per_antenna}, supports[], unsupported[], daemon:{version, update?:{state,target,error,at}}}` — static, never touches the vendor `/API`
 - `Reader.GetConfig` → `{tx_power_dbm:[{antenna,power}], …}`
 - `Reader.SetConfig(params=ReaderConfig, partial)` → `{applied: "immediate"|"pending_reload", effective_at?}`
 - `Reader.GetStatus` → `{online, reading, active_profile?}`
 
 **Capability-flagged management** (reserved; declared `unsupported` by the CS463 adapter): `Scan.Start`, `Scan.Stop`, `Gpo.Set`, `Reader.Reboot`.
+
+**Daemon** (acts on mqtt-rpcd itself; never touches the vendor `/API`):
+- `Daemon.Update(params={version, url, sha256, signature})` → `{accepted, from, to}` once verified; the install follows the reply. Refusals are error `-33002`. See "Remote update".
 
 Rules: neutral config (no vendor terms like "operation profile" leak into the
 wire); a new tunable is a field, not a method; `applied` is explicit; the contract
@@ -177,3 +180,83 @@ To re-run on a reader: `CS463_LIVE=1 CS463_IP=… CS463_WEB_PASS=… go test ./i
 Open (non-blocking): **partial-failure policy** — reconcile aborts on first entity
 error (logged, non-fatal to RPC); revisit if a real reader ever needs
 best-effort-continue.
+
+---
+
+## Remote update (`Daemon.Update`, TRA-1317)
+
+Customer readers have no SSH; they are reachable only through the broker. So
+after one SSH install (`deploy/edge/mqtt-rpc/install.sh`) every later daemon
+build arrives over RPC, and a bad build must never strand the reader.
+
+### Flow
+1. **Request.** `Daemon.Update {version, url, sha256, signature}` — in practice a
+   release's `manifest.json`, relayed by the backend
+   (`POST /api/v1/scan-devices/{id}/reader-software/update {version}`) or sent by
+   `mqtt-rpcctl update -manifest <url>`.
+2. **Verify before touching anything** (refused with `-33002` otherwise): version
+   format, `https://` URL, not the running version, an Ed25519 signature over
+   `trakrf-mqtt-rpcd-release-v1\nversion=<v>\nsha256=<hex>\n` by a key compiled into
+   the running binary, the rollback guard and its timer installed, no update
+   already in flight or on probation. The reply goes out here.
+3. **Install.** Download (https only, redirects included, 64 MiB cap) into
+   `versions/`, hash, compare, fsync. Write `update/pending {target, from}` —
+   arming the guard — then swap the `mqtt-rpcd` symlink atomically and exit;
+   systemd restarts onto the new version. The new binary is **never executed** to
+   check it: mqtt-rpcd has no flags, so running it starts a second daemon.
+4. **Probation → commit.** The new daemon sends itself `Reader.GetCapabilities`
+   through the broker (to its own `<base>/rpc`, reply to `<base>/selftest`) every
+   30 s. Once it has answered an RPC through the broker — that one or any cloud
+   RPC — and its own updater preflight passes, it commits (removes `pending`).
+   The commit criterion is deliberately **not** "reconcile succeeded": a wedged
+   vendor app (`/API` answering 200 with an empty body) would otherwise roll back
+   the very build sent to fix it.
+5. **Rollback** is the guard's job, not the daemon's — a broken build cannot be
+   trusted to undo itself. `deploy/edge/mqtt-rpc/mqtt-rpcd-guard` (POSIX sh,
+   installed only by `install.sh`, never updated over the air):
+   - `ExecStartPre` counts starts while pending; more than 5 = crash loop.
+   - A 5-minute timer counts ticks while pending; 4 = no commit (15–20 min,
+     enough for the ~7 min first broker connect after a boot).
+   - Either repoints the link at `from`, deletes the failed version, records
+     `update/last` and restarts. Commit and rollback both claim `pending` by
+     rename, so exactly one wins.
+
+`update/last` is reported in `GetCapabilities().daemon.update`:
+`committed`, `rolled_back` (`error`: `crash_loop` | `no_commit` | `manual`) or
+`failed` (nothing replaced). The updater never reads or writes
+`/opt/trakrf/mqtt-rpcd.env` — it holds the only on-device copy of the reader
+password.
+
+### Releases
+`.github/workflows/mqtt-rpcd-release.yml` (manual dispatch) tests, cross-builds
+`linux/armv7` static, signs, and publishes a GitHub **prerelease**
+`mqtt-rpcd-<version>` with `mqtt-rpcd-linux-armv7` and `manifest.json`.
+`<version>` is `git describe --tags --match 'v[0-9]*'` of the built commit.
+The backend resolves versions under `MQTT_RPCD_RELEASE_BASE_URL` (default
+`https://github.com/trakrf/platform/releases/download`).
+
+**Release rule:** a build goes to customer readers only after it has itself
+updated a bench reader (cs463-212) to a newer build. Commit proves the new build
+connects; only that step proves its *updater* works.
+
+### Signing keys
+Two Ed25519 keys are compiled in (`internal/update/keys.go`); a release signed by
+either is accepted.
+- `ci-2026-11` — private half is the GitHub Actions secret
+  `MQTT_RPCD_SIGNING_KEY` (base64 seed). Signs every CI release.
+- `offline-2026-11` — private half lives offline (password manager), never in CI.
+  It signs a release if the CI key is lost or compromised.
+
+**Rotation:** ship a build trusting `{old, new}` signed by the old key; once every
+reader runs it, ship one trusting `{new, offline}` signed by the new key. Readers
+only ever trust the keys of the build they run, so a key that leaves the list
+stops working fleet-wide as soon as the fleet has updated. `mqtt-rpcctl keygen`
+makes a key pair.
+
+### Recovery, cheapest first
+1. Automatic: the guard (above).
+2. Over RPC: `Daemon.Update` to any other signed version — downgrades allowed.
+3. SSH from the reader's LAN: `deploy/edge/mqtt-rpc/rollback.sh <host> [version]`
+   (on the reader: `/opt/trakrf/mqtt-rpcd-guard list|rollback <version>`). The
+   newest 3 versions are retained, plus the active and previous ones.
+4. `install.sh` again.
