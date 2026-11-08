@@ -22,7 +22,7 @@ export function parseReaderBusy(err: unknown): ReaderBusy | null {
 
 /**
  * Fetch a fixed reader's live capabilities + config via the MQTT-RPC contract.
- * The reader allows one root session at a time, so the GET can come back "busy"
+ * The reader allows one session per user at a time, so the GET can come back "busy"
  * (held by another client / the reader's own web UI): that surfaces as `busy`,
  * and `retryWithForce` re-requests with force=true (force-logout-and-retry).
  */
