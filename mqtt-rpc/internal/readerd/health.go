@@ -70,8 +70,12 @@ type MonitorDeps struct {
 	Publish func(readerrpc.Health)
 	// GoingDown is called just before an automatic reboot, with the reason.
 	GoingDown func(reason string)
-	Log       *zerolog.Logger
-	Now       func() time.Time
+	// CloudServer returns the golden CloudServer fault ("" when clean), re-run
+	// every tick so an operator's fix, or a firmware update reverting one,
+	// shows without a daemon restart. nil checks nothing.
+	CloudServer func() string
+	Log         *zerolog.Logger
+	Now         func() time.Time
 }
 
 // Monitor probes the reader API and drives the golden-config reconcile and the
@@ -160,6 +164,7 @@ func (m *Monitor) Tick(ctx context.Context) {
 		h.API, h.Since = state, now.UTC().Format(time.RFC3339)
 	}
 	h.Detail = detail
+	m.checkCloudServer(&h)
 
 	switch state {
 	case readerrpc.APIUnknown:
@@ -170,6 +175,23 @@ func (m *Monitor) Tick(ctx context.Context) {
 		m.unhealthy(ctx, now, &h)
 	}
 	m.set(h)
+}
+
+// checkCloudServer refreshes h.CloudServerFault, logging only when it changes.
+func (m *Monitor) checkCloudServer(h *readerrpc.Health) {
+	if m.deps.CloudServer == nil {
+		return
+	}
+	fault := m.deps.CloudServer()
+	if fault == h.CloudServerFault {
+		return
+	}
+	if fault == "" {
+		m.log.Info().Str("was", h.CloudServerFault).Msg("golden cloudserver fault cleared")
+	} else {
+		m.log.Error().Str("fault", fault).Msg("golden cloudserver will not publish reads")
+	}
+	h.CloudServerFault = fault
 }
 
 func (m *Monitor) healthy(ctx context.Context, now time.Time, h *readerrpc.Health) {

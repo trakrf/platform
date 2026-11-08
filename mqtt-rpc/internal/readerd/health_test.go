@@ -302,3 +302,30 @@ func TestMonitor_PublishesOnlyOnChange(t *testing.T) {
 		t.Fatalf("published %d times for a steady reader, want 1", len(r.published))
 	}
 }
+
+// The golden CloudServer fault rides the retained health: set on the tick that
+// finds it, cleared on the tick after it is fixed.
+func TestMonitor_CarriesCloudServerFault(t *testing.T) {
+	r := newRig(t, DefaultHealthPolicy(), false)
+	fault := "cleanSession is false; golden is true"
+	r.m.deps.CloudServer = func() string { return fault }
+
+	r.run(H, DefaultHealthPolicy().Interval)
+	if got := r.last().CloudServerFault; got != fault {
+		t.Fatalf("cloudserver_fault = %q, want %q", got, fault)
+	}
+
+	fault = ""
+	r.run(H, DefaultHealthPolicy().Interval)
+	if got := r.last().CloudServerFault; got != "" {
+		t.Fatalf("cloudserver_fault after the fix = %q, want empty", got)
+	}
+}
+
+func TestMonitor_NoCloudServerCheckLeavesFaultEmpty(t *testing.T) {
+	r := newRig(t, DefaultHealthPolicy(), false)
+	r.run(H, DefaultHealthPolicy().Interval)
+	if got := r.last().CloudServerFault; got != "" {
+		t.Fatalf("cloudserver_fault = %q, want empty with no check wired", got)
+	}
+}

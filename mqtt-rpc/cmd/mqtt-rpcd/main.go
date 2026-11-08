@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/rs/zerolog"
 
@@ -110,7 +111,10 @@ func main() {
 		Store:     readerd.RebootStore{Path: readerd.DefaultRebootStorePath},
 		Publish:   d.SetHealth,
 		GoingDown: d.GoingDown,
-		Log:       &logger,
+		CloudServer: func() string {
+			return readerd.CloudServerFault(cfg.CloudServer, time.Now())
+		},
+		Log: &logger,
 	})
 	d.SetHealth(monitor.Health())
 	go monitor.Run(ctx)
