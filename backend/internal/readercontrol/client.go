@@ -28,6 +28,16 @@ const (
 	defaultTimeout = 10 * time.Second
 )
 
+// ErrPublishTimeout is wrapped when the broker does not acknowledge a publish
+// in time. It reports Timeout() like a net.Error, so callers can tell a
+// timeout from other failures.
+var ErrPublishTimeout error = publishTimeoutError{}
+
+type publishTimeoutError struct{}
+
+func (publishTimeoutError) Error() string { return "publish timed out" }
+func (publishTimeoutError) Timeout() bool { return true }
+
 // Client is the cloud RPC client. It owns one paho client used to publish
 // requests and receive replies on the cloud reply wildcard. Replies are matched
 // to in-flight requests by id via the pending map.
@@ -97,7 +107,7 @@ func New(cfg ingest.Config, log *zerolog.Logger) (*Client, func()) {
 	c.publish = func(topic string, payload []byte) error {
 		tok := client.Publish(topic, 1, false, payload)
 		if !tok.WaitTimeout(publishTimeout) {
-			return fmt.Errorf("readercontrol: publish to %s timed out (broker unreachable?)", topic)
+			return fmt.Errorf("readercontrol: publish to %s (broker unreachable?): %w", topic, ErrPublishTimeout)
 		}
 		return tok.Error()
 	}

@@ -41,12 +41,21 @@ type Dispatcher struct {
 	http httpSetter
 	mqtt mqttPublisher // may be nil when the broker is disabled
 	gpo  gpoSetter     // may be nil when the broker is disabled
+
+	metrics *DeviceCallMetrics // nil records nothing
 }
 
 // NewDispatcher builds a Dispatcher. mqtt and gpo may be nil (devices needing
 // them then fail with a clear error; http devices are unaffected).
 func NewDispatcher(http httpSetter, mqtt mqttPublisher, gpo gpoSetter) Dispatcher {
 	return Dispatcher{http: http, mqtt: mqtt, gpo: gpo}
+}
+
+// WithMetrics returns a copy of d that times every device call into m.
+// Validation rejects never reach a device and are not timed.
+func (d Dispatcher) WithMetrics(m *DeviceCallMetrics) Dispatcher {
+	d.metrics = m
+	return d
 }
 
 // Set drives the device on/off using its configured transport and type.
@@ -63,7 +72,9 @@ func (d Dispatcher) Set(ctx context.Context, dev outputdevice.OutputDevice, on b
 	}
 
 	if dev.Transport != outputdevice.TransportMQTT {
-		return d.http.Set(ctx, dev.BaseURL, dev.SwitchID, on, offAfterSec)
+		return d.metrics.time(kindShellyHTTP, func() error {
+			return d.http.Set(ctx, dev.BaseURL, dev.SwitchID, on, offAfterSec)
+		})
 	}
 
 	if dev.Type == outputdevice.TypeCSLGPO {
@@ -87,7 +98,9 @@ func (d Dispatcher) Set(ctx context.Context, dev outputdevice.OutputDevice, on b
 		if on && offAfterSec > 0 {
 			pulseMs = offAfterSec * 1000
 		}
-		return d.gpo.GpoSet(ctx, dev.ReaderBaseTopic, dev.SwitchID, on, pulseMs)
+		return d.metrics.time(kindCSLGPO, func() error {
+			return d.gpo.GpoSet(ctx, dev.ReaderBaseTopic, dev.SwitchID, on, pulseMs)
+		})
 	}
 
 	if dev.CommandTopic == nil || *dev.CommandTopic == "" {
@@ -97,5 +110,7 @@ func (d Dispatcher) Set(ctx context.Context, dev outputdevice.OutputDevice, on b
 	if d.mqtt == nil {
 		return fmt.Errorf("alarm: device %d uses mqtt transport but the broker is not configured", dev.ID)
 	}
-	return d.mqtt.Publish(ctx, *dev.CommandTopic, dev.SwitchID, on, offAfterSec)
+	return d.metrics.time(kindShellyMQTT, func() error {
+		return d.mqtt.Publish(ctx, *dev.CommandTopic, dev.SwitchID, on, offAfterSec)
+	})
 }
