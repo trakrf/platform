@@ -122,7 +122,9 @@ func (d *Daemon) Start() error {
 		return tok.Error()
 	}
 	d.publishRetained = func(topic string, payload []byte) error {
-		if !d.client.IsConnected() {
+		// IsConnectionOpen, not IsConnected: with ConnectRetry, IsConnected is
+		// true while still connecting, and a publish then waits out its timeout.
+		if !d.client.IsConnectionOpen() {
 			return nil // OnConnect publishes the current document
 		}
 		tok := d.client.Publish(topic, 1, true, payload)
