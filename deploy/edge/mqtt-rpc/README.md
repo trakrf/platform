@@ -9,6 +9,7 @@ contract.
 ```sh
 ./install.sh root@<reader-ip>
 # then set READER_API_USER / READER_API_PASS in /opt/trakrf/mqtt-rpcd.env
+./set-recover-password.sh root@<reader-ip>   # the on-site operator's password
 ```
 This cross-builds a static armv7 binary and installs:
 
@@ -21,6 +22,7 @@ This cross-builds a static armv7 binary and installs:
 | `/etc/systemd/system/mqtt-rpcd-guard.{service,timer}` | guard tick every 5 min |
 | `/opt/trakrf/update/` | update state shared by the daemon and the guard |
 | `/opt/trakrf/mqtt-rpcd.env` | credentials — seeded once, never touched by updates |
+| user `recover`, `/etc/sudoers.d/trakrf-recover`, a `Match User recover` block in `/etc/ssh/sshd_config` | the on-site operator's recovery login (below); starts locked |
 
 After this, every later update can arrive over RPC alone (`Daemon.Update`; see
 `/mqtt-rpc/README.md` "Remote update"). A reader installed before versioned
@@ -40,7 +42,27 @@ remote updates for that reader.
    ./rollback.sh root@<reader-ip> <version>   # switch and restart
    ```
    On the reader itself: `/opt/trakrf/mqtt-rpcd-guard list|rollback <version>`.
-4. **Reinstall.** `./install.sh` again.
+4. **On-site operator, no developer needed.** From any computer on the reader's
+   network:
+   ```sh
+   ssh recover@<reader-ip>
+   ```
+   and enter that reader's recover password. The login runs one fixed command and
+   then logs out; there is no shell. It downloads the newest `mqtt-rpcd-*` release
+   from GitHub, checks it against its manifest's sha256, switches to it, and then
+   reboots the reader cleanly. The reboot happens even if nothing could be
+   downloaded, because a clean reboot also clears a wedged vendor app. The reader is
+   back in about 5 minutes. Each step is printed for the operator to read back, and
+   kept in `/opt/trakrf/update/recover.log` (the last run; the CS463 journal does not
+   survive the reboot).
+   - It checks the hash but not the signature: the reader's OpenSSL is too old for
+     Ed25519. The URL is fixed to this repo's GitHub releases and never comes from
+     the broker.
+   - When the newest release is itself the problem, publish a fixed release first,
+     then ask the operator to run it.
+   - Set or change the password with `./set-recover-password.sh root@<reader-ip>`.
+     It reads the password from the terminal, or from stdin.
+5. **Reinstall.** `./install.sh` again.
 
 ## Notes
 - The daemon auto-discovers the broker from the reader's own CloudServer config

@@ -50,9 +50,12 @@ PENDING="$STATE/pending"
 LINK="$DIR/mqtt-rpcd"
 
 log() { echo "mqtt-rpcd-guard: $*" >&2; }
-# say: a line for the operator, also kept in the journal.
+# say: a line for the operator, also kept in the journal and, because the CS463
+# journal does not survive the reboot recover ends with, in update/recover.log.
+RECOVER_LOG="$STATE/recover.log"
 say() {
 	echo "$*" >&2
+	echo "$*" >>"$RECOVER_LOG" 2>/dev/null || true
 	"$LOGGER" -t mqtt-rpcd-guard "recover: $*" 2>/dev/null || true
 }
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
@@ -279,8 +282,10 @@ rollback)
 	exit 0
 	;;
 recover)
+	mkdir -p "$STATE"
+	: >"$RECOVER_LOG" # the last run only
 	say "TrakRF reader recovery on $(hostname 2>/dev/null) at $(now)"
-	say "Network: link $(cat /sys/class/net/eth0/speed 2>/dev/null || echo unknown) Mbps, address $(ip -4 -o addr show eth0 2>/dev/null | awk '{print $4}' | head -n 1)"
+	say "Network: link $(cat /sys/class/net/eth0/speed 2>/dev/null || echo unknown) Mbps, addresses $(ip -4 -o addr show eth0 2>/dev/null | awk '{print $4}' | tr '\n' ' ')"
 	was=$(active_version || echo unknown)
 	say "The daemon is on $was."
 	rc=1
@@ -299,8 +304,8 @@ recover)
 		fi
 	fi
 	[ "$rc" -eq 0 ] || say "Nothing on this reader was changed."
-	"$SYNC"
 	say "Restarting the reader cleanly now. It will be back in about 5 minutes. You can close this window."
+	"$SYNC"
 	"$SYSTEMCTL" reboot
 	exit "$rc"
 	;;

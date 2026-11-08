@@ -104,6 +104,29 @@ func TestRecover_InstallsTheNewestDaemonReleaseAndReboots(t *testing.T) {
 	assert.FileExists(t, l.VersionPath("v2"), "the old version stays, so it can be rolled back to")
 	assert.Contains(t, out, "v3")
 	assertNoDownloadLeftovers(t, l)
+	assertRecoverLogSays(t, l, "Switched the daemon from v2 to v3")
+}
+
+// The CS463 journal does not survive a reboot, and recover always reboots, so
+// what the operator saw is also kept in update/recover.log (the last run only).
+func assertRecoverLogSays(t *testing.T, l Layout, want string) {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(l.StateDir(), "recover.log"))
+	require.NoError(t, err)
+	assert.Contains(t, string(b), want)
+	assert.Contains(t, string(b), "Restarting the reader cleanly")
+}
+
+func TestRecover_KeepsOnlyTheLastRunInItsLog(t *testing.T) {
+	l := installed(t, "v2", "v1")
+	require.NoError(t, os.MkdirAll(l.StateDir(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(l.StateDir(), "recover.log"), []byte("an older run\n"), 0o644))
+	env := []string{"GUARD_RELEASES_API=file:///nonexistent/releases.json", "GUARD_PROTO==file"}
+	_, _, _ = runGuardEnv(t, l, env, "recover")
+	b, err := os.ReadFile(filepath.Join(l.StateDir(), "recover.log"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(b), "an older run")
+	assert.Contains(t, string(b), "Nothing on this reader was changed")
 }
 
 func TestRecover_AlreadyOnTheNewestReleaseOnlyReboots(t *testing.T) {
