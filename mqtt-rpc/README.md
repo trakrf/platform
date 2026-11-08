@@ -53,7 +53,9 @@ never evicts the reader's own reads connection.
 - `Reader.SetConfig(params=ReaderConfig, partial)` → `{applied: "immediate"|"pending_reload", effective_at?}`
 - `Reader.GetStatus` → `{online, reading, active_profile?}`
 
-**Capability-flagged management** (reserved; declared `unsupported` by the CS463 adapter): `Scan.Start`, `Scan.Stop`, `Gpo.Set`, `Reader.Reboot`.
+**Capability-flagged management** (declared per adapter in `supports[]` / `unsupported[]`):
+- `Gpo.Set(params={port, on, pulse_ms?})` → `{port, on, pulsed}` — supported by the CS463 adapter. See "Alarm outputs".
+- `Scan.Start`, `Scan.Stop`, `Reader.Reboot` — reserved; `unsupported` on the CS463.
 
 **Daemon** (acts on mqtt-rpcd itself; never touches the vendor `/API`):
 - `Daemon.Update(params={version, url, sha256, signature})` → `{accepted, from, to}` once verified; the install follows the reply. Refusals are error `-33002`. See "Remote update".
@@ -70,6 +72,22 @@ is versioned via `contract_version`.
   auth — the `/API` `setOperProfile` can't set antenna enablement on web-app
   1.3.23), then re-arms the inventory event so reads resume on the new config
   (a brief read pause), and verifies antenna enablement survived the write.
+
+### Alarm outputs (`Gpo.Set`)
+Alarm outputs fail toward off: a horn stuck on is worse than one cut short.
+- **No ON latches.** Every ON releases itself: after `pulse_ms`, or after the
+  default on-time when it names none (30 s, `READERD_GPO_DEFAULT_ON`), and never
+  later than the **60 s hard cap**, whatever is asked for (a longer request is
+  cut, with a warning). The cloud holds a wanted output on by re-sending ON.
+- **Safe state at start and stop.** The daemon drives all four ports off when it
+  starts (a crash, a `kill -9` or the previous version may have left one on) and
+  again when it stops (a release timer dies with the process, and a halted
+  board on PoE holds its last GPO state). After the stop sweep it refuses ON.
+  Each port's result is logged.
+- **Every OFF also goes below the vendor app.** It writes the kernel GPIO line
+  (`/sys/class/gpio`, needs root), then `/API`, then the line again, so it
+  lands while `/API` is wedged. ON uses `/API` only. Pin map and timings:
+  `docs/cs463-reader-references.md`.
 
 ---
 
