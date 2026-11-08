@@ -91,7 +91,7 @@ type Capabilities struct {
 	Daemon *DaemonInfo `json:"daemon,omitempty"`
 }
 
-// Status is the response to Reader.GetStatus and the status-topic payload.
+// Status is the response to Reader.GetStatus. The status topic carries StatusDoc.
 type Status struct {
 	Online        bool   `json:"online"`
 	Reading       bool   `json:"reading"`
