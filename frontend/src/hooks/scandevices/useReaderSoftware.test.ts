@@ -1,6 +1,20 @@
-import { describe, it, expect } from 'vitest';
-import { updateOutcome, UPDATE_WATCH_MS } from './useReaderSoftware';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { createElement, type ReactNode } from 'react';
+import { renderHook, waitFor, cleanup } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  updateOutcome,
+  readerUpdateInFlight,
+  useReaderSoftware,
+  UPDATE_POLL_MS,
+  UPDATE_WATCH_MS,
+} from './useReaderSoftware';
+import { scanDevicesApi } from '@/lib/api/scandevices';
 import type { DaemonUpdateInfo, ReaderSoftware } from '@/types/scandevices';
+
+vi.mock('@/lib/api/scandevices', () => ({
+  scanDevicesApi: { getReaderSoftware: vi.fn(), startReaderUpdate: vi.fn() },
+}));
 
 const sw = (version: string, update?: DaemonUpdateInfo): ReaderSoftware => ({
   daemon: { version, update },
@@ -60,5 +74,51 @@ describe('updateOutcome', () => {
   it('times out after the rollback window has certainly passed', () => {
     expect(updateOutcome('v2', sw('v1'), t0, t0 + UPDATE_WATCH_MS + 1)).toBe('timeout');
     expect(UPDATE_WATCH_MS).toBeGreaterThanOrEqual(20 * 60 * 1000);
+  });
+});
+
+describe('readerUpdateInFlight', () => {
+  it('is true only while the reader reports an update that has not settled', () => {
+    expect(readerUpdateInFlight(sw('v1', { state: 'downloading', target: 'v2' }))).toBe(true);
+    expect(readerUpdateInFlight(sw('v1', { state: 'installing', target: 'v2' }))).toBe(true);
+    expect(readerUpdateInFlight(sw('v2', { state: 'pending', target: 'v2' }))).toBe(true);
+    expect(readerUpdateInFlight(sw('v2', { state: 'committed', target: 'v2' }))).toBe(false);
+    expect(readerUpdateInFlight(sw('v1', { state: 'rolled_back', target: 'v2' }))).toBe(false);
+    expect(readerUpdateInFlight(sw('v1', { state: 'failed', target: 'v2' }))).toBe(false);
+    expect(readerUpdateInFlight(sw('v1'))).toBe(false);
+    expect(readerUpdateInFlight(undefined)).toBe(false);
+  });
+});
+
+describe('useReaderSoftware', () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it('keeps polling an update it did not start until the reader settles it', async () => {
+    // Opened mid-update (a reload, or another admin's update): the panel must
+    // not freeze on "has not committed yet".
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const get = vi.mocked(scanDevicesApi.getReaderSoftware);
+    const reply = (s: ReaderSoftware) => Promise.resolve({ data: { data: s } } as never);
+    get
+      .mockReturnValueOnce(reply(sw('v2', { state: 'pending', target: 'v2' })))
+      .mockReturnValue(reply(sw('v2', { state: 'committed', target: 'v2' })));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: qc }, children);
+
+    const { result } = renderHook(() => useReaderSoftware(10), { wrapper });
+    await waitFor(() => expect(result.current.software?.daemon?.update?.state).toBe('pending'));
+    expect(result.current.inFlight).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(UPDATE_POLL_MS + 100);
+    await waitFor(() => expect(result.current.software?.daemon?.update?.state).toBe('committed'));
+    expect(result.current.inFlight).toBe(false);
+
+    const calls = get.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(UPDATE_POLL_MS * 3);
+    expect(get.mock.calls.length).toBe(calls);
   });
 });

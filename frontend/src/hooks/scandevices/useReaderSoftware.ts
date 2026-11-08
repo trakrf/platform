@@ -41,6 +41,16 @@ export function updateOutcome(
   return 'watching';
 }
 
+/**
+ * Whether the reader itself reports an update that has not settled yet. True
+ * whoever started it, so a panel opened mid-update (after a reload, or for
+ * another admin's update) keeps polling instead of freezing on "pending".
+ */
+export function readerUpdateInFlight(software: ReaderSoftware | undefined): boolean {
+  const state = software?.daemon?.update?.state;
+  return state === 'downloading' || state === 'installing' || state === 'pending';
+}
+
 interface Watch {
   target: string;
   startedAt: number;
@@ -56,15 +66,17 @@ interface Watch {
 export function useReaderSoftware(deviceId: number | null) {
   const [watch, setWatch] = useState<Watch | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const polling = watch != null && watch.settled == null;
+  const watching = watch != null && watch.settled == null;
 
   const query = useQuery({
     queryKey: ['readerSoftware', deviceId],
     queryFn: async () => (await scanDevicesApi.getReaderSoftware(deviceId as number)).data.data,
     enabled: deviceId != null,
     retry: false,
-    refetchInterval: polling ? UPDATE_POLL_MS : false,
+    refetchInterval: (q) =>
+      watching || readerUpdateInFlight(q.state.data) ? UPDATE_POLL_MS : false,
   });
+  const inFlight = readerUpdateInFlight(query.data);
 
   const outcome: UpdateOutcome | null = watch
     ? (watch.settled ??
@@ -72,16 +84,16 @@ export function useReaderSoftware(deviceId: number | null) {
     : null;
 
   useEffect(() => {
-    if (!polling) return;
+    if (!watching) return;
     const t = setInterval(() => setNow(Date.now()), UPDATE_POLL_MS);
     return () => clearInterval(t);
-  }, [polling]);
+  }, [watching]);
 
   useEffect(() => {
-    if (polling && outcome && outcome !== 'watching') {
+    if (watching && outcome && outcome !== 'watching') {
       setWatch((w) => (w ? { ...w, settled: outcome } : w));
     }
-  }, [polling, outcome]);
+  }, [watching, outcome]);
 
   const mutation = useMutation({
     mutationFn: async (version: string) => {
@@ -98,7 +110,7 @@ export function useReaderSoftware(deviceId: number | null) {
   return {
     software: query.data,
     isLoading: query.isLoading,
-    error: polling ? null : query.error,
+    error: watching ? null : query.error,
     startUpdate: async (version: string) => {
       await mutation.mutateAsync(version);
     },
@@ -106,5 +118,7 @@ export function useReaderSoftware(deviceId: number | null) {
     startError: mutation.error as unknown,
     target: watch?.target ?? null,
     outcome,
+    /** The reader reports an update in flight, whoever started it. */
+    inFlight,
   };
 }

@@ -20,6 +20,7 @@ function setup(over: Partial<State> & { software?: ReaderSoftware }) {
     startError: null,
     target: null,
     outcome: null,
+    inFlight: false,
     ...over,
   } as State;
   vi.mocked(useReaderSoftware).mockReturnValue(state);
@@ -58,6 +59,21 @@ describe('ReaderSoftwarePanel', () => {
     expect(startUpdate).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
     expect(startUpdate).toHaveBeenCalledWith('v2');
+  });
+
+  it('does not start another update while the reader reports one in flight', () => {
+    setup({
+      software: {
+        daemon: { version: 'v2', update: { state: 'pending', target: 'v2' } },
+        supports_update: true,
+      },
+      inFlight: true,
+    });
+    fireEvent.change(screen.getByLabelText(/target version/i), {
+      target: { value: 'v3' },
+    });
+    expect(screen.getByRole('button', { name: /^update$/i })).toBeDisabled();
+    expect(screen.getByText(/has not committed yet/i)).toBeInTheDocument();
   });
 
   it('does not offer an update the reader cannot take', () => {

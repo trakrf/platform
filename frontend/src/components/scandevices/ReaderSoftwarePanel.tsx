@@ -43,8 +43,17 @@ function startErrorText(err: unknown): string | null {
 }
 
 export function ReaderSoftwarePanel({ deviceId }: ReaderSoftwarePanelProps) {
-  const { software, isLoading, error, startUpdate, isStarting, startError, target, outcome } =
-    useReaderSoftware(deviceId);
+  const {
+    software,
+    isLoading,
+    error,
+    startUpdate,
+    isStarting,
+    startError,
+    target,
+    outcome,
+    inFlight,
+  } = useReaderSoftware(deviceId);
   const [version, setVersion] = useState('');
   const [confirming, setConfirming] = useState(false);
 
@@ -101,7 +110,7 @@ export function ReaderSoftwarePanel({ deviceId }: ReaderSoftwarePanelProps) {
           <button
             type="button"
             onClick={() => setConfirming(true)}
-            disabled={!wanted || watching || isStarting}
+            disabled={!wanted || watching || inFlight || isStarting}
             className="rounded bg-blue-600 px-3 py-1.5 text-white hover:bg-blue-700 disabled:opacity-50"
           >
             Update
