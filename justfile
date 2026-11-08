@@ -139,7 +139,7 @@ test-release-guards:
 # `validate` and by its own CI step in lint-test, not by `test`.
 test-mqtt-rpc:
     cd mqtt-rpc && go vet ./... && go test -race ./...
-    shellcheck -s sh deploy/edge/mqtt-rpc/mqtt-rpcd-guard deploy/edge/mqtt-rpc/install.sh deploy/edge/mqtt-rpc/rollback.sh deploy/edge/mqtt-rpc/set-recover-password.sh
+    shellcheck -s sh deploy/edge/mqtt-rpc/mqtt-rpcd-guard deploy/edge/mqtt-rpc/install.sh deploy/edge/mqtt-rpc/rollback.sh deploy/edge/mqtt-rpc/set-recover-password.sh deploy/edge/mqtt-rpc/update-to-release.sh
 
 # TRA-1085 item 4 — a clean VERSION requires its CHANGELOG.md section. Inert
 # during development (VERSION carries -dev). Run in CI inside `lint-test` so it
