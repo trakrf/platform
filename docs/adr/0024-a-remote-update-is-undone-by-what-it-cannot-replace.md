@@ -1,4 +1,4 @@
-# ADR 0023 — A remote update is undone by what it cannot replace
+# ADR 0024 — A remote update is undone by what it cannot replace
 
 Date: 2026-11-08
 Status: Proposed

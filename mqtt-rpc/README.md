@@ -189,7 +189,7 @@ Customer readers have no SSH; they are reachable only through the broker. So
 after one SSH install (`deploy/edge/mqtt-rpc/install.sh`) every later daemon
 build arrives over RPC, and a bad build must never strand the reader.
 Why the rollback is a separate never-updated script, and why commit ignores
-reconcile: `docs/adr/0023-a-remote-update-is-undone-by-what-it-cannot-replace.md`.
+reconcile: `docs/adr/0024-a-remote-update-is-undone-by-what-it-cannot-replace.md`.
 
 ### Flow
 1. **Request.** `Daemon.Update {version, url, sha256, signature}` — in practice a
