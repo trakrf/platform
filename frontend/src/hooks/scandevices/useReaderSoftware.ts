@@ -20,15 +20,19 @@ export type UpdateOutcome = 'watching' | 'done' | 'rolled_back' | 'failed' | 'ti
  * Where an update to `target`, started at `startedAt`, stands given the latest
  * reader software report (undefined while the reader is restarting and does not
  * answer). Only an outcome recorded for `target` counts, so an earlier attempt's
- * rollback is not mistaken for this one's.
+ * rollback is not mistaken for this one's — and only a report fetched after the
+ * update started (`fetchedAt`), so a retry of the same version is not judged by
+ * the previous attempt's cached result.
  */
 export function updateOutcome(
   target: string,
   software: ReaderSoftware | undefined,
   startedAt: number,
-  now: number
+  now: number,
+  fetchedAt: number = Number.POSITIVE_INFINITY
 ): UpdateOutcome {
-  const daemon = software?.daemon;
+  const fresh = fetchedAt > startedAt;
+  const daemon = fresh ? software?.daemon : undefined;
   const update = daemon?.update;
   if (daemon?.version === target && update?.state === 'committed') return 'done';
   if (update?.target === target && update.state === 'rolled_back') return 'rolled_back';
@@ -63,7 +67,8 @@ export function useReaderSoftware(deviceId: number | null) {
   });
 
   const outcome: UpdateOutcome | null = watch
-    ? (watch.settled ?? updateOutcome(watch.target, query.data, watch.startedAt, now))
+    ? (watch.settled ??
+      updateOutcome(watch.target, query.data, watch.startedAt, now, query.dataUpdatedAt))
     : null;
 
   useEffect(() => {

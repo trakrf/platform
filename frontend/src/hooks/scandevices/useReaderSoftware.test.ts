@@ -49,6 +49,14 @@ describe('updateOutcome', () => {
     ).toBe('watching');
   });
 
+  it('does not judge a retry of the same version by a report fetched before it started', () => {
+    // The previous attempt at v2 failed; the operator retries v2. The cached
+    // report still says failed for v2 until a fresh one arrives.
+    const stale = sw('v1', { state: 'failed', target: 'v2', error: 'download: status 404' });
+    expect(updateOutcome('v2', stale, t0, t0 + 1000, t0 - 1)).toBe('watching');
+    expect(updateOutcome('v2', stale, t0, t0 + 6000, t0 + 5000)).toBe('failed');
+  });
+
   it('times out after the rollback window has certainly passed', () => {
     expect(updateOutcome('v2', sw('v1'), t0, t0 + UPDATE_WATCH_MS + 1)).toBe('timeout');
     expect(UPDATE_WATCH_MS).toBeGreaterThanOrEqual(20 * 60 * 1000);
