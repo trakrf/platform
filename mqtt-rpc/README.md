@@ -74,7 +74,8 @@ is versioned via `contract_version`.
   (a brief read pause), and verifies antenna enablement survived the write.
 
 ### Alarm outputs (`Gpo.Set`)
-Alarm outputs fail toward off: a horn stuck on is worse than one cut short.
+Alarm outputs fail toward off: a horn stuck on is worse than one cut short
+(`docs/adr/0026-an-alarm-output-fails-toward-off.md`).
 - **No ON latches.** Every ON releases itself: after `pulse_ms`, or after the
   default on-time when it names none (30 s, `READERD_GPO_DEFAULT_ON`), and never
   later than the **60 s hard cap**, whatever is asked for (a longer request is
