@@ -26,7 +26,7 @@ func TestBrokerTLS_UnusableBundleFallsBackToSystemRoots(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			var logs bytes.Buffer
 			log := zerolog.New(&logs)
-			cfg := brokerTLS(path, &log)
+			cfg := brokerTLS(path, &log, nil)
 			if cfg == nil {
 				t.Fatal("brokerTLS returned nil")
 			}
@@ -45,7 +45,7 @@ func TestBrokerTLS_UnusableBundleFallsBackToSystemRoots(t *testing.T) {
 
 func TestBrokerTLS_UsableBundleIsTrusted(t *testing.T) {
 	log := zerolog.Nop()
-	cfg := brokerTLS(filepath.Join("testdata", "le-anchors-only.pem"), &log)
+	cfg := brokerTLS(filepath.Join("testdata", "le-anchors-only.pem"), &log, nil)
 	if cfg == nil || cfg.RootCAs == nil {
 		t.Fatalf("brokerTLS = %+v, want RootCAs from the bundle", cfg)
 	}

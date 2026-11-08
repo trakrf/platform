@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,6 +52,21 @@ type Daemon struct {
 	statusMu sync.Mutex
 	health   *readerrpc.Health // latest from the health monitor
 	reason   string            // set by GoingDown before a planned reboot
+
+	anchor anchorCheck // the last broker handshake, judged as CSL would
+}
+
+// CloudServerFault is the golden CloudServer fault for the retained health:
+// CheckCloudServer's static findings, then whether the broker's chain reached
+// the bundle's first certificate on the last handshake.
+func (d *Daemon) CloudServerFault(src *CloudServerSource, now time.Time) string {
+	var faults []string
+	for _, f := range []string{CloudServerFault(src, now), d.anchor.Fault()} {
+		if f != "" {
+			faults = append(faults, f)
+		}
+	}
+	return strings.Join(faults, "; ")
 }
 
 // New builds a Daemon. It does not connect; call Start.
@@ -106,7 +122,7 @@ func (d *Daemon) Start() error {
 		})
 
 	if d.cfg.Broker.CACertPath != "" {
-		opts.SetTLSConfig(brokerTLS(d.cfg.Broker.CACertPath, &d.log))
+		opts.SetTLSConfig(brokerTLS(d.cfg.Broker.CACertPath, &d.log, &d.anchor))
 	}
 
 	d.client = mqtt.NewClient(opts)
@@ -179,11 +195,23 @@ func (d *Daemon) Stop() {
 // than failing. The daemon is the only remote path to the reader: refusing to
 // start over a bundle that has already silenced the reader's reads would cut
 // that path too, and would hide the fault the health status exists to report.
-func brokerTLS(path string, log *zerolog.Logger) *tls.Config {
+//
+// With a usable bundle, every handshake is also judged against the bundle's
+// first certificate alone and recorded in anchor (nil records nothing). That
+// judgement never fails the daemon's own handshake.
+func brokerTLS(path string, log *zerolog.Logger, anchor *anchorCheck) *tls.Config {
 	cfg, err := loadTLS(path)
 	if err != nil {
 		log.Error().Err(err).Str("ca_cert", path).Msg("cannot use the CloudServer trust bundle; trusting the system roots instead")
 		return &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+	if pemData, err := os.ReadFile(path); err == nil && anchor != nil {
+		if first := firstCertificate(pemData); first != nil {
+			cfg.VerifyConnection = func(cs tls.ConnectionState) error {
+				anchor.observe(first, cs.PeerCertificates, time.Now())
+				return nil
+			}
+		}
 	}
 	return cfg
 }

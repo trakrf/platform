@@ -112,7 +112,7 @@ func main() {
 		Publish:   d.SetHealth,
 		GoingDown: d.GoingDown,
 		CloudServer: func() string {
-			return readerd.CloudServerFault(cfg.CloudServer, time.Now())
+			return d.CloudServerFault(cfg.CloudServer, time.Now())
 		},
 		Log: &logger,
 	})
