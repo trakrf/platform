@@ -45,6 +45,43 @@ rm -f .mqtt-rpcd.link
 ln -s "versions/mqtt-rpcd-$VERSION" .mqtt-rpcd.link && mv -f .mqtt-rpcd.link mqtt-rpcd
 test -f mqtt-rpcd.env || mv /tmp/mqtt-rpcd.env.example mqtt-rpcd.env
 chmod 600 mqtt-rpcd.env
+
+# The on-site operator's recovery login: `ssh recover@<reader>` runs
+# `mqtt-rpcd-guard recover` as root and nothing else — no shell, no forwarding.
+# The account starts locked; set-recover-password.sh gives it a password.
+id recover >/dev/null 2>&1 || useradd -M -d / -s /bin/sh recover
+S=/etc/sudoers.d/trakrf-recover
+printf 'recover ALL=(root) NOPASSWD: /opt/trakrf/mqtt-rpcd-guard recover\n' >/etc/sudoers.d/.trakrf-recover.tmp
+chmod 440 /etc/sudoers.d/.trakrf-recover.tmp
+if visudo -cqf /etc/sudoers.d/.trakrf-recover.tmp; then
+  mv -f /etc/sudoers.d/.trakrf-recover.tmp "$S"
+else
+  rm -f /etc/sudoers.d/.trakrf-recover.tmp
+  echo "ERROR: visudo rejected the recover rule"
+  exit 1
+fi
+C=/etc/ssh/sshd_config
+if ! grep -q '^# BEGIN trakrf recover' "$C"; then
+  cp -p "$C" "$C.trakrf-bak"
+  cat >>"$C" <<'SSHD'
+
+# BEGIN trakrf recover (install.sh): the on-site operator's recovery login
+Match User recover
+	ForceCommand /usr/bin/sudo -n /opt/trakrf/mqtt-rpcd-guard recover
+	AllowTcpForwarding no
+	AllowAgentForwarding no
+	X11Forwarding no
+	PermitTunnel no
+# END trakrf recover
+SSHD
+  # sshd here is socket-activated: every connection reads this file, so a bad
+  # edit would lock everyone out. Check it, and put the old file back if not.
+  if ! /usr/sbin/sshd -t; then
+    cp -p "$C.trakrf-bak" "$C"
+    echo "ERROR: sshd rejected the recover block; sshd_config restored"
+    exit 1
+  fi
+fi
 sync
 systemctl daemon-reload
 systemctl enable mqtt-rpcd >/dev/null 2>&1
@@ -64,6 +101,10 @@ fi
 systemctl is-active --quiet mqtt-rpcd-guard.timer || { echo "ERROR: mqtt-rpcd-guard.timer is not active — remote updates would have no rollback"; exit 1; }
 echo "mqtt-rpcd $VERSION active (NRestarts=$nr); rollback guard armed"
 /opt/trakrf/mqtt-rpcd-guard list
+case "$(passwd -S recover 2>/dev/null | cut -d' ' -f2)" in
+L | LK | NP) echo "The recover login has no password yet: run set-recover-password.sh for this reader." ;;
+*) echo "The recover login is ready: ssh recover@<this reader>" ;;
+esac
 REMOTE
 
 echo "Done. Set READER_API_USER / READER_API_PASS in /opt/trakrf/mqtt-rpcd.env if the password is still CHANGEME."

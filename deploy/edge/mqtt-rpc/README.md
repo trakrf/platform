@@ -9,6 +9,7 @@ contract.
 ```sh
 ./install.sh root@<reader-ip>
 # then set READER_API_USER / READER_API_PASS in /opt/trakrf/mqtt-rpcd.env
+./set-recover-password.sh root@<reader-ip>   # the on-site operator's password
 ```
 This cross-builds a static armv7 binary and installs:
 
@@ -21,12 +22,46 @@ This cross-builds a static armv7 binary and installs:
 | `/etc/systemd/system/mqtt-rpcd-guard.{service,timer}` | guard tick every 5 min |
 | `/opt/trakrf/update/` | update state shared by the daemon and the guard |
 | `/opt/trakrf/mqtt-rpcd.env` | credentials — seeded once, never touched by updates |
+| user `recover`, `/etc/sudoers.d/trakrf-recover`, a `Match User recover` block in `/etc/ssh/sshd_config` | the on-site operator's recovery login (below); starts locked |
 
 After this, every later update can arrive over RPC alone (`Daemon.Update`; see
 `/mqtt-rpc/README.md` "Remote update"). A reader installed before versioned
 binaries keeps its old binary as version `legacy` until it ages out of retention
 (newest 3 versions are kept); `legacy` has no updater, so rolling back to it ends
 remote updates for that reader.
+
+## Bringing a reader onto a release before it leaves (while SSH still works)
+Per reader, from a machine on the reader's network with this repo, Go and
+python3. The reader must already be commissioned: golden CloudServer, the
+`trakrf` web user, and `READER_API_USER=trakrf` / `READER_API_PASS` in
+`/opt/trakrf/mqtt-rpcd.env`.
+
+1. **Link:** `cat /sys/class/net/eth0/speed` on the reader reads `1000`. Anything
+   less is a bad cable pair, not a bad port.
+2. **Install:** `./install.sh root@<reader>` from `main`. It installs the daemon,
+   the rollback guard and the `recover` login, and ends with
+   `rollback guard armed`.
+3. **Recover password:** `./set-recover-password.sh root@<reader>`. Keep each
+   reader's password with its other credentials; it is the one you give the
+   site's IT.
+4. **Release:** `./update-to-release.sh root@<reader> <version>` (default:
+   the newest `mqtt-rpcd-*` release). It takes the reader off the local build
+   from step 2 onto the exact CI-signed binary, over RPC, and waits for
+   `OK: … committed`, about 4 minutes. This also proves the remote-update path
+   on this reader: GitHub download, signature check, broker round trip.
+5. **Operator path, once per site network:** `ssh recover@<reader>` with that
+   password. It should report the release as already intact, then reboot the
+   reader cleanly. Wait for it to come back (2–7 min) and check
+   `/opt/trakrf/update/recover.log`.
+6. **Before shipping:** `systemctl poweroff`, never a power pull.
+
+**Network:** remote updates and `recover` need outbound HTTPS (443) to
+`github.com`, `api.github.com` and `release-assets.githubusercontent.com`, as well
+as the broker's port (8883). A site whose firewall allows destinations by name
+must allow those three names too.
+
+A release goes to readers only after it has updated a bench reader to a newer
+build ("Release rule" in `/mqtt-rpc/README.md`).
 
 ## Recovering from a bad update
 1. **Automatic.** A build that crash-loops (more than 5 starts) or never commits
@@ -40,7 +75,27 @@ remote updates for that reader.
    ./rollback.sh root@<reader-ip> <version>   # switch and restart
    ```
    On the reader itself: `/opt/trakrf/mqtt-rpcd-guard list|rollback <version>`.
-4. **Reinstall.** `./install.sh` again.
+4. **On-site operator, no developer needed.** From any computer on the reader's
+   network:
+   ```sh
+   ssh recover@<reader-ip>
+   ```
+   and enter that reader's recover password. The login runs one fixed command and
+   then logs out; there is no shell. It downloads the newest `mqtt-rpcd-*` release
+   from GitHub, checks it against its manifest's sha256, switches to it, and then
+   reboots the reader cleanly. The reboot happens even if nothing could be
+   downloaded, because a clean reboot also clears a wedged vendor app. The reader is
+   back in about 5 minutes. Each step is printed for the operator to read back, and
+   kept in `/opt/trakrf/update/recover.log` (the last run; the CS463 journal does not
+   survive the reboot).
+   - It checks the hash but not the signature: the reader's OpenSSL is too old for
+     Ed25519. The URL is fixed to this repo's GitHub releases and never comes from
+     the broker.
+   - When the newest release is itself the problem, publish a fixed release first,
+     then ask the operator to run it.
+   - Set or change the password with `./set-recover-password.sh root@<reader-ip>`.
+     It reads the password from the terminal, or from stdin.
+5. **Reinstall.** `./install.sh` again.
 
 ## Notes
 - The daemon auto-discovers the broker from the reader's own CloudServer config

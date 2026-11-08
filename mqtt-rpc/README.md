@@ -279,4 +279,8 @@ request. Broker publish rights are therefore part of the trust boundary.
 3. SSH from the reader's LAN: `deploy/edge/mqtt-rpc/rollback.sh <host> [version]`
    (on the reader: `/opt/trakrf/mqtt-rpcd-guard list|rollback <version>`). The
    newest 3 versions are retained, plus the active and previous ones.
-4. `install.sh` again.
+4. On site, no developer: `ssh recover@<reader-ip>` runs
+   `mqtt-rpcd-guard recover`: fetch the newest release from GitHub (hash-checked,
+   not signature-checked), switch to it, reboot cleanly. See
+   `deploy/edge/mqtt-rpc/README.md`.
+5. `install.sh` again.

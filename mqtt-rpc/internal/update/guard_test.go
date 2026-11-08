@@ -23,6 +23,12 @@ const guardScript = "../../../deploy/edge/mqtt-rpc/mqtt-rpcd-guard"
 // runGuard runs the guard with a stub systemctl that records its arguments.
 func runGuard(t *testing.T, l Layout, args ...string) (out string, exitCode int, systemctlCalls string) {
 	t.Helper()
+	return runGuardEnv(t, l, nil, args...)
+}
+
+// runGuardEnv is runGuard with extra environment for the guard.
+func runGuardEnv(t *testing.T, l Layout, env []string, args ...string) (out string, exitCode int, systemctlCalls string) {
+	t.Helper()
 	script, err := filepath.Abs(guardScript)
 	require.NoError(t, err)
 	// The stub and its call log live beside the install, not in it, so a test
@@ -35,7 +41,7 @@ func runGuard(t *testing.T, l Layout, args ...string) (out string, exitCode int,
 	_ = os.Remove(calls)
 
 	cmd := exec.Command("sh", append([]string{script}, args...)...)
-	cmd.Env = append(os.Environ(), "GUARD_DIR="+l.Dir, "GUARD_SYSTEMCTL="+stub, "GUARD_SYNC=true")
+	cmd.Env = append(append(os.Environ(), "GUARD_DIR="+l.Dir, "GUARD_SYSTEMCTL="+stub, "GUARD_SYNC=true", "GUARD_LOGGER=true"), env...)
 	b, err := cmd.CombinedOutput()
 	code := 0
 	if ee, ok := err.(*exec.ExitError); ok {
