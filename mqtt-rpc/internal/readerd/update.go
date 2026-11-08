@@ -11,6 +11,13 @@ import (
 // selfTestInterval is how often a daemon on probation re-sends its loopback RPC.
 const selfTestInterval = 30 * time.Second
 
+// DefaultCommitAfter is the minimum uptime before a build on probation commits.
+// Answering one RPC proves it connects; staying up and answering for this long
+// is what catches a build that crashes or wedges shortly after connecting. A
+// crash resets the uptime, so such a build never commits and the guard's start
+// count rolls it back; a wedge stops the answers, so its tick count does.
+const DefaultCommitAfter = 3 * time.Minute
+
 // Updater is the daemon's remote self-update (internal/update.Updater). It is
 // optional: a daemon without one does not advertise Daemon.Update.
 type Updater interface {
@@ -69,6 +76,9 @@ func (d *Daemon) probationLoop() {
 func (d *Daemon) answered() {
 	if d.updater == nil || !d.updater.OnProbation() {
 		return
+	}
+	if up := d.now().Sub(d.started); up < d.commitAfter {
+		return // the self-test keeps answering every 30 s; a later one commits
 	}
 	if err := d.updater.Commit(); err != nil {
 		d.log.Error().Err(err).Msg("update commit failed; the guard will roll back if this persists")

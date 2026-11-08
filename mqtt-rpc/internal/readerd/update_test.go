@@ -131,6 +131,7 @@ func TestGetCapabilitiesWithoutUpdaterStillReportsVersion(t *testing.T) {
 // No vendor /API is involved — a wedged reader app must not block a commit.
 func TestProbation_SelfTestRoundTripCommitsOnce(t *testing.T) {
 	d := newTestDaemon(&fakeAdapter{})
+	d.commitAfter = 0 // the uptime floor has its own test
 	u := &fakeUpdater{probation: true}
 	d.SetUpdater(u)
 
@@ -163,6 +164,28 @@ func TestProbation_SelfTestRoundTripCommitsOnce(t *testing.T) {
 	<-published
 	time.Sleep(20 * time.Millisecond)
 	assert.Equal(t, 1, u.commitCount(), "commit happens once")
+}
+
+// A build must stay up and answering for a while before it commits: one that
+// connects, answers, then crashes or wedges a minute later would otherwise be
+// committed — and a committed build that hangs is only recoverable over SSH.
+func TestProbation_NoCommitBeforeTheMinimumUptime(t *testing.T) {
+	d := newTestDaemon(&fakeAdapter{})
+	u := &fakeUpdater{probation: true}
+	d.SetUpdater(u)
+	start := d.started
+	clock := start.Add(time.Minute)
+	d.now = func() time.Time { return clock }
+	d.publish = func(string, []byte) error { return nil }
+
+	d.answered()
+	assert.Equal(t, 0, u.commitCount(), "1 min of uptime is not enough")
+
+	clock = start.Add(DefaultCommitAfter)
+	d.answered()
+	assert.Equal(t, 1, u.commitCount())
+	assert.GreaterOrEqual(t, DefaultCommitAfter, 2*time.Minute)
+	assert.Less(t, DefaultCommitAfter, 15*time.Minute, "well inside the guard's 15-20 min no-commit window")
 }
 
 func TestNoCommitWhenReplyPublishFails(t *testing.T) {

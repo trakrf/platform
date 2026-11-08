@@ -40,6 +40,9 @@ type Daemon struct {
 
 	updater Updater       // optional remote self-update (SetUpdater)
 	stopCh  chan struct{} // closed by Stop
+
+	started     time.Time     // process start, for the commit uptime floor
+	commitAfter time.Duration // minimum uptime before a probation commit
 }
 
 // New builds a Daemon. It does not connect; call Start.
@@ -50,6 +53,9 @@ func New(cfg Config, adapter Adapter, log *zerolog.Logger) *Daemon {
 		log:     log.With().Str("component", "readerd").Logger(),
 		now:     time.Now,
 		stopCh:  make(chan struct{}),
+
+		started:     time.Now(),
+		commitAfter: DefaultCommitAfter,
 	}
 }
 
