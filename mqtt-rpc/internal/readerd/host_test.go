@@ -15,7 +15,7 @@ import (
 // fakeSystem records what a SystemdHost asked the system to do.
 type fakeSystem struct {
 	calls []string
-	procs []int         // what cgroup.procs holds
+	procs []int          // what cgroup.procs holds
 	dieOn syscall.Signal // the signal that empties procs; 0 = nothing does
 }
 

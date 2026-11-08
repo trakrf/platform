@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/rs/zerolog"
 
@@ -21,10 +20,6 @@ import (
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerd/cs463"
 	"github.com/trakrf/platform/mqtt-rpc/internal/update"
 )
-
-// reconcileTimeout bounds the startup golden-config reconcile (a handful of /API
-// round-trips against the reader's localhost interface).
-const reconcileTimeout = 30 * time.Second
 
 // version is overridable via -ldflags "-X main.version=...".
 var version = "dev"
@@ -76,25 +71,25 @@ func main() {
 		Logger:       &logger,
 	})
 
-	// Converge the reader to the golden TrakRF mqtt-rpc config before serving RPC.
-	// The daemon is opinionated about the ONE hand-crafted prerequisite: the golden
-	// CloudServer. If it is missing, refuse to serve (fatal) — the missing/misnamed
-	// server is a permanent commissioning error and serving a half-configured reader
-	// is worse than not serving. Transient failures (reader busy, broker down,
-	// GlassFish still booting) are logged loudly but the daemon still serves; the
-	// next restart re-arms. With systemd Restart=always, the fatal case self-heals
-	// once the operator creates the CloudServer.
+	// The golden-config reconcile runs from the health monitor, whenever /API
+	// is healthy and the config is not yet applied: at boot, once GlassFish is
+	// actually serving, and again after every outage. Running it once before
+	// serving lost the boot race to GlassFish (a 502) and never retried.
+	//
+	// The daemon is opinionated about the ONE hand-crafted prerequisite, the
+	// golden CloudServer. If it is missing, it exits (fatal): a missing or
+	// misnamed server is a permanent commissioning error, and serving a
+	// half-configured reader is worse than not serving. With systemd
+	// Restart=always, the daemon recovers once the operator creates it. Anything
+	// else (reader busy, a transient error) is retried by the monitor.
+	var reconcile func(context.Context) error
 	if cfg.Reconcile {
-		rctx, cancel := context.WithTimeout(ctx, reconcileTimeout)
-		err := adapter.Reconcile(rctx)
-		cancel()
-		switch {
-		case err == nil:
-			logger.Info().Msg("golden-config reconcile complete")
-		case errors.Is(err, cs463.ErrMissingCloudServer):
-			logger.Fatal().Err(err).Msg("golden-config reconcile: required CloudServer missing — refusing to serve; create it (exact name) and the daemon will recover on restart")
-		default:
-			logger.Error().Err(err).Msg("golden-config reconcile failed; serving RPC anyway")
+		reconcile = func(ctx context.Context) error {
+			err := adapter.Reconcile(ctx)
+			if errors.Is(err, cs463.ErrMissingCloudServer) {
+				logger.Fatal().Err(err).Msg("golden-config reconcile: required CloudServer missing — refusing to serve; create it (exact name) and the daemon will recover on restart")
+			}
+			return err
 		}
 	}
 
@@ -105,10 +100,27 @@ func main() {
 	}
 	defer d.Stop()
 
+	policy := readerd.DefaultHealthPolicy()
+	policy.AutoRecover = cfg.AutoRecover
+	policy.WedgeAfter = cfg.WedgeAfter
+	monitor := readerd.NewMonitor(policy, readerd.MonitorDeps{
+		Probe:     adapter.ProbeHealth,
+		Reconcile: reconcile,
+		Host:      readerd.NewSystemdHost(&logger),
+		Store:     readerd.RebootStore{Path: readerd.DefaultRebootStorePath},
+		Publish:   d.SetHealth,
+		GoingDown: d.GoingDown,
+		Log:       &logger,
+	})
+	d.SetHealth(monitor.Health())
+	go monitor.Run(ctx)
+
 	logger.Info().
 		Str("base_topic", cfg.Broker.BaseTopic).
 		Str("rpc_client_id", cfg.Broker.RPCClientID).
 		Str("reader_url", baseURL).
+		Bool("auto_recover", policy.AutoRecover).
+		Dur("wedge_after", policy.WedgeAfter).
 		Msg("mqtt-rpcd running")
 
 	select {
