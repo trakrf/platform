@@ -26,7 +26,7 @@ func TestSignReleaseProducesAManifestTheDaemonAccepts(t *testing.T) {
 	priv, err := parseSeed(base64.StdEncoding.EncodeToString(seed) + "\n")
 	require.NoError(t, err)
 
-	m, err := signRelease(priv, "v1.5.0-240-gabc1234", bin, "https://example.test/mqtt-rpcd")
+	m, err := signRelease(priv, "v1.5.0-240-gabc1234", bin, "https://example.test/mqtt-rpcd", false)
 	require.NoError(t, err)
 	assert.Equal(t, "v1.5.0-240-gabc1234", m.Version)
 	assert.Equal(t, "https://example.test/mqtt-rpcd", m.URL)
@@ -48,7 +48,7 @@ func TestSignReleaseRefusesABadVersion(t *testing.T) {
 	_, priv, _ := ed25519.GenerateKey(nil)
 	bin := filepath.Join(t.TempDir(), "b")
 	require.NoError(t, os.WriteFile(bin, []byte("x"), 0o755))
-	_, err := signRelease(priv, "v1 bad", bin, "https://x/y")
+	_, err := signRelease(priv, "v1 bad", bin, "https://x/y", false)
 	assert.Error(t, err)
 }
 

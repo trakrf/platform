@@ -19,7 +19,7 @@ case "$VERSION" in *[!A-Za-z0-9._+-]*) echo "unusable version '$VERSION'" >&2; e
 
 echo "Cross-building mqtt-rpcd $VERSION (linux/armv7, static)..."
 ( cd "$MODULE_DIR" && GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 \
-    go build -trimpath -ldflags "-X main.version=$VERSION" -o /tmp/mqtt-rpcd ./cmd/mqtt-rpcd )
+    go build -ldflags "-X main.version=$VERSION" -o /tmp/mqtt-rpcd ./cmd/mqtt-rpcd )
 
 echo "Shipping to $HOST..."
 ssh "$HOST" 'mkdir -p /opt/trakrf/versions /opt/trakrf/update'

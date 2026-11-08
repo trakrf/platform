@@ -72,6 +72,7 @@ func cmdSign(args []string) error {
 	url := fs.String("url", "", "https URL the binary will be served from")
 	keyFile := fs.String("key", "", "base64 seed file (default: $MQTT_RPCD_SIGNING_KEY)")
 	out := fs.String("out", "", "write the manifest here (default stdout)")
+	unchecked := fs.Bool("unchecked-version", false, "skip the check that the binary was built as -version (bench fixtures only)")
 	_ = fs.Parse(args)
 
 	seed := os.Getenv("MQTT_RPCD_SIGNING_KEY")
@@ -89,7 +90,7 @@ func cmdSign(args []string) error {
 	if err != nil {
 		return err
 	}
-	m, err := signRelease(priv, *version, *bin, *url)
+	m, err := signRelease(priv, *version, *bin, *url, !*unchecked)
 	if err != nil {
 		return err
 	}

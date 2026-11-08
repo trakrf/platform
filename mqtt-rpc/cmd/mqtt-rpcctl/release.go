@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"debug/buildinfo"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -36,10 +38,47 @@ func parseSeed(s string) (ed25519.PrivateKey, error) {
 	return ed25519.NewKeyFromSeed(raw), nil
 }
 
-// signRelease hashes the binary at path and signs it as version, to be served at url.
-func signRelease(priv ed25519.PrivateKey, version, path, url string) (manifest, error) {
+var ldflagsVersionRE = regexp.MustCompile(`main\.version=([^\s'"]+)`)
+
+// builtVersion reads the -X main.version a Go binary was linked with.
+func builtVersion(path string) (string, error) {
+	bi, err := buildinfo.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("%s is not a Go binary with build info: %w", path, err)
+	}
+	trimpath := false
+	for _, s := range bi.Settings {
+		switch s.Key {
+		case "-ldflags":
+			if m := ldflagsVersionRE.FindStringSubmatch(s.Value); m != nil {
+				return m[1], nil
+			}
+		case "-trimpath":
+			trimpath = s.Value == "true"
+		}
+	}
+	if trimpath {
+		return "", fmt.Errorf("%s was built with -trimpath, which drops -ldflags from build info; build release binaries without it", path)
+	}
+	return "", fmt.Errorf("%s was built without -X main.version", path)
+}
+
+// signRelease hashes the binary at path and signs it as version, to be served at
+// url. With checkVersion, the binary must have been linked with exactly that
+// version: a reader installs a release under its label and the daemon reports its
+// compiled-in version, so a mismatch is a build that can never commit.
+func signRelease(priv ed25519.PrivateKey, version, path, url string, checkVersion bool) (manifest, error) {
 	if !update.ValidVersion(version) {
 		return manifest{}, fmt.Errorf("invalid version %q", version)
+	}
+	if checkVersion {
+		built, err := builtVersion(path)
+		if err != nil {
+			return manifest{}, err
+		}
+		if built != version {
+			return manifest{}, fmt.Errorf("binary was built as %s, not %s", built, version)
+		}
 	}
 	f, err := os.Open(path)
 	if err != nil {
