@@ -106,11 +106,7 @@ func (d *Daemon) Start() error {
 		})
 
 	if d.cfg.Broker.CACertPath != "" {
-		tlsCfg, err := loadTLS(d.cfg.Broker.CACertPath)
-		if err != nil {
-			return fmt.Errorf("readerd: load CA cert: %w", err)
-		}
-		opts.SetTLSConfig(tlsCfg)
+		opts.SetTLSConfig(brokerTLS(d.cfg.Broker.CACertPath, &d.log))
 	}
 
 	d.client = mqtt.NewClient(opts)
@@ -176,6 +172,20 @@ func (d *Daemon) Stop() {
 	}
 	d.client.Disconnect(250)
 	d.log.Info().Msg("readerd disconnected")
+}
+
+// brokerTLS trusts the CloudServer's bundle at path, as the reader's own app
+// does, and falls back to the system roots when the bundle is unusable rather
+// than failing. The daemon is the only remote path to the reader: refusing to
+// start over a bundle that has already silenced the reader's reads would cut
+// that path too, and would hide the fault the health status exists to report.
+func brokerTLS(path string, log *zerolog.Logger) *tls.Config {
+	cfg, err := loadTLS(path)
+	if err != nil {
+		log.Error().Err(err).Str("ca_cert", path).Msg("cannot use the CloudServer trust bundle; trusting the system roots instead")
+		return &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+	return cfg
 }
 
 // loadTLS builds a TLS config trusting the CA bundle at path.
