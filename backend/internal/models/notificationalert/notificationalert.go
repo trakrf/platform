@@ -11,7 +11,8 @@ import (
 	"github.com/trakrf/platform/backend/internal/models/notificationevent"
 )
 
-// Alert is one sent notification. Type is the event's source (alarm or
+// Alert is one sent notification. ID is the delivery's public id, never its
+// internal sequence number. Type is the event's source (alarm or
 // location_change). Subject is nil for SMS. Details carries event specifics:
 // an alarm has "location"; a location change has "to" and, when the asset was
 // somewhere known before, "from".

@@ -1,11 +1,10 @@
 package notificationrecipients
 
 import (
-	"fmt"
+	"errors"
 	"math"
 	"net/http"
 	"net/url"
-	"strconv"
 	"time"
 
 	"github.com/trakrf/platform/backend/internal/middleware"
@@ -20,7 +19,6 @@ import (
 const (
 	defaultAlertsPerPage = 20
 	maxAlertsPerPage     = 100
-	dateOnly             = "2006-01-02"
 )
 
 var alertQueryParams = []string{"asset_id", "recipient_id", "type", "channel", "from", "to", "page", "per_page"}
@@ -32,9 +30,8 @@ type listAlertsResponse struct {
 
 // ListAlerts returns sent notifications, newest first, paginated by page and
 // per_page. Filters: asset_id, recipient_id, type (alarm, location_change),
-// channel (email, sms), and from/to on the sent time. from and to take an
-// RFC 3339 instant or a YYYY-MM-DD date, both inclusive; a bare to date covers
-// that whole UTC day.
+// channel (email, sms), and from/to on the sent time as inclusive RFC 3339
+// instants.
 func (h *Handler) ListAlerts(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
 	orgID, err := middleware.GetRequestOrgID(r)
@@ -63,32 +60,30 @@ func (h *Handler) ListAlerts(w http.ResponseWriter, r *http.Request) {
 }
 
 // parseAlertQuery validates every parameter and reports all failures at once
-// as a *httputil.ListParamError.
+// as a *httputil.ListParamError. A parameter that is present but empty is an
+// error, not an absent filter: a client with an unset asset_id must not get
+// the whole org's alerts.
 func parseAlertQuery(q url.Values) (notificationalert.ListFilter, int, int, error) {
 	var (
 		f      notificationalert.ListFilter
 		fields []apierrors.FieldError
 	)
-	fail := func(field, code, msg string) {
-		fields = append(fields, apierrors.FieldError{Field: field, Code: code, Message: msg})
+	fail := func(field, msg string) {
+		fields = append(fields, apierrors.FieldError{Field: field, Code: "invalid_value", Message: msg})
 	}
-	intParam := func(field string, min, max int) (int, bool) {
-		raw := q.Get(field)
-		if raw == "" {
+	intParam := func(field string, min, max int64) (int, bool) {
+		if !q.Has(field) {
 			return 0, false
 		}
-		n, err := strconv.Atoi(raw)
-		switch {
-		case err != nil:
-			fail(field, "invalid_value", field+" must be an integer")
-		case n < min:
-			fail(field, "too_small", fmt.Sprintf("%s must be ≥ %d", field, min))
-		case n > max:
-			fail(field, "too_large", fmt.Sprintf("%s must be ≤ %d", field, max))
-		default:
-			return n, true
+		n, err := httputil.ParsePathInt(field, q.Get(field), min, max)
+		if err != nil {
+			var fpe *httputil.FieldParamError
+			if errors.As(err, &fpe) {
+				fields = append(fields, fpe.FieldError)
+			}
+			return 0, false
 		}
-		return 0, false
+		return n, true
 	}
 
 	page := 1
@@ -99,54 +94,53 @@ func parseAlertQuery(q url.Values) (notificationalert.ListFilter, int, int, erro
 	if n, ok := intParam("per_page", 1, maxAlertsPerPage); ok {
 		perPage = n
 	}
-	if n, ok := intParam("asset_id", 1, math.MaxInt); ok {
+	if n, ok := intParam("asset_id", 1, math.MaxInt64); ok {
 		f.AssetID = &n
 	}
-	if n, ok := intParam("recipient_id", 1, math.MaxInt); ok {
+	if n, ok := intParam("recipient_id", 1, math.MaxInt64); ok {
 		f.RecipientID = &n
 	}
 
-	switch v := notificationevent.Source(q.Get("type")); v {
-	case "":
-	case notificationevent.SourceAlarm, notificationevent.SourceLocationChange:
-		f.Type = &v
-	default:
-		fail("type", "invalid_value", "type must be one of: alarm, location_change")
+	if q.Has("type") {
+		switch v := notificationevent.Source(q.Get("type")); v {
+		case notificationevent.SourceAlarm, notificationevent.SourceLocationChange:
+			f.Type = &v
+		default:
+			fail("type", "type must be one of: alarm, location_change")
+		}
 	}
 
-	switch v := notificationdelivery.Channel(q.Get("channel")); v {
-	case "":
-	case notificationdelivery.ChannelEmail, notificationdelivery.ChannelSMS:
-		f.Channel = &v
-	default:
-		fail("channel", "invalid_value", "channel must be one of: email, sms")
+	if q.Has("channel") {
+		switch v := notificationdelivery.Channel(q.Get("channel")); v {
+		case notificationdelivery.ChannelEmail, notificationdelivery.ChannelSMS:
+			f.Channel = &v
+		default:
+			fail("channel", "channel must be one of: email, sms")
+		}
 	}
 
-	timeParam := func(field string, upper bool) *time.Time {
-		raw := q.Get(field)
-		if raw == "" {
+	// Bare dates are rejected rather than read as UTC days: the caller knows
+	// the viewer's zone and the server does not, so a local day must arrive
+	// as instants.
+	timeParam := func(field string) *time.Time {
+		if !q.Has(field) {
 			return nil
 		}
-		if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
-			if upper {
-				// An instant to is inclusive; storage bounds it exclusively.
-				t = t.Add(time.Microsecond)
-			}
-			return &t
+		t, err := time.Parse(time.RFC3339Nano, q.Get(field))
+		if err != nil {
+			fail(field, field+" must be an RFC 3339 timestamp with a time zone, e.g. 2026-10-20T00:00:00-04:00")
+			return nil
 		}
-		if t, err := time.Parse(dateOnly, raw); err == nil {
-			if upper {
-				t = t.AddDate(0, 0, 1)
-			}
-			return &t
-		}
-		fail(field, "invalid_value", field+" must be an RFC 3339 timestamp or a YYYY-MM-DD date")
-		return nil
+		return &t
 	}
-	f.From = timeParam("from", false)
-	f.To = timeParam("to", true)
-	if f.From != nil && f.To != nil && !f.From.Before(*f.To) {
-		fail("to", "invalid_value", "to must be later than from")
+	f.From = timeParam("from")
+	if to := timeParam("to"); to != nil {
+		// to is inclusive; storage bounds it exclusively.
+		end := to.Add(time.Microsecond)
+		f.To = &end
+		if f.From != nil && f.From.After(*to) {
+			fail("to", "to must not be earlier than from")
+		}
 	}
 
 	if len(fields) > 0 {

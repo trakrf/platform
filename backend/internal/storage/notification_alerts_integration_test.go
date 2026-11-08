@@ -25,8 +25,8 @@ type alertSeed struct {
 	sentAt                        time.Time
 }
 
-// seedAlert writes one delivery row in state s.state and backdates its
-// finalized_at to s.sentAt, and returns the row id.
+// seedAlert writes one delivery row in state s.state, backdates its
+// finalized_at to s.sentAt, and returns its public id.
 func seedAlert(t *testing.T, db *testutil.TestDB, orgID int, s alertSeed) int64 {
 	t.Helper()
 	ctx := context.Background()
@@ -52,7 +52,11 @@ func seedAlert(t *testing.T, db *testutil.TestDB, orgID int, s alertSeed) int64 
 		_, err = db.AdminPool.Exec(ctx, `UPDATE trakrf.notification_deliveries SET finalized_at = $1 WHERE id = $2`, s.sentAt, id)
 		require.NoError(t, err)
 	}
-	return id
+	var publicID int64
+	require.NoError(t, db.AdminPool.QueryRow(ctx,
+		`SELECT public_id FROM trakrf.notification_deliveries WHERE id = $1`, id).Scan(&publicID))
+	require.NotEqual(t, id, publicID)
+	return publicID
 }
 
 type alertFixture struct {
@@ -228,4 +232,47 @@ func TestListNotificationAlerts_OrgIsolation(t *testing.T) {
 	alerts, total := listAlerts(t, db, otherOrgID, notificationalert.ListFilter{})
 	require.Zero(t, total)
 	require.Empty(t, alerts)
+}
+
+func TestListNotificationAlerts_SoftDeletedNamesStillResolve(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	f := newAlertFixture(t, db)
+	ctx := context.Background()
+
+	for _, q := range []string{
+		`UPDATE trakrf.assets SET deleted_at = now() WHERE org_id = $1`,
+		`UPDATE trakrf.notification_recipients SET deleted_at = now() WHERE org_id = $1`,
+		`UPDATE trakrf.locations SET deleted_at = now() WHERE org_id = $1`,
+	} {
+		_, err := db.AdminPool.Exec(ctx, q, f.orgID)
+		require.NoError(t, err)
+	}
+
+	alerts, total := listAlerts(t, db, f.orgID, notificationalert.ListFilter{})
+	require.Equal(t, 3, total)
+	require.Equal(t, "Test Asset", alerts[0].AssetName)
+	require.Equal(t, "Alice", alerts[0].RecipientName)
+	require.Equal(t, map[string]string{"location": "Gate A"}, alerts[0].Details)
+	require.Equal(t, map[string]string{"from": "Row A", "to": "Row B"}, alerts[2].Details)
+}
+
+func TestListNotificationAlerts_PublicIDsAreNotTheSequence(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	f := newAlertFixture(t, db)
+
+	var internal []int64
+	rows, err := db.AdminPool.Query(context.Background(),
+		`SELECT id FROM trakrf.notification_deliveries WHERE org_id = $1`, f.orgID)
+	require.NoError(t, err)
+	for rows.Next() {
+		var id int64
+		require.NoError(t, rows.Scan(&id))
+		internal = append(internal, id)
+	}
+	require.NoError(t, rows.Err())
+
+	alerts, _ := listAlerts(t, db, f.orgID, notificationalert.ListFilter{})
+	for _, a := range alerts {
+		require.NotContains(t, internal, a.ID)
+	}
 }
