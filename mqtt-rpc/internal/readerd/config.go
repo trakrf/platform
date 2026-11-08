@@ -64,6 +64,9 @@ type Config struct {
 	// WedgeAfter is how long /API must stay unhealthy before it counts as
 	// wedged (READERD_WEDGE_AFTER, a Go duration, at least minWedgeAfter).
 	WedgeAfter time.Duration
+	// CloudServer is where the broker config was discovered, for
+	// CheckCloudServer. nil when READERD_BROKER_URL configured it directly.
+	CloudServer *CloudServerSource
 	// GpoDefaultOn is the on-time of a Gpo.Set ON that names no pulse
 	// (READERD_GPO_DEFAULT_ON, a Go duration, default readerrpc.GpoDefaultOn,
 	// at most readerrpc.GpoMaxOn).
@@ -183,6 +186,7 @@ func LoadConfig() (Config, error) {
 			return Config{}, err
 		}
 		cfg.Broker = bc
+		cfg.CloudServer = &CloudServerSource{File: csFile, ServerID: serverID, CertDir: certDir}
 	}
 
 	// Reconcile golden config on startup (default on). Determined before EventID

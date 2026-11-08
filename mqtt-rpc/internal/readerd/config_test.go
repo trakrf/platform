@@ -251,6 +251,39 @@ func TestHealthOverrides(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_DirectBrokerHasNoCloudServerToCheck(t *testing.T) {
+	brokerEnv(t)
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.CloudServer != nil {
+		t.Fatalf("CloudServer = %+v, want nil for a directly configured broker", cfg.CloudServer)
+	}
+	if got := CloudServerFault(cfg.CloudServer, time.Now()); got != "" {
+		t.Fatalf("CloudServerFault(nil) = %q, want empty", got)
+	}
+}
+
+func TestLoadConfig_DiscoveredBrokerRecordsItsCloudServer(t *testing.T) {
+	cs := filepath.Join(t.TempDir(), "CloudServer")
+	if err := os.WriteFile(cs, []byte(multiServerCloudServer), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("READERD_CLOUDSERVER_FILE", cs)
+	t.Setenv("READERD_CLOUDSERVER_ID", "TrakRF MQTT")
+	t.Setenv("READERD_CERT_DIR", "/certs")
+	t.Setenv("READERD_EVENT_ID", "TrakRF mqtt-rpc Event")
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := CloudServerSource{File: cs, ServerID: "TrakRF MQTT", CertDir: "/certs"}
+	if cfg.CloudServer == nil || *cfg.CloudServer != want {
+		t.Fatalf("CloudServer = %+v, want %+v", cfg.CloudServer, want)
+	}
+}
+
 func TestHealthInvalidValuesError(t *testing.T) {
 	for _, kv := range [][2]string{
 		{"READERD_AUTO_RECOVERY", "maybe"},

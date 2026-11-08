@@ -31,6 +31,47 @@ binaries keeps its old binary as version `legacy` until it ages out of retention
 (newest 3 versions are kept); `legacy` has no updater, so rolling back to it ends
 remote updates for that reader.
 
+## The golden CloudServer
+The one entity the daemon cannot create is `TrakRF mqtt-rpc MQTT Server`. It
+holds the broker credential and a trust bundle, so it is set up by hand when the
+reader is commissioned. The reader's own app publishes reads through it. A
+wrong bundle or TLS version stops reads while the daemon stays connected and
+everything looks healthy. A wrong `cleanSession` or `qos` is drift from the
+validated config:
+
+| Setting | Golden | Why |
+|---|---|---|
+| `serverCertFile` bundle | **trust anchors only**, a self-signed root **first** | CSL loads only the **first** certificate in the file. A bundle that leads with the broker's issuing intermediate works until the broker's certificate is renewed under a sibling intermediate, and then every handshake fails. Let's Encrypt rotates between its intermediates routinely. Lead with `ISRG Root X1`; any cross-signs after it are harmless. Never put a leaf or an intermediate first. |
+| the bundle file itself | present | If the config names a file that has been deleted, the app publishes nothing **and logs nothing**. |
+| `cleanSession` | `true` | |
+| `qos` | `0` | Reads are fire-and-forget. A buffered backlog replayed late reads as presence that is no longer true. |
+| `sslVersion` | `TLSv1.2` | It is the newest the CS463 offers, so it is a ceiling, not a choice. **Never make the broker require TLS 1.3** while CS463s are in the fleet: every reader drops at once, without a word. |
+
+Check a bundle before uploading it. The first `subject` must equal its
+`issuer`, and the broker's chain must verify against that first certificate
+alone, the way CSL will use it:
+
+```sh
+openssl x509 -in bundle.pem -noout -subject -issuer -enddate
+awk '/BEGIN CERT/{n++} n==1' bundle.pem > first.pem
+openssl s_client -connect <broker>:8883 -servername <broker> -CAfile first.pem \
+  -verify_return_error </dev/null | grep 'Verify return code'   # 0 (ok)
+```
+
+The daemon checks the same things. Every 30 s it reads the entry and the bundle.
+On every broker handshake it also verifies the chain the broker presented
+against the bundle's first certificate alone. That catches a broker-side change
+the reader never sees, such as a renewal under another intermediate or a
+cross-sign the broker stops sending. A fault is logged once and published as
+`health.cloudserver_fault` in the retained `<base>/status`. The daemon reports
+and never rewrites the entry. A firmware update that replaces
+`/opt/EmbeddedGlassFish` can revert the entry, and the check sees that too.
+
+If the bundle is missing or holds no certificate, the daemon trusts the
+reader's system roots for its own broker connection instead of exiting. It
+stays reachable only if those roots include the broker's root, which has not
+been verified on every firmware image.
+
 ## Bringing a reader onto a release before it leaves (while SSH still works)
 Per reader, from a machine on the reader's network with this repo, Go and
 python3. The reader must already be commissioned: golden CloudServer, the

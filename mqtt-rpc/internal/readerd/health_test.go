@@ -1,6 +1,7 @@
 package readerd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -300,5 +301,51 @@ func TestMonitor_PublishesOnlyOnChange(t *testing.T) {
 	r.run(H, 10*time.Minute)
 	if len(r.published) != 1 {
 		t.Fatalf("published %d times for a steady reader, want 1", len(r.published))
+	}
+}
+
+// The golden CloudServer fault rides the retained health: set on the tick that
+// finds it, cleared on the tick after it is fixed.
+func TestMonitor_CarriesCloudServerFault(t *testing.T) {
+	r := newRig(t, DefaultHealthPolicy(), false)
+	fault := "cleanSession is false; golden is true"
+	r.m.deps.CloudServer = func() string { return fault }
+
+	r.run(H, DefaultHealthPolicy().Interval)
+	if got := r.last().CloudServerFault; got != fault {
+		t.Fatalf("cloudserver_fault = %q, want %q", got, fault)
+	}
+
+	fault = ""
+	r.run(H, DefaultHealthPolicy().Interval)
+	if got := r.last().CloudServerFault; got != "" {
+		t.Fatalf("cloudserver_fault after the fix = %q, want empty", got)
+	}
+}
+
+// Not every fault stops reads (cleanSession false at qos 0 is drift), so the
+// log names a config fault rather than claiming reads have stopped. A steady
+// fault is logged once, not every 30 s.
+func TestMonitor_CloudServerFaultLoggedOnceAsAConfigFault(t *testing.T) {
+	r := newRig(t, DefaultHealthPolicy(), false)
+	var logs bytes.Buffer
+	r.m.log = zerolog.New(&logs)
+	r.m.deps.CloudServer = func() string { return "cleanSession is false; golden is true" }
+
+	r.run(H, 5*DefaultHealthPolicy().Interval)
+	out := logs.String()
+	if n := strings.Count(out, "golden cloudserver config fault"); n != 1 {
+		t.Fatalf("logged %d times, want once:\n%s", n, out)
+	}
+	if strings.Contains(out, "will not publish reads") {
+		t.Fatalf("log claims reads stopped for config drift:\n%s", out)
+	}
+}
+
+func TestMonitor_NoCloudServerCheckLeavesFaultEmpty(t *testing.T) {
+	r := newRig(t, DefaultHealthPolicy(), false)
+	r.run(H, DefaultHealthPolicy().Interval)
+	if got := r.last().CloudServerFault; got != "" {
+		t.Fatalf("cloudserver_fault = %q, want empty with no check wired", got)
 	}
 }

@@ -87,6 +87,9 @@ func summarizeStatus(b []byte) string {
 			parts = append(parts, "EXHAUSTED")
 		}
 		parts = append(parts, "golden="+h.GoldenConfig)
+		if h.CloudServerFault != "" {
+			parts = append(parts, fmt.Sprintf("cloudserver_fault=%q", h.CloudServerFault))
+		}
 		if h.Detail != "" && h.API != readerrpc.APIHealthy {
 			parts = append(parts, fmt.Sprintf("detail=%q", h.Detail))
 		}
