@@ -126,22 +126,73 @@ func TestDispatcher_GPODevice_UsesGpoSet(t *testing.T) {
 	}
 }
 
-func TestDispatcher_GPODevice_ZeroOffAfter_NoPulse(t *testing.T) {
-	// Presence mode passes offAfterSec=0 because the engine owns the OFF edge;
-	// that must arrive as pulse_ms=0 (latch on), not as a pulse.
-	g := &recordingGPO{}
-	d := NewDispatcher(&recordingHTTP{}, &recordingMQTT{}, g)
-	dev := outputdevice.OutputDevice{
+// No ON latches, on any transport (ADR 0026, TRA-1138). An ON that names no
+// on-time gets the default, and none is longer than the cap. A CS463 GPO's
+// daemon enforces this too, but a Shelly has nothing between it and the cloud,
+// so the dispatcher is where its on-time is bounded.
+func TestDispatcher_OnTimeIsBoundedOnEveryTransport(t *testing.T) {
+	gpoDev := outputdevice.OutputDevice{
 		Transport:       outputdevice.TransportMQTT,
 		Type:            outputdevice.TypeCSLGPO,
 		ReaderBaseTopic: "trakrf.id/cs463-212",
 		SwitchID:        2,
 	}
-	if err := d.Set(context.Background(), dev, true, 0); err != nil {
-		t.Fatalf("Set: %v", err)
+	httpDev := outputdevice.OutputDevice{Transport: outputdevice.TransportHTTP, BaseURL: "http://1.2.3.4", SwitchID: 0}
+	mqttDev := outputdevice.OutputDevice{Transport: outputdevice.TransportMQTT, CommandTopic: strptr("trakrf.id/dock")}
+
+	for _, tc := range []struct {
+		name      string
+		requested int
+		wantSec   int
+	}{
+		{"no on-time gets the 30 s default", 0, 30},
+		{"a negative on-time gets the default", -5, 30},
+		{"an on-time inside the cap is kept", 45, 45},
+		{"the cap itself is kept", 60, 60},
+		{"a 600 s on-time is cut to 60 s", 600, 60},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, m, g := &recordingHTTP{}, &recordingMQTT{}, &recordingGPO{}
+			d := NewDispatcher(h, m, g)
+
+			if err := d.Set(context.Background(), httpDev, true, tc.requested); err != nil {
+				t.Fatalf("http Set: %v", err)
+			}
+			if h.offAfterSec != tc.wantSec {
+				t.Errorf("shelly http toggle_after = %d, want %d", h.offAfterSec, tc.wantSec)
+			}
+			if err := d.Set(context.Background(), mqttDev, true, tc.requested); err != nil {
+				t.Fatalf("mqtt Set: %v", err)
+			}
+			if m.offAfterSec != tc.wantSec {
+				t.Errorf("shelly mqtt toggle_after = %d, want %d", m.offAfterSec, tc.wantSec)
+			}
+			if err := d.Set(context.Background(), gpoDev, true, tc.requested); err != nil {
+				t.Fatalf("gpo Set: %v", err)
+			}
+			if g.pulseMs != tc.wantSec*1000 {
+				t.Errorf("gpo pulse_ms = %d, want %d", g.pulseMs, tc.wantSec*1000)
+			}
+		})
 	}
-	if g.pulseMs != 0 {
-		t.Errorf("pulseMs = %d, want 0", g.pulseMs)
+}
+
+// An OFF carries no on-time on any transport.
+func TestDispatcher_OffCarriesNoOnTime(t *testing.T) {
+	h, m, g := &recordingHTTP{}, &recordingMQTT{}, &recordingGPO{}
+	d := NewDispatcher(h, m, g)
+	devs := []outputdevice.OutputDevice{
+		{Transport: outputdevice.TransportHTTP, BaseURL: "http://1.2.3.4"},
+		{Transport: outputdevice.TransportMQTT, CommandTopic: strptr("trakrf.id/dock")},
+		{Transport: outputdevice.TransportMQTT, Type: outputdevice.TypeCSLGPO, ReaderBaseTopic: "trakrf.id/cs463-212", SwitchID: 1},
+	}
+	for _, dev := range devs {
+		if err := d.Set(context.Background(), dev, false, 30); err != nil {
+			t.Fatalf("Set off: %v", err)
+		}
+	}
+	if h.offAfterSec != 0 || m.offAfterSec != 0 || g.pulseMs != 0 {
+		t.Errorf("off carried an on-time: http %d, mqtt %d, gpo %d ms", h.offAfterSec, m.offAfterSec, g.pulseMs)
 	}
 }
 
