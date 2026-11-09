@@ -227,3 +227,10 @@ type UpdateOutputDeviceRequest struct {
 type OutputDeviceResponse struct {
 	Data OutputDevice `json:"data"`
 }
+
+// ConfirmsDrives reports whether a drive's success means the device acted.
+// An http device answers each call. An mqtt device is only published to: the
+// broker's ack is all the caller gets (a cs463 gpo rides readercontrol's
+// fire-and-forget Notify, a shelly a bare publish), so a powered-off reader
+// still "succeeds". Its drives are recorded as sent, not ok (TRA-1314).
+func (d OutputDevice) ConfirmsDrives() bool { return d.Transport != TransportMQTT }

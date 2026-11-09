@@ -5,8 +5,16 @@
 -- say which devices were driven or whether the drive reached them: one fire
 -- drives every device at the location, each suppressed or driven on its own,
 -- and a drive to an offline reader fails with only a log line to show for it.
--- These rows are the delivery record. An alarm whose drive rows are all
--- result = 'error' (or that has none) was detected but not delivered.
+-- These rows are the delivery record: an alarm's drive rows say which devices
+-- were reached. They are best-effort writes, so a missing row is a lost
+-- record, not a missed drive.
+--
+-- result:
+--   ok     the device answered (http transport)
+--   sent   handed to the MQTT broker, which is all an mqtt transport hears: a
+--          cs463 gpo drive is fire-and-forget, and a powered-off reader still
+--          lets the publish succeed. Not proof the output moved.
+--   error  the drive failed; error says how
 --
 -- cause says what drove it:
 --   alarm    the ON a fire sent; alarm_event_id names the fire, unless the
@@ -33,7 +41,7 @@ CREATE TABLE output_drives (
     edge             TEXT        NOT NULL CHECK (edge IN ('on', 'off')),
     cause            TEXT        NOT NULL
         CHECK (cause IN ('alarm', 'refresh', 'age_out', 'test', 'reset', 'delete')),
-    result           TEXT        NOT NULL CHECK (result IN ('ok', 'error')),
+    result           TEXT        NOT NULL CHECK (result IN ('ok', 'sent', 'error')),
     error            TEXT,
     latency_ms       INT         NOT NULL CHECK (latency_ms >= 0),
     driven_at        TIMESTAMPTZ NOT NULL,
@@ -48,7 +56,8 @@ CREATE INDEX idx_output_drives_device_time ON output_drives(org_id, output_devic
 CREATE INDEX idx_output_drives_alarm ON output_drives(alarm_event_id) WHERE alarm_event_id IS NOT NULL;
 
 COMMENT ON TABLE output_drives IS 'One row per output-device drive and its result. The delivery record for alarm_events.';
-COMMENT ON COLUMN output_drives.error IS 'Transport error text when result = error (RPC timeout, reader error code), capped at 1000 bytes.';
+COMMENT ON COLUMN output_drives.error IS 'Transport error text when result = error (HTTP failure, broker publish failure, device config error), capped at 1000 bytes.';
+COMMENT ON COLUMN output_drives.result IS 'ok = the device answered; sent = handed to the MQTT broker, unconfirmed; error = failed.';
 COMMENT ON COLUMN output_drives.latency_ms IS 'Time the drive call took, success or failure.';
 
 -- RLS: org isolation, USING-only, identical shape to alarm_events.

@@ -37,8 +37,12 @@ type OutputDriveRow struct {
 	On             bool
 	Cause          DriveCause
 	Err            error
-	Latency        time.Duration
-	DrivenAt       time.Time
+	// Unconfirmed marks a transport that only hands the drive off (the MQTT
+	// broker) and never hears from the device: a drive that sent cleanly is
+	// recorded as "sent", not "ok". A failure is an error either way.
+	Unconfirmed bool
+	Latency     time.Duration
+	DrivenAt    time.Time
 }
 
 // OutputDrive is one recorded drive, as read back.
@@ -48,7 +52,7 @@ type OutputDrive struct {
 	AlarmEventID   *int64
 	Edge           string // on | off
 	Cause          string
-	Result         string // ok | error
+	Result         string // ok | sent | error
 	Error          *string
 	LatencyMs      int
 	DrivenAt       time.Time
@@ -68,6 +72,9 @@ func (s *Storage) RecordOutputDrive(ctx context.Context, orgID int, row OutputDr
 		edge = "on"
 	}
 	result := "ok"
+	if row.Unconfirmed {
+		result = "sent"
+	}
 	var errText *string
 	if row.Err != nil {
 		result = "error"
