@@ -59,7 +59,7 @@ func TestRecordOutputDrive_ListsEachDeviceNewestFirst(t *testing.T) {
 	t0 := time.Now().Truncate(time.Millisecond)
 	require.NoError(t, db.Store.RecordOutputDrive(ctx, orgID, storage.OutputDriveRow{
 		OutputDeviceID: horn, AlarmEventID: &alarmID, On: true, Cause: storage.DriveCauseAlarm,
-		Err: errors.New("reader rpc: timeout after 5s"), Latency: 5003 * time.Millisecond, DrivenAt: t0,
+		Err: errors.New("device unreachable: dial tcp 192.0.2.10:80: i/o timeout"), Latency: 5003 * time.Millisecond, DrivenAt: t0,
 	}))
 	require.NoError(t, db.Store.RecordOutputDrive(ctx, orgID, storage.OutputDriveRow{
 		OutputDeviceID: horn, On: false, Cause: storage.DriveCauseAgeOut, Latency: 12 * time.Millisecond, DrivenAt: t0.Add(time.Minute),
@@ -83,7 +83,7 @@ func TestRecordOutputDrive_ListsEachDeviceNewestFirst(t *testing.T) {
 	assert.Equal(t, "alarm", got[1].Cause)
 	assert.Equal(t, "error", got[1].Result)
 	require.NotNil(t, got[1].Error)
-	assert.Equal(t, "reader rpc: timeout after 5s", *got[1].Error)
+	assert.Equal(t, "device unreachable: dial tcp 192.0.2.10:80: i/o timeout", *got[1].Error)
 	require.NotNil(t, got[1].AlarmEventID)
 	assert.Equal(t, alarmID, *got[1].AlarmEventID)
 	assert.Equal(t, 5003, got[1].LatencyMs)
@@ -140,4 +140,28 @@ func TestOutputDrives_OKRowCannotCarryErrorText(t *testing.T) {
 		VALUES ($1, $2, 'on', 'test', 'ok', 'boom', 1, now())`, orgID, horn)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "output_drives_error_iff_failed")
+}
+
+// A broker-only drive that published cleanly is "sent": handed off, never
+// answered. It must not read as "ok".
+func TestRecordOutputDrive_UnconfirmedSuccessIsSent(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+	horn := createOutput(t, db, orgID, "horn")
+
+	require.NoError(t, db.Store.RecordOutputDrive(ctx, orgID, storage.OutputDriveRow{
+		OutputDeviceID: horn, On: true, Cause: storage.DriveCauseTest, Unconfirmed: true, DrivenAt: time.Now(),
+	}))
+	require.NoError(t, db.Store.RecordOutputDrive(ctx, orgID, storage.OutputDriveRow{
+		OutputDeviceID: horn, On: false, Cause: storage.DriveCauseTest, Unconfirmed: true,
+		Err: errors.New("broker unreachable"), DrivenAt: time.Now().Add(time.Second),
+	}))
+
+	got, err := db.Store.ListOutputDrives(ctx, orgID, horn, 10)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.Equal(t, "error", got[0].Result, "a failed publish is still an error")
+	assert.Equal(t, "sent", got[1].Result)
+	assert.Nil(t, got[1].Error)
 }

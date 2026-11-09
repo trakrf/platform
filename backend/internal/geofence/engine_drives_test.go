@@ -53,14 +53,14 @@ func TestEvaluate_RecordsEachDeviceDriveWithAlarmID(t *testing.T) {
 
 func TestEvaluate_FailedDriveRecordsErrorAndCountsUndelivered(t *testing.T) {
 	s := &fakeStore{devices: []outputdevice.OutputDevice{dev(1, nil)}}
-	e := newTestEngine(Config{RSSIThreshold: -65, LatchTTL: time.Minute}, s, &fakeDriver{err: errors.New("reader rpc: timeout after 5s")})
+	e := newTestEngine(Config{RSSIThreshold: -65, LatchTTL: time.Minute}, s, &fakeDriver{err: errors.New("device unreachable: dial tcp 192.0.2.10:80: i/o timeout")})
 	defer e.Stop()
 	before := undelivered(t)
 
 	e.Evaluate(context.Background(), 42, 9, time.Unix(1000, 0), []storage.ResolvedRead{read("EPC1", -50)})
 
 	drives := s.recordedDrives()
-	if len(drives) != 1 || drives[0].Err == nil || drives[0].Err.Error() != "reader rpc: timeout after 5s" {
+	if len(drives) != 1 || drives[0].Err == nil || drives[0].Err.Error() != "device unreachable: dial tcp 192.0.2.10:80: i/o timeout" {
 		t.Fatalf("drives = %+v, want one row carrying the timeout", drives)
 	}
 	if got := undelivered(t) - before; got != 1 {
@@ -158,5 +158,33 @@ func TestEvaluate_PresenceAgeOutRecordsOffRow(t *testing.T) {
 	}
 	if s.driveOrgs[1] != 42 {
 		t.Errorf("age-out drive org = %d, want 42", s.driveOrgs[1])
+	}
+}
+
+// A drive over the broker is only handed off: a powered-off CS463 still lets
+// the publish succeed. Its row must not claim the device was reached.
+func TestEvaluate_BrokerDriveIsRecordedUnconfirmed(t *testing.T) {
+	gpo := outputdevice.OutputDevice{ID: 1, Transport: outputdevice.TransportMQTT, Type: outputdevice.TypeCSLGPO}
+	s := &fakeStore{devices: []outputdevice.OutputDevice{gpo}}
+	e := newTestEngine(Config{RSSIThreshold: -65, LatchTTL: time.Minute}, s, &fakeDriver{})
+	defer e.Stop()
+
+	e.Evaluate(context.Background(), 42, 9, time.Unix(1000, 0), []storage.ResolvedRead{read("EPC1", -50)})
+
+	drives := s.recordedDrives()
+	if len(drives) != 1 || !drives[0].Unconfirmed || drives[0].Err != nil {
+		t.Fatalf("drives = %+v, want one unconfirmed row with no error", drives)
+	}
+}
+
+func TestEvaluate_HTTPDriveIsRecordedConfirmed(t *testing.T) {
+	s := &fakeStore{devices: []outputdevice.OutputDevice{dev(1, nil)}}
+	e := newTestEngine(Config{RSSIThreshold: -65, LatchTTL: time.Minute}, s, &fakeDriver{})
+	defer e.Stop()
+
+	e.Evaluate(context.Background(), 42, 9, time.Unix(1000, 0), []storage.ResolvedRead{read("EPC1", -50)})
+
+	if drives := s.recordedDrives(); len(drives) != 1 || drives[0].Unconfirmed {
+		t.Fatalf("drives = %+v, want one confirmed row", drives)
 	}
 }

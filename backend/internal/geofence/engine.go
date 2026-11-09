@@ -272,6 +272,9 @@ func (e *Engine) drive(ctx context.Context, orgID int, dev outputdevice.OutputDe
 	if on {
 		edge = "on"
 	}
+	if !dev.ConfirmsDrives() {
+		result = "sent"
+	}
 	if err != nil {
 		result = "error"
 		e.log.Error().Err(err).Int("org_id", orgID).Int("output_device_id", dev.ID).Bool("on", on).
@@ -286,6 +289,7 @@ func (e *Engine) drive(ctx context.Context, orgID int, dev outputdevice.OutputDe
 		On:             on,
 		Cause:          cause,
 		Err:            err,
+		Unconfirmed:    !dev.ConfirmsDrives(),
 		Latency:        latency,
 		DrivenAt:       at,
 	}); rerr != nil {

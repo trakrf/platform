@@ -21,6 +21,7 @@ func (h *Handler) set(ctx context.Context, orgID int, dev outputdevice.OutputDev
 		On:             on,
 		Cause:          cause,
 		Err:            err,
+		Unconfirmed:    !dev.ConfirmsDrives(),
 		Latency:        time.Since(drivenAt),
 		DrivenAt:       drivenAt,
 	}); rerr != nil {
