@@ -341,7 +341,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	if !found {
 		return
 	}
-	if err := h.actuator.Set(r.Context(), *device, false, 0); err != nil && r.URL.Query().Get("force") != "true" {
+	if err := h.set(r.Context(), orgID, *device, false, 0, storage.DriveCauseDelete); err != nil && r.URL.Query().Get("force") != "true" {
 		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal,
 			"could not turn the output off before deleting it, so it was kept: "+err.Error(), reqID)
 		return
@@ -382,7 +382,7 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 	// cannot leave the output latched on (TRA-1273): the OFF is a second
 	// message, and alarm outputs fail toward off.
 	offAfter := max(1, int(math.Ceil(h.testPulse.Seconds())))
-	if err := h.actuator.Set(ctx, *device, true, offAfter); err != nil {
+	if err := h.set(ctx, orgID, *device, true, offAfter, storage.DriveCauseTest); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal, "output device unreachable: "+err.Error(), reqID)
 		return
 	}
@@ -390,7 +390,7 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(h.testPulse)
 	}
 	// Best-effort off; the operator can still use reset if this fails.
-	_ = h.actuator.Set(ctx, *device, false, 0)
+	_ = h.set(ctx, orgID, *device, false, 0, storage.DriveCauseTest)
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 }
 
@@ -412,7 +412,7 @@ func (h *Handler) Reset(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := h.actuator.Set(r.Context(), *device, false, 0); err != nil {
+	if err := h.set(r.Context(), orgID, *device, false, 0, storage.DriveCauseReset); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal, "output device unreachable: "+err.Error(), reqID)
 		return
 	}
