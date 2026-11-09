@@ -33,16 +33,19 @@ scp "$HERE/mqtt-rpcd.env.example" "$HOST:/tmp/mqtt-rpcd.env.example"
 ssh "$HOST" "VERSION='$VERSION' sh -s" <<'REMOTE'
 set -eu
 cd /opt/trakrf
-chmod 755 "versions/.mqtt-rpcd-$VERSION.upload" .mqtt-rpcd-guard.upload
-mv -f "versions/.mqtt-rpcd-$VERSION.upload" "versions/mqtt-rpcd-$VERSION"
+chmod 755 .mqtt-rpcd-guard.upload
 mv -f .mqtt-rpcd-guard.upload mqtt-rpcd-guard
-# A pre-versioning install has a plain file here: keep it as a manual rollback
-# target named "legacy" (it has no updater, so rolling back to it ends OTA).
-if [ -f mqtt-rpcd ] && [ ! -L mqtt-rpcd ]; then mv -f mqtt-rpcd versions/mqtt-rpcd-legacy; fi
-# An SSH install supersedes any remote update on probation.
-rm -f update/pending update/starts update/ticks
-rm -f .mqtt-rpcd.link
-ln -s "versions/mqtt-rpcd-$VERSION" .mqtt-rpcd.link && mv -f .mqtt-rpcd.link mqtt-rpcd
+# The guard's install step stops its timer. Start it again however this script
+# ends — an error under set -e, or the SSH session dropping — so a failed
+# install never leaves a reader with no no-commit rollback until its next boot.
+restart_guard_timer() { systemctl start mqtt-rpcd-guard.timer >/dev/null 2>&1 || true; }
+trap restart_guard_timer EXIT
+trap 'exit 1' HUP INT TERM
+# Stop the timer, disarm any remote update on probation, move the binary in,
+# and swap the link — keeping a pre-versioning plain binary as "legacy" (a
+# manual rollback target with no updater; rolling back to it ends OTA). Each
+# step is safe to interrupt and re-run; see mqtt-rpcd-guard "install".
+./mqtt-rpcd-guard install "$VERSION"
 test -f mqtt-rpcd.env || mv /tmp/mqtt-rpcd.env.example mqtt-rpcd.env
 chmod 600 mqtt-rpcd.env
 

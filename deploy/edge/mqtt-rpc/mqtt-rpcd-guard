@@ -18,6 +18,11 @@
 #   list               Print the installed versions; `*` marks the active one.
 #   rollback <version> Operator recovery over SSH: point the link at <version>,
 #                      drop any pending update, restart.
+#   install <version>  install.sh's step on the reader: stop the guard timer,
+#                      disarm any pending update, move the uploaded binary in
+#                      and point the link at it (a plain pre-versioning binary
+#                      is hardlinked to "legacy" first, so the link path never
+#                      goes missing). install.sh restarts the timer after.
 #   recover            The on-site operator's one command (the `recover` SSH
 #                      login runs it and nothing else): fetch the newest daemon
 #                      release from GitHub, check it against its manifest's
@@ -309,6 +314,46 @@ rollback)
 	"$SYSTEMCTL" restart mqtt-rpcd
 	exit 0
 	;;
+install)
+	# install.sh's binary-and-link step, run on the reader after it uploads
+	# versions/.mqtt-rpcd-<version>.upload. Every step is safe to interrupt
+	# (an SSH drop) and to re-run.
+	v="${2:-}"
+	up="$DIR/versions/.mqtt-rpcd-$v.upload"
+	if ! valid_version "$v" || [ ! -f "$up" ]; then
+		log "install: no upload for version '$v' at $up"
+		exit 1
+	fi
+	# No guard tick may act while the install changes what it acts on.
+	# install.sh starts the timer again when it finishes, however it finishes.
+	"$SYSTEMCTL" stop mqtt-rpcd-guard.timer 2>/dev/null || true
+	# An SSH install supersedes any remote update on probation. Disarm BEFORE
+	# the new binary moves in: a rollback of a same-version update would
+	# otherwise delete the binary just installed. The claim goes first, since
+	# resume_claim turns a lone claim back into pending.
+	rm -f "$CLAIM" "$PENDING.commit" "$PENDING" "$STATE/starts" "$STATE/ticks"
+	"$SYNC"
+	if ! { chmod 755 "$up" && mv -f "$up" "$DIR/versions/mqtt-rpcd-$v"; }; then
+		log "install: could not put $v in place"
+		exit 1
+	fi
+	# A pre-versioning install has a plain binary at the link path. Keep it as
+	# the "legacy" rollback target by hardlink, so it never leaves the link
+	# path: the symlink rename below replaces it in one step.
+	if [ -f "$LINK" ] && [ ! -L "$LINK" ]; then
+		ln -f "$LINK" "$DIR/versions/mqtt-rpcd-legacy" || {
+			log "install: could not keep the old binary as legacy; nothing switched"
+			exit 1
+		}
+	fi
+	if ! point_at "$v"; then
+		log "install: could not point the link at $v"
+		exit 1
+	fi
+	"$SYNC"
+	log "installed $v"
+	exit 0
+	;;
 recover)
 	mkdir -p "$STATE"
 	: >"$RECOVER_LOG" # the last run only
@@ -338,7 +383,7 @@ recover)
 	exit "$rc"
 	;;
 *)
-	echo "usage: $0 start|tick|list|rollback <version>|recover" >&2
+	echo "usage: $0 start|tick|list|rollback <version>|install <version>|recover" >&2
 	exit 2
 	;;
 esac
