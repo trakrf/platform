@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -48,8 +49,18 @@ func TestPowerRequest(t *testing.T) {
 }
 
 func TestDefaultRequestedBy(t *testing.T) {
+	host, _ := os.Hostname() // "" in a container without one
+	want := "mike@" + host
+	if host == "" {
+		want = "mike"
+	}
 	t.Setenv("USER", "mike")
-	if got := defaultRequestedBy(); !strings.HasPrefix(got, "mike@") || got == "mike@" {
-		t.Errorf("defaultRequestedBy = %q, want mike@<hostname>", got)
+	if got := defaultRequestedBy(); got != want {
+		t.Errorf("defaultRequestedBy = %q, want %q", got, want)
+	}
+
+	t.Setenv("USER", "")
+	if got := defaultRequestedBy(); got != host {
+		t.Errorf("defaultRequestedBy with no USER = %q, want the bare hostname %q", got, host)
 	}
 }

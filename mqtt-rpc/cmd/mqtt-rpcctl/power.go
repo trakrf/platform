@@ -47,8 +47,17 @@ func powerRequest(action string, yes bool, by string) (string, json.RawMessage, 
 	return method, params, err
 }
 
-// defaultRequestedBy is $USER@hostname, or whichever half is known.
+// defaultRequestedBy is $USER@hostname, or whichever half is known, or "" when
+// neither is: never a bare "user@" or "@host".
 func defaultRequestedBy() string {
+	user := os.Getenv("USER")
 	host, _ := os.Hostname()
-	return os.Getenv("USER") + "@" + host
+	switch {
+	case user != "" && host != "":
+		return user + "@" + host
+	case user != "":
+		return user
+	default:
+		return host
+	}
 }
