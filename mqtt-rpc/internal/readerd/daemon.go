@@ -52,9 +52,16 @@ type Daemon struct {
 	// publishRetained is the retained-status seam, set by Start (status.go).
 	publishRetained func(topic string, payload []byte) error
 
+	// host runs Reader.Reboot and Reader.Shutdown (SetHost); nil disables them.
+	// after schedules the delayed power action; a seam for tests.
+	host       Host
+	powerDelay time.Duration
+	after      func(time.Duration, func())
+
 	statusMu sync.Mutex
 	health   *readerrpc.Health // latest from the health monitor
-	reason   string            // set by GoingDown before a planned reboot
+	claim    string            // owner of the going-down claim (status.go); "" when free
+	reason   string            // the claim, once GoingDown has announced it on the status
 
 	anchor anchorCheck // the last broker handshake, judged as CSL would
 }
@@ -83,6 +90,9 @@ func New(cfg Config, adapter Adapter, log *zerolog.Logger) *Daemon {
 
 		started:     time.Now(),
 		commitAfter: DefaultCommitAfter,
+
+		powerDelay: DefaultPowerDelay,
+		after:      func(wait time.Duration, f func()) { time.AfterFunc(wait, f) },
 	}
 }
 
@@ -265,6 +275,14 @@ func (d *Daemon) handleMessage(_ mqtt.Client, m mqtt.Message) {
 		}
 	}()
 
+	// A request is never replayed. The broker hands a retained one back on
+	// every reconnect, so a retained Reader.Reboot would reboot the reader each
+	// time it came back. A live publish with -r still arrives unflagged.
+	if m.Retained() {
+		d.log.Warn().Str("topic", m.Topic()).Msg("retained rpc request dropped; clear it on the broker with an empty retained publish")
+		return
+	}
+
 	replyTopic, reply := d.handleRPC(m.Payload())
 	if replyTopic == "" || reply == nil {
 		return
@@ -311,10 +329,16 @@ func (d *Daemon) dispatch(ctx context.Context, req readerrpc.Request) readerrpc.
 		if err != nil {
 			return readerrpc.NewError(req, readerrpc.CodeInternal, err.Error())
 		}
-		return d.result(req, d.withDaemonInfo(caps))
+		return d.result(req, d.withPowerMethods(d.withDaemonInfo(caps)))
 
 	case readerrpc.MethodDaemonUpdate:
 		return d.daemonUpdate(req)
+
+	case readerrpc.MethodReboot:
+		return d.power(req, readerrpc.StatusReasonReboot)
+
+	case readerrpc.MethodShutdown:
+		return d.power(req, readerrpc.StatusReasonShutdown)
 
 	case readerrpc.MethodGetOperProfile:
 		var p readerrpc.OperProfileParams

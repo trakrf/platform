@@ -290,12 +290,15 @@ func TestHandleRPC_UnparseableDropped(t *testing.T) {
 	}
 }
 
-// fakeMessage is a minimal mqtt.Message carrying only a payload.
-type fakeMessage struct{ payload []byte }
+// fakeMessage is a minimal mqtt.Message carrying a payload and the retain flag.
+type fakeMessage struct {
+	payload  []byte
+	retained bool
+}
 
 func (m fakeMessage) Duplicate() bool   { return false }
 func (m fakeMessage) Qos() byte         { return 1 }
-func (m fakeMessage) Retained() bool    { return false }
+func (m fakeMessage) Retained() bool    { return m.retained }
 func (m fakeMessage) Topic() string     { return "trakrf.id/cs463-212/rpc" }
 func (m fakeMessage) MessageID() uint16 { return 0 }
 func (m fakeMessage) Payload() []byte   { return m.payload }

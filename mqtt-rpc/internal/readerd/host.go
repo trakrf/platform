@@ -22,6 +22,9 @@ type Host interface {
 	RestartReaderApp(ctx context.Context) error
 	// Reboot asks systemd for a clean reboot. It returns once the job is queued.
 	Reboot() error
+	// Poweroff asks systemd for a clean power-off. It returns once the job is
+	// queued. Bringing the reader back needs a power-cycle on site.
+	Poweroff() error
 }
 
 const (
@@ -166,4 +169,11 @@ func (h *SystemdHost) signalAndWait(procsPath string, sig syscall.Signal, wait t
 func (h *SystemdHost) Reboot() error {
 	h.sync()
 	return h.run(context.Background(), "systemctl", "reboot")
+}
+
+// Poweroff flushes the filesystems and asks systemd for a clean power-off: the
+// orderly shutdown that avoids the vendor-app wedge an unclean power cut causes.
+func (h *SystemdHost) Poweroff() error {
+	h.sync()
+	return h.run(context.Background(), "systemctl", "poweroff")
 }

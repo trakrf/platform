@@ -39,6 +39,13 @@ const (
 // reboots a wedged reader, so a planned recovery reads differently from a failure.
 const StatusReasonAutoRecovery = "auto-recovery"
 
+// StatusReasonReboot and StatusReasonShutdown are the offline reasons for a
+// reboot or shutdown an operator asked for (Reader.Reboot, Reader.Shutdown).
+const (
+	StatusReasonReboot   = "reboot"
+	StatusReasonShutdown = "shutdown"
+)
+
 // Health is the reader-API health block of the status document.
 type Health struct {
 	// API is one of the API* states.
@@ -76,7 +83,8 @@ type StatusDoc struct {
 	Online  bool   `json:"online"`
 	At      string `json:"at,omitempty"`
 	Version string `json:"version,omitempty"`
-	// Reason accompanies a planned offline (auto-recovery).
+	// Reason accompanies a planned offline: StatusReasonAutoRecovery,
+	// StatusReasonReboot or StatusReasonShutdown.
 	Reason string  `json:"reason,omitempty"`
 	Health *Health `json:"health,omitempty"`
 }

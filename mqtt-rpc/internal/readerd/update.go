@@ -96,6 +96,11 @@ func (d *Daemon) daemonUpdate(req readerrpc.Request) readerrpc.Response {
 	if err := json.Unmarshal(req.Params, &p); err != nil {
 		return readerrpc.NewError(req, readerrpc.CodeInvalidParams, "invalid Daemon.Update params: "+err.Error())
 	}
+	if down := d.goingDown(); down != "" {
+		re := &readerrpc.UpdateRefusedError{Reason: "the reader is going down: " + down}
+		d.log.Warn().Str("to", p.Version).Str("reason", re.Reason).Msg("update refused")
+		return readerrpc.NewError(req, readerrpc.CodeUpdateRefused, re.Error())
+	}
 	res, err := d.updater.Start(p)
 	if err != nil {
 		var re *readerrpc.UpdateRefusedError
