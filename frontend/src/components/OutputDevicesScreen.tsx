@@ -20,6 +20,7 @@ export default function OutputDevicesScreen() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [deletingDevice, setDeletingDevice] = useState<OutputDevice | null>(null);
   const [offFailed, setOffFailed] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
 
   const { outputDevices, isLoading } = useOutputDevices();
   const { locations } = useLocations();
@@ -59,7 +60,10 @@ export default function OutputDevicesScreen() {
   // delivered and the row was kept, so Reset still works later; the operator
   // can still delete it deliberately (TRA-1273).
   const confirmDelete = async (force = false) => {
-    if (!deletingDevice) return;
+    if (!deletingDevice || deletePending) return;
+    // The first try waits on the off (a few seconds for an unreachable device),
+    // so the modal shows progress and takes no second click meanwhile.
+    setDeletePending(true);
     try {
       await deleteOutputDevice(force ? { id: deletingDevice.id, force } : { id: deletingDevice.id });
       toast.success(`Output device "${deletingDevice.name}" deleted successfully`);
@@ -72,6 +76,8 @@ export default function OutputDevicesScreen() {
         return;
       }
       toast.error(getApiErrorMessage(error, 'Failed to delete output device'));
+    } finally {
+      setDeletePending(false);
     }
   };
   const cancelDelete = () => {
@@ -250,6 +256,8 @@ export default function OutputDevicesScreen() {
         message={`Are you sure you want to delete "${deletingDevice?.name}"? This action cannot be undone.`}
         onConfirm={() => confirmDelete()}
         onCancel={cancelDelete}
+        pending={deletePending}
+        pendingText="Turning off…"
       />
 
       <ConfirmModal
@@ -259,6 +267,8 @@ export default function OutputDevicesScreen() {
         confirmText="Delete anyway"
         onConfirm={() => confirmDelete(true)}
         onCancel={cancelDelete}
+        pending={deletePending}
+        pendingText="Deleting…"
       />
     </div>
   );

@@ -318,6 +318,35 @@ describe('OutputDevicesScreen delete when the output cannot be turned off', () =
     expect(del).toHaveBeenLastCalledWith({ id: 1, force: true });
   });
 
+  it('shows progress and takes no second click while the delete runs', async () => {
+    let settle: (v: number) => void = () => {};
+    del.mockReturnValueOnce(new Promise<number>((r) => (settle = r)));
+    startDelete();
+
+    const confirm = await screen.findByTestId('modal-confirm-button');
+    await waitFor(() => expect(confirm).toHaveTextContent('Turning off…'));
+    expect(confirm).toBeDisabled();
+    fireEvent.click(confirm);
+    expect(del).toHaveBeenCalledTimes(1);
+
+    settle(1);
+    await waitFor(() => expect(screen.queryByTestId('modal-confirm-button')).not.toBeInTheDocument());
+  });
+
+  it('shows progress on delete-anyway too', async () => {
+    let settle: (v: number) => void = () => {};
+    del.mockRejectedValueOnce({ isAxiosError: true, response: { status: 502 } });
+    del.mockReturnValueOnce(new Promise<number>((r) => (settle = r)));
+    startDelete();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete anyway' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('modal-confirm-button')).toHaveTextContent('Deleting…')
+    );
+    settle(1);
+    await waitFor(() => expect(screen.queryByTestId('modal-confirm-button')).not.toBeInTheDocument());
+  });
+
   it('does not offer delete-anyway for other failures', async () => {
     del.mockRejectedValueOnce({ isAxiosError: true, response: { status: 500 } });
     startDelete();
