@@ -11,6 +11,7 @@ package readercontrol
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -156,6 +157,11 @@ func (c *Client) next() int {
 	return c.nextID
 }
 
+// ErrNoReply: the request was published but no reply arrived in time. Unlike a
+// publish failure, the reader may have received it and acted — a caller that
+// started something must treat the outcome as unknown, not as "not started".
+var ErrNoReply = errors.New("reader did not respond (offline?)")
+
 // call publishes a request to the reader's <base>/rpc topic and blocks until the
 // matching reply arrives, the context is canceled, or the configured timeout
 // elapses. On timeout the pending entry is reclaimed and an offline-style error
@@ -201,12 +207,12 @@ func (c *Client) call(ctx context.Context, base, method string, params any) (rea
 		c.mu.Lock()
 		delete(c.pending, id)
 		c.mu.Unlock()
-		return readerrpc.Response{}, fmt.Errorf("readercontrol: %s on %s: reader did not respond (offline?): %w", method, base, ctx.Err())
+		return readerrpc.Response{}, fmt.Errorf("readercontrol: %s on %s: %w: %w", method, base, ErrNoReply, ctx.Err())
 	case <-timer.C:
 		c.mu.Lock()
 		delete(c.pending, id)
 		c.mu.Unlock()
-		return readerrpc.Response{}, fmt.Errorf("readercontrol: %s on %s: reader did not respond (offline?)", method, base)
+		return readerrpc.Response{}, fmt.Errorf("readercontrol: %s on %s: %w", method, base, ErrNoReply)
 	}
 }
 

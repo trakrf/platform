@@ -21,6 +21,8 @@ function lastUpdateText(u: DaemonUpdateInfo): string {
       return `Last update: rolled back from ${u.target ?? 'an update'}${why}`;
     case 'failed':
       return `Last update: ${u.target ?? 'update'} failed, nothing replaced${why}`;
+    case 'unguarded':
+      return `Last update: ${u.target ?? 'the update'} is running but never confirmed it came online, and no earlier version was left to roll back to${why}`;
     case 'pending':
       return `Update ${u.target ?? ''} is running and has not committed yet`;
     default:
@@ -32,11 +34,11 @@ function lastUpdateText(u: DaemonUpdateInfo): string {
 function startErrorText(err: unknown): string | null {
   if (!err) return null;
   const e = err as {
-    response?: { status?: number; data?: { reason?: string; detail?: string } };
+    response?: { status?: number; data?: { error?: { detail?: string } } };
   };
   const status = e.response?.status;
-  if (status === 422 && e.response?.data?.reason)
-    return `The reader refused: ${e.response.data.reason}`;
+  const detail = e.response?.data?.error?.detail;
+  if (status === 422 && detail) return `The reader refused: ${detail}`;
   if (status === 403) return 'Only an org admin can update reader software.';
   if (status === 404) return 'No release with that version.';
   return 'Could not start the update. Is the reader online?';
@@ -145,6 +147,12 @@ export function ReaderSoftwarePanel({ deviceId }: ReaderSoftwarePanelProps) {
         <p className="mt-2 text-xs text-red-600 dark:text-red-400">
           The update to {target} failed and nothing was replaced
           {daemon?.update?.error ? `: ${daemon.update.error}` : '.'}
+        </p>
+      )}
+      {outcome === 'unguarded' && (
+        <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+          {target} never confirmed it came online, and the reader had no earlier version to roll
+          back to, so it is still running {target}. Check the reader, then update it again.
         </p>
       )}
       {outcome === 'timeout' && (
