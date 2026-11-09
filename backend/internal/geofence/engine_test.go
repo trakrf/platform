@@ -33,12 +33,12 @@ func (s *fakeStore) GetOrgGeofenceDefaults(_ context.Context, _ int) (organizati
 	return s.orgDefaults, nil
 }
 
-func (s *fakeStore) InsertAlarmEvent(_ context.Context, _ int, ev storage.AlarmEventRow) error {
+func (s *fakeStore) InsertAlarmEvent(_ context.Context, _ int, ev storage.AlarmEventRow) (int64, error) {
 	if s.insertErr != nil {
-		return s.insertErr
+		return 0, s.insertErr
 	}
 	s.rows = append(s.rows, ev)
-	return nil
+	return int64(len(s.rows)), nil
 }
 
 func (s *fakeStore) ListOutputDevicesForLocation(_ context.Context, _, _ int) ([]outputdevice.OutputDevice, error) {

@@ -34,7 +34,7 @@ func TestInsertAlarmEvent_WritesUnderOrgContext(t *testing.T) {
 	spID := scanPointID(t, db, orgID, dev.ID)
 
 	firedAt := time.Now()
-	err := db.Store.InsertAlarmEvent(ctx, orgID, storage.AlarmEventRow{
+	_, err := db.Store.InsertAlarmEvent(ctx, orgID, storage.AlarmEventRow{
 		AssetID:     asset.ID,
 		ScanPointID: spID,
 		EPC:         testEPC,
@@ -64,9 +64,10 @@ func TestInsertAlarmEvent_RLSIsolatesByOrg(t *testing.T) {
 	asset := testutil.CreateTestAsset(t, db.AdminPool, orgA, "alarm-asset")
 	spID := scanPointID(t, db, orgA, dev.ID)
 
-	require.NoError(t, db.Store.InsertAlarmEvent(ctx, orgA, storage.AlarmEventRow{
+	_, err := db.Store.InsertAlarmEvent(ctx, orgA, storage.AlarmEventRow{
 		AssetID: asset.ID, ScanPointID: spID, EPC: testEPC, RSSI: -50, FiredAt: time.Now(),
-	}))
+	})
+	require.NoError(t, err)
 
 	// Under org B's RLS context the store pool must not see org A's alarm row.
 	var visibleToB, visibleToA int
