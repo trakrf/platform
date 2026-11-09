@@ -40,6 +40,9 @@ mv -f .mqtt-rpcd-guard.upload mqtt-rpcd-guard
 # dropping — so a failed install never leaves a reader with no daemon, or no
 # no-commit rollback, until its next boot. start is a no-op on a running unit.
 restart_units() {
+  # A second signal (sshd's session unit stopping after a PIPE) must not cut
+  # this short between the two starts.
+  trap '' HUP PIPE INT QUIT TERM
   systemctl start mqtt-rpcd >/dev/null 2>&1 || true
   systemctl start mqtt-rpcd-guard.timer >/dev/null 2>&1 || true
 }

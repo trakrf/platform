@@ -47,16 +47,17 @@ unset CONF
 CTL="$(mktemp -d)/mqtt-rpcctl"
 (cd "$MODULE_DIR" && go build -o "$CTL" ./cmd/mqtt-rpcctl)
 
-# daemon_info: "<version> <update state> <update error>" from GetCapabilities.
+# daemon_info: "<version> <update state> <update target> <update error>" from
+# GetCapabilities.
 daemon_info() {
   "$CTL" call -base "$BASE" -method Reader.GetCapabilities 2>/dev/null | python3 -c '
 import json, sys
 try:
     d = json.load(sys.stdin)["result"]["daemon"]
     u = d.get("update") or {}
-    print(d.get("version", "?"), u.get("state", "-"), u.get("error", "-"))
+    print(d.get("version") or "?", u.get("state") or "-", u.get("target") or "-", u.get("error") or "-")
 except Exception:
-    print("no-answer - -")
+    print("no-answer - - -")
 '
 }
 
@@ -69,19 +70,22 @@ while :; do
   info=$(daemon_info)
   ver=$(echo "$info" | cut -d' ' -f1)
   st=$(echo "$info" | cut -d' ' -f2)
-  er=$(echo "$info" | cut -d' ' -f3)
+  tg=$(echo "$info" | cut -d' ' -f3)
+  er=$(echo "$info" | cut -d' ' -f4-)
   echo "$(date -u +%T) +$(($(date +%s) - start))s version=$ver update=$st ${er#-}"
   if [ "$ver" = "$V" ] && [ "$st" = committed ]; then
     echo "OK: $BASE runs $V, committed."
     exit 0
   fi
+  # An outcome recorded for another version (an earlier attempt) is history.
+  [ "$tg" = "$V" ] || st="$st (earlier: $tg)"
   case "$st" in
   rolled_back | failed)
     echo "FAILED: $st ($er). The reader is on $ver. See mqtt-rpc/README.md \"Remote update\"." >&2
     exit 1
     ;;
   unguarded)
-    echo "UNGUARDED: $ver never committed, and no other version is installed to roll back to, so the guard left it running ($er). It has no rollback armed. Check its broker connection, then install a good version with install.sh." >&2
+    echo "UNGUARDED: $ver never committed, and no other version is installed to roll back to, so the guard left it running ($er). It has no rollback armed. It answered over the broker, so it can take a remote update: run this script again with a good version." >&2
     exit 1
     ;;
   esac

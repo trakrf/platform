@@ -19,9 +19,9 @@
 #   rollback <version> Operator recovery over SSH: point the link at <version>,
 #                      drop any pending update, restart.
 #   place <version>    install.sh's step on the reader: stop the guard timer,
-#                      disarm any pending update, move the uploaded binary in
-#                      and point the link at it. install.sh restarts the timer
-#                      and the daemon after.
+#                      the guard service and the daemon, disarm any pending
+#                      update, move the uploaded binary in and point the link
+#                      at it. install.sh starts the daemon and timer after.
 #   recover            The on-site operator's one command (the `recover` SSH
 #                      login runs it and nothing else): fetch the newest daemon
 #                      release from GitHub, check it against its manifest's
@@ -320,9 +320,10 @@ place)
 	# No guard may act while the install changes what it acts on. It runs from
 	# the timer's service (a tick may already be running) and as the daemon's
 	# ExecStartPre (every restart of a crash-looping build), so stop all three,
-	# one at a time: on a first install a unit may not be loaded yet. stop waits
-	# for a running guard to end. install.sh starts the timer and the daemon
-	# again when it finishes, however it finishes.
+	# one at a time: on a first install a unit may not be loaded yet. stop
+	# terminates a running guard and returns once it has exited; whatever it
+	# left half done, the steps below overwrite. install.sh starts the timer
+	# and the daemon again when it finishes, however it finishes.
 	for unit in mqtt-rpcd-guard.timer mqtt-rpcd-guard.service mqtt-rpcd.service; do
 		"$SYSTEMCTL" stop "$unit" 2>/dev/null || true
 	done
