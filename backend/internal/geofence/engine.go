@@ -8,8 +8,10 @@
 // presence), age_out_seconds, rssi_threshold, auto_off_seconds. The engine
 // resolves location -> outputs and keys its dedup/presence state per (output,
 // epc). Membership is implicit — only membership-passing reads ever reach
-// Evaluate. Firing writes an alarm_events row and drives the device; both are
-// best-effort and never block ingestion or the authoritative asset_scans write.
+// Evaluate. Firing writes an alarm_events row (the detection), then drives each
+// device and writes one output_drives row per drive (the delivery, TRA-1314).
+// All of it is best-effort and never blocks ingestion or the authoritative
+// asset_scans write.
 package geofence
 
 import (
@@ -29,6 +31,7 @@ import (
 // satisfies it. Narrowed so unit tests can inject a fake.
 type engineStore interface {
 	InsertAlarmEvent(ctx context.Context, orgID int, ev storage.AlarmEventRow) (int64, error)
+	RecordOutputDrive(ctx context.Context, orgID int, row storage.OutputDriveRow) error
 	ListOutputDevicesForLocation(ctx context.Context, orgID, locationID int) ([]outputdevice.OutputDevice, error)
 	GetOrgGeofenceDefaults(ctx context.Context, orgID int) (organization.GeofenceDefaults, error)
 }
@@ -62,16 +65,19 @@ type Engine struct {
 func NewEngine(cfg Config, store *storage.Storage, driver outputDriver, log *zerolog.Logger) *Engine {
 	l := log.With().Str("component", "geofence").Logger()
 	clk := RealClock{}
-	return &Engine{
+	e := &Engine{
 		cfg:          cfg,
 		store:        store,
 		driver:       driver,
 		latch:        newLatch(cfg.SweepInterval, clk),
 		pulses:       newPulseGuard(),
-		presence:     newPresence(driver, l),
 		startupGrace: cfg.StartupGrace,
 		log:          l,
 	}
+	// The presence tracker drives its age-out OFF through the engine, so that
+	// OFF is recorded like every other drive.
+	e.presence = newPresence(e.drive, l)
+	return e
 }
 
 // Start is a no-op today (the sweepers start in their constructors) but keeps the
@@ -153,7 +159,9 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 			continue
 		}
 
-		firedAny := false
+		// The devices this read fires, collected first: the alarm row is written
+		// before any drive, so each ON can name the fire it delivers.
+		var fires []pendingFire
 		for _, dev := range devices {
 			// Collapse the three tuning tiers (system/code -> org default ->
 			// per-output override) for this device (TRA-955).
@@ -179,15 +187,13 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 						metricSuppressed.WithLabelValues("startup_grace").Inc()
 						continue
 					}
-					firedAny = true
-					ok := e.drive(ctx, orgID, dev, true, presenceOnSeconds)
-					e.presence.driven(orgID, dev.ID, receivedAt, ok)
+					fires = append(fires, pendingFire{dev: dev, offAfter: presenceOnSeconds, presence: true})
 					continue
 				}
 				if e.presence.refreshDue(orgID, dev.ID, receivedAt) {
 					// A refresh, or the retry of a failed ON. Not a fire: no
 					// alarm_events row.
-					ok := e.drive(ctx, orgID, dev, true, presenceOnSeconds)
+					ok := e.drive(ctx, orgID, dev, true, presenceOnSeconds, receivedAt, storage.DriveCauseRefresh, nil)
 					e.presence.driven(orgID, dev.ID, receivedAt, ok)
 				}
 				continue
@@ -213,17 +219,37 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 				metricSuppressed.WithLabelValues("pulse_active").Inc()
 				continue
 			}
-			firedAny = true
-			if !e.drive(ctx, orgID, dev, true, tuning.AutoOffSeconds) {
-				// A failed ON must not hold the output busy for the whole window.
-				e.pulses.release(orgID, dev.ID, receivedAt, pulse)
-			}
+			fires = append(fires, pendingFire{dev: dev, offAfter: tuning.AutoOffSeconds, pulse: pulse})
 		}
 
-		if firedAny {
-			e.recordFire(ctx, orgID, tagScanID, receivedAt, rd)
+		if len(fires) == 0 {
+			continue
 		}
+		alarmID := e.recordFire(ctx, orgID, tagScanID, receivedAt, rd)
+		delivered := 0
+		for _, f := range fires {
+			ok := e.drive(ctx, orgID, f.dev, true, f.offAfter, receivedAt, storage.DriveCauseAlarm, alarmID)
+			if ok {
+				delivered++
+			}
+			if f.presence {
+				e.presence.driven(orgID, f.dev.ID, receivedAt, ok)
+			} else if !ok {
+				// A failed ON must not hold the output busy for the whole window.
+				e.pulses.release(orgID, f.dev.ID, receivedAt, f.pulse)
+			}
+		}
+		e.logFire(orgID, rd, delivered, len(fires))
 	}
+}
+
+// pendingFire is one device a read fires: the ON to send once the alarm row
+// exists. pulse is the egress re-entrancy window to release if the ON fails.
+type pendingFire struct {
+	dev      outputdevice.OutputDevice
+	offAfter int
+	presence bool
+	pulse    time.Duration
 }
 
 // presenceOnSeconds is the on-time every presence ON carries: the reader's
@@ -231,22 +257,50 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 // apart. A Shelly gets it as toggle_after, a CS463 GPO as pulse_ms.
 var presenceOnSeconds = int(readerrpc.GpoDefaultOn / time.Second)
 
-// drive turns a device on/off, folding any error into the best-effort metric.
-// It reports whether the drive succeeded.
-func (e *Engine) drive(ctx context.Context, orgID int, dev outputdevice.OutputDevice, on bool, offAfter int) bool {
-	if err := e.driver.Set(ctx, dev, on, offAfter); err != nil {
-		e.log.Error().Err(err).Int("org_id", orgID).Int("output_device_id", dev.ID).Bool("on", on).Msg("output device drive failed (best-effort)")
-		metricFireErrors.Inc()
-		return false
+// drive turns a device on/off and records the drive as one output_drives row
+// (TRA-1314). It reports whether the drive succeeded. A drive error is folded
+// into the best-effort metric; a record error is logged and never changes the
+// result. at is the drive's driven_at: the read's receive time for a read-driven
+// drive, the timer's fire time for an age-out OFF. alarmID names the fire an
+// ON delivers, nil for every other cause.
+func (e *Engine) drive(ctx context.Context, orgID int, dev outputdevice.OutputDevice, on bool, offAfter int, at time.Time, cause storage.DriveCause, alarmID *int64) bool {
+	start := time.Now()
+	err := e.driver.Set(ctx, dev, on, offAfter)
+	latency := time.Since(start)
+
+	edge, result := "off", "ok"
+	if on {
+		edge = "on"
 	}
-	return true
+	if err != nil {
+		result = "error"
+		e.log.Error().Err(err).Int("org_id", orgID).Int("output_device_id", dev.ID).Bool("on", on).
+			Str("cause", string(cause)).Msg("output device drive failed (best-effort)")
+		metricFireErrors.Inc()
+	}
+	metricDrives.WithLabelValues(edge, result).Inc()
+
+	if rerr := e.store.RecordOutputDrive(ctx, orgID, storage.OutputDriveRow{
+		OutputDeviceID: dev.ID,
+		AlarmEventID:   alarmID,
+		On:             on,
+		Cause:          cause,
+		Err:            err,
+		Latency:        latency,
+		DrivenAt:       at,
+	}); rerr != nil {
+		e.log.Error().Err(rerr).Int("org_id", orgID).Int("output_device_id", dev.ID).Msg("output_drives write failed")
+		metricDriveWriteErrors.Inc()
+	}
+	return err == nil
 }
 
-// recordFire writes the durable alarm_events row for a read that drove at least
-// one device on, and logs/metrics the fire. Best-effort: a write error never
-// blocks ingestion.
-func (e *Engine) recordFire(ctx context.Context, orgID int, tagScanID int64, receivedAt time.Time, rd storage.ResolvedRead) {
-	if _, err := e.store.InsertAlarmEvent(ctx, orgID, storage.AlarmEventRow{
+// recordFire writes the durable alarm_events row for a read that fires at
+// least one device, before any of them is driven. It returns the row's id, or
+// nil when the write failed: the drives still go, and their rows carry no
+// alarm id. Best-effort: a write error never blocks ingestion or a drive.
+func (e *Engine) recordFire(ctx context.Context, orgID int, tagScanID int64, receivedAt time.Time, rd storage.ResolvedRead) *int64 {
+	id, err := e.store.InsertAlarmEvent(ctx, orgID, storage.AlarmEventRow{
 		AssetID:     rd.AssetID,
 		ScanPointID: rd.ScanPointID,
 		LocationID:  rd.LocationID,
@@ -254,17 +308,33 @@ func (e *Engine) recordFire(ctx context.Context, orgID int, tagScanID int64, rec
 		RSSI:        rd.RSSI,
 		TagScanID:   tagScanID,
 		FiredAt:     receivedAt,
-	}); err != nil {
+	})
+	if err != nil {
 		e.log.Error().Err(err).Int("org_id", orgID).Str("epc", rd.EPC).Msg("alarm_events write failed")
 		metricEventWriteErrors.Inc()
+		return nil
 	}
+	return &id
+}
 
+// logFire logs and metrics a fire once its drives are done. A fire none of
+// whose devices was reached is undelivered: it is logged as a warning and
+// counted, so it never reads as a working alarm.
+func (e *Engine) logFire(orgID int, rd storage.ResolvedRead, delivered, devices int) {
 	metricFired.Inc()
-	e.log.Info().
-		Int("org_id", orgID).
+	ev := e.log.Info()
+	msg := "geofence rule fired"
+	if delivered == 0 {
+		metricUndelivered.Inc()
+		ev = e.log.Warn()
+		msg = "geofence rule fired but no output device was reached"
+	}
+	ev.Int("org_id", orgID).
 		Int("asset_id", rd.AssetID).
 		Int("scan_point_id", rd.ScanPointID).
 		Str("epc", rd.EPC).
 		Int("rssi", rd.RSSI).
-		Msg("geofence rule fired")
+		Int("devices", devices).
+		Int("delivered", delivered).
+		Msg(msg)
 }

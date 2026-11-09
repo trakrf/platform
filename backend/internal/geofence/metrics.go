@@ -28,6 +28,21 @@ var (
 		Help: "Errors driving output devices or looking them up (best-effort; do not block ingestion).",
 	})
 
+	metricDrives = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "geofence_output_drives_total",
+		Help: "Output-device drives sent by the geofence engine, by edge and result.",
+	}, []string{"edge", "result"}) // edge: on|off; result: ok|error
+
+	metricUndelivered = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "geofence_alarms_undelivered_total",
+		Help: "Alarms whose every output-device drive failed: detected, but no device was reached.",
+	})
+
+	metricDriveWriteErrors = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "geofence_drive_write_errors_total",
+		Help: "Errors writing output_drives rows (best-effort; never delays a drive).",
+	})
+
 	metricEventWriteErrors = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "geofence_event_write_errors_total",
 		Help: "Errors writing alarm_events rows (best-effort; do not block ingestion).",
