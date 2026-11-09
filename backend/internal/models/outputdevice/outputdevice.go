@@ -91,10 +91,10 @@ func (d OutputDevice) metaInt(key string) (int, bool) {
 }
 
 // AutoOffSeconds returns metadata.auto_off_seconds, or 0 when unset, zero,
-// negative, or non-numeric. Device-side (Shelly toggle_after; a GPO's pulse).
-// Nothing latches: the dispatcher turns 0 into the 30 s default on-time and cuts
-// anything over 60 s (ADR 0026). Ignored by the engine in presence mode (the
-// engine owns the OFF edge).
+// negative, or non-numeric. Device-side (Shelly toggle_after); ignored by the
+// engine in presence mode (the engine owns the OFF edge). In egress mode a
+// resolved 0 means no OFF edge at all, so the write path refuses it
+// (geofence.OutputTuningError); the engine resolves tiers with Resolve, not this.
 func (d OutputDevice) AutoOffSeconds() int {
 	v, ok := d.metaInt("auto_off_seconds")
 	if !ok || v < 0 {
