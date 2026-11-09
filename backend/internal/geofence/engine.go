@@ -42,7 +42,7 @@ const lookupTimeout = 2 * time.Second
 // engineStore is the storage surface the engine needs; *storage.Storage
 // satisfies it. Narrowed so unit tests can inject a fake.
 type engineStore interface {
-	InsertAlarmEvent(ctx context.Context, orgID int, ev storage.AlarmEventRow) error
+	InsertAlarmEvent(ctx context.Context, orgID int, ev storage.AlarmEventRow) (int64, error)
 	ListOutputDevicesForLocation(ctx context.Context, orgID, locationID int) ([]outputdevice.OutputDevice, error)
 	GetOrgGeofenceDefaults(ctx context.Context, orgID int) (organization.GeofenceDefaults, error)
 }
@@ -389,7 +389,7 @@ func (e *Engine) alarmRow(f fire, tagScanID int64, receivedAt time.Time) storage
 // blocks ingestion.
 func (e *Engine) recordFire(ctx context.Context, orgID int, f fire, tagScanID int64, receivedAt time.Time) {
 	rd := f.read
-	if err := e.store.InsertAlarmEvent(ctx, orgID, e.alarmRow(f, tagScanID, receivedAt)); err != nil {
+	if _, err := e.store.InsertAlarmEvent(ctx, orgID, e.alarmRow(f, tagScanID, receivedAt)); err != nil {
 		e.log.Error().Err(err).Int("org_id", orgID).Str("epc", rd.EPC).Msg("alarm_events write failed")
 		metricEventWriteErrors.Inc()
 	}

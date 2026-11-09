@@ -21,14 +21,18 @@ type AlarmEventRow struct {
 }
 
 // InsertAlarmEvent appends a geofence alarm to trakrf.alarm_events under org
-// context (RLS). It is called best-effort from the geofence engine: a failure
+// context (RLS) and returns its id, which the drives that deliver it carry
+// (output_drives.alarm_event_id). It is called best-effort from the geofence engine: a failure
 // here is logged by the caller and never blocks ingestion or the asset_scans
 // write, which is the authoritative record.
-func (s *Storage) InsertAlarmEvent(ctx context.Context, orgID int, ev AlarmEventRow) error {
-	return s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		_, err := s.InsertAlarmEventTx(ctx, tx, orgID, ev)
+func (s *Storage) InsertAlarmEvent(ctx context.Context, orgID int, ev AlarmEventRow) (int64, error) {
+	var id int64
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		txID, err := s.InsertAlarmEventTx(ctx, tx, orgID, ev)
+		id = int64(txID)
 		return err
 	})
+	return id, err
 }
 
 // InsertAlarmEventTx appends a geofence alarm inside the caller's transaction and
