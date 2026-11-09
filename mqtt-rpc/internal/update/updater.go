@@ -59,7 +59,7 @@ func New(l Layout, running string, restart func(), log zerolog.Logger) *Updater 
 		Layout:         l,
 		Keys:           TrustedKeys,
 		Running:        running,
-		HTTP:           &http.Client{Timeout: downloadTimeout},
+		HTTP:           &http.Client{Timeout: downloadTimeout, Transport: downloadTransport()},
 		Restart:        restart,
 		Log:            log.With().Str("component", "update").Logger(),
 		MaxBytes:       defaultMaxBytes,
