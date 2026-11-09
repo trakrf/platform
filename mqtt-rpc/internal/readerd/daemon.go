@@ -58,10 +58,10 @@ type Daemon struct {
 	powerDelay time.Duration
 	after      func(time.Duration, func())
 
-	statusMu     sync.Mutex
-	health       *readerrpc.Health // latest from the health monitor
-	reason       string            // set by GoingDown before a planned reboot or power-off
-	powerPending string            // a Reader.Reboot/Shutdown accepted and not yet acted on
+	statusMu sync.Mutex
+	health   *readerrpc.Health // latest from the health monitor
+	claim    string            // owner of the going-down claim (status.go); "" when free
+	reason   string            // the claim, once GoingDown has announced it on the status
 
 	anchor anchorCheck // the last broker handshake, judged as CSL would
 }
@@ -274,6 +274,14 @@ func (d *Daemon) handleMessage(_ mqtt.Client, m mqtt.Message) {
 			d.log.Error().Interface("panic", r).Str("topic", m.Topic()).Msg("recovered from panic in rpc handler")
 		}
 	}()
+
+	// A request is never replayed. The broker hands a retained one back on
+	// every reconnect, so a retained Reader.Reboot would reboot the reader each
+	// time it came back. A live publish with -r still arrives unflagged.
+	if m.Retained() {
+		d.log.Warn().Str("topic", m.Topic()).Msg("retained rpc request dropped; clear it on the broker with an empty retained publish")
+		return
+	}
 
 	replyTopic, reply := d.handleRPC(m.Payload())
 	if replyTopic == "" || reply == nil {

@@ -26,13 +26,53 @@ func (d *Daemon) SetHealth(h readerrpc.Health) {
 	d.publishStatus(d.onlinePayload())
 }
 
-// GoingDown publishes the retained offline status with a reason (auto-recovery)
-// ahead of a planned reboot. Stop keeps the reason.
-func (d *Daemon) GoingDown(reason string) {
+// The going-down claim: one owner at a time takes the reader down. The owner is
+// its reason — StatusReasonAutoRecovery for the health monitor, or the action of
+// an operator's Reader.Reboot/Shutdown — and only that owner releases it, so the
+// two can never take over, or undo, each other's.
+
+// claimGoingDown takes the free claim for owner without announcing it. It
+// reports the current owner when the claim is already held, by anyone: a
+// second request is refused, not merged into the first.
+func (d *Daemon) claimGoingDown(owner string) (held string, ok bool) {
 	d.statusMu.Lock()
-	d.reason = reason
+	defer d.statusMu.Unlock()
+	if d.claim != "" {
+		return d.claim, false
+	}
+	d.claim = owner
+	return "", true
+}
+
+// GoingDown takes (or keeps) the claim for reason and publishes the retained
+// offline status with it, ahead of a planned reboot or power-off. Stop keeps the
+// reason. It returns false, and publishes nothing, when another owner holds it.
+func (d *Daemon) GoingDown(reason string) bool {
+	d.statusMu.Lock()
+	if d.claim != "" && d.claim != reason {
+		held := d.claim
+		d.statusMu.Unlock()
+		d.log.Warn().Str("reason", reason).Str("held_by", held).Msg("not going down: already going down for another reason")
+		return false
+	}
+	d.claim, d.reason = reason, reason
 	d.statusMu.Unlock()
 	d.publishStatus(d.offlinePayload())
+	return true
+}
+
+// AbortGoingDown releases owner's claim after a reboot or power-off that did not
+// happen, and republishes the reader as online. Anyone else's claim is left
+// alone.
+func (d *Daemon) AbortGoingDown(owner string) {
+	d.statusMu.Lock()
+	if d.claim != owner {
+		d.statusMu.Unlock()
+		return
+	}
+	d.claim, d.reason = "", ""
+	d.statusMu.Unlock()
+	d.publishStatus(d.onlinePayload())
 }
 
 func (d *Daemon) publishStatus(b []byte) {

@@ -282,9 +282,20 @@ MQTT_URL=… mqtt-rpcctl shutdown -base trakrf.id/cs463-212 -yes   # back only a
    or `"shutdown"`, then runs `sync` and `systemctl reboot` or
    `systemctl poweroff`. Never a power reset. systemd then stops the daemon,
    whose stop drives every output off and keeps the reason on the status.
-3. A second request while one is under way, or while an automatic recovery
-   reboot is announced, is refused (`-32603`, "already going down").
-4. If systemd refuses, the status goes back online and a retry is accepted.
+3. One owner at a time takes the reader down. A second request while one is
+   under way, or while an automatic recovery reboot is announced, is refused
+   (`-32603`, "already going down"). An automatic recovery reboot that comes
+   due inside an operator's 2 s does not reboot and does not count against the
+   cap, so a requested shutdown stays a shutdown.
+4. A request during a `Daemon.Update` (downloading, installing, or a new build
+   not yet committed) is refused (`-32603`), and a `Daemon.Update` while the
+   reader is going down is refused (`-33002`).
+5. If systemd refuses, the status goes back online and a retry is accepted.
+
+The daemon never serves a **retained** request on `<base>/rpc`: the broker
+would hand it back on every reconnect, and a retained reboot would loop the
+reader. It logs "retained rpc request dropped". Clear one with an empty retained
+publish to the topic (`mosquitto_pub -r -n -t <base>/rpc`).
 
 After a reboot the daemon takes 2–7 min to reach the broker again (boot-time
 entropy for TLS).

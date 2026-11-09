@@ -2,6 +2,7 @@ package readerd
 
 import (
 	"encoding/json"
+	"slices"
 	"time"
 
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
@@ -29,17 +30,11 @@ func (d *Daemon) power(req readerrpc.Request, action string) readerrpc.Response 
 		}
 	}
 
-	d.statusMu.Lock()
-	busy := d.reason // an automatic recovery reboot already announced
-	if busy == "" {
-		busy = d.powerPending
+	if state := d.updateUnderWay(); state != "" {
+		return readerrpc.NewError(req, readerrpc.CodeInternal, "a daemon update is under way ("+state+"); try again once it has settled")
 	}
-	if busy == "" {
-		d.powerPending = action
-	}
-	d.statusMu.Unlock()
-	if busy != "" {
-		return readerrpc.NewError(req, readerrpc.CodeInternal, "already going down: "+busy)
+	if held, ok := d.claimGoingDown(action); !ok {
+		return readerrpc.NewError(req, readerrpc.CodeInternal, "already going down: "+held)
 	}
 
 	delay := d.powerDelay
@@ -66,20 +61,36 @@ func (d *Daemon) powerNow(action string) {
 	}
 	if err := run(); err != nil {
 		d.log.Error().Err(err).Str("action", action).Msg("power action failed; the reader stays up")
-		d.AbortGoingDown()
+		d.AbortGoingDown(action)
 		return
 	}
 	d.log.Warn().Str("action", action).Msg("power action queued with systemd")
 }
 
-// AbortGoingDown undoes GoingDown after a reboot or power-off that did not
-// happen: it clears the reason and republishes the reader as online.
-func (d *Daemon) AbortGoingDown() {
+// updateUnderWay names the state of a daemon update that a reboot must not
+// interrupt: downloading, installing, or a new build on probation that has not
+// confirmed itself yet. "" when there is none.
+func (d *Daemon) updateUnderWay() string {
+	if d.updater == nil {
+		return ""
+	}
+	if d.updater.OnProbation() {
+		return readerrpc.UpdateStatePending
+	}
+	if u := d.updater.Info().Update; u != nil {
+		switch u.State {
+		case readerrpc.UpdateStateDownloading, readerrpc.UpdateStateInstalling, readerrpc.UpdateStatePending:
+			return u.State
+		}
+	}
+	return ""
+}
+
+// goingDown names the owner of the going-down claim; "" when it is free.
+func (d *Daemon) goingDown() string {
 	d.statusMu.Lock()
-	d.reason = ""
-	d.powerPending = ""
-	d.statusMu.Unlock()
-	d.publishStatus(d.onlinePayload())
+	defer d.statusMu.Unlock()
+	return d.claim
 }
 
 // withPowerMethods advertises Reader.Reboot and Reader.Shutdown when the daemon
@@ -88,8 +99,13 @@ func (d *Daemon) withPowerMethods(caps readerrpc.Capabilities) readerrpc.Capabil
 	if d.host == nil {
 		return caps
 	}
-	power := []string{readerrpc.MethodReboot, readerrpc.MethodShutdown}
-	caps.Supports = append(append([]string(nil), caps.Supports...), power...)
+	supports := append([]string(nil), caps.Supports...)
+	for _, m := range []string{readerrpc.MethodReboot, readerrpc.MethodShutdown} {
+		if !slices.Contains(supports, m) {
+			supports = append(supports, m)
+		}
+	}
+	caps.Supports = supports
 	var unsupported []string
 	for _, m := range caps.Unsupported {
 		if m != readerrpc.MethodReboot && m != readerrpc.MethodShutdown {

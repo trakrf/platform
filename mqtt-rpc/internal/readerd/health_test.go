@@ -32,6 +32,9 @@ type rig struct {
 	published []readerrpc.Health
 	store     RebootStore
 	rebootErr error // what the host's Reboot returns
+	// operatorDown: an operator's Reader.Reboot/Shutdown holds the going-down
+	// claim, so the monitor's GoingDown is refused.
+	operatorDown bool
 }
 
 type rigHost struct{ r *rig }
@@ -69,8 +72,15 @@ func newRig(t *testing.T, p HealthPolicy, reconcile bool) *rig {
 		Publish: func(h readerrpc.Health) {
 			r.published = append(r.published, h)
 		},
-		GoingDown:      func(reason string) { r.events = append(r.events, "going-down:"+reason) },
-		AbortGoingDown: func() { r.events = append(r.events, "abort-going-down") },
+		GoingDown: func(reason string) bool {
+			if r.operatorDown {
+				r.events = append(r.events, "going-down-refused:"+reason)
+				return false
+			}
+			r.events = append(r.events, "going-down:"+reason)
+			return true
+		},
+		AbortGoingDown: func(reason string) { r.events = append(r.events, "abort-going-down:"+reason) },
 		Log:            &log,
 		Now:            func() time.Time { return r.now },
 	}
@@ -233,8 +243,30 @@ func TestMonitor_FailedRebootTakesBackTheOfflineStatus(t *testing.T) {
 		t.Fatalf("events %q, want one reboot attempt", r.events)
 	}
 	tail := strings.Join(r.events[len(r.events)-3:], ",")
-	if tail != "going-down:auto-recovery,reboot,abort-going-down" {
+	if tail != "going-down:auto-recovery,reboot,abort-going-down:auto-recovery" {
 		t.Fatalf("failed reboot sequence = %q, want the offline status taken back", tail)
+	}
+}
+
+// An operator's reboot or shutdown already under way owns the going-down
+// state. The monitor must not reboot over it, and must not spend one of its
+// automatic reboots on a reboot it did not do.
+func TestMonitor_NoAutoRebootWhileAnOperatorActionIsUnderWay(t *testing.T) {
+	p := DefaultHealthPolicy()
+	r := newRig(t, p, true)
+	r.operatorDown = true
+	r.run(H, time.Minute)
+	r.run(D, p.WedgeAfter+p.Interval) // app restart
+	r.run(D, p.WedgeAfter)            // reboot due, claim refused
+
+	if r.count("reboot") != 0 {
+		t.Fatalf("events %q, want no reboot over the operator's action", r.events)
+	}
+	if r.count("going-down-refused:auto-recovery") == 0 {
+		t.Fatalf("events %q, want the monitor to have asked for the claim", r.events)
+	}
+	if n, err := r.store.Count(); err != nil || n != 0 {
+		t.Fatalf("auto reboots recorded = %d (%v), want 0", n, err)
 	}
 }
 

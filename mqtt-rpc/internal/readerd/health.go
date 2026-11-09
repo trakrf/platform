@@ -68,11 +68,13 @@ type MonitorDeps struct {
 	Store     rebootCounter
 	// Publish receives the health whenever it changes.
 	Publish func(readerrpc.Health)
-	// GoingDown is called just before an automatic reboot, with the reason.
-	GoingDown func(reason string)
-	// AbortGoingDown takes GoingDown back when the reboot was refused, so a
-	// reader that stayed up is not announced as offline.
-	AbortGoingDown func()
+	// GoingDown claims the going-down state for an automatic reboot and
+	// announces it. false means an operator's reboot or shutdown holds it, and
+	// the monitor does not reboot.
+	GoingDown func(reason string) bool
+	// AbortGoingDown releases the monitor's claim when the reboot did not
+	// happen, so a reader that stayed up is not announced as offline.
+	AbortGoingDown func(reason string)
 	// CloudServer returns the golden CloudServer fault ("" when clean), re-run
 	// every tick so an operator's fix, or a firmware update reverting one,
 	// shows without a daemon restart. nil checks nothing.
@@ -288,7 +290,19 @@ func (m *Monitor) reboot(now time.Time, h *readerrpc.Health) {
 		m.exhausted(h, nil)
 		return
 	}
+	// Claim before spending an automatic reboot: an operator's reboot or
+	// shutdown already under way owns the going-down state.
+	if m.deps.GoingDown != nil && !m.deps.GoingDown(readerrpc.StatusReasonAutoRecovery) {
+		m.log.Warn().Msg("auto-recovery: an operator reboot or shutdown is under way; not rebooting")
+		return
+	}
+	release := func() {
+		if m.deps.AbortGoingDown != nil {
+			m.deps.AbortGoingDown(readerrpc.StatusReasonAutoRecovery)
+		}
+	}
 	if err := m.deps.Store.Record(now); err != nil {
+		release()
 		m.exhausted(h, err)
 		return
 	}
@@ -296,14 +310,9 @@ func (m *Monitor) reboot(now time.Time, h *readerrpc.Health) {
 	h.Recovery, h.AutoReboots = m.step, n+1
 	m.set(*h)
 	m.log.Warn().Int("auto_reboots", n+1).Int("max", m.policy.MaxAutoReboots).Msg("auto-recovery: rebooting the reader")
-	if m.deps.GoingDown != nil {
-		m.deps.GoingDown(readerrpc.StatusReasonAutoRecovery)
-	}
 	if err := m.deps.Host.Reboot(); err != nil {
 		m.log.Error().Err(err).Msg("auto-recovery: reboot failed; retrying after the next window")
-		if m.deps.AbortGoingDown != nil {
-			m.deps.AbortGoingDown()
-		}
+		release()
 	}
 }
 
