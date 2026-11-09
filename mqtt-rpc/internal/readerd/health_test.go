@@ -31,6 +31,7 @@ type rig struct {
 	events    []string
 	published []readerrpc.Health
 	store     RebootStore
+	rebootErr error // what the host's Reboot returns
 }
 
 type rigHost struct{ r *rig }
@@ -41,6 +42,10 @@ func (h rigHost) RestartReaderApp(context.Context) error {
 }
 func (h rigHost) Reboot() error {
 	h.r.events = append(h.r.events, "reboot")
+	return h.r.rebootErr
+}
+func (h rigHost) Poweroff() error {
+	h.r.events = append(h.r.events, "poweroff")
 	return nil
 }
 

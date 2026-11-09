@@ -22,13 +22,33 @@ const (
 	MethodGetOperProfile  = "Reader.GetOperProfile"
 	MethodSetOperProfile  = "Reader.SetOperProfile"
 	MethodGetStatus       = "Reader.GetStatus"
+	MethodGpoSet          = "Gpo.Set"
+
+	// MethodReboot and MethodShutdown cleanly reboot or power off the reader
+	// host (sync, then systemd). The daemon replies first and acts after a short
+	// delay, announcing the planned outage on the retained status first.
+	// Neither takes required params; PowerParams is optional.
+	MethodReboot   = "Reader.Reboot"
+	MethodShutdown = "Reader.Shutdown"
 
 	// Reserved for future use.
 	MethodScanStart = "Scan.Start"
 	MethodScanStop  = "Scan.Stop"
-	MethodGpoSet    = "Gpo.Set"
-	MethodReboot    = "Reader.Reboot"
 )
+
+// PowerParams are the optional params of Reader.Reboot and Reader.Shutdown.
+type PowerParams struct {
+	// RequestedBy names the person or system asking, for the reader's log. The
+	// request's Src is logged as well.
+	RequestedBy string `json:"requested_by,omitempty"`
+}
+
+// PowerResult acknowledges Reader.Reboot or Reader.Shutdown. The action has not
+// happened yet: it starts InMs after the reply.
+type PowerResult struct {
+	Action string `json:"action"` // StatusReasonReboot or StatusReasonShutdown
+	InMs   int    `json:"in_ms"`
+}
 
 // Standard JSON-RPC 2.0 error codes.
 const (

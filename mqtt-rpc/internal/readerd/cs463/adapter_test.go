@@ -214,10 +214,11 @@ func TestGetCapabilities(t *testing.T) {
 	if !reflect.DeepEqual(caps.Supports, wantSupports) {
 		t.Errorf("supports = %v, want %v", caps.Supports, wantSupports)
 	}
+	// Reader.Reboot and Reader.Shutdown are the daemon's, not the adapter's: it
+	// advertises them itself when it has a host to run them on.
 	wantUnsupported := []string{
 		readerrpc.MethodScanStart,
 		readerrpc.MethodScanStop,
-		readerrpc.MethodReboot,
 	}
 	if !reflect.DeepEqual(caps.Unsupported, wantUnsupported) {
 		t.Errorf("unsupported = %v, want %v", caps.Unsupported, wantUnsupported)

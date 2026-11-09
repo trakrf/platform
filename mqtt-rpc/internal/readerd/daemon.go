@@ -52,9 +52,16 @@ type Daemon struct {
 	// publishRetained is the retained-status seam, set by Start (status.go).
 	publishRetained func(topic string, payload []byte) error
 
-	statusMu sync.Mutex
-	health   *readerrpc.Health // latest from the health monitor
-	reason   string            // set by GoingDown before a planned reboot
+	// host runs Reader.Reboot and Reader.Shutdown (SetHost); nil disables them.
+	// after schedules the delayed power action; a seam for tests.
+	host       Host
+	powerDelay time.Duration
+	after      func(time.Duration, func())
+
+	statusMu     sync.Mutex
+	health       *readerrpc.Health // latest from the health monitor
+	reason       string            // set by GoingDown before a planned reboot or power-off
+	powerPending string            // a Reader.Reboot/Shutdown accepted and not yet acted on
 
 	anchor anchorCheck // the last broker handshake, judged as CSL would
 }
@@ -83,6 +90,9 @@ func New(cfg Config, adapter Adapter, log *zerolog.Logger) *Daemon {
 
 		started:     time.Now(),
 		commitAfter: DefaultCommitAfter,
+
+		powerDelay: DefaultPowerDelay,
+		after:      func(wait time.Duration, f func()) { time.AfterFunc(wait, f) },
 	}
 }
 
@@ -311,10 +321,16 @@ func (d *Daemon) dispatch(ctx context.Context, req readerrpc.Request) readerrpc.
 		if err != nil {
 			return readerrpc.NewError(req, readerrpc.CodeInternal, err.Error())
 		}
-		return d.result(req, d.withDaemonInfo(caps))
+		return d.result(req, d.withPowerMethods(d.withDaemonInfo(caps)))
 
 	case readerrpc.MethodDaemonUpdate:
 		return d.daemonUpdate(req)
+
+	case readerrpc.MethodReboot:
+		return d.power(req, readerrpc.StatusReasonReboot)
+
+	case readerrpc.MethodShutdown:
+		return d.power(req, readerrpc.StatusReasonShutdown)
 
 	case readerrpc.MethodGetOperProfile:
 		var p readerrpc.OperProfileParams
