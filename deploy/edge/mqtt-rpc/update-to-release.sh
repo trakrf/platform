@@ -34,7 +34,9 @@ for e in json.load(sys.stdin):
     if e.get("serverId") == "TrakRF mqtt-rpc MQTT Server" and e.get("type") == "MQTT":
         q = lambda s: urllib.parse.quote(s, safe="")
         scheme = "mqtts" if e.get("enableSSL") else "mqtt"
-        print("%s://%s:%s@%s:%d\t%s" % (scheme, q(e["username"]), q(e["password"]), e["path"], e["port"], e["topic"]))
+        # The daemon base topic is the reads topic less a trailing "/reads".
+        base = e["topic"][:-len("/reads")] if e["topic"].endswith("/reads") else e["topic"]
+        print("%s://%s:%s@%s:%d\t%s" % (scheme, q(e["username"]), q(e["password"]), e["path"], e["port"], base))
         break
 else:
     sys.exit("no golden CloudServer (TrakRF mqtt-rpc MQTT Server) on this reader")
