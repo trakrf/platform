@@ -218,10 +218,14 @@ reads.
 
 The first thing `mqtt-rpcd` does at start is read 512 bytes from `/dev/hwrng`
 and credit them to the kernel with `RNDADDENTROPY` (`internal/hwrng`). The log
-line is `credited the hardware RNG to the kernel`, with `source: rng-caam`. It
-refuses output that is constant or repeats a block, gives up after 2 s, and skips
-a machine with no `/dev/hwrng`. A failure is only a warning: the reader falls back
-to the old slow boot.
+line is `credited the hardware RNG to the kernel`, with `source: rng-caam`.
+- It credits only `rng-caam`, the generator measured on the CS463. When
+  `rng_current` is `none`, unreadable, or anything else, it skips the credit and
+  leaves the kernel to its own estimate.
+- It refuses output that repeats with any period, constant output included.
+- It gives up after 2 s, and an answer that arrives later is never credited.
+
+A failure is only a warning: the reader falls back to the old slow boot.
 
 Why it is built this way:
 - **In the daemon, not in a separate unit.** `Daemon.Update` replaces only this
