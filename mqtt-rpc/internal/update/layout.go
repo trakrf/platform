@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // DefaultDir is the reader install directory.
@@ -18,6 +19,12 @@ const DefaultDir = "/opt/trakrf"
 const DefaultGuardTimerUnit = "/etc/systemd/system/mqtt-rpcd-guard.timer"
 
 const binName = "mqtt-rpcd"
+
+// guardTimerWants is the link `systemctl enable` creates for the guard timer
+// unit: its presence is what "enabled" means.
+func guardTimerWants(unit string) string {
+	return filepath.Join(filepath.Dir(unit), "timers.target.wants", filepath.Base(unit))
+}
 
 // Layout names every path of an install. On a reader:
 //
@@ -79,7 +86,7 @@ func ActiveVersion(l Layout) (string, error) {
 }
 
 // Prune keeps the newest keep versions (by mtime) plus every protected version,
-// and removes the rest. Hidden in-progress downloads are left alone.
+// and removes the rest. Hidden temp files are CleanStale's.
 func Prune(l Layout, keep int, protect ...string) error {
 	entries, err := os.ReadDir(l.VersionsDir())
 	if err != nil {
@@ -111,6 +118,35 @@ func Prune(l Layout, keep int, protect ...string) error {
 			continue
 		}
 		if err := os.Remove(filepath.Join(l.VersionsDir(), v.name)); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// CleanStale removes the updater's own hidden temp files in versions/ —
+// .mqtt-rpcd-<v>.download (this daemon and the guard's recover) and
+// .mqtt-rpcd-<v>.upload (install.sh) — once they are older than olderThan. An
+// interrupted transfer leaves one behind and nothing else ever removes it; the
+// age keeps a transfer still in progress safe.
+func CleanStale(l Layout, olderThan time.Duration) error {
+	entries, err := os.ReadDir(l.VersionsDir())
+	if err != nil {
+		return err
+	}
+	cutoff := time.Now().Add(-olderThan)
+	var errs []error
+	for _, e := range entries {
+		n := e.Name()
+		if e.IsDir() || !strings.HasPrefix(n, "."+binName+"-") ||
+			(!strings.HasSuffix(n, ".download") && !strings.HasSuffix(n, ".upload")) {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || info.ModTime().After(cutoff) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(l.VersionsDir(), n)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			errs = append(errs, err)
 		}
 	}

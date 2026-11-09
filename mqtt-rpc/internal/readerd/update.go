@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
+	"github.com/trakrf/platform/mqtt-rpc/internal/update"
 )
 
 // selfTestInterval is how often a daemon on probation re-sends its loopback RPC.
@@ -81,6 +82,9 @@ func (d *Daemon) answered() {
 		return // the self-test keeps answering every 30 s; a later one commits
 	}
 	if err := d.updater.Commit(); err != nil {
+		if errors.Is(err, update.ErrAlreadyCommitted) {
+			return // a reply racing this one already committed
+		}
 		d.log.Error().Err(err).Msg("update commit failed; the guard will roll back if this persists")
 		return
 	}

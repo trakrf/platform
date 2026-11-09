@@ -39,6 +39,8 @@ func newFixture(t *testing.T) *updaterFixture {
 	require.NoError(t, os.WriteFile(f.l.Guard(), []byte("#!/bin/sh\n"), 0o755))
 	timer := filepath.Join(f.l.Dir, "mqtt-rpcd-guard.timer")
 	require.NoError(t, os.WriteFile(timer, []byte("[Timer]\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Dir(guardTimerWants(timer)), 0o755))
+	require.NoError(t, os.Symlink(timer, guardTimerWants(timer)))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/mqtt-rpcd", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(f.body) })

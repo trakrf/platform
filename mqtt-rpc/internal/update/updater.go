@@ -23,7 +23,14 @@ const (
 	defaultMaxBytes = 64 << 20 // the armv7 binary is ~10 MB
 	downloadTimeout = 10 * time.Minute
 	keepVersions    = 3
+	// staleDownloadAge: a temp file untouched this long belongs to no live
+	// download — ours is bounded by downloadTimeout, the guard's curl by 300 s.
+	staleDownloadAge = downloadTimeout + 5*time.Minute
 )
+
+// ErrAlreadyCommitted: this process already committed its update. A reply that
+// raced the committing one gets this, and it is not a failure.
+var ErrAlreadyCommitted = errors.New("update: already committed")
 
 // Updater is the daemon side of a remote update. It never executes the binary it
 // downloads: the signature and hash are the whole check, and systemd starts it.
@@ -43,6 +50,7 @@ type Updater struct {
 	busy      bool
 	attempt   *readerrpc.UpdateInfo // this process's own attempt, if any
 	probation bool
+	committed bool // this process ended its own probation
 }
 
 // New builds an Updater with production defaults.
@@ -65,8 +73,12 @@ func refuse(format string, a ...any) error {
 }
 
 // CheckPending runs once at startup: it decides whether this process is an update
-// on probation (see the package-level CheckPending).
+// on probation (see the package-level CheckPending), and clears temp files left
+// by a download that a kill or power cut interrupted.
 func (u *Updater) CheckPending() error {
+	if err := CleanStale(u.Layout, staleDownloadAge); err != nil {
+		u.Log.Warn().Err(err).Msg("clean abandoned downloads")
+	}
 	on, err := CheckPending(u.Layout, u.Running)
 	u.mu.Lock()
 	u.probation = on
@@ -93,6 +105,12 @@ func (u *Updater) Preflight() error {
 	}
 	if _, err := os.Stat(u.GuardTimerUnit); err != nil {
 		return fmt.Errorf("rollback guard timer %s is not installed (re-run install.sh)", u.GuardTimerUnit)
+	}
+	// Installed is not enough: a disabled timer never ticks, so a build that
+	// never reaches the broker would never be rolled back. `systemctl enable`
+	// records itself as this link, which needs no systemctl call to read.
+	if _, err := os.Stat(guardTimerWants(u.GuardTimerUnit)); err != nil {
+		return fmt.Errorf("rollback guard timer %s is not enabled (re-run install.sh)", u.GuardTimerUnit)
 	}
 	active, err := ActiveVersion(u.Layout)
 	if err != nil {
@@ -166,11 +184,20 @@ func (u *Updater) run(p readerrpc.DaemonUpdateParams) {
 		u.setState(readerrpc.UpdateStateFailed, msg)
 	}
 
+	if err := CleanStale(u.Layout, staleDownloadAge); err != nil {
+		u.Log.Warn().Err(err).Msg("clean abandoned downloads")
+	}
 	if err := u.download(p.URL, tmp, p.SHA256); err != nil {
 		fail(err)
 		return
 	}
 	if err := os.Rename(tmp, u.Layout.VersionPath(p.Version)); err != nil {
+		fail(err)
+		return
+	}
+	// The rename must be durable before pending names it: otherwise a power cut
+	// could leave a guard armed for a binary whose directory entry was lost.
+	if err := syncDir(u.Layout.VersionsDir()); err != nil {
 		fail(err)
 		return
 	}
@@ -250,10 +277,14 @@ func (u *Updater) download(rawURL, dst, wantSHA string) error {
 }
 
 // Commit ends this build's probation, after checking that its own updater is
-// usable. A commit that loses the race to the guard returns ErrNotPending.
+// usable. A commit that loses the race to the guard returns ErrNotPending; one
+// that loses to this process's own earlier commit returns ErrAlreadyCommitted.
 func (u *Updater) Commit() error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
+	if u.committed {
+		return ErrAlreadyCommitted
+	}
 	if !u.probation {
 		return ErrNotPending
 	}
@@ -267,6 +298,7 @@ func (u *Updater) Commit() error {
 		return err
 	}
 	u.probation = false
+	u.committed = true
 	return nil
 }
 
