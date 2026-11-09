@@ -15,6 +15,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -47,6 +48,10 @@ type RPCClient interface {
 type Handler struct {
 	storage *storage.Storage
 	rpc     RPCClient // nil when the broker is disabled
+
+	// Reader software endpoints (software.go); nil until WithSoftware.
+	daemon   DaemonRPC
+	releases ReleaseSource
 }
 
 // NewHandler builds a Handler. rpc may be a nil interface (endpoints then 503).
@@ -54,12 +59,36 @@ func NewHandler(storage *storage.Storage, rpc RPCClient) *Handler {
 	return &Handler{storage: storage, rpc: rpc}
 }
 
-// RegisterRoutes mounts the endpoints inside the session-auth group. The read is
-// open; the set is paid-gated (it mutates reader hardware config), matching the
-// scan-device mutation policy.
-func (h *Handler) RegisterRoutes(r chi.Router, paidGate func(http.Handler) http.Handler) {
-	r.Get("/api/v1/scan-devices/{scan_device_id}/reader-config", h.Get)
-	r.With(paidGate).Patch("/api/v1/scan-devices/{scan_device_id}/reader-config", h.Set)
+// readerRPCWriteBudget is how long a reader route may take to write its
+// response. The server's WriteTimeout (10 s) is shorter than a reader route can
+// legitimately take: one RPC is a publish (up to 5 s) plus a reply (up to 10 s),
+// a config read makes two, and a software update first fetches the release
+// manifest (up to 15 s). Past WriteTimeout the response — a late reply, or the
+// 504 for a lost one — goes to a closed connection and the browser sees the
+// proxy's 502 instead.
+const readerRPCWriteBudget = 45 * time.Second
+
+// extendWriteDeadline gives a reader route readerRPCWriteBudget to respond.
+func extendWriteDeadline(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Walks the middleware writers' Unwrap chain to the connection. Best
+		// effort: a writer that cannot is left on the server's timeout.
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(readerRPCWriteBudget))
+		next.ServeHTTP(w, r)
+	})
+}
+
+// RegisterRoutes mounts the endpoints inside the session-auth group. The reads
+// are open; the set is paid-gated (it mutates reader hardware config), matching
+// the scan-device mutation policy. Starting a daemon update — which can also
+// downgrade, and restarts reader software — additionally requires an org admin.
+func (h *Handler) RegisterRoutes(r chi.Router, paidGate, adminGate func(http.Handler) http.Handler) {
+	// Every route here waits on a reader; see readerRPCWriteBudget.
+	rr := r.With(extendWriteDeadline)
+	rr.Get("/api/v1/scan-devices/{scan_device_id}/reader-config", h.Get)
+	rr.With(paidGate).Patch("/api/v1/scan-devices/{scan_device_id}/reader-config", h.Set)
+	rr.Get("/api/v1/scan-devices/{scan_device_id}/reader-software", h.GetSoftware)
+	rr.With(paidGate, adminGate).Post("/api/v1/scan-devices/{scan_device_id}/reader-software/update", h.UpdateSoftware)
 }
 
 // baseTopicForDevice derives a reader's RPC base topic from its publish_topic by

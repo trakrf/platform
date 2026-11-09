@@ -52,12 +52,16 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const { data: prs } = await github.rest.pulls.list({
+            // Page through every open PR. One pulls.list call returns only
+            // the first 30, oldest first, so once more than 30 were open every
+            // newer PR silently fell off preview (TRA-1343).
+            const prs = await github.paginate(github.rest.pulls.list, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
               sort: 'created',
-              direction: 'asc'
+              direction: 'asc',
+              per_page: 100
             });
 
             // Drafts are excluded, and so is anything not based on main:

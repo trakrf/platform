@@ -117,6 +117,24 @@ func TestCall_Timeout(t *testing.T) {
 	}
 }
 
+// A request that was published but never answered may still have been acted
+// on: callers must be able to tell it from one that was never sent.
+func TestCall_NoReplyIsErrNoReply(t *testing.T) {
+	c, _ := newTestClient()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, err := c.call(ctx, "trakrf.id/cs463-212", readerrpc.MethodGetStatus, nil)
+	if !errors.Is(err, ErrNoReply) {
+		t.Fatalf("context expiry: err = %v, want ErrNoReply", err)
+	}
+
+	c.timeout = 20 * time.Millisecond
+	_, err = c.call(context.Background(), "trakrf.id/cs463-212", readerrpc.MethodGetStatus, nil)
+	if !errors.Is(err, ErrNoReply) {
+		t.Fatalf("client timeout: err = %v, want ErrNoReply", err)
+	}
+}
+
 func TestSetOperProfile_RPCErrorMapsToGoError(t *testing.T) {
 	c, cp := newTestClient()
 

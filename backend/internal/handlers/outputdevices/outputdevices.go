@@ -6,8 +6,8 @@ package outputdevices
 
 import (
 	"context"
+	"math"
 	"net/http"
-	"net/url"
 	"strconv"
 	"time"
 
@@ -72,92 +72,6 @@ func (h *Handler) RegisterRoutes(r chi.Router, capGate, paidGate func(http.Handl
 	r.With(capGate, paidGate).Delete("/api/v1/output-devices/{output_device_id}", h.Delete)
 	r.With(capGate).Post("/api/v1/output-devices/{output_device_id}/test", h.Test)
 	r.With(capGate).Post("/api/v1/output-devices/{output_device_id}/reset", h.Reset)
-}
-
-// deviceFieldsError enforces the type- and transport-specific fields of an
-// output device against its effective (post-merge) state. Validating here
-// rather than via struct tags keeps a field from being rejected for a device
-// type where it does not apply (TRA-928, extended for TRA-1028).
-//
-//   - csl_gpo: mqtt only; the reader is addressed by scan_device_id (an
-//     FK, checked against storage separately — see Create/Update), NOT by
-//     command_topic, which this pure function does not require for GPO; the
-//     1-based GPO port lives in switch_id and must be 1-4.
-//   - shelly_gen4 over mqtt: needs a command_topic, ignores base_url.
-//   - shelly_gen4 over http: needs a base_url that is a valid http(s) URL.
-//
-// Returns "" when valid.
-func deviceFieldsError(deviceType, transport, baseURL, commandTopic string, switchID int) string {
-	if deviceType == outputdevice.TypeCSLGPO {
-		if transport != outputdevice.TransportMQTT {
-			return "csl_gpo requires mqtt transport"
-		}
-		if switchID < 1 || switchID > 4 {
-			return "switch_id is the GPO port and must be between 1 and 4 for csl_gpo"
-		}
-		return ""
-	}
-	if transport == outputdevice.TransportMQTT {
-		if commandTopic == "" {
-			return "command_topic is required for mqtt transport"
-		}
-		return ""
-	}
-	if baseURL == "" {
-		return "base_url is required for http transport"
-	}
-	if !isHTTPURL(baseURL) {
-		return "base_url is not a valid value"
-	}
-	return ""
-}
-
-// scanDeviceFKError checks the storage-backed half of GPO validation that
-// deviceFieldsError cannot do (it is pure, with no storage access): a
-// csl_gpo device's effective scan_device_id must be present, must
-// reference a live reader in orgID, that reader must be a csl_cs463 (the only
-// type with a CS463 daemon listening for Gpo.Set), and that reader must have
-// a non-empty publish_topic (the alarm dispatcher derives the reader's RPC
-// base topic from it at fire time; with none, the base topic is "" and the
-// dispatcher fail-closed refuses to fire — silently, unless caught here).
-// Returns a non-"" message for the caller to surface as 400, or a non-nil
-// error for an unexpected storage failure (500). Both are "" only when
-// scanDeviceID resolves to a fireable reader.
-func (h *Handler) scanDeviceFKError(ctx context.Context, orgID int, scanDeviceID *int) (msg string, err error) {
-	if scanDeviceID == nil {
-		return "scan_device_id is required for csl_gpo", nil
-	}
-	check, err := h.storage.CheckGPOReader(ctx, orgID, *scanDeviceID)
-	if err != nil {
-		return "", err
-	}
-	if !check.Found {
-		return "scan_device_id must reference one of your readers", nil
-	}
-	if !check.IsCS463 {
-		return "scan_device_id must reference a csl_cs463 reader", nil
-	}
-	if !check.HasPublishTopic {
-		return "scan_device_id must reference a reader with a publish_topic configured", nil
-	}
-	return "", nil
-}
-
-// isHTTPURL reports whether s is an absolute http(s) URL with a host. This is
-// the transport-aware replacement for the former `url` struct validator.
-func isHTTPURL(s string) bool {
-	u, err := url.Parse(s)
-	if err != nil {
-		return false
-	}
-	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
-}
-
-func deref(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }
 
 func parseListLimitOffset(r *http.Request) (limit, offset int) {
@@ -253,6 +167,13 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
 			return
 		}
+	}
+	if msg, err := h.tuningError(r.Context(), orgID, outputdevice.OutputDevice{Metadata: req.Metadata}); err != nil {
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
+		return
+	} else if msg != "" {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
+		return
 	}
 	device, err := h.storage.CreateOutputDevice(r.Context(), orgID, req)
 	if err != nil {
@@ -375,6 +296,19 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Metadata is replaced whole when sent, so the merged device carries either
+	// the new object or the stored one.
+	merged := *existing
+	if req.Metadata != nil {
+		merged.Metadata = *req.Metadata
+	}
+	if msg, err := h.tuningError(r.Context(), orgID, merged); err != nil {
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
+		return
+	} else if msg != "" {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation, msg, reqID)
+		return
+	}
 	device, err := h.storage.UpdateOutputDevice(r.Context(), orgID, id, req)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
@@ -388,10 +322,13 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary  Delete an output device
+// @Description Drives the output off first: a pin left on after its row is gone cannot be released from the app. If the off cannot be delivered the row is kept (502) so Reset still works later; force=true deletes anyway.
 // @Tags     outputdevices,internal
 // @ID       outputdevices.delete
 // @Param    output_device_id path int true "Alarm device id"
+// @Param    force query bool false "Delete even if the output could not be driven off"
 // @Success  204
+// @Failure  502 {object} modelerrors.ErrorResponse
 // @Router   /api/v1/output-devices/{output_device_id} [delete]
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetRequestID(r.Context())
@@ -400,12 +337,16 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		httputil.RespondMissingOrgContext(w, r, reqID)
 		return
 	}
-	id, err := httputil.ParseSurrogateID("output_device_id", chi.URLParam(r, "output_device_id"))
-	if err != nil {
-		httputil.RespondPathParamError(w, r, err, reqID)
+	device, found := h.load(w, r, orgID, reqID)
+	if !found {
 		return
 	}
-	ok, err := h.storage.DeleteOutputDevice(r.Context(), orgID, id)
+	if err := h.actuator.Set(r.Context(), *device, false, 0); err != nil && r.URL.Query().Get("force") != "true" {
+		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal,
+			"could not turn the output off before deleting it, so it was kept: "+err.Error(), reqID)
+		return
+	}
+	ok, err := h.storage.DeleteOutputDevice(r.Context(), orgID, device.ID)
 	if err != nil {
 		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal, err.Error(), reqID)
 		return
@@ -436,10 +377,12 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	// Backend-driven pulse for the manual test action: on, hold, off. offAfterSec
-	// is 0 here (we drive the off ourselves) — the device-side toggle_after timer
-	// is the geofence fire path's concern, not this synchronous diagnostic.
-	if err := h.actuator.Set(ctx, *device, true, 0); err != nil {
+	// Backend-driven pulse for the manual test action: on, hold, off. The ON also
+	// arms the device-side timer for the same hold, so a lost or failed OFF
+	// cannot leave the output latched on (TRA-1273): the OFF is a second
+	// message, and alarm outputs fail toward off.
+	offAfter := max(1, int(math.Ceil(h.testPulse.Seconds())))
+	if err := h.actuator.Set(ctx, *device, true, offAfter); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal, "output device unreachable: "+err.Error(), reqID)
 		return
 	}

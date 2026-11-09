@@ -17,13 +17,11 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/trakrf/platform/mqtt-rpc/internal/hwrng"
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerd"
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerd/cs463"
+	"github.com/trakrf/platform/mqtt-rpc/internal/update"
 )
-
-// reconcileTimeout bounds the startup golden-config reconcile (a handful of /API
-// round-trips against the reader's localhost interface).
-const reconcileTimeout = 30 * time.Second
 
 // version is overridable via -ldflags "-X main.version=...".
 var version = "dev"
@@ -35,6 +33,12 @@ func main() {
 		Str("version", version).
 		Logger()
 
+	// First, before anything reaches for crypto/rand: credit the reader's
+	// hardware RNG to the kernel. Without it the CS463's kernel takes 90–390 s
+	// after a boot to seed itself, and every TLS client on the reader — this
+	// daemon's broker link and the vendor app's CloudServer — waits that long.
+	seedKernelRNG(&logger)
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -42,55 +46,132 @@ func main() {
 	if err != nil {
 		logger.Fatal().Err(err).Msg("load config")
 	}
+	cfg.Version = version
+
+	// Remote self-update. CheckPending runs first, before anything touches the
+	// reader: if this process is a fresh update on probation, it commits only
+	// after answering an RPC through the broker (see readerd.selfTest) — never on
+	// reconcile, which a wedged vendor app would fail.
+	restart := make(chan struct{}, 1)
+	upd := update.New(update.Layout{Dir: update.DefaultDir}, version, func() {
+		select {
+		case restart <- struct{}{}:
+		default:
+		}
+	}, logger)
+	if err := upd.CheckPending(); err != nil {
+		logger.Error().Err(err).Msg("read update state")
+	}
+	if upd.OnProbation() {
+		logger.Warn().Msg("this build is an update on probation; it commits after answering an rpc through the broker, else the guard rolls it back")
+	}
 
 	// The daemon runs on the reader and talks to the reader's localhost servlet
 	// API. URL/user/pass are overridable via env; pass is the only secret.
 	baseURL := envOr("READER_API_URL", "http://localhost")
-	user := envOr("READER_API_USER", "root")
+	user := envOr("READER_API_USER", "trakrf")
 	pass := os.Getenv("READER_API_PASS")
 	client := cs463.New(baseURL, user, pass, 0)
 
 	adapter := cs463.NewAdapter(client, cs463.AdapterConfig{
 		AntennaCount: cfg.AntennaCount,
 		EventID:      cfg.EventID,
+		Logger:       &logger,
+		// Every GPO off also goes through the kernel's GPIO lines, so it lands
+		// while the vendor app is wedged. Start and Stop drive all four off.
+		GPO: cs463.SysfsGPO(),
+		// No ON latches: one with no pulse gets this on-time, and every ON is
+		// capped at readerrpc.GpoMaxOn.
+		DefaultOn: cfg.GpoDefaultOn,
 	})
 
-	// Converge the reader to the golden TrakRF mqtt-rpc config before serving RPC.
-	// The daemon is opinionated about the ONE hand-crafted prerequisite: the golden
-	// CloudServer. If it is missing, refuse to serve (fatal) — the missing/misnamed
-	// server is a permanent commissioning error and serving a half-configured reader
-	// is worse than not serving. Transient failures (reader busy, broker down,
-	// GlassFish still booting) are logged loudly but the daemon still serves; the
-	// next restart re-arms. With systemd Restart=always, the fatal case self-heals
-	// once the operator creates the CloudServer.
+	// The golden-config reconcile runs from the health monitor, whenever /API
+	// is healthy and the config is not yet applied: at boot, once GlassFish is
+	// actually serving, and again after every outage. Running it once before
+	// serving lost the boot race to GlassFish (a 502) and never retried.
+	//
+	// The daemon is opinionated about the ONE hand-crafted prerequisite, the
+	// golden CloudServer. If it is missing, it exits (fatal): a missing or
+	// misnamed server is a permanent commissioning error, and serving a
+	// half-configured reader is worse than not serving. With systemd
+	// Restart=always, the daemon recovers once the operator creates it. Anything
+	// else (reader busy, a transient error) is retried by the monitor.
+	var reconcile func(context.Context) error
 	if cfg.Reconcile {
-		rctx, cancel := context.WithTimeout(ctx, reconcileTimeout)
-		err := adapter.Reconcile(rctx)
-		cancel()
-		switch {
-		case err == nil:
-			logger.Info().Msg("golden-config reconcile complete")
-		case errors.Is(err, cs463.ErrMissingCloudServer):
-			logger.Fatal().Err(err).Msg("golden-config reconcile: required CloudServer missing — refusing to serve; create it (exact name) and the daemon will recover on restart")
-		default:
-			logger.Error().Err(err).Msg("golden-config reconcile failed; serving RPC anyway")
+		reconcile = func(ctx context.Context) error {
+			err := adapter.Reconcile(ctx)
+			if errors.Is(err, cs463.ErrMissingCloudServer) {
+				logger.Fatal().Err(err).Msg("golden-config reconcile: required CloudServer missing — refusing to serve; create it (exact name) and the daemon will recover on restart")
+			}
+			return err
 		}
 	}
 
+	// One host for the operator's Reader.Reboot/Shutdown and the monitor's
+	// automatic recovery.
+	host := readerd.NewSystemdHost(&logger)
 	d := readerd.New(cfg, adapter, &logger)
+	d.SetUpdater(upd)
+	d.SetHost(host)
 	if err := d.Start(); err != nil {
 		logger.Fatal().Err(err).Msg("start daemon")
 	}
 	defer d.Stop()
 
+	policy := readerd.DefaultHealthPolicy()
+	policy.AutoRecover = cfg.AutoRecover
+	policy.WedgeAfter = cfg.WedgeAfter
+	monitor := readerd.NewMonitor(policy, readerd.MonitorDeps{
+		Probe:          adapter.ProbeHealth,
+		Reconcile:      reconcile,
+		Host:           host,
+		Store:          readerd.RebootStore{Path: readerd.DefaultRebootStorePath},
+		Publish:        d.SetHealth,
+		GoingDown:      d.GoingDown,
+		AbortGoingDown: d.AbortGoingDown,
+		CloudServer: func() string {
+			return d.CloudServerFault(cfg.CloudServer, time.Now())
+		},
+		Log: &logger,
+	})
+	d.SetHealth(monitor.Health())
+	go monitor.Run(ctx)
+
 	logger.Info().
 		Str("base_topic", cfg.Broker.BaseTopic).
 		Str("rpc_client_id", cfg.Broker.RPCClientID).
 		Str("reader_url", baseURL).
+		Bool("auto_recover", policy.AutoRecover).
+		Dur("wedge_after", policy.WedgeAfter).
 		Msg("mqtt-rpcd running")
 
-	<-ctx.Done()
-	logger.Info().Msg("mqtt-rpcd shutting down")
+	select {
+	case <-ctx.Done():
+		logger.Info().Msg("mqtt-rpcd shutting down")
+	case <-restart:
+		// Exit cleanly; systemd (Restart=always) starts the binary the active
+		// link now points at, and the guard's ExecStartPre counts the start.
+		logger.Info().Msg("mqtt-rpcd exiting to restart onto the updated version")
+	}
+}
+
+// seedKernelRNG never stops the daemon: a failure costs only the old slow boot.
+func seedKernelRNG(logger *zerolog.Logger) {
+	res := hwrng.Seed(hwrng.Config{})
+	switch {
+	case res.Skip != "":
+		logger.Info().Str("source", res.Source).Str("reason", res.Skip).
+			Msg("not crediting a hardware RNG; the kernel seeds itself")
+	case res.Err != nil:
+		logger.Warn().Err(res.Err).Str("source", res.Source).
+			Int("entropy_avail", res.AvailBefore).
+			Msg("could not credit the hardware RNG; TLS may wait for the kernel to seed itself")
+	default:
+		logger.Info().Str("source", res.Source).Int("bits_offered", res.Bits).
+			Int("entropy_avail_before", res.AvailBefore).
+			Int("entropy_avail_after", res.AvailAfter).
+			Msg("credited the hardware RNG to the kernel")
+	}
 }
 
 func envOr(key, def string) string {

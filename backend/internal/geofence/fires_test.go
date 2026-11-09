@@ -30,7 +30,7 @@ func TestDecide_DrivesNothing(t *testing.T) {
 	e := newTestEngine(Config{RSSIThreshold: -65, LatchTTL: time.Minute}, s, d)
 	defer e.Stop()
 
-	fires := e.decide(context.Background(), 42, time.Unix(1000, 0), reads(read("EPC1", -50)))
+	fires, _ := e.decide(context.Background(), 42, time.Unix(1000, 0), reads(read("EPC1", -50)))
 
 	if len(fires) != 1 {
 		t.Fatalf("an egress read must give one fire, got %d", len(fires))
@@ -54,16 +54,16 @@ func TestDecide_LatchedReadAndGraceGiveNoFire(t *testing.T) {
 	defer e.Stop()
 
 	at := time.Unix(1000, 0)
-	if got := e.decide(context.Background(), 42, at, reads(read("EPC1", -50))); len(got) != 1 {
+	if got, _ := e.decide(context.Background(), 42, at, reads(read("EPC1", -50))); len(got) != 1 {
 		t.Fatalf("first sight must fire, got %d", len(got))
 	}
-	if got := e.decide(context.Background(), 42, at.Add(time.Second), reads(read("EPC1", -50))); len(got) != 0 {
+	if got, _ := e.decide(context.Background(), 42, at.Add(time.Second), reads(read("EPC1", -50))); len(got) != 0 {
 		t.Fatalf("a read that only refreshes the latch is not a fire, got %d", len(got))
 	}
 
 	graced := newTestEngine(Config{RSSIThreshold: -65, LatchTTL: time.Minute, StartupGrace: time.Minute}, s, &fakeDriver{})
 	defer graced.Stop()
-	if got := graced.decide(context.Background(), 42, at, reads(read("EPC1", -50))); len(got) != 0 {
+	if got, _ := graced.decide(context.Background(), 42, at, reads(read("EPC1", -50))); len(got) != 0 {
 		t.Fatalf("a read inside the startup grace is not a fire, got %d", len(got))
 	}
 }
@@ -78,13 +78,13 @@ func TestFireUndo_EgressRestoresLatch(t *testing.T) {
 	e.decide(context.Background(), 42, at, reads(read("EPC1", -50)))
 	reentry := at.Add(2 * time.Minute)
 
-	fires := e.decide(context.Background(), 42, reentry, reads(read("EPC1", -50)))
+	fires, _ := e.decide(context.Background(), 42, reentry, reads(read("EPC1", -50)))
 	if len(fires) != 1 {
 		t.Fatalf("a re-entry must fire, got %d", len(fires))
 	}
 	fires[0].undo()
 
-	if got := e.decide(context.Background(), 42, reentry, reads(read("EPC1", -50))); len(got) != 1 {
+	if got, _ := e.decide(context.Background(), 42, reentry, reads(read("EPC1", -50))); len(got) != 1 {
 		t.Fatalf("after undo the same read must fire again, got %d", len(got))
 	}
 }
@@ -94,7 +94,7 @@ func TestFireUndo_FirstSightRemovesLatchEntry(t *testing.T) {
 	e := newTestEngine(Config{RSSIThreshold: -65, LatchTTL: time.Minute}, s, &fakeDriver{})
 	defer e.Stop()
 
-	fires := e.decide(context.Background(), 42, time.Unix(1000, 0), reads(read("EPC1", -50)))
+	fires, _ := e.decide(context.Background(), 42, time.Unix(1000, 0), reads(read("EPC1", -50)))
 	if e.latch.size() != 1 {
 		t.Fatalf("decide must latch the tag, size=%d", e.latch.size())
 	}
@@ -111,13 +111,13 @@ func TestFireUndo_ReleasesPulse(t *testing.T) {
 	defer e.Stop()
 
 	at := time.Unix(1000, 0)
-	fires := e.decide(context.Background(), 42, at, reads(read("EPC1", -50)))
-	if got := e.decide(context.Background(), 42, at.Add(time.Second), reads(read("EPC2", -50))); len(got) != 1 || len(got[0].drives) != 0 {
+	fires, _ := e.decide(context.Background(), 42, at, reads(read("EPC1", -50)))
+	if got, _ := e.decide(context.Background(), 42, at.Add(time.Second), reads(read("EPC2", -50))); len(got) != 1 || len(got[0].drives) != 0 {
 		t.Fatalf("the pulse must hold the output while the fire stands, got %+v", got)
 	}
 	fires[0].undo()
 
-	if got := e.decide(context.Background(), 42, at.Add(time.Second), reads(read("EPC3", -50))); len(got) != 1 {
+	if got, _ := e.decide(context.Background(), 42, at.Add(time.Second), reads(read("EPC3", -50))); len(got) != 1 {
 		t.Fatalf("after undo another tag must fire the output, got %d", len(got))
 	}
 }
@@ -128,12 +128,12 @@ func TestDecide_BusyOutputStillGivesAFireWithNoDrive(t *testing.T) {
 	defer e.Stop()
 
 	at := time.Unix(1000, 0)
-	fires := e.decide(context.Background(), 42, at, reads(read("EPC1", -50), read("EPC2", -50)))
+	fires, _ := e.decide(context.Background(), 42, at, reads(read("EPC1", -50), read("EPC2", -50)))
 	if len(fires) != 2 || len(fires[0].drives) != 1 || fires[1].read.EPC != "EPC2" || len(fires[1].drives) != 0 {
 		t.Fatalf("EPC1 must drive and EPC2 must fire with no drive, got %+v", fires)
 	}
 	// Still latched: a repeat sighting of the dropped tag is not a fire.
-	if got := e.decide(context.Background(), 42, at.Add(time.Second), reads(read("EPC2", -50))); len(got) != 0 {
+	if got, _ := e.decide(context.Background(), 42, at.Add(time.Second), reads(read("EPC2", -50))); len(got) != 0 {
 		t.Fatalf("a latched tag must give no fire, got %d", len(got))
 	}
 }
@@ -160,14 +160,14 @@ func TestFireUndo_NoDriveFireRestoresItsLatchForSameMessagePulse(t *testing.T) {
 	defer e.Stop()
 
 	at := time.Unix(1000, 0)
-	fires := e.decide(context.Background(), 42, at, reads(read("EPC1", -50), read("EPC2", -50)))
+	fires, _ := e.decide(context.Background(), 42, at, reads(read("EPC1", -50), read("EPC2", -50)))
 	if len(fires) != 2 {
 		t.Fatalf("expected two fires, got %d", len(fires))
 	}
 	fires[1].undo()
 
 	// A is still pulsing, so B is dropped again, but it is a fresh fire not a latched read.
-	again := e.decide(context.Background(), 42, at, reads(read("EPC2", -50)))
+	again, _ := e.decide(context.Background(), 42, at, reads(read("EPC2", -50)))
 	if len(again) != 1 || len(again[0].drives) != 0 {
 		t.Fatalf("after undo the dropped read must fire again with no drive, got %+v", again)
 	}
@@ -180,7 +180,7 @@ func TestFireUndo_NoDriveFireRestoresItsLatchForEarlierPulse(t *testing.T) {
 
 	at := time.Unix(1000, 0)
 	e.decide(context.Background(), 42, at, reads(read("EPC1", -50)))
-	fires := e.decide(context.Background(), 42, at.Add(time.Second), reads(read("EPC2", -50)))
+	fires, _ := e.decide(context.Background(), 42, at.Add(time.Second), reads(read("EPC2", -50)))
 	if len(fires) != 1 || len(fires[0].drives) != 0 {
 		t.Fatalf("EPC2 must fire with no drive, got %+v", fires)
 	}
@@ -188,7 +188,7 @@ func TestFireUndo_NoDriveFireRestoresItsLatchForEarlierPulse(t *testing.T) {
 
 	// The pulse from the earlier message stands, so the undone read is not latched
 	// but is dropped again.
-	again := e.decide(context.Background(), 42, at.Add(2*time.Second), reads(read("EPC2", -50)))
+	again, _ := e.decide(context.Background(), 42, at.Add(2*time.Second), reads(read("EPC2", -50)))
 	if len(again) != 1 || len(again[0].drives) != 0 {
 		t.Fatalf("pulse still stands, the read must fire again with no drive, got %+v", again)
 	}
@@ -203,12 +203,12 @@ func TestFireUndo_EachFireOfAMessageUndoesIndependently(t *testing.T) {
 	defer e.Stop()
 
 	at := time.Unix(1000, 0)
-	fires := e.decide(context.Background(), 42, at, reads(read("EPC1", -50), read("EPC2", -50)))
+	fires, _ := e.decide(context.Background(), 42, at, reads(read("EPC1", -50), read("EPC2", -50)))
 	fires[0].undo() // releases the pulse only
 	if e.latch.size() != 1 {
 		t.Fatalf("undoing A must leave B latched, size=%d", e.latch.size())
 	}
-	if got := e.decide(context.Background(), 42, at, reads(read("EPC3", -50))); len(got) != 1 || len(got[0].drives) != 1 {
+	if got, _ := e.decide(context.Background(), 42, at, reads(read("EPC3", -50))); len(got) != 1 || len(got[0].drives) != 1 {
 		t.Fatalf("undoing A must release the pulse, got %+v", got)
 	}
 }
@@ -219,14 +219,14 @@ func TestFireUndo_UndoingEveryFireRestoresLatchAndPulse(t *testing.T) {
 	defer e.Stop()
 
 	at := time.Unix(1000, 0)
-	fires := e.decide(context.Background(), 42, at, reads(read("EPC1", -50), read("EPC2", -50)))
+	fires, _ := e.decide(context.Background(), 42, at, reads(read("EPC1", -50), read("EPC2", -50)))
 	for _, f := range fires {
 		f.undo()
 	}
 	if e.latch.size() != 0 {
 		t.Fatalf("latch must be empty after undoing every fire, size=%d", e.latch.size())
 	}
-	again := e.decide(context.Background(), 42, at, reads(read("EPC2", -50)))
+	again, _ := e.decide(context.Background(), 42, at, reads(read("EPC2", -50)))
 	if len(again) != 1 || len(again[0].drives) != 1 {
 		t.Fatalf("the pulse must be free after undoing every fire, got %+v", again)
 	}
@@ -241,7 +241,7 @@ func TestFireUndo_PresenceForgetsOutput(t *testing.T) {
 	e.presence = p
 
 	at := time.Unix(1000, 0)
-	fires := e.decide(context.Background(), 42, at, reads(read("EPC1", -50)))
+	fires, _ := e.decide(context.Background(), 42, at, reads(read("EPC1", -50)))
 	if len(fires) != 1 || len(*timers) != 1 {
 		t.Fatalf("presence must fire once and arm a timer, got fires=%d timers=%d", len(fires), len(*timers))
 	}
@@ -253,7 +253,7 @@ func TestFireUndo_PresenceForgetsOutput(t *testing.T) {
 	if d.offCount() != 0 {
 		t.Fatalf("undo must not drive the output off, got %d", d.offCount())
 	}
-	if got := e.decide(context.Background(), 42, at, reads(read("EPC1", -50))); len(got) != 1 {
+	if got, _ := e.decide(context.Background(), 42, at, reads(read("EPC1", -50))); len(got) != 1 {
 		t.Fatalf("after undo the next read must fire, got %d", len(got))
 	}
 }
@@ -266,13 +266,13 @@ func TestFireUndo_CoversEveryOutputOfTheRead(t *testing.T) {
 	defer e.Stop()
 
 	at := time.Unix(1000, 0)
-	fires := e.decide(context.Background(), 42, at, reads(read("EPC1", -50)))
+	fires, _ := e.decide(context.Background(), 42, at, reads(read("EPC1", -50)))
 	if len(fires) != 1 || len(fires[0].drives) != 2 {
 		t.Fatalf("one read on two outputs must be one fire with two drives, got %+v", fires)
 	}
 	fires[0].undo()
 
-	again := e.decide(context.Background(), 42, at, reads(read("EPC1", -50)))
+	again, _ := e.decide(context.Background(), 42, at, reads(read("EPC1", -50)))
 	if len(again) != 1 || len(again[0].drives) != 2 {
 		t.Fatalf("after undo both outputs must fire again, got %+v", again)
 	}
@@ -287,7 +287,7 @@ func TestDriveFire_DrivesEachOutputWithItsAutoOff(t *testing.T) {
 	e := newTestEngine(Config{RSSIThreshold: -65, LatchTTL: time.Minute}, s, d)
 	defer e.Stop()
 
-	fires := e.decide(context.Background(), 42, time.Unix(1000, 0), reads(read("EPC1", -50)))
+	fires, _ := e.decide(context.Background(), 42, time.Unix(1000, 0), reads(read("EPC1", -50)))
 	e.driveFire(context.Background(), 42, fires[0])
 
 	d.mu.Lock()
@@ -298,8 +298,8 @@ func TestDriveFire_DrivesEachOutputWithItsAutoOff(t *testing.T) {
 	if c := d.calls[0]; c.dev.ID != 11 || !c.on || c.offAfter != 5 {
 		t.Fatalf("egress must drive ON with its auto-off, got %+v", c)
 	}
-	if c := d.calls[1]; c.dev.ID != 12 || !c.on || c.offAfter != 0 {
-		t.Fatalf("presence must drive ON with no auto-off, got %+v", c)
+	if c := d.calls[1]; c.dev.ID != 12 || !c.on || c.offAfter != presenceOnSeconds {
+		t.Fatalf("presence must drive ON with its on-time, not its auto-off, got %+v", c)
 	}
 }
 
@@ -310,10 +310,10 @@ func TestDriveFire_FailedDriveReleasesPulse(t *testing.T) {
 	defer e.Stop()
 
 	at := time.Unix(1000, 0)
-	fires := e.decide(context.Background(), 42, at, reads(read("EPC1", -50)))
+	fires, _ := e.decide(context.Background(), 42, at, reads(read("EPC1", -50)))
 	e.driveFire(context.Background(), 42, fires[0])
 
-	if got := e.decide(context.Background(), 42, at.Add(time.Second), reads(read("EPC2", -50))); len(got) != 1 {
+	if got, _ := e.decide(context.Background(), 42, at.Add(time.Second), reads(read("EPC2", -50))); len(got) != 1 {
 		t.Fatalf("a failed drive must free the output for the next tag, got %d", len(got))
 	}
 }
@@ -367,7 +367,7 @@ func TestAlarmRow_CarriesTheFiredRead(t *testing.T) {
 	defer e.Stop()
 
 	at := time.Unix(1000, 0)
-	fires := e.decide(context.Background(), 42, at, reads(read("EPC1", -50)))
+	fires, _ := e.decide(context.Background(), 42, at, reads(read("EPC1", -50)))
 	row := e.alarmRow(fires[0], 555, at)
 
 	if row.AssetID != 7 || row.ScanPointID != 3 || row.LocationID == nil || *row.LocationID != 9 ||

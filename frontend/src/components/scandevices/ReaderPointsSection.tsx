@@ -9,6 +9,7 @@
 
 import { SinglePointLocationField } from './SinglePointLocationField';
 import { AntennaSettingsPanel } from './AntennaSettingsPanel';
+import { ReaderSoftwarePanel } from './ReaderSoftwarePanel';
 import { deviceProfile } from '@/lib/scandevices/deviceProfile';
 import type { ScanDevice } from '@/types/scandevices';
 
@@ -21,7 +22,12 @@ export function ReaderPointsSection({ device }: ReaderPointsSectionProps) {
 
   if (profile === 'multi_point') {
     // CS463: consolidated per-antenna location + transmit-power tuning (TRA-995).
-    return <AntennaSettingsPanel deviceId={device.id} />;
+    return (
+      <div className="space-y-4">
+        <AntennaSettingsPanel deviceId={device.id} />
+        <ReaderSoftwarePanel deviceId={device.id} />
+      </div>
+    );
   }
 
   if (profile === 'single_point') {

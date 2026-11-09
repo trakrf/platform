@@ -66,10 +66,12 @@ export const outputDevicesApi = {
     }),
 
   /**
-   * Delete an output device by ID.
-   * DELETE /api/v1/output-devices/:id
+   * Delete an output device by ID. The backend drives the output off first and
+   * answers 502, keeping the row, if it cannot; force deletes anyway.
+   * DELETE /api/v1/output-devices/:id[?force=true]
    */
-  delete: (id: number) => apiClient.delete<void>(`/output-devices/${id}`),
+  delete: (id: number, force = false) =>
+    apiClient.delete<void>(`/output-devices/${id}`, force ? { params: { force: true } } : undefined),
 
   /**
    * Test-fire an output device (pulse on then off).
