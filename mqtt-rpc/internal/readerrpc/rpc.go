@@ -46,7 +46,7 @@ type PowerParams struct {
 // PowerResult acknowledges Reader.Reboot or Reader.Shutdown. The action has not
 // happened yet: it starts InMs after the reply.
 type PowerResult struct {
-	Action string `json:"action"` // StatusReasonReboot or StatusReasonShutdown
+	Action string `json:"action"` // "reboot" or "shutdown", the status reason it announces
 	InMs   int    `json:"in_ms"`
 }
 
