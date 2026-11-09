@@ -22,13 +22,33 @@ const (
 	MethodGetOperProfile  = "Reader.GetOperProfile"
 	MethodSetOperProfile  = "Reader.SetOperProfile"
 	MethodGetStatus       = "Reader.GetStatus"
+	MethodGpoSet          = "Gpo.Set"
+
+	// MethodReboot and MethodShutdown cleanly reboot or power off the reader
+	// host (sync, then systemd). The daemon replies first and acts after a short
+	// delay, announcing the planned outage on the retained status first.
+	// Neither takes required params; PowerParams is optional.
+	MethodReboot   = "Reader.Reboot"
+	MethodShutdown = "Reader.Shutdown"
 
 	// Reserved for future use.
 	MethodScanStart = "Scan.Start"
 	MethodScanStop  = "Scan.Stop"
-	MethodGpoSet    = "Gpo.Set"
-	MethodReboot    = "Reader.Reboot"
 )
+
+// PowerParams are the optional params of Reader.Reboot and Reader.Shutdown.
+type PowerParams struct {
+	// RequestedBy names the person or system asking, for the reader's log. The
+	// request's Src is logged as well.
+	RequestedBy string `json:"requested_by,omitempty"`
+}
+
+// PowerResult acknowledges Reader.Reboot or Reader.Shutdown. The action has not
+// happened yet: it starts InMs after the reply.
+type PowerResult struct {
+	Action string `json:"action"` // "reboot" or "shutdown", the status reason it announces
+	InMs   int    `json:"in_ms"`
+}
 
 // Standard JSON-RPC 2.0 error codes.
 const (
@@ -42,6 +62,11 @@ const (
 // CodeReaderBusy signals the reader session for the daemon's user is held by
 // another client. It is outside the JSON-RPC reserved range (-32768..-32000).
 const CodeReaderBusy = -33001
+
+// CodePowerRefused signals that a Reader.Reboot or Reader.Shutdown was refused
+// before anything happened: the reader is already going down, or a daemon
+// update is downloading or installing. Routine; try again later.
+const CodePowerRefused = -33003
 
 // Request is an inbound JSON-RPC request frame. Src names the topic the caller
 // expects the response to be published to (Shelly-style correlation).

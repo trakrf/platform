@@ -234,10 +234,11 @@ func (a *Adapter) GetCapabilities(ctx context.Context) (readerrpc.Capabilities, 
 			readerrpc.MethodGetStatus,
 			readerrpc.MethodGpoSet,
 		},
+		// Reader.Reboot and Reader.Shutdown run on the host, not the reader API;
+		// the daemon advertises them (readerd.Daemon.SetHost).
 		Unsupported: []string{
 			readerrpc.MethodScanStart,
 			readerrpc.MethodScanStop,
-			readerrpc.MethodReboot,
 		},
 	}, nil
 }

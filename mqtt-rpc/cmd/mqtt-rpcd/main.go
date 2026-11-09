@@ -100,8 +100,12 @@ func main() {
 		}
 	}
 
+	// One host for the operator's Reader.Reboot/Shutdown and the monitor's
+	// automatic recovery.
+	host := readerd.NewSystemdHost(&logger)
 	d := readerd.New(cfg, adapter, &logger)
 	d.SetUpdater(upd)
+	d.SetHost(host)
 	if err := d.Start(); err != nil {
 		logger.Fatal().Err(err).Msg("start daemon")
 	}
@@ -111,12 +115,13 @@ func main() {
 	policy.AutoRecover = cfg.AutoRecover
 	policy.WedgeAfter = cfg.WedgeAfter
 	monitor := readerd.NewMonitor(policy, readerd.MonitorDeps{
-		Probe:     adapter.ProbeHealth,
-		Reconcile: reconcile,
-		Host:      readerd.NewSystemdHost(&logger),
-		Store:     readerd.RebootStore{Path: readerd.DefaultRebootStorePath},
-		Publish:   d.SetHealth,
-		GoingDown: d.GoingDown,
+		Probe:          adapter.ProbeHealth,
+		Reconcile:      reconcile,
+		Host:           host,
+		Store:          readerd.RebootStore{Path: readerd.DefaultRebootStorePath},
+		Publish:        d.SetHealth,
+		GoingDown:      d.GoingDown,
+		AbortGoingDown: d.AbortGoingDown,
 		CloudServer: func() string {
 			return d.CloudServerFault(cfg.CloudServer, time.Now())
 		},

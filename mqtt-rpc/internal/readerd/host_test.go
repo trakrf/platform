@@ -121,6 +121,17 @@ func TestReboot_SyncsFirst(t *testing.T) {
 	}
 }
 
+func TestPoweroff_SyncsFirst(t *testing.T) {
+	fs := &fakeSystem{}
+	h := newFakeSystemdHost(t, fs)
+	if err := h.Poweroff(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(fs.calls, "|") != "sync|systemctl poweroff" {
+		t.Fatalf("calls = %q, want sync then systemctl poweroff", fs.calls)
+	}
+}
+
 func TestReadCgroupProcs(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cgroup.procs")
 	if err := os.WriteFile(path, []byte("492\n879\n\n"), 0o644); err != nil {
