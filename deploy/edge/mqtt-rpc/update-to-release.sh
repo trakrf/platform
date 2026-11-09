@@ -75,8 +75,13 @@ while :; do
     echo "OK: $BASE runs $V, committed."
     exit 0
   fi
-  case "$st" in rolled_back | failed)
+  case "$st" in
+  rolled_back | failed)
     echo "FAILED: $st ($er). The reader is on $ver. See mqtt-rpc/README.md \"Remote update\"." >&2
+    exit 1
+    ;;
+  unguarded)
+    echo "UNGUARDED: $ver never committed, and no other version is installed to roll back to, so the guard left it running ($er). It has no rollback armed. Check its broker connection, then install a good version with install.sh." >&2
     exit 1
     ;;
   esac

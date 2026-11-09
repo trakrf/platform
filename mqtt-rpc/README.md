@@ -344,7 +344,9 @@ reconcile: `docs/adr/0024-a-remote-update-is-undone-by-what-it-cannot-replace.md
 `committed`, `rolled_back` (`error`: `crash_loop` | `no_commit` | `manual`,
 with `_fallback` when it fell back past a missing `from`), `unguarded`
 (`<why>_no_from`: the target is live and nothing was left to roll back to) or
-`failed` (nothing replaced).
+`failed` (nothing replaced). The guard does not restart a build it leaves
+`unguarded`, so the running daemon reports it as soon as `pending` is gone,
+not on its next start.
 
 Downloads trust the reader's CA bundle plus Mozilla roots embedded in the
 binary (`golang.org/x/crypto/x509roots/fallback`), so every update refreshes

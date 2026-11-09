@@ -23,6 +23,40 @@ func TestPreflight_RefusesATimerThatIsNotEnabled(t *testing.T) {
 	assertStillOnV1(t, f.l)
 }
 
+// The guard leaves a never-committed build running when it has nothing to roll
+// back to, and does not restart it. The running daemon must then report that
+// outcome, not "pending" for as long as it lives.
+func TestInfo_ReportsUnguardedWhileTheTargetKeepsRunning(t *testing.T) {
+	f := newFixture(t)
+	require.NoError(t, WritePending(f.l, Pending{Target: "v1", From: "v0"})) // v0 is not installed
+	require.NoError(t, f.u.CheckPending())
+	require.Equal(t, readerrpc.UpdateStatePending, f.u.Info().Update.State)
+
+	require.NoError(t, os.WriteFile(filepath.Join(f.l.StateDir(), "ticks"), []byte("3\n"), 0o644))
+	_, code, calls := runGuard(t, f.l, "tick")
+	require.Equal(t, 0, code)
+	require.Empty(t, calls, "the guard must not restart a target it cannot replace")
+
+	info := f.u.Info()
+	require.NotNil(t, info.Update)
+	assert.Equal(t, readerrpc.UpdateStateUnguarded, info.Update.State)
+	assert.Equal(t, "v1", info.Update.Target)
+	assert.Equal(t, "no_commit_no_from", info.Update.Error)
+}
+
+// While pending is armed, or the guard holds it mid-rollback, an earlier
+// recorded outcome for the same version is history: the update is still pending.
+func TestInfo_StaysPendingUntilTheGuardSettlesIt(t *testing.T) {
+	f := newFixture(t)
+	require.NoError(t, writeLast(f.l, readerrpc.UpdateStateUnguarded, "v1", "no_commit_no_from"))
+	require.NoError(t, WritePending(f.l, Pending{Target: "v1", From: "v0"}))
+	require.NoError(t, f.u.CheckPending())
+	assert.Equal(t, readerrpc.UpdateStatePending, f.u.Info().Update.State)
+
+	require.NoError(t, os.Rename(f.l.Pending(), filepath.Join(f.l.StateDir(), "rollback.claim")))
+	assert.Equal(t, readerrpc.UpdateStatePending, f.u.Info().Update.State)
+}
+
 func TestGuardTimerWants_IsTheTimersTargetWantsLink(t *testing.T) {
 	assert.Equal(t, "/etc/systemd/system/timers.target.wants/mqtt-rpcd-guard.timer",
 		guardTimerWants(DefaultGuardTimerUnit))

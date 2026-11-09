@@ -313,6 +313,13 @@ func (u *Updater) Info() readerrpc.DaemonInfo {
 		info.Update = &a
 	case u.probation:
 		info.Update = &readerrpc.UpdateInfo{State: readerrpc.UpdateStatePending, Target: u.Running}
+		// The guard can settle probation without restarting this process: with
+		// nothing to roll back to it leaves this build running, "unguarded".
+		if !probationArmed(u.Layout) {
+			if last, ok := ReadLast(u.Layout); ok && last.Target == u.Running {
+				info.Update = &last
+			}
+		}
 	default:
 		if last, ok := ReadLast(u.Layout); ok {
 			info.Update = &last
