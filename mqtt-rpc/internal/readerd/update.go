@@ -86,12 +86,13 @@ func (d *Daemon) answered() {
 			return // a reply racing this one already committed
 		}
 		if errors.Is(err, update.ErrNotPending) {
-			// The guard ended probation first. Had it rolled back, it would
-			// have restarted this process; it left this build running.
+			// The guard ended probation first: it is rolling back (a restart
+			// follows), or it had nothing to roll back to and left this build
+			// running. daemon.update says which.
 			d.log.Warn().Msg("update not committed: the guard settled probation first; see daemon.update")
 			return
 		}
-		d.log.Error().Err(err).Msg("update commit failed; the guard will roll back if this persists")
+		d.log.Error().Err(err).Msg("update commit failed; if this persists the guard rolls back, or marks this build unguarded when there is nothing to roll back to")
 		return
 	}
 	d.log.Info().Msg("update committed: answered an rpc through the broker")

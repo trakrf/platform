@@ -57,6 +57,23 @@ func TestInfo_StaysPendingUntilTheGuardSettlesIt(t *testing.T) {
 	assert.Equal(t, readerrpc.UpdateStatePending, f.u.Info().Update.State)
 }
 
+// A reader takes a new daemon by remote update but keeps the guard install.sh
+// gave it. That older guard, with nothing to roll back to, records "failed"
+// for the running build and does not restart it either. The daemon must
+// report that, or the update looks pending forever.
+func TestInfo_ReportsAnOlderGuardsFailedWhileTheTargetKeepsRunning(t *testing.T) {
+	f := newFixture(t)
+	require.NoError(t, WritePending(f.l, Pending{Target: "v1", From: "v0"}))
+	require.NoError(t, f.u.CheckPending())
+	require.NoError(t, os.Remove(f.l.Pending()))
+	require.NoError(t, writeLast(f.l, readerrpc.UpdateStateFailed, "v1", "no_commit_no_from"))
+
+	info := f.u.Info()
+	require.NotNil(t, info.Update)
+	assert.Equal(t, readerrpc.UpdateStateFailed, info.Update.State)
+	assert.Equal(t, "no_commit_no_from", info.Update.Error)
+}
+
 // A rollback records its outcome and drops its claim a moment before it
 // restarts this process. In that moment this build is still the one running,
 // so it must not report itself rolled back.

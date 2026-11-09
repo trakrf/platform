@@ -346,7 +346,9 @@ with `_fallback` when it fell back past a missing `from`), `unguarded`
 (`<why>_no_from`: the target is live and nothing was left to roll back to) or
 `failed` (nothing replaced). The guard does not restart a build it leaves
 `unguarded`, so the running daemon reports it as soon as `pending` is gone,
-not on its next start.
+not on its next start. A guard installed before `unguarded` existed records
+`failed` (`<why>_no_from`) for the same case, and the daemon reports that too;
+a reader keeps its guard until `install.sh` runs again.
 
 Downloads trust the reader's CA bundle plus Mozilla roots embedded in the
 binary (`golang.org/x/crypto/x509roots/fallback`), so every update refreshes

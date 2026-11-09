@@ -314,12 +314,13 @@ func (u *Updater) Info() readerrpc.DaemonInfo {
 	case u.probation:
 		info.Update = &readerrpc.UpdateInfo{State: readerrpc.UpdateStatePending, Target: u.Running}
 		// The guard can settle probation without restarting this process: with
-		// nothing to roll back to it leaves this build running, "unguarded".
-		// Any other outcome comes with a restart, so until then this build is
-		// still the one on probation.
+		// nothing to roll back to it leaves this build running, recorded as
+		// "unguarded" — or "failed" by a guard from before that state, which a
+		// reader keeps until install.sh runs again. A rollback comes with a
+		// restart, so until then this build is still the one on probation.
 		if !probationArmed(u.Layout) {
 			if last, ok := ReadLast(u.Layout); ok && last.Target == u.Running &&
-				last.State == readerrpc.UpdateStateUnguarded {
+				(last.State == readerrpc.UpdateStateUnguarded || last.State == readerrpc.UpdateStateFailed) {
 				info.Update = &last
 			}
 		}
