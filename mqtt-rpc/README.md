@@ -206,6 +206,56 @@ best-effort-continue.
 
 ---
 
+## Boot entropy: the hardware RNG
+
+The CS463 kernel (i.MX6, 4.14) seeds its RNG only from interrupts: it registers
+the SoC's CAAM generator as `/dev/hwrng` but never credits it (`rng_core`
+quality 0), and the image has no `rngd` or `haveged`. So `random: crng init done`
+landed **96–388 s** after a boot. Until then `getrandom(2)` blocks, and both TLS
+clients on the reader wait: this daemon's broker link (`crypto/rand: blocked for
+60 seconds`) and the vendor app's own CloudServer MQTT client, which carries the
+reads.
+
+The first thing `mqtt-rpcd` does at start is read 512 bytes from `/dev/hwrng`
+and credit them to the kernel with `RNDADDENTROPY` (`internal/hwrng`). The log
+line is `credited the hardware RNG to the kernel`, with `source: rng-caam`. It
+refuses output that is constant or repeats a block, gives up after 2 s, and skips
+a machine with no `/dev/hwrng`. A failure is only a warning: the reader falls back
+to the old slow boot.
+
+Why it is built this way:
+- **In the daemon, not in a separate unit.** `Daemon.Update` replaces only this
+  binary, so a fix anywhere else would never reach a reader that has no SSH.
+  The daemon starts at about 15 s of uptime, well before the vendor app's first
+  TLS handshake.
+- **From the hardware, not from a saved seed.** It needs no saved state, so it
+  works on the first boot after a reflash (which wipes `/opt`) and after a power
+  pull. Crediting a saved seed is unsafe on exactly those boots: one that is
+  never rewritten gets credited twice.
+- **Not `rng_core.default_quality=` on the kernel command line.** That edits the
+  bootloader environment on a customer's reader, and no update over the broker
+  can do it.
+
+Measured on cs463-212 (2026-11-09), over 5 clean reboots (seconds of uptime):
+
+| Boot | daemon start | `crng init done` | daemon on broker |
+|---|---|---|---|
+| 1 | 15.4 | 16.0 | 18.1 |
+| 2 | 15.9 | 16.5 | 18.5 |
+| 3 | 15.7 | 16.3 | 18.2 |
+| 4 | 24.2 | 24.6 | 26.7 |
+| 5 | 15.9 | 16.5 | 18.5 |
+
+The same reader's previous boot, before this change: `crng init done` at 106.8 s,
+and the daemon waited 96 s on `crypto/rand` before it connected. With the change,
+the vendor CloudServer was on the broker within seconds of `/API` serving, or
+before it. In boot 4, the only one where SSH came up early enough to watch, it
+connected at 110.8 s. Boot 3 hit the vendor-app wedge (see below); the reader
+app restart cleared it.
+
+See [ADR 0024](../docs/adr/0024-a-remote-update-is-undone-by-what-it-cannot-replace.md)
+for why only the daemon binary changes over the air.
+
 ## Reader-API health and wedge recovery
 
 The CS463 vendor app can come up **answering every `/API` request with HTTP 200
