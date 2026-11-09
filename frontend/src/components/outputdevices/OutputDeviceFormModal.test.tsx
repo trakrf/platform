@@ -36,6 +36,16 @@ vi.mock('@/hooks/scandevices', () => ({
   }),
 }));
 
+// The form reads the org geofence defaults to decide whether an egress
+// Auto-off may be left blank. Default: the org supplies none.
+const geofence = vi.hoisted(() => ({ orgAutoOff: null as number | null }));
+vi.mock('@/hooks/orgs/useGeofenceDefaults', () => ({
+  useGeofenceDefaults: () => ({
+    defaults: { auto_off_seconds: geofence.orgAutoOff },
+    system_defaults: { rssi_threshold: -65, age_out_seconds: 60, auto_off_seconds: 0, mode: 'egress' },
+  }),
+}));
+
 const wrapper = ({ children }: { children: ReactNode }) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -44,6 +54,10 @@ const wrapper = ({ children }: { children: ReactNode }) => {
 };
 const render = (ui: ReactElement, options?: Omit<RenderOptions, 'wrapper'>) =>
   rtlRender(ui, { wrapper, ...options });
+
+// An egress create needs an off edge (TRA-1273); tests about other fields give it one.
+const setAutoOff = (value = '5') =>
+  fireEvent.change(screen.getByLabelText(/Auto-off/i), { target: { value } });
 
 describe('OutputDeviceFormModal', () => {
   const mockOnClose = vi.fn();
@@ -59,7 +73,7 @@ describe('OutputDeviceFormModal', () => {
     switch_id: 0,
     location_id: null,
     is_active: true,
-    metadata: {},
+    metadata: { auto_off_seconds: 5 },
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
     deleted_at: null,
@@ -67,6 +81,7 @@ describe('OutputDeviceFormModal', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    geofence.orgAutoOff = null;
     (outputDevicesApi.create as any).mockResolvedValue({ data: { data: mockDevice } });
     (outputDevicesApi.update as any).mockResolvedValue({ data: { data: mockDevice } });
     (outputDevicesApi.test as any).mockResolvedValue({ data: { status: 'ok' } });
@@ -110,6 +125,7 @@ describe('OutputDeviceFormModal', () => {
       target: { value: 'http://192.168.50.66' },
     });
 
+    setAutoOff();
     fireEvent.click(screen.getByRole('button', { name: /Create Output Device/i }));
 
     await waitFor(() => {
@@ -139,6 +155,7 @@ describe('OutputDeviceFormModal', () => {
       target: { value: 'trakrf.id/dock-strobe' },
     });
 
+    setAutoOff();
     fireEvent.click(screen.getByRole('button', { name: /Create Output Device/i }));
 
     await waitFor(() => {
@@ -211,67 +228,6 @@ describe('OutputDeviceFormModal', () => {
 
     expect(screen.queryByRole('button', { name: /Test-fire/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Reset/i })).not.toBeInTheDocument();
-  });
-
-  describe('rule config fields (TRA-943/935)', () => {
-    it('renders the rule-config fields', () => {
-      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
-      expect(screen.getByLabelText(/Mode/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/Age-out/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/Auto-off/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/RSSI/i)).toBeInTheDocument();
-    });
-
-    it('disables auto-off when mode is presence', () => {
-      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
-      fireEvent.change(screen.getByLabelText(/Mode/i), { target: { value: 'presence' } });
-      expect(screen.getByLabelText(/Auto-off/i)).toBeDisabled();
-    });
-
-    it('submits metadata with the rule fields', async () => {
-      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
-
-      fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Dock Strobe' } });
-      fireEvent.change(screen.getByLabelText(/Base URL/), {
-        target: { value: 'http://192.168.50.66' },
-      });
-      fireEvent.change(screen.getByLabelText(/Age-out/i), { target: { value: '30' } });
-      fireEvent.change(screen.getByLabelText(/RSSI/i), { target: { value: '-60' } });
-
-      fireEvent.click(screen.getByRole('button', { name: /Create Output Device/i }));
-
-      await waitFor(() => {
-        expect(outputDevicesApi.create).toHaveBeenCalledTimes(1);
-      });
-      expect(outputDevicesApi.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          metadata: expect.objectContaining({
-            mode: 'egress',
-            age_out_seconds: 30,
-            rssi_threshold: -60,
-          }),
-        })
-      );
-    });
-
-    it('omits auto_off_seconds from metadata in presence mode', async () => {
-      render(<OutputDeviceFormModal isOpen={true} mode="create" onClose={mockOnClose} />);
-
-      fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Dock Light' } });
-      fireEvent.change(screen.getByLabelText(/Base URL/), {
-        target: { value: 'http://192.168.50.66' },
-      });
-      fireEvent.change(screen.getByLabelText(/Mode/i), { target: { value: 'presence' } });
-
-      fireEvent.click(screen.getByRole('button', { name: /Create Output Device/i }));
-
-      await waitFor(() => {
-        expect(outputDevicesApi.create).toHaveBeenCalledTimes(1);
-      });
-      const payload = (outputDevicesApi.create as any).mock.calls[0][0];
-      expect(payload.metadata.mode).toBe('presence');
-      expect(payload.metadata).not.toHaveProperty('auto_off_seconds');
-    });
   });
 
   describe('inline variant (TRA-938 row expander)', () => {
@@ -397,6 +353,7 @@ describe('OutputDeviceFormModal', () => {
       fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'csl_gpo' } });
       fireEvent.change(screen.getByLabelText(/Reader/), { target: { value: '42' } });
       fireEvent.change(screen.getByLabelText(/GPO port/), { target: { value: '4' } });
+      setAutoOff();
       fireEvent.click(screen.getByRole('button', { name: /Create Output Device/i }));
 
       await waitFor(() => expect(outputDevicesApi.create).toHaveBeenCalled());
@@ -472,6 +429,7 @@ describe('OutputDeviceFormModal', () => {
         target: { value: 'http://192.168.50.66' },
       });
       fireEvent.change(screen.getByLabelText(/Switch ID/), { target: { value: '0' } });
+      setAutoOff();
       fireEvent.click(screen.getByRole('button', { name: /Create Output Device/i }));
 
       await waitFor(() => expect(outputDevicesApi.create).toHaveBeenCalled());

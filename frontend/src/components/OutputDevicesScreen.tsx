@@ -1,6 +1,7 @@
 import { useState, useEffect, Fragment } from 'react';
 import { Plus, ChevronRight, ChevronDown, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { isAxiosError } from 'axios';
 import { useOutputDevices, useOutputDeviceMutations } from '@/hooks/outputdevices';
 import { useLocations } from '@/hooks/locations';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
@@ -18,6 +19,8 @@ export default function OutputDevicesScreen() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [deletingDevice, setDeletingDevice] = useState<OutputDevice | null>(null);
+  const [offFailed, setOffFailed] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
 
   const { outputDevices, isLoading } = useOutputDevices();
   const { locations } = useLocations();
@@ -53,16 +56,33 @@ export default function OutputDevicesScreen() {
     setActiveTab('output-devices');
   }, [setActiveTab]);
 
-  const confirmDelete = async () => {
-    if (!deletingDevice) return;
+  // Delete drives the output off first. A 502 means that off could not be
+  // delivered and the row was kept, so Reset still works later; the operator
+  // can still delete it deliberately (TRA-1273).
+  const confirmDelete = async (force = false) => {
+    if (!deletingDevice || deletePending) return;
+    // The first try waits on the off (a few seconds for an unreachable device),
+    // so the modal shows progress and takes no second click meanwhile.
+    setDeletePending(true);
     try {
-      await deleteOutputDevice(deletingDevice.id);
+      await deleteOutputDevice(force ? { id: deletingDevice.id, force } : { id: deletingDevice.id });
       toast.success(`Output device "${deletingDevice.name}" deleted successfully`);
       if (expandedId === deletingDevice.id) setExpandedId(null);
       setDeletingDevice(null);
+      setOffFailed(false);
     } catch (error) {
+      if (!force && isAxiosError(error) && error.response?.status === 502) {
+        setOffFailed(true);
+        return;
+      }
       toast.error(getApiErrorMessage(error, 'Failed to delete output device'));
+    } finally {
+      setDeletePending(false);
     }
+  };
+  const cancelDelete = () => {
+    setDeletingDevice(null);
+    setOffFailed(false);
   };
 
   return (
@@ -231,11 +251,24 @@ export default function OutputDevicesScreen() {
       />
 
       <ConfirmModal
-        isOpen={!!deletingDevice}
+        isOpen={!!deletingDevice && !offFailed}
         title="Delete Output Device"
         message={`Are you sure you want to delete "${deletingDevice?.name}"? This action cannot be undone.`}
-        onConfirm={confirmDelete}
-        onCancel={() => setDeletingDevice(null)}
+        onConfirm={() => confirmDelete()}
+        onCancel={cancelDelete}
+        pending={deletePending}
+        pendingText="Turning off…"
+      />
+
+      <ConfirmModal
+        isOpen={!!deletingDevice && offFailed}
+        title="Output Could Not Be Turned Off"
+        message={`"${deletingDevice?.name}" could not be turned off, so it was not deleted. If it is on, deleting it leaves it on with no way to reset it from here. Delete anyway?`}
+        confirmText="Delete anyway"
+        onConfirm={() => confirmDelete(true)}
+        onCancel={cancelDelete}
+        pending={deletePending}
+        pendingText="Deleting…"
       />
     </div>
   );

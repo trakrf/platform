@@ -143,6 +143,36 @@ func (s *Storage) ListOutputDevices(ctx context.Context, orgID, limit, offset in
 	return devices, nil
 }
 
+// ListAllOutputDevices returns every live output device for the org, active or
+// not, unpaginated. It is for checks that must see the whole set — an org
+// geofence-defaults change is refused when it would strand any of them.
+func (s *Storage) ListAllOutputDevices(ctx context.Context, orgID int) ([]outputdevice.OutputDevice, error) {
+	query := `SELECT ` + outputDeviceColumns + `
+		FROM trakrf.output_devices
+		WHERE org_id = $1 AND deleted_at IS NULL
+		ORDER BY id`
+	devices := []outputdevice.OutputDevice{}
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, orgID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var d outputdevice.OutputDevice
+			if err := scanOutputDevice(rows, &d); err != nil {
+				return err
+			}
+			devices = append(devices, d)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list all output devices: %w", err)
+	}
+	return devices, nil
+}
+
 // CountOutputDevices returns the number of live output devices for the org.
 func (s *Storage) CountOutputDevices(ctx context.Context, orgID int) (int, error) {
 	var n int

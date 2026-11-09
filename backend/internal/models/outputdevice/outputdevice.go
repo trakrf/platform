@@ -5,6 +5,7 @@ package outputdevice
 
 import (
 	"encoding/json"
+	"math"
 	"time"
 )
 
@@ -138,6 +139,26 @@ func (d OutputDevice) AutoOffSecondsOpt() (int, bool) {
 		return 0, false
 	}
 	return v, true
+}
+
+// AutoOffSecondsRaw reports metadata.auto_off_seconds as stored, for write-time
+// validation. present is false when the key is absent or null. ok is false when
+// it is present but not a whole number — a value the lenient readers above would
+// otherwise treat as unset and fall through on.
+func (d OutputDevice) AutoOffSecondsRaw() (v int, present bool, ok bool) {
+	m, isMap := d.Metadata.(map[string]any)
+	if !isMap {
+		return 0, false, false
+	}
+	raw, has := m["auto_off_seconds"]
+	if !has || raw == nil {
+		return 0, false, false
+	}
+	if f, isFloat := raw.(float64); isFloat && f != math.Trunc(f) {
+		return 0, true, false
+	}
+	v, ok = d.metaInt("auto_off_seconds")
+	return v, true, ok
 }
 
 // AgeOutSeconds returns the per-output age-out override from
