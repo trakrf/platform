@@ -73,7 +73,7 @@ while :; do
   tg=$(echo "$info" | cut -d' ' -f3)
   er=$(echo "$info" | cut -d' ' -f4-)
   echo "$(date -u +%T) +$(($(date +%s) - start))s version=$ver update=$st ${er#-}"
-  if [ "$ver" = "$V" ] && [ "$st" = committed ]; then
+  if [ "$ver" = "$V" ] && [ "$st" = committed ] && [ "$tg" = "$V" ]; then
     echo "OK: $BASE runs $V, committed."
     exit 0
   fi
@@ -90,7 +90,7 @@ while :; do
     ;;
   esac
   if [ $(($(date +%s) - start)) -gt 1500 ]; then
-    echo "TIMEOUT after 25 min: version=$ver update=$st. The guard will settle it; check again." >&2
+    echo "TIMEOUT after 25 min: the reader runs $ver and reports update=$st, with no outcome yet for $V. If it is on probation the guard will settle it; otherwise the attempt was lost, so run this again." >&2
     exit 1
   fi
 done
