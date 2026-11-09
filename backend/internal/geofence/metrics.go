@@ -15,7 +15,7 @@ var (
 
 	metricFired = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "geofence_alarms_fired_total",
-		Help: "Geofence boundary alarms fired (post-dedup).",
+		Help: "Geofence boundary alarms detected (post-dedup), whether or not a device was reached. See geofence_alarms_undelivered_total.",
 	})
 
 	metricSuppressed = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -26,6 +26,21 @@ var (
 	metricFireErrors = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "geofence_fire_errors_total",
 		Help: "Errors driving output devices or looking them up (best-effort; do not block ingestion).",
+	})
+
+	metricDrives = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "geofence_output_drives_total",
+		Help: "Output-device drives sent by the geofence engine, by edge and result.",
+	}, []string{"edge", "result"}) // edge: on|off; result: ok|sent|error
+
+	metricUndelivered = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "geofence_alarms_undelivered_total",
+		Help: "Alarms whose every output-device drive returned an error. A drive over the broker that published cleanly is not counted: the reader does not confirm it.",
+	})
+
+	metricDriveWriteErrors = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "geofence_drive_write_errors_total",
+		Help: "Errors writing output_drives rows (best-effort; never delays a drive).",
 	})
 
 	metricEventWriteErrors = promauto.NewCounter(prometheus.CounterOpts{

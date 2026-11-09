@@ -9,7 +9,12 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/trakrf/platform/backend/internal/models/outputdevice"
+	"github.com/trakrf/platform/backend/internal/storage"
 )
+
+// driveFunc drives one output and records the drive; Engine.drive satisfies
+// it. It reports whether the drive succeeded.
+type driveFunc func(ctx context.Context, orgID int, dev outputdevice.OutputDevice, on bool, offAfter int, at time.Time, cause storage.DriveCause, alarmID *int64) bool
 
 // presence drives presence-mode outputs (TRA-943/TRA-950). Each output, while a
 // member tag is present, holds a single per-output timer set to the output's
@@ -27,8 +32,8 @@ type presence struct {
 	outputs map[string]*presenceOutput // "org:outputID" -> state
 	closed  bool
 
-	driver outputDriver
-	log    zerolog.Logger
+	drive driveFunc
+	log   zerolog.Logger
 
 	// afterFunc schedules f to run after d; *time.Timer satisfies the return.
 	// Injectable so tests fire timers deterministically instead of sleeping.
@@ -41,6 +46,7 @@ type timerHandle interface {
 }
 
 type presenceOutput struct {
+	orgID int                       // so the age-out OFF is recorded under its org
 	dev   outputdevice.OutputDevice // snapshot, so the timer can drive OFF later
 	timer timerHandle
 	// gen increments on every observe; the timer callback captures the gen it was
@@ -88,10 +94,10 @@ func (p *presence) refreshDue(orgID, outputID int, at time.Time) bool {
 	return po != nil && po.wanted && at.Sub(po.onAt) >= presenceRefreshEvery
 }
 
-func newPresence(driver outputDriver, log zerolog.Logger) *presence {
+func newPresence(drive driveFunc, log zerolog.Logger) *presence {
 	return &presence{
 		outputs: map[string]*presenceOutput{},
-		driver:  driver,
+		drive:   drive,
 		log:     log,
 		afterFunc: func(d time.Duration, f func()) timerHandle {
 			return time.AfterFunc(d, f)
@@ -119,6 +125,7 @@ func (p *presence) observe(orgID int, dev outputdevice.OutputDevice, ttl time.Du
 		po = &presenceOutput{}
 		p.outputs[k] = po
 	}
+	po.orgID = orgID
 	po.dev = dev
 	po.gen++
 	gen := po.gen
@@ -130,8 +137,8 @@ func (p *presence) observe(orgID int, dev outputdevice.OutputDevice, ttl time.Du
 }
 
 // expire drives an output off when its age-out timer fires, unless a newer read
-// has rescheduled it (stale gen) or it has already been cleared. The Set happens
-// outside the lock (best-effort).
+// has rescheduled it (stale gen) or it has already been cleared. The drive
+// happens outside the lock (best-effort) and is recorded with cause age_out.
 func (p *presence) expire(key string, gen uint64) {
 	p.mu.Lock()
 	po := p.outputs[key]
@@ -139,13 +146,12 @@ func (p *presence) expire(key string, gen uint64) {
 		p.mu.Unlock()
 		return
 	}
-	dev := po.dev
+	orgID, dev := po.orgID, po.dev
 	delete(p.outputs, key)
 	p.mu.Unlock()
 
-	if err := p.driver.Set(context.Background(), dev, false, 0); err != nil {
-		p.log.Error().Err(err).Int("output_device_id", dev.ID).Msg("presence off failed (best-effort)")
-	}
+	// drive logs and metrics a failure itself.
+	p.drive(context.Background(), orgID, dev, false, 0, time.Now(), storage.DriveCauseAgeOut, nil)
 }
 
 // Close stops all outstanding timers and blocks further observes. Idempotent.
