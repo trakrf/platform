@@ -7,9 +7,15 @@
 //	mqtt-rpcctl call   -base TOPIC -method M [-params JSON] [-ca FILE]
 //	mqtt-rpcctl update -base TOPIC -manifest FILE|URL [-ca FILE]
 //	mqtt-rpcctl status -base TOPIC [-watch] [-ca FILE]
+//	mqtt-rpcctl reboot   -base TOPIC -yes [-by WHO] [-ca FILE]
+//	mqtt-rpcctl shutdown -base TOPIC -yes [-by WHO] [-ca FILE]
+//
+// reboot and shutdown are clean (sync, then systemd), and both take the reader
+// offline: a shutdown needs someone on site to power-cycle it back. -by goes to
+// the reader's log and defaults to $USER@hostname.
 //
 // sign reads the key from -key or, if absent, from $MQTT_RPCD_SIGNING_KEY.
-// call/update/status read the broker URL (with credentials) from $MQTT_URL so they never
+// call/update/status/reboot/shutdown read the broker URL (with credentials) from $MQTT_URL so they never
 // appear on a command line. -base is the reader's base topic, e.g.
 // trakrf.id/cs463-212.
 package main
@@ -54,6 +60,8 @@ func main() {
 		err = cmdUpdate(os.Args[2:])
 	case "status":
 		err = cmdStatus(os.Args[2:])
+	case "reboot", "shutdown":
+		err = cmdPower(os.Args[1], os.Args[2:])
 	default:
 		usage()
 	}
@@ -64,7 +72,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: mqtt-rpcctl keygen|sign|call|update|status [flags]  (see -h on each)")
+	fmt.Fprintln(os.Stderr, "usage: mqtt-rpcctl keygen|sign|call|update|status|reboot|shutdown [flags]  (see -h on each)")
 	os.Exit(2)
 }
 
