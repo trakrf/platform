@@ -55,10 +55,11 @@ never evicts the reader's own reads connection.
 
 **Capability-flagged management** (declared per adapter in `supports[]` / `unsupported[]`):
 - `Gpo.Set(params={port, on, pulse_ms?})` → `{port, on, pulsed}` — supported by the CS463 adapter. See "Alarm outputs".
-- `Scan.Start`, `Scan.Stop`, `Reader.Reboot` — reserved; `unsupported` on the CS463.
+- `Scan.Start`, `Scan.Stop` — reserved; `unsupported` on the CS463.
 
 **Daemon** (acts on mqtt-rpcd itself; never touches the vendor `/API`):
 - `Daemon.Update(params={version, url, sha256, signature})` → `{accepted, from, to}` once verified; the install follows the reply. Refusals are error `-33002`. See "Remote update".
+- `Reader.Reboot`, `Reader.Shutdown(params={requested_by?})` → `{action: "reboot"|"shutdown", in_ms}`; the clean reboot or power-off follows the reply. Listed in `supports[]` when the daemon runs on a host it can reboot. See "Reboot and shutdown".
 
 Rules: neutral config (no vendor terms like "operation profile" leak into the
 wire); a new tunable is a field, not a method; `applied` is explicit; the contract
@@ -262,6 +263,32 @@ reconcile re-arms it.
 retry, but takes no recovery action. Use it on a bench that has to hold a wedge
 for diagnosis.
 
+If systemd refuses the reboot, the reader is still up: the daemon republishes
+the status online and tries again after the next window.
+
+### Reboot and shutdown (`Reader.Reboot`, `Reader.Shutdown`)
+A clean reboot or power-off an operator asks for over the broker, for a reader
+with no SSH. A reboot is the known fix for the vendor-app wedge; a shutdown
+before planned power work avoids the unclean power cut that causes it.
+
+```sh
+MQTT_URL=… mqtt-rpcctl reboot   -base trakrf.id/cs463-212 -yes
+MQTT_URL=… mqtt-rpcctl shutdown -base trakrf.id/cs463-212 -yes   # back only after an on-site power-cycle
+```
+
+1. The daemon logs the request (`requested_by`, the reply topic, `asked_at`) and
+   replies `{action, in_ms: 2000}`.
+2. 2 s later it publishes the retained status offline with `reason: "reboot"`
+   or `"shutdown"`, then runs `sync` and `systemctl reboot` or
+   `systemctl poweroff`. Never a power reset. systemd then stops the daemon,
+   whose stop drives every output off and keeps the reason on the status.
+3. A second request while one is under way, or while an automatic recovery
+   reboot is announced, is refused (`-32603`, "already going down").
+4. If systemd refuses, the status goes back online and a retry is accepted.
+
+After a reboot the daemon takes 2–7 min to reach the broker again (boot-time
+entropy for TLS).
+
 ### Status document (retained `<base>/status`)
 ```jsonc
 {"online": true, "at": "2026-11-08T17:40:00Z", "version": "v1.5.0-330-g…",
@@ -271,7 +298,8 @@ for diagnosis.
             "auto_reboots": 1, "auto_reboots_exhausted": false,
             "golden_config": "pending",           // "applied" | "pending" | "off"
             "cloudserver_fault": "cleanSession is false; golden is true"}}  // absent when clean
-// before an automatic reboot, and after it via Stop:
+// before a planned outage, and after it via Stop. reason is "auto-recovery"
+// (the daemon's own), or "reboot" / "shutdown" (Reader.Reboot / Reader.Shutdown):
 {"online": false, "reason": "auto-recovery", "version": "…", "health": {…}}
 // MQTT Last Will (the daemon died without Stop):
 {"online": false}
