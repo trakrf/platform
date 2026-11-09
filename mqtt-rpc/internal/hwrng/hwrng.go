@@ -24,23 +24,28 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 const (
 	// DefaultBytes is one 4.14 input pool's worth (4096 bits).
 	DefaultBytes = 512
-	// DefaultTimeout bounds the read: the CAAM answers 512 bytes in ~1 ms, and
-	// the daemon's start must never wait on a generator that has stopped.
+	// DefaultTimeout bounds the open and the read: the CAAM answers 512 bytes in
+	// ~1 ms, and the daemon's start must never wait on a generator that has
+	// stopped.
 	DefaultTimeout = 2 * time.Second
 
 	defaultHWRNG        = "/dev/hwrng"
 	defaultCurrent      = "/sys/class/misc/hw_random/rng_current"
 	defaultEntropyAvail = "/proc/sys/kernel/random/entropy_avail"
-
-	// blockSize is the unit of the repeated-output check.
-	blockSize = 32
 )
+
+// trusted names the generators that earn full credit, 8 bits a byte. Crediting
+// is a claim about the generator, so it is made only for the one measured on
+// the CS463: the i.MX6 CAAM's RNG4, a DRBG seeded from its own TRNG. Any other
+// generator is left to the kernel's own estimate.
+var trusted = map[string]bool{"rng-caam": true}
 
 var (
 	// ErrStuck means the generator returned output no healthy RNG produces.
@@ -55,29 +60,44 @@ type Pool interface {
 }
 
 // Credit reads n bytes from src and credits them to pool at 8 bits a byte.
-// Output that is constant, or that repeats a block back to back, is refused and
-// never credited: a hardware RNG that fails usually fails that way.
+// Output that repeats with any period up to half its length (constant output is
+// period 1) is refused and never credited: a hardware RNG that fails usually
+// fails that way.
 func Credit(src io.Reader, pool Pool, n int) (int, error) {
+	buf, err := read(src, n)
+	if err != nil {
+		return 0, err
+	}
+	return credit(pool, buf)
+}
+
+func read(src io.Reader, n int) ([]byte, error) {
 	buf := make([]byte, n)
 	if _, err := io.ReadFull(src, buf); err != nil {
-		return 0, fmt.Errorf("read hardware RNG: %w", err)
+		return nil, fmt.Errorf("read hardware RNG: %w", err)
 	}
-	if stuck(buf) {
-		return 0, ErrStuck
+	if periodic(buf) {
+		return nil, ErrStuck
 	}
-	bits := n * 8
+	return buf, nil
+}
+
+func credit(pool Pool, buf []byte) (int, error) {
+	bits := len(buf) * 8
 	if err := pool.AddEntropy(buf, bits); err != nil {
 		return 0, fmt.Errorf("credit entropy: %w", err)
 	}
 	return bits, nil
 }
 
-func stuck(buf []byte) bool {
-	if len(buf) == 0 || bytes.Count(buf, buf[:1]) == len(buf) {
+// periodic reports whether buf repeats with some period p <= len(buf)/2.
+// Quadratic in the worst case, which at 512 bytes is nothing.
+func periodic(buf []byte) bool {
+	if len(buf) == 0 {
 		return true
 	}
-	for i := blockSize; i+blockSize <= len(buf); i += blockSize {
-		if bytes.Equal(buf[i-blockSize:i], buf[i:i+blockSize]) {
+	for p := 1; p <= len(buf)/2; p++ {
+		if bytes.Equal(buf[:len(buf)-p], buf[p:]) {
 			return true
 		}
 	}
@@ -87,20 +107,18 @@ func stuck(buf []byte) bool {
 // Config says where to read from and where to credit to. The zero value is the
 // reader's real devices.
 type Config struct {
-	HWRNG        string // default /dev/hwrng
-	Current      string // the generator's name; default /sys/class/misc/hw_random/rng_current
-	EntropyAvail string // default /proc/sys/kernel/random/entropy_avail
-	// Open overrides opening HWRNG (tests).
-	Open    func() (io.ReadCloser, error)
-	Pool    Pool          // default: the kernel, through /dev/random
-	Bytes   int           // default DefaultBytes
-	Timeout time.Duration // default DefaultTimeout
+	HWRNG        string        // default /dev/hwrng
+	Current      string        // the generator's name; default /sys/class/misc/hw_random/rng_current
+	EntropyAvail string        // default /proc/sys/kernel/random/entropy_avail
+	Pool         Pool          // default: the kernel, through /dev/random
+	Bytes        int           // default DefaultBytes
+	Timeout      time.Duration // default DefaultTimeout
 }
 
 // Result is what Seed did, for one log line.
 type Result struct {
-	Skipped     bool   // no hardware RNG on this machine
-	Source      string // e.g. "rng-caam"
+	Skip        string // why nothing was credited, when that is not a fault
+	Source      string // the kernel's current generator, e.g. "rng-caam"
 	Bits        int    // credited
 	AvailBefore int    // entropy_avail before, -1 if unreadable
 	AvailAfter  int    // entropy_avail after, -1 if unreadable
@@ -108,7 +126,8 @@ type Result struct {
 }
 
 // Seed credits the hardware RNG to the kernel once. It never blocks longer than
-// the timeout, and a machine with no hardware RNG is skipped, not an error.
+// the timeout. A machine with no generator, or one it does not trust, is
+// skipped, not an error.
 func Seed(cfg Config) Result {
 	cfg = withDefaults(cfg)
 	res := Result{
@@ -116,14 +135,16 @@ func Seed(cfg Config) Result {
 		AvailBefore: readInt(cfg.EntropyAvail),
 		AvailAfter:  -1,
 	}
-
-	src, err := cfg.Open()
-	if errors.Is(err, fs.ErrNotExist) {
-		res.Skipped = true
+	switch {
+	case res.Source == "" || res.Source == "none":
+		res.Skip = "the kernel has no hardware RNG"
+		return res
+	case !trusted[res.Source]:
+		res.Skip = "not a hardware RNG this daemon credits"
 		return res
 	}
-	if err != nil {
-		res.Err = fmt.Errorf("open hardware RNG: %w", err)
+	if _, err := os.Stat(cfg.HWRNG); errors.Is(err, fs.ErrNotExist) {
+		res.Skip = "no hardware RNG device"
 		return res
 	}
 
@@ -132,21 +153,50 @@ func Seed(cfg Config) Result {
 		err  error
 	}
 	done := make(chan outcome, 1)
+	// Once Seed has given up, a late answer is not credited: Seed has already
+	// reported the timeout, and the log line must stay true.
+	var mu sync.Mutex
+	abandoned := false
 	go func() {
-		// A read that never returns strands this goroutine, not the daemon.
-		defer src.Close()
-		bits, err := Credit(src, cfg.Pool, cfg.Bytes)
+		// An open or read that never returns strands this goroutine, not the
+		// daemon.
+		bits, err := func() (int, error) {
+			src, err := os.Open(cfg.HWRNG)
+			if err != nil {
+				return 0, fmt.Errorf("open hardware RNG: %w", err)
+			}
+			defer src.Close()
+			buf, err := read(src, cfg.Bytes)
+			if err != nil {
+				return 0, err
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if abandoned {
+				return 0, ErrTimeout
+			}
+			return credit(cfg.Pool, buf)
+		}()
 		done <- outcome{bits, err}
 	}()
 
 	timer := time.NewTimer(cfg.Timeout)
 	defer timer.Stop()
+	var o outcome
 	select {
-	case o := <-done:
-		res.Bits, res.Err = o.bits, o.err
+	case o = <-done:
 	case <-timer.C:
-		res.Err = ErrTimeout
+		mu.Lock()
+		abandoned = true
+		mu.Unlock()
+		// The credit may have finished between the timer and the lock.
+		select {
+		case o = <-done:
+		default:
+			o.err = ErrTimeout
+		}
 	}
+	res.Bits, res.Err = o.bits, o.err
 	res.AvailAfter = readInt(cfg.EntropyAvail)
 	return res
 }
@@ -160,10 +210,6 @@ func withDefaults(cfg Config) Config {
 	}
 	if cfg.EntropyAvail == "" {
 		cfg.EntropyAvail = defaultEntropyAvail
-	}
-	if cfg.Open == nil {
-		path := cfg.HWRNG
-		cfg.Open = func() (io.ReadCloser, error) { return os.Open(path) }
 	}
 	if cfg.Pool == nil {
 		cfg.Pool = KernelPool{}

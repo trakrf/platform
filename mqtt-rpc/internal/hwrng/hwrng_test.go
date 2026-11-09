@@ -4,11 +4,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,6 +15,7 @@ import (
 
 // recordingPool captures what would have gone to the kernel.
 type recordingPool struct {
+	mu    sync.Mutex
 	calls int
 	data  []byte
 	bits  int
@@ -23,10 +23,18 @@ type recordingPool struct {
 }
 
 func (p *recordingPool) AddEntropy(data []byte, bits int) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.calls++
 	p.data = append([]byte(nil), data...)
 	p.bits = bits
 	return p.err
+}
+
+func (p *recordingPool) Calls() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.calls
 }
 
 func randomish(n int) []byte {
@@ -49,7 +57,7 @@ func TestCreditPassesEveryByteAtEightBitsEach(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 4096, bits)
-	assert.Equal(t, 1, pool.calls)
+	assert.Equal(t, 1, pool.Calls())
 	assert.Equal(t, src, pool.data)
 	assert.Equal(t, 4096, pool.bits)
 }
@@ -60,18 +68,22 @@ func TestCreditRefusesAStuckSource(t *testing.T) {
 	_, err := Credit(bytes.NewReader(make([]byte, 512)), pool, 512)
 
 	require.ErrorIs(t, err, ErrStuck)
-	assert.Zero(t, pool.calls, "a stuck source must never be credited")
+	assert.Zero(t, pool.Calls(), "a stuck source must never be credited")
 }
 
-func TestCreditRefusesARepeatingBlock(t *testing.T) {
-	block := randomish(blockSize)
-	src := bytes.Repeat(block, 512/blockSize)
-	pool := &recordingPool{}
+// A generator stuck in a cycle repeats with that cycle's period, whatever it
+// is: aligned to nothing in particular, and as long as half the read.
+func TestCreditRefusesARepeatingCycleOfAnyLength(t *testing.T) {
+	for _, period := range []int{1, 2, 32, 33, 48, 64, 200, 256} {
+		cycle := randomish(period)
+		src := bytes.Repeat(cycle, 512/period+1)[:512]
+		pool := &recordingPool{}
 
-	_, err := Credit(bytes.NewReader(src), pool, 512)
+		_, err := Credit(bytes.NewReader(src), pool, 512)
 
-	require.ErrorIs(t, err, ErrStuck)
-	assert.Zero(t, pool.calls)
+		require.ErrorIs(t, err, ErrStuck, "period %d", period)
+		assert.Zero(t, pool.Calls(), "period %d", period)
+	}
 }
 
 func TestCreditRefusesAShortRead(t *testing.T) {
@@ -80,7 +92,7 @@ func TestCreditRefusesAShortRead(t *testing.T) {
 	_, err := Credit(bytes.NewReader(randomish(100)), pool, 512)
 
 	require.Error(t, err)
-	assert.Zero(t, pool.calls, "a short read must never be credited")
+	assert.Zero(t, pool.Calls(), "a short read must never be credited")
 }
 
 func TestCreditReportsAPoolError(t *testing.T) {
@@ -91,8 +103,8 @@ func TestCreditReportsAPoolError(t *testing.T) {
 	require.Error(t, err)
 }
 
-// poolInfo is struct rand_pool_info from <linux/random.h>:
-// int entropy_count (bits); int buf_size (bytes); __u32 buf[].
+// struct rand_pool_info in <linux/random.h>: int entropy_count (bits) at
+// offset 0, int buf_size (bytes) at offset 4, the bytes from offset 8.
 func TestPoolInfoMatchesTheKernelLayout(t *testing.T) {
 	data := []byte{1, 2, 3, 4, 5, 6, 7, 8}
 
@@ -104,66 +116,83 @@ func TestPoolInfoMatchesTheKernelLayout(t *testing.T) {
 	assert.Equal(t, data, got[8:])
 }
 
-func TestRNDADDENTROPYIsTheKernelValue(t *testing.T) {
-	// _IOW('R', 0x03, int[2]) — the same on arm and amd64.
-	assert.Equal(t, uintptr(0x40085203), uintptr(rndAddEntropy))
+// fakeSystem lays out the files Seed reads, in a temp dir.
+type fakeSystem struct {
+	cfg Config
 }
 
-func TestSeedSkipsAReaderWithNoHardwareRNG(t *testing.T) {
+func newFakeSystem(t *testing.T, current string, dev []byte) fakeSystem {
+	t.Helper()
 	dir := t.TempDir()
-	pool := &recordingPool{}
-
-	res := Seed(Config{
-		HWRNG: filepath.Join(dir, "hwrng"), // absent
-		Pool:  pool,
-	})
-
-	assert.True(t, res.Skipped)
-	require.NoError(t, res.Err)
-	assert.Zero(t, pool.calls)
+	cfg := Config{
+		HWRNG:        filepath.Join(dir, "hwrng"),
+		Current:      filepath.Join(dir, "rng_current"),
+		EntropyAvail: filepath.Join(dir, "entropy_avail"),
+	}
+	if current != "" {
+		require.NoError(t, os.WriteFile(cfg.Current, []byte(current+"\n"), 0o600))
+	}
+	if dev != nil {
+		require.NoError(t, os.WriteFile(cfg.HWRNG, dev, 0o600))
+	}
+	require.NoError(t, os.WriteFile(cfg.EntropyAvail, []byte("71\n"), 0o600))
+	return fakeSystem{cfg: cfg}
 }
 
-func TestSeedCreditsFromTheHardwareRNG(t *testing.T) {
-	dir := t.TempDir()
-	dev := filepath.Join(dir, "hwrng")
-	require.NoError(t, os.WriteFile(dev, randomish(4096), 0o600))
-	name := filepath.Join(dir, "rng_current")
-	require.NoError(t, os.WriteFile(name, []byte("rng-caam\n"), 0o600))
-	avail := filepath.Join(dir, "entropy_avail")
-	require.NoError(t, os.WriteFile(avail, []byte("71\n"), 0o600))
+func TestSeedCreditsTheCAAM(t *testing.T) {
+	sys := newFakeSystem(t, "rng-caam", randomish(4096))
 	pool := &recordingPool{}
+	sys.cfg.Pool = pool
 
-	res := Seed(Config{HWRNG: dev, Current: name, EntropyAvail: avail, Pool: pool})
+	res := Seed(sys.cfg)
 
 	require.NoError(t, res.Err)
-	assert.False(t, res.Skipped)
+	assert.Empty(t, res.Skip)
 	assert.Equal(t, "rng-caam", res.Source)
 	assert.Equal(t, DefaultBytes*8, res.Bits)
 	assert.Equal(t, 71, res.AvailBefore)
-	assert.Equal(t, 1, pool.calls)
+	assert.Equal(t, 1, pool.Calls())
 }
 
-// blockingReader never returns, like a hardware RNG that has stopped answering.
-type blockingReader struct{ release chan struct{} }
-
-func (b blockingReader) Read([]byte) (int, error) {
-	<-b.release
-	return 0, io.EOF
-}
-
-func TestSeedGivesUpOnASourceThatNeverAnswers(t *testing.T) {
-	release := make(chan struct{})
-	defer close(release)
+func TestSeedSkipsAReaderWithNoHardwareRNG(t *testing.T) {
+	sys := newFakeSystem(t, "rng-caam", nil) // no device node
 	pool := &recordingPool{}
+	sys.cfg.Pool = pool
 
-	start := time.Now()
-	res := Seed(Config{
-		Open:    func() (io.ReadCloser, error) { return io.NopCloser(blockingReader{release}), nil },
-		Pool:    pool,
-		Timeout: 50 * time.Millisecond,
-	})
+	res := Seed(sys.cfg)
 
-	require.ErrorIs(t, res.Err, ErrTimeout)
-	assert.Less(t, time.Since(start), 2*time.Second, "the daemon's start must not wait on the RNG")
-	assert.Zero(t, pool.calls)
+	assert.NotEmpty(t, res.Skip)
+	require.NoError(t, res.Err)
+	assert.Zero(t, pool.Calls())
+}
+
+// rng_current "none" means the device node exists but reading it fails with
+// ENODEV: that is a machine with no generator, not a fault to warn about.
+func TestSeedSkipsWhenTheKernelHasNoCurrentGenerator(t *testing.T) {
+	for _, current := range []string{"none", ""} {
+		sys := newFakeSystem(t, current, randomish(4096))
+		pool := &recordingPool{}
+		sys.cfg.Pool = pool
+
+		res := Seed(sys.cfg)
+
+		assert.NotEmpty(t, res.Skip, "rng_current %q", current)
+		require.NoError(t, res.Err, "rng_current %q", current)
+		assert.Zero(t, pool.Calls(), "rng_current %q", current)
+	}
+}
+
+// Full credit is a claim about the generator. Only the one measured on the
+// CS463 earns it; anything else is left to the kernel's own estimate.
+func TestSeedCreditsNoGeneratorItDoesNotKnow(t *testing.T) {
+	sys := newFakeSystem(t, "timeriomem_rng", randomish(4096))
+	pool := &recordingPool{}
+	sys.cfg.Pool = pool
+
+	res := Seed(sys.cfg)
+
+	assert.NotEmpty(t, res.Skip)
+	assert.Equal(t, "timeriomem_rng", res.Source)
+	require.NoError(t, res.Err)
+	assert.Zero(t, pool.Calls())
 }

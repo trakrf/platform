@@ -159,8 +159,9 @@ func main() {
 func seedKernelRNG(logger *zerolog.Logger) {
 	res := hwrng.Seed(hwrng.Config{})
 	switch {
-	case res.Skipped:
-		logger.Info().Msg("no hardware RNG; the kernel seeds itself")
+	case res.Skip != "":
+		logger.Info().Str("source", res.Source).Str("reason", res.Skip).
+			Msg("not crediting a hardware RNG; the kernel seeds itself")
 	case res.Err != nil:
 		logger.Warn().Err(res.Err).Str("source", res.Source).
 			Int("entropy_avail", res.AvailBefore).
