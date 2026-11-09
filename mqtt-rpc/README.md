@@ -378,10 +378,23 @@ reconcile: `docs/adr/0024-a-remote-update-is-undone-by-what-it-cannot-replace.md
      `pending` stays armed for the next run; a rollback interrupted mid-way
      resumes. Commit and rollback both claim `pending` by rename, so exactly one
      wins.
+   - If `from` is no longer installed, it falls back to the newest other
+     installed version. With nothing else installed the failed build stays
+     live, unguarded.
 
 `update/last` is reported in `GetCapabilities().daemon.update`:
-`committed`, `rolled_back` (`error`: `crash_loop` | `no_commit` | `manual`) or
-`failed` (nothing replaced). The updater never reads or writes
+`committed`, `rolled_back` (`error`: `crash_loop` | `no_commit` | `manual`,
+with `_fallback` when it fell back past a missing `from`), `unguarded`
+(`<why>_no_from`: the target is live and nothing was left to roll back to) or
+`failed` (nothing replaced). The guard does not restart a build it leaves
+`unguarded`, so the running daemon reports it as soon as `pending` is gone,
+not on its next start. A guard installed before `unguarded` existed records
+`failed` (`<why>_no_from`) for the same case, and the daemon reports that too;
+a reader keeps its guard until `install.sh` runs again.
+
+Downloads trust the reader's CA bundle plus Mozilla roots embedded in the
+binary (`golang.org/x/crypto/x509roots/fallback`), so every update refreshes
+them; the firmware bundle itself is never updated. The updater never reads or writes
 `/opt/trakrf/mqtt-rpcd.env` — it holds the only on-device copy of the reader
 password.
 

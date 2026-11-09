@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
+	"github.com/trakrf/platform/mqtt-rpc/internal/update"
 )
 
 // selfTestInterval is how often a daemon on probation re-sends its loopback RPC.
@@ -81,7 +82,17 @@ func (d *Daemon) answered() {
 		return // the self-test keeps answering every 30 s; a later one commits
 	}
 	if err := d.updater.Commit(); err != nil {
-		d.log.Error().Err(err).Msg("update commit failed; the guard will roll back if this persists")
+		if errors.Is(err, update.ErrAlreadyCommitted) {
+			return // a reply racing this one already committed
+		}
+		if errors.Is(err, update.ErrNotPending) {
+			// The guard ended probation first: it is rolling back (a restart
+			// follows), or it had nothing to roll back to and left this build
+			// running. daemon.update says which.
+			d.log.Warn().Msg("update not committed: the guard settled probation first; see daemon.update")
+			return
+		}
+		d.log.Error().Err(err).Msg("update commit failed; if this persists the guard rolls back, or marks this build unguarded when there is nothing to roll back to")
 		return
 	}
 	d.log.Info().Msg("update committed: answered an rpc through the broker")

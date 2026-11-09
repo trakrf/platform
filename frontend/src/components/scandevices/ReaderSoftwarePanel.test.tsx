@@ -78,7 +78,7 @@ describe('ReaderSoftwarePanel', () => {
 
   it('does not offer an update the reader cannot take', () => {
     setup({
-      software: { daemon: { version: 'legacy' }, supports_update: false },
+      software: { daemon: { version: 'v0.9.0' }, supports_update: false },
     });
     expect(screen.queryByRole('button', { name: /^update$/i })).not.toBeInTheDocument();
     expect(screen.getByText(/reinstall over ssh/i)).toBeInTheDocument();
@@ -126,14 +126,44 @@ describe('ReaderSoftwarePanel', () => {
       startError: {
         response: {
           status: 422,
+          // The standard error envelope.
           data: {
-            error: 'update_refused',
-            reason: 'an update is already in progress',
+            error: {
+              type: 'validation_error',
+              status: 422,
+              detail: 'an update is already in progress',
+            },
           },
         },
       },
     });
     expect(screen.getByText(/an update is already in progress/)).toBeInTheDocument();
+  });
+
+  it('does not say "nothing replaced" for a target left running unguarded', () => {
+    setup({
+      software: {
+        daemon: {
+          version: 'v2',
+          update: { state: 'unguarded', target: 'v2', error: 'no_commit_no_from' },
+        },
+        supports_update: true,
+      },
+    });
+    expect(screen.getByText(/v2 is running but never confirmed/i)).toBeInTheDocument();
+    expect(screen.queryByText(/nothing replaced/i)).not.toBeInTheDocument();
+  });
+
+  it('explains an unguarded outcome while watching it land', () => {
+    setup({
+      software: {
+        daemon: { version: 'v2', update: { state: 'unguarded', target: 'v2' } },
+        supports_update: true,
+      },
+      target: 'v2',
+      outcome: 'unguarded',
+    });
+    expect(screen.getByText(/no earlier version to roll back to/i)).toBeInTheDocument();
   });
 
   it('tells a non-admin why the update was not started', () => {

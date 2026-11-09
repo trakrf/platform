@@ -12,6 +12,7 @@ import {
 import { scanDevicesApi } from '@/lib/api/scandevices';
 import type { DaemonUpdateInfo, ReaderSoftware } from '@/types/scandevices';
 
+vi.mock('@/lib/auth/orgContext', () => ({ ensureOrgContext: vi.fn(() => Promise.resolve()) }));
 vi.mock('@/lib/api/scandevices', () => ({
   scanDevicesApi: { getReaderSoftware: vi.fn(), startReaderUpdate: vi.fn() },
 }));
@@ -75,6 +76,26 @@ describe('updateOutcome', () => {
     expect(updateOutcome('v2', sw('v1'), t0, t0 + UPDATE_WATCH_MS + 1)).toBe('timeout');
     expect(UPDATE_WATCH_MS).toBeGreaterThanOrEqual(20 * 60 * 1000);
   });
+
+  it('does not time out on a clock that ran while nobody checked the reader', () => {
+    // A background tab: the clock kept running, refetches paused. The last
+    // check was long before the deadline, so the reader has not been asked.
+    const late = t0 + UPDATE_WATCH_MS + 60_000;
+    expect(updateOutcome('v2', sw('v1'), t0, late, t0 + 1000, t0 + 1000)).toBe('watching');
+    // A check after the deadline — even a failed one — settles it.
+    expect(updateOutcome('v2', sw('v1'), t0, late, t0 + 1000, late)).toBe('timeout');
+  });
+
+  it('reports a target left running with nothing to roll back to', () => {
+    expect(
+      updateOutcome(
+        'v2',
+        sw('v2', { state: 'unguarded', target: 'v2', error: 'no_commit_no_from' }),
+        t0,
+        t0 + 1000
+      )
+    ).toBe('unguarded');
+  });
 });
 
 describe('readerUpdateInFlight', () => {
@@ -120,5 +141,39 @@ describe('useReaderSoftware', () => {
     const calls = get.mock.calls.length;
     await vi.advanceTimersByTimeAsync(UPDATE_POLL_MS * 3);
     expect(get.mock.calls.length).toBe(calls);
+  });
+
+  function renderSoftware() {
+    vi.mocked(scanDevicesApi.getReaderSoftware).mockReturnValue(
+      Promise.resolve({ data: { data: sw('v1') } } as never)
+    );
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: qc }, children);
+    return renderHook(() => useReaderSoftware(10), { wrapper });
+  }
+
+  it('watches the reader when the start request reached it but the reply was lost', async () => {
+    // 504: Daemon.Update was sent and may be running. Saying "could not start"
+    // would be wrong, and not watching would miss its outcome.
+    vi.mocked(scanDevicesApi.startReaderUpdate).mockRejectedValue({ response: { status: 504 } });
+    const { result } = renderSoftware();
+    await waitFor(() => expect(result.current.software).toBeDefined());
+
+    await result.current.startUpdate('v2').catch(() => undefined);
+    await waitFor(() => expect(result.current.target).toBe('v2'));
+    expect(result.current.outcome).toBe('watching');
+    expect(result.current.startError).toBeNull();
+  });
+
+  it('does not watch an update that was never sent', async () => {
+    vi.mocked(scanDevicesApi.startReaderUpdate).mockRejectedValue({ response: { status: 502 } });
+    const { result } = renderSoftware();
+    await waitFor(() => expect(result.current.software).toBeDefined());
+
+    await result.current.startUpdate('v2').catch(() => undefined);
+    await waitFor(() => expect(result.current.startError).not.toBeNull());
+    expect(result.current.target).toBeNull();
+    expect(result.current.outcome).toBeNull();
   });
 });

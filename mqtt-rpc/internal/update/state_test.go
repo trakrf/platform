@@ -43,9 +43,9 @@ func TestSwapLinkRepointsTheActiveVersionWithARelativeLink(t *testing.T) {
 
 func TestActiveVersionRejectsAPlainFile(t *testing.T) {
 	l := Layout{Dir: t.TempDir()}
-	require.NoError(t, os.WriteFile(l.Link(), []byte("legacy"), 0o755))
+	require.NoError(t, os.WriteFile(l.Link(), []byte("binary"), 0o755))
 	_, err := ActiveVersion(l)
-	assert.Error(t, err, "a pre-symlink install has no versions to roll back to")
+	assert.Error(t, err, "with no versioned link there is nothing to roll back to")
 }
 
 func TestPendingRoundTrip(t *testing.T) {
