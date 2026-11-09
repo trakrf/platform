@@ -18,7 +18,7 @@
 #   list               Print the installed versions; `*` marks the active one.
 #   rollback <version> Operator recovery over SSH: point the link at <version>,
 #                      drop any pending update, restart.
-#   install <version>  install.sh's step on the reader: stop the guard timer,
+#   place <version>    install.sh's step on the reader: stop the guard timer,
 #                      disarm any pending update, move the uploaded binary in
 #                      and point the link at it (a plain pre-versioning binary
 #                      is hardlinked to "legacy" first, so the link path never
@@ -314,14 +314,14 @@ rollback)
 	"$SYSTEMCTL" restart mqtt-rpcd
 	exit 0
 	;;
-install)
+place)
 	# install.sh's binary-and-link step, run on the reader after it uploads
 	# versions/.mqtt-rpcd-<version>.upload. Every step is safe to interrupt
 	# (an SSH drop) and to re-run.
 	v="${2:-}"
 	up="$DIR/versions/.mqtt-rpcd-$v.upload"
 	if ! valid_version "$v" || [ ! -f "$up" ]; then
-		log "install: no upload for version '$v' at $up"
+		log "place: no upload for version '$v' at $up"
 		exit 1
 	fi
 	# No guard tick may act while the install changes what it acts on.
@@ -334,7 +334,7 @@ install)
 	rm -f "$CLAIM" "$PENDING.commit" "$PENDING" "$STATE/starts" "$STATE/ticks"
 	"$SYNC"
 	if ! { chmod 755 "$up" && mv -f "$up" "$DIR/versions/mqtt-rpcd-$v"; }; then
-		log "install: could not put $v in place"
+		log "place: could not put $v in place"
 		exit 1
 	fi
 	# A pre-versioning install has a plain binary at the link path. Keep it as
@@ -342,12 +342,12 @@ install)
 	# path: the symlink rename below replaces it in one step.
 	if [ -f "$LINK" ] && [ ! -L "$LINK" ]; then
 		ln -f "$LINK" "$DIR/versions/mqtt-rpcd-legacy" || {
-			log "install: could not keep the old binary as legacy; nothing switched"
+			log "place: could not keep the old binary as legacy; nothing switched"
 			exit 1
 		}
 	fi
 	if ! point_at "$v"; then
-		log "install: could not point the link at $v"
+		log "place: could not point the link at $v"
 		exit 1
 	fi
 	"$SYNC"
@@ -383,7 +383,7 @@ recover)
 	exit "$rc"
 	;;
 *)
-	echo "usage: $0 start|tick|list|rollback <version>|install <version>|recover" >&2
+	echo "usage: $0 start|tick|list|rollback <version>|place <version>|recover" >&2
 	exit 2
 	;;
 esac

@@ -44,8 +44,8 @@ trap 'exit 1' HUP INT TERM
 # Stop the timer, disarm any remote update on probation, move the binary in,
 # and swap the link — keeping a pre-versioning plain binary as "legacy" (a
 # manual rollback target with no updater; rolling back to it ends OTA). Each
-# step is safe to interrupt and re-run; see mqtt-rpcd-guard "install".
-./mqtt-rpcd-guard install "$VERSION"
+# step is safe to interrupt and re-run; see mqtt-rpcd-guard "place".
+./mqtt-rpcd-guard place "$VERSION"
 test -f mqtt-rpcd.env || mv /tmp/mqtt-rpcd.env.example mqtt-rpcd.env
 chmod 600 mqtt-rpcd.env
 

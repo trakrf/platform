@@ -33,7 +33,7 @@ remote updates for that reader.
 
 `install.sh` is safe to interrupt and re-run: an SSH drop at any point leaves a
 runnable `/opt/trakrf/mqtt-rpcd`, and the rollback guard is stopped and disarmed
-before the new binary moves in (`mqtt-rpcd-guard install`).
+before the new binary moves in (`mqtt-rpcd-guard place`).
 
 ## The golden CloudServer
 The one entity the daemon cannot create is `TrakRF mqtt-rpc MQTT Server`. It
