@@ -57,6 +57,18 @@ func TestInfo_StaysPendingUntilTheGuardSettlesIt(t *testing.T) {
 	assert.Equal(t, readerrpc.UpdateStatePending, f.u.Info().Update.State)
 }
 
+// A rollback records its outcome and drops its claim a moment before it
+// restarts this process. In that moment this build is still the one running,
+// so it must not report itself rolled back.
+func TestInfo_StaysPendingThroughARollbackUntilTheRestart(t *testing.T) {
+	f := newFixture(t)
+	require.NoError(t, WritePending(f.l, Pending{Target: "v1", From: "v0"}))
+	require.NoError(t, f.u.CheckPending())
+	require.NoError(t, os.Remove(f.l.Pending()))
+	require.NoError(t, writeLast(f.l, readerrpc.UpdateStateRolledBack, "v1", "no_commit"))
+	assert.Equal(t, readerrpc.UpdateStatePending, f.u.Info().Update.State)
+}
+
 func TestGuardTimerWants_IsTheTimersTargetWantsLink(t *testing.T) {
 	assert.Equal(t, "/etc/systemd/system/timers.target.wants/mqtt-rpcd-guard.timer",
 		guardTimerWants(DefaultGuardTimerUnit))

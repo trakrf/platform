@@ -85,6 +85,12 @@ func (d *Daemon) answered() {
 		if errors.Is(err, update.ErrAlreadyCommitted) {
 			return // a reply racing this one already committed
 		}
+		if errors.Is(err, update.ErrNotPending) {
+			// The guard ended probation first. Had it rolled back, it would
+			// have restarted this process; it left this build running.
+			d.log.Warn().Msg("update not committed: the guard settled probation first; see daemon.update")
+			return
+		}
 		d.log.Error().Err(err).Msg("update commit failed; the guard will roll back if this persists")
 		return
 	}

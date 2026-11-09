@@ -209,6 +209,22 @@ func TestAnswered_LosingACommitRaceToItselfIsNotAnError(t *testing.T) {
 	assert.NotContains(t, buf.String(), `"level":"error"`)
 }
 
+// The guard ended probation without a rollback (nothing to roll back to). A
+// commit then finds no pending; saying the guard will roll back would be false.
+func TestAnswered_ProbationSettledByTheGuardIsNotARollbackWarning(t *testing.T) {
+	var buf bytes.Buffer
+	log := zerolog.New(&buf)
+	d := New(Config{Broker: BrokerConfig{BaseTopic: "trakrf.id/cs463-212"}}, &fakeAdapter{}, &log)
+	u := &fakeUpdater{probation: true, commitErr: update.ErrNotPending}
+	d.SetUpdater(u)
+	d.now = func() time.Time { return d.started.Add(DefaultCommitAfter) }
+
+	d.answered()
+	assert.NotContains(t, buf.String(), "will roll back")
+	assert.NotContains(t, buf.String(), `"level":"error"`)
+	assert.Contains(t, buf.String(), "the guard settled")
+}
+
 func TestNoCommitWhenReplyPublishFails(t *testing.T) {
 	d := newTestDaemon(&fakeAdapter{})
 	u := &fakeUpdater{probation: true}
