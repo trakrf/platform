@@ -15,8 +15,8 @@ import (
 	"github.com/trakrf/platform/backend/internal/storage"
 )
 
-// fakeStore records alarm_events writes and serves a fixed device list; either
-// call can be made to fail.
+// fakeStore records alarm_events and output_drives writes and serves a fixed
+// device list; any call can be made to fail.
 type fakeStore struct {
 	rows        []storage.AlarmEventRow
 	devices     []outputdevice.OutputDevice
@@ -24,6 +24,28 @@ type fakeStore struct {
 	insertErr   error
 	listErr     error
 	defaultsErr error
+	driveErr    error
+
+	mu        sync.Mutex // drives are recorded from the presence timer goroutine too
+	drives    []storage.OutputDriveRow
+	driveOrgs []int
+}
+
+func (s *fakeStore) RecordOutputDrive(_ context.Context, orgID int, row storage.OutputDriveRow) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.driveErr != nil {
+		return s.driveErr
+	}
+	s.drives = append(s.drives, row)
+	s.driveOrgs = append(s.driveOrgs, orgID)
+	return nil
+}
+
+func (s *fakeStore) recordedDrives() []storage.OutputDriveRow {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]storage.OutputDriveRow(nil), s.drives...)
 }
 
 func (s *fakeStore) GetOrgGeofenceDefaults(_ context.Context, _ int) (organization.GeofenceDefaults, error) {
@@ -96,16 +118,17 @@ func (d *fakeDriver) first() setCall {
 func newTestEngine(cfg Config, s engineStore, d outputDriver) *Engine {
 	log := zerolog.New(io.Discard)
 	clk := NewFakeClock(time.Unix(0, 0))
-	return &Engine{
+	e := &Engine{
 		cfg:          cfg,
 		store:        s,
 		driver:       d,
 		latch:        newLatch(0, clk),
 		pulses:       newPulseGuard(),
-		presence:     newPresence(d, log),
 		startupGrace: cfg.StartupGrace,
 		log:          log,
 	}
+	e.presence = newPresence(e.drive, log)
+	return e
 }
 
 func ptr(i int) *int { return &i }
