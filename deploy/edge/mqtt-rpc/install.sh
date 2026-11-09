@@ -44,7 +44,9 @@ restart_units() {
   systemctl start mqtt-rpcd-guard.timer >/dev/null 2>&1 || true
 }
 trap restart_units EXIT
-trap 'exit 1' HUP INT TERM
+# A shell killed by a signal it does not trap skips the EXIT trap. A dropped
+# SSH session can arrive as HUP, or as PIPE on the next write to it.
+trap 'exit 1' HUP PIPE INT QUIT TERM
 # Stop the timer, disarm any remote update on probation, move the binary in,
 # and swap the link — keeping a pre-versioning plain binary as "legacy" (a
 # manual rollback target with no updater; rolling back to it ends OTA). Each
