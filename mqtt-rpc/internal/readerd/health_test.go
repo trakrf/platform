@@ -69,9 +69,10 @@ func newRig(t *testing.T, p HealthPolicy, reconcile bool) *rig {
 		Publish: func(h readerrpc.Health) {
 			r.published = append(r.published, h)
 		},
-		GoingDown: func(reason string) { r.events = append(r.events, "going-down:"+reason) },
-		Log:       &log,
-		Now:       func() time.Time { return r.now },
+		GoingDown:      func(reason string) { r.events = append(r.events, "going-down:"+reason) },
+		AbortGoingDown: func() { r.events = append(r.events, "abort-going-down") },
+		Log:            &log,
+		Now:            func() time.Time { return r.now },
 	}
 	if reconcile {
 		deps.Reconcile = func(context.Context) error {
@@ -214,6 +215,26 @@ func TestMonitor_WedgeLadder(t *testing.T) {
 	}
 	if h := r.last(); h.Recovery != readerrpc.RecoveryReboot || h.AutoReboots != 1 {
 		t.Fatalf("health at reboot = %+v", h)
+	}
+}
+
+// A reboot systemd refused leaves the reader up. The monitor announced it as
+// going down first, so it must take that back, or the retained status says
+// offline for as long as the daemon keeps running.
+func TestMonitor_FailedRebootTakesBackTheOfflineStatus(t *testing.T) {
+	p := DefaultHealthPolicy()
+	r := newRig(t, p, true)
+	r.rebootErr = errors.New("systemctl reboot: exit status 1")
+	r.run(H, time.Minute)
+	r.run(D, p.WedgeAfter+p.Interval) // app restart
+	r.run(D, p.WedgeAfter)            // reboot, refused
+
+	if r.count("reboot") != 1 {
+		t.Fatalf("events %q, want one reboot attempt", r.events)
+	}
+	tail := strings.Join(r.events[len(r.events)-3:], ",")
+	if tail != "going-down:auto-recovery,reboot,abort-going-down" {
+		t.Fatalf("failed reboot sequence = %q, want the offline status taken back", tail)
 	}
 }
 

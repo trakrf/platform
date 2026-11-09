@@ -115,12 +115,13 @@ func main() {
 	policy.AutoRecover = cfg.AutoRecover
 	policy.WedgeAfter = cfg.WedgeAfter
 	monitor := readerd.NewMonitor(policy, readerd.MonitorDeps{
-		Probe:     adapter.ProbeHealth,
-		Reconcile: reconcile,
-		Host:      host,
-		Store:     readerd.RebootStore{Path: readerd.DefaultRebootStorePath},
-		Publish:   d.SetHealth,
-		GoingDown: d.GoingDown,
+		Probe:          adapter.ProbeHealth,
+		Reconcile:      reconcile,
+		Host:           host,
+		Store:          readerd.RebootStore{Path: readerd.DefaultRebootStorePath},
+		Publish:        d.SetHealth,
+		GoingDown:      d.GoingDown,
+		AbortGoingDown: d.AbortGoingDown,
 		CloudServer: func() string {
 			return d.CloudServerFault(cfg.CloudServer, time.Now())
 		},

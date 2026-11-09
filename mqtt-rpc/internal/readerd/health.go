@@ -70,6 +70,9 @@ type MonitorDeps struct {
 	Publish func(readerrpc.Health)
 	// GoingDown is called just before an automatic reboot, with the reason.
 	GoingDown func(reason string)
+	// AbortGoingDown takes GoingDown back when the reboot was refused, so a
+	// reader that stayed up is not announced as offline.
+	AbortGoingDown func()
 	// CloudServer returns the golden CloudServer fault ("" when clean), re-run
 	// every tick so an operator's fix, or a firmware update reverting one,
 	// shows without a daemon restart. nil checks nothing.
@@ -298,6 +301,9 @@ func (m *Monitor) reboot(now time.Time, h *readerrpc.Health) {
 	}
 	if err := m.deps.Host.Reboot(); err != nil {
 		m.log.Error().Err(err).Msg("auto-recovery: reboot failed; retrying after the next window")
+		if m.deps.AbortGoingDown != nil {
+			m.deps.AbortGoingDown()
+		}
 	}
 }
 
