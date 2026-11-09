@@ -113,6 +113,23 @@ resume_claim() {
 	fi
 }
 
+# fallback_version <exclude>: the newest installed version (by mtime) other
+# than <exclude>. legacy has no updater, so it is chosen only when nothing else
+# is installed. Prints nothing when there is no candidate at all.
+fallback_version() {
+	# ls -t is the only mtime sort the reader's busybox has; every name is
+	# checked by valid_version before use, so odd filenames cannot leak through.
+	# shellcheck disable=SC2012
+	c=$(ls -t "$DIR/versions" 2>/dev/null | sed -n 's/^mqtt-rpcd-//p' | while read -r cand; do
+		if valid_version "$cand" && [ "$cand" != "$1" ] && [ -f "$DIR/versions/mqtt-rpcd-$cand" ]; then
+			echo "$cand"
+		fi
+	done)
+	pick=$(printf '%s\n' "$c" | grep -vx legacy | head -n 1)
+	[ -n "$pick" ] || pick=$(printf '%s\n' "$c" | grep -x legacy | head -n 1)
+	echo "$pick"
+}
+
 # auto_rollback <reason>: claim the pending update and point back at `from`.
 # Returns 0 only when the link was moved (the caller restarts). Every failure
 # leaves the target in place and pending armed, so the next run retries:
@@ -121,13 +138,24 @@ auto_rollback() {
 	mv "$PENDING" "$CLAIM" 2>/dev/null || return 1 # the daemon committed first
 	target=$(field target "$CLAIM")
 	from=$(field from "$CLAIM")
+	reason="$1"
 	if ! valid_version "$from" || [ ! -f "$DIR/versions/mqtt-rpcd-$from" ]; then
-		write_last failed "$target" "${1}_no_from"
-		log "cannot roll back $target: version '$from' is not installed ($1)"
-		rm -f "$CLAIM"
-		clear_counters
-		"$SYNC"
-		return 1
+		# The recorded version is gone (removed by hand, or never recorded).
+		# Any other build beats leaving the failing one live with no guard.
+		gone="$from"
+		from=$(fallback_version "$target")
+		if [ -z "$from" ]; then
+			# Nothing else to run. The target stays live, unguarded; say so
+			# rather than "failed", which reads as "nothing replaced".
+			write_last unguarded "$target" "${1}_no_from"
+			log "cannot roll back $target: '$gone' is not installed and no other version is ($1)"
+			rm -f "$CLAIM"
+			clear_counters
+			"$SYNC"
+			return 1
+		fi
+		reason="${1}_fallback"
+		log "version '$gone' is not installed; falling back to $from ($1)"
 	fi
 	if ! point_at "$from"; then
 		mv "$CLAIM" "$PENDING" 2>/dev/null
@@ -135,7 +163,7 @@ auto_rollback() {
 		return 1
 	fi
 	"$SYNC" # the link swap is durable before anything is deleted
-	write_last rolled_back "$target" "$1"
+	write_last rolled_back "$target" "$reason"
 	# A build that failed probation is never a rollback target and must not push
 	# a good version out of retention.
 	if valid_version "$target" && [ "$target" != "$from" ]; then
@@ -144,7 +172,7 @@ auto_rollback() {
 	rm -f "$CLAIM"
 	clear_counters
 	"$SYNC"
-	log "rolled back $target -> $from ($1); removed $target"
+	log "rolled back $target -> $from ($reason); removed $target"
 	return 0
 }
 

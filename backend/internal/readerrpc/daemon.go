@@ -41,6 +41,10 @@ const (
 	UpdateStateCommitted  = "committed"
 	UpdateStateRolledBack = "rolled_back"
 	UpdateStateFailed     = "failed"
+	// UpdateStateUnguarded: the target never committed, and the guard found no
+	// other installed version to roll back to, so the target stays live with no
+	// rollback armed. Unlike failed, the target DID replace the old build.
+	UpdateStateUnguarded = "unguarded"
 )
 
 // UpdateInfo describes the most recent update attempt.
