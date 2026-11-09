@@ -8,7 +8,6 @@ package update
 import (
 	"os"
 	"path/filepath"
-	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -43,47 +42,20 @@ func snapshotCalls(t *testing.T, l Layout) string {
 	return string(b)
 }
 
-func inode(t *testing.T, path string) uint64 {
-	t.Helper()
-	fi, err := os.Stat(path)
-	require.NoError(t, err)
-	return fi.Sys().(*syscall.Stat_t).Ino
-}
-
-func TestGuardPlace_MigratesAPlainBinaryWithNoWindow(t *testing.T) {
-	l := Layout{Dir: t.TempDir()}
-	require.NoError(t, os.WriteFile(l.Link(), []byte("plain"), 0o755))
-	plain := inode(t, l.Link())
+func TestGuardPlace_MovesTheUploadInAndPointsTheLinkAtIt(t *testing.T) {
+	l := installed(t, "v1")
 	upload(t, l, "v2")
 
 	out, code, _ := runGuard(t, l, "place", "v2")
 	require.Equal(t, 0, code, out)
 
 	assert.Equal(t, "v2", activeOf(t, l))
-	// A hardlink, not a move: the plain file stayed at the link path until the
-	// symlink was renamed over it.
-	assert.Equal(t, plain, inode(t, l.VersionPath("legacy")))
 	got, _ := os.ReadFile(l.Link())
 	assert.Equal(t, "binary v2", string(got))
 	fi, _ := os.Stat(l.VersionPath("v2"))
 	assert.NotZero(t, fi.Mode()&0o111)
 	assert.NoFileExists(t, filepath.Join(l.VersionsDir(), ".mqtt-rpcd-v2.upload"))
-}
-
-// An SSH drop after the hardlink, before the swap: the plain binary is still in
-// place, and running install again converges.
-func TestGuardPlace_ReRunAfterAnInterruptedMigrationConverges(t *testing.T) {
-	l := Layout{Dir: t.TempDir()}
-	require.NoError(t, os.WriteFile(l.Link(), []byte("plain"), 0o755))
-	require.NoError(t, os.MkdirAll(l.VersionsDir(), 0o755))
-	require.NoError(t, os.Link(l.Link(), l.VersionPath("legacy")))
-	upload(t, l, "v2")
-
-	out, code, _ := runGuard(t, l, "place", "v2")
-	require.Equal(t, 0, code, out)
-	assert.Equal(t, "v2", activeOf(t, l))
-	legacy, _ := os.ReadFile(l.VersionPath("legacy"))
-	assert.Equal(t, "plain", string(legacy))
+	assert.FileExists(t, l.VersionPath("v1"), "the previous version stays as a rollback target")
 }
 
 // The guard runs from two units: its timer's service, and the daemon's

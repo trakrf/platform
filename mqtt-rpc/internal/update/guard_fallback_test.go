@@ -50,22 +50,6 @@ func TestGuard_MissingFromFallsBackToTheNewestOtherVersion(t *testing.T) {
 	assert.Equal(t, "no_commit_fallback", last.Error)
 }
 
-// legacy has no updater, so it is the last resort — but a daemon that reads tags
-// beats a build that never committed.
-func TestGuard_MissingFromPrefersAnyVersionOverLegacy(t *testing.T) {
-	l := installedAged(t, "v3", "legacy", "v1")
-	armedForRollback(t, l, "v3", "v0")
-	_, code, _ := runGuard(t, l, "tick")
-	require.Equal(t, 0, code)
-	assert.Equal(t, "v1", activeOf(t, l))
-
-	m := installedAged(t, "v3", "legacy")
-	armedForRollback(t, m, "v3", "v0")
-	_, code, _ = runGuard(t, m, "tick")
-	require.Equal(t, 0, code)
-	assert.Equal(t, "legacy", activeOf(t, m))
-}
-
 func TestGuard_CrashLoopWithMissingFromFallsBackToo(t *testing.T) {
 	l := installedAged(t, "v3", "v2")
 	require.NoError(t, WritePending(l, Pending{Target: "v3", From: "v0"}))

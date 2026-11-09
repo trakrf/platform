@@ -193,10 +193,10 @@ func TestUpdate_RefusedWithoutTheRollbackGuard(t *testing.T) {
 	refused(t, err)
 }
 
-func TestUpdate_RefusedOnALegacyPlainFileInstall(t *testing.T) {
+func TestUpdate_RefusedWhenTheLinkIsNotASymlink(t *testing.T) {
 	f := newFixture(t)
 	require.NoError(t, os.Remove(f.l.Link()))
-	require.NoError(t, os.WriteFile(f.l.Link(), []byte("legacy"), 0o755))
+	require.NoError(t, os.WriteFile(f.l.Link(), []byte("binary"), 0o755))
 	_, err := f.u.Start(f.params("v2", "/mqtt-rpcd"))
 	refused(t, err)
 }

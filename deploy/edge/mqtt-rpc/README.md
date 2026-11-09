@@ -26,10 +26,7 @@ This cross-builds a static armv7 binary and installs:
 | user `recover`, `/etc/sudoers.d/trakrf-recover`, a `Match User recover` block in `/etc/ssh/sshd_config` | the on-site operator's recovery login (below); starts locked |
 
 After this, every later update can arrive over RPC alone (`Daemon.Update`; see
-`/mqtt-rpc/README.md` "Remote update"). A reader installed before versioned
-binaries keeps its old binary as version `legacy` until it ages out of retention
-(newest 3 versions are kept); `legacy` has no updater, so rolling back to it ends
-remote updates for that reader.
+`/mqtt-rpc/README.md` "Remote update"). The newest 3 versions are kept.
 
 `install.sh` is safe to interrupt and re-run: an SSH drop at any point leaves a
 runnable `/opt/trakrf/mqtt-rpcd`, and the rollback guard is stopped and disarmed

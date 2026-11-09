@@ -20,9 +20,8 @@
 #                      drop any pending update, restart.
 #   place <version>    install.sh's step on the reader: stop the guard timer,
 #                      disarm any pending update, move the uploaded binary in
-#                      and point the link at it (a plain pre-versioning binary
-#                      is hardlinked to "legacy" first, so the link path never
-#                      goes missing). install.sh restarts the timer after.
+#                      and point the link at it. install.sh restarts the timer
+#                      and the daemon after.
 #   recover            The on-site operator's one command (the `recover` SSH
 #                      login runs it and nothing else): fetch the newest daemon
 #                      release from GitHub, check it against its manifest's
@@ -119,20 +118,17 @@ resume_claim() {
 }
 
 # fallback_version <exclude>: the newest installed version (by mtime) other
-# than <exclude>. legacy has no updater, so it is chosen only when nothing else
-# is installed. Prints nothing when there is no candidate at all.
+# than <exclude>. Prints nothing when there is no candidate at all.
 fallback_version() {
 	# ls -t is the only mtime sort the reader's busybox has; every name is
 	# checked by valid_version before use, so odd filenames cannot leak through.
 	# shellcheck disable=SC2012
-	c=$(ls -t "$DIR/versions" 2>/dev/null | sed -n 's/^mqtt-rpcd-//p' | while read -r cand; do
+	ls -t "$DIR/versions" 2>/dev/null | sed -n 's/^mqtt-rpcd-//p' | while read -r cand; do
 		if valid_version "$cand" && [ "$cand" != "$1" ] && [ -f "$DIR/versions/mqtt-rpcd-$cand" ]; then
 			echo "$cand"
+			break
 		fi
-	done)
-	pick=$(printf '%s\n' "$c" | grep -vx legacy | head -n 1)
-	[ -n "$pick" ] || pick=$(printf '%s\n' "$c" | grep -x legacy | head -n 1)
-	echo "$pick"
+	done
 }
 
 # auto_rollback <reason>: claim the pending update and point back at `from`.
@@ -308,9 +304,6 @@ rollback)
 	write_last rolled_back "$was" manual
 	"$SYNC"
 	log "rolled back $was -> $v (manual)"
-	if [ "$v" = legacy ]; then
-		log "warning: legacy is the daemon from before remote updates. It has no remote update support: this reader takes no updates over RPC until install.sh runs again."
-	fi
 	"$SYSTEMCTL" restart mqtt-rpcd
 	exit 0
 	;;
@@ -342,15 +335,6 @@ place)
 	if ! { chmod 755 "$up" && mv -f "$up" "$DIR/versions/mqtt-rpcd-$v"; }; then
 		log "place: could not put $v in place"
 		exit 1
-	fi
-	# A pre-versioning install has a plain binary at the link path. Keep it as
-	# the "legacy" rollback target by hardlink, so it never leaves the link
-	# path: the symlink rename below replaces it in one step.
-	if [ -f "$LINK" ] && [ ! -L "$LINK" ]; then
-		ln -f "$LINK" "$DIR/versions/mqtt-rpcd-legacy" || {
-			log "place: could not keep the old binary as legacy; nothing switched"
-			exit 1
-		}
 	fi
 	if ! point_at "$v"; then
 		log "place: could not point the link at $v"

@@ -47,10 +47,9 @@ trap restart_units EXIT
 # A shell killed by a signal it does not trap skips the EXIT trap. A dropped
 # SSH session can arrive as HUP, or as PIPE on the next write to it.
 trap 'exit 1' HUP PIPE INT QUIT TERM
-# Stop the timer, disarm any remote update on probation, move the binary in,
-# and swap the link — keeping a pre-versioning plain binary as "legacy" (a
-# manual rollback target with no updater; rolling back to it ends OTA). Each
-# step is safe to interrupt and re-run; see mqtt-rpcd-guard "place".
+# Stop the guard and the daemon, disarm any remote update on probation, move
+# the binary in and swap the link. Each step is safe to interrupt and re-run;
+# see mqtt-rpcd-guard "place".
 ./mqtt-rpcd-guard place "$VERSION"
 test -f mqtt-rpcd.env || mv /tmp/mqtt-rpcd.env.example mqtt-rpcd.env
 chmod 600 mqtt-rpcd.env

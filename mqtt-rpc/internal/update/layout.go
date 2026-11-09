@@ -70,9 +70,9 @@ func SwapLink(l Layout, v string) error {
 	return syncDir(l.Dir)
 }
 
-// ActiveVersion reads the version the active symlink points at. A plain file at
-// the link path is an install from before versioned binaries: it has nothing to
-// roll back to, so it is an error rather than a guess.
+// ActiveVersion reads the version the active symlink points at. Anything else
+// at the link path names no version to roll back to, so it is an error rather
+// than a guess.
 func ActiveVersion(l Layout) (string, error) {
 	target, err := os.Readlink(l.Link())
 	if err != nil {

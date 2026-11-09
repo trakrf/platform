@@ -78,7 +78,7 @@ describe('ReaderSoftwarePanel', () => {
 
   it('does not offer an update the reader cannot take', () => {
     setup({
-      software: { daemon: { version: 'legacy' }, supports_update: false },
+      software: { daemon: { version: 'v0.9.0' }, supports_update: false },
     });
     expect(screen.queryByRole('button', { name: /^update$/i })).not.toBeInTheDocument();
     expect(screen.getByText(/reinstall over ssh/i)).toBeInTheDocument();

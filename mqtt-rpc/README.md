@@ -337,8 +337,8 @@ reconcile: `docs/adr/0024-a-remote-update-is-undone-by-what-it-cannot-replace.md
      resumes. Commit and rollback both claim `pending` by rename, so exactly one
      wins.
    - If `from` is no longer installed, it falls back to the newest other
-     installed version (`legacy` only as a last resort). With nothing else
-     installed the failed build stays live, unguarded.
+     installed version. With nothing else installed the failed build stays
+     live, unguarded.
 
 `update/last` is reported in `GetCapabilities().daemon.update`:
 `committed`, `rolled_back` (`error`: `crash_loop` | `no_commit` | `manual`,
