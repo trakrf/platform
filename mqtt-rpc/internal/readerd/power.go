@@ -31,10 +31,10 @@ func (d *Daemon) power(req readerrpc.Request, action string) readerrpc.Response 
 	}
 
 	if state := d.updateUnderWay(); state != "" {
-		return readerrpc.NewError(req, readerrpc.CodeInternal, "a daemon update is under way ("+state+"); try again once it has settled")
+		return readerrpc.NewError(req, readerrpc.CodePowerRefused, "a daemon update is under way ("+state+"); try again once it has settled")
 	}
 	if held, ok := d.claimGoingDown(action); !ok {
-		return readerrpc.NewError(req, readerrpc.CodeInternal, "already going down: "+held)
+		return readerrpc.NewError(req, readerrpc.CodePowerRefused, "already going down: "+held)
 	}
 
 	delay := d.powerDelay
@@ -68,18 +68,20 @@ func (d *Daemon) powerNow(action string) {
 }
 
 // updateUnderWay names the state of a daemon update that a reboot must not
-// interrupt: downloading, installing, or a new build on probation that has not
-// confirmed itself yet. "" when there is none.
+// interrupt: downloading, or installing (the binary swap). "" when there is
+// none. Both end on their own: in failure, or in the daemon's exit.
+//
+// A build on probation is deliberately not refused. Probation ends only when
+// the build commits or the guard rolls back, which can take 15–20 min and, on a
+// read-only filesystem, never happens; a reboot is what fixes that, and the
+// guard counts the extra start and still rolls back across it.
 func (d *Daemon) updateUnderWay() string {
 	if d.updater == nil {
 		return ""
 	}
-	if d.updater.OnProbation() {
-		return readerrpc.UpdateStatePending
-	}
 	if u := d.updater.Info().Update; u != nil {
 		switch u.State {
-		case readerrpc.UpdateStateDownloading, readerrpc.UpdateStateInstalling, readerrpc.UpdateStatePending:
+		case readerrpc.UpdateStateDownloading, readerrpc.UpdateStateInstalling:
 			return u.State
 		}
 	}

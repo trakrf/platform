@@ -63,6 +63,11 @@ const (
 // another client. It is outside the JSON-RPC reserved range (-32768..-32000).
 const CodeReaderBusy = -33001
 
+// CodePowerRefused signals that a Reader.Reboot or Reader.Shutdown was refused
+// before anything happened: the reader is already going down, or a daemon
+// update is downloading or installing. Routine; try again later.
+const CodePowerRefused = -33003
+
 // Request is an inbound JSON-RPC request frame. Src names the topic the caller
 // expects the response to be published to (Shelly-style correlation).
 type Request struct {

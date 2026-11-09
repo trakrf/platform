@@ -59,7 +59,7 @@ never evicts the reader's own reads connection.
 
 **Daemon** (acts on mqtt-rpcd itself; never touches the vendor `/API`):
 - `Daemon.Update(params={version, url, sha256, signature})` → `{accepted, from, to}` once verified; the install follows the reply. Refusals are error `-33002`. See "Remote update".
-- `Reader.Reboot`, `Reader.Shutdown(params={requested_by?})` → `{action: "reboot"|"shutdown", in_ms}`; the clean reboot or power-off follows the reply. Listed in `supports[]` when the daemon runs on a host it can reboot. See "Reboot and shutdown".
+- `Reader.Reboot`, `Reader.Shutdown(params={requested_by?})` → `{action: "reboot"|"shutdown", in_ms}`; the clean reboot or power-off follows the reply. Listed in `supports[]` when the daemon runs on a host it can reboot. Refusals are error `-33003`. See "Reboot and shutdown".
 
 Rules: neutral config (no vendor terms like "operation profile" leak into the
 wire); a new tunable is a field, not a method; `applied` is explicit; the contract
@@ -284,18 +284,21 @@ MQTT_URL=… mqtt-rpcctl shutdown -base trakrf.id/cs463-212 -yes   # back only a
    whose stop drives every output off and keeps the reason on the status.
 3. One owner at a time takes the reader down. A second request while one is
    under way, or while an automatic recovery reboot is announced, is refused
-   (`-32603`, "already going down"). An automatic recovery reboot that comes
+   (`-33003`, "already going down"). An automatic recovery reboot that comes
    due inside an operator's 2 s does not reboot and does not count against the
    cap, so a requested shutdown stays a shutdown.
-4. A request during a `Daemon.Update` (downloading, installing, or a new build
-   not yet committed) is refused (`-32603`), and a `Daemon.Update` while the
-   reader is going down is refused (`-33002`).
+4. A request while a `Daemon.Update` is downloading or installing is refused
+   (`-33003`), and a `Daemon.Update` while the reader is going down is refused
+   (`-33002`). A new build on probation can still be rebooted: the guard
+   counts the start and rolls back across it, and a reboot is the fix for a
+   build that cannot commit (a read-only filesystem, for one).
 5. If systemd refuses, the status goes back online and a retry is accepted.
 
 The daemon never serves a **retained** request on `<base>/rpc`: the broker
 would hand it back on every reconnect, and a retained reboot would loop the
 reader. It logs "retained rpc request dropped". Clear one with an empty retained
-publish to the topic (`mosquitto_pub -r -n -t <base>/rpc`).
+publish to the topic (`mosquitto_pub -r -n -t <base>/rpc`); the live daemon
+gets that empty frame too and logs it as an unparseable request, harmlessly.
 
 After a reboot the daemon takes 2–7 min to reach the broker again (boot-time
 entropy for TLS).

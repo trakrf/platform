@@ -55,13 +55,15 @@ func TestPower_OperatorAbortDoesNotReleaseAutoRecovery(t *testing.T) {
 	require.Nil(t, r.call(t, readerrpc.MethodReboot, "").Error)
 }
 
-// A reboot in the middle of a remote update, or before the new build has
-// confirmed itself, is refused; once the update has settled it is accepted.
+// A reboot in the middle of a download or the binary swap is refused. A build
+// on probation ("pending") is not: probation can last until the guard rolls
+// back, or for good on a read-only filesystem, which is what a reboot fixes,
+// and the guard survives a reboot.
 func TestPower_RefusedDuringDaemonUpdate(t *testing.T) {
 	for state, refused := range map[string]bool{
 		readerrpc.UpdateStateDownloading: true,
 		readerrpc.UpdateStateInstalling:  true,
-		readerrpc.UpdateStatePending:     true,
+		readerrpc.UpdateStatePending:     false,
 		readerrpc.UpdateStateCommitted:   false,
 		readerrpc.UpdateStateFailed:      false,
 		readerrpc.UpdateStateRolledBack:  false,
@@ -75,12 +77,30 @@ func TestPower_RefusedDuringDaemonUpdate(t *testing.T) {
 				return
 			}
 			require.NotNil(t, resp.Error)
+			assert.Equal(t, readerrpc.CodePowerRefused, resp.Error.Code)
 			assert.Contains(t, resp.Error.Message, state)
 			assert.Empty(t, r.pending)
 			r.d.SetUpdater(&fakeUpdater{})
 			require.Nil(t, r.call(t, readerrpc.MethodReboot, "").Error, "a refusal leaves no claim behind")
 		})
 	}
+}
+
+func TestPower_AcceptedOnProbation(t *testing.T) {
+	r := newPowerRig(t, true)
+	r.d.SetUpdater(&fakeUpdater{probation: true})
+	require.Nil(t, r.call(t, readerrpc.MethodReboot, "").Error)
+	assert.Len(t, r.pending, 1)
+}
+
+// A refusal is routine, not a fault: it carries its own code, so a caller can
+// tell "try later" from a daemon that broke.
+func TestPower_AlreadyGoingDownIsATypedRefusal(t *testing.T) {
+	r := newPowerRig(t, true)
+	require.Nil(t, r.call(t, readerrpc.MethodShutdown, "").Error)
+	resp := r.call(t, readerrpc.MethodReboot, "")
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, readerrpc.CodePowerRefused, resp.Error.Code)
 }
 
 // An adapter that already lists the power methods must not get them twice.
