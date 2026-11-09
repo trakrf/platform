@@ -212,18 +212,18 @@ The CS463 kernel (i.MX6, 4.14) seeds its RNG only from interrupts: it registers
 the SoC's CAAM generator as `/dev/hwrng` but never credits it (`rng_core`
 quality 0), and the image has no `rngd` or `haveged`. So `random: crng init done`
 landed **96–388 s** after a boot. Until then `getrandom(2)` blocks, and both TLS
-clients on the reader wait: this daemon's broker link (`crypto/rand: blocked for
-60 seconds`) and the vendor app's own CloudServer MQTT client, which carries the
-reads.
+clients wait: this daemon's broker link (`crypto/rand: blocked for 60 seconds`)
+and the vendor app's CloudServer MQTT client, which carries the reads.
 
 The first thing `mqtt-rpcd` does at start is read 512 bytes from `/dev/hwrng`
 and credit them to the kernel with `RNDADDENTROPY` (`internal/hwrng`). The log
-line is `credited the hardware RNG to the kernel`, with `source: rng-caam`.
-- It credits only `rng-caam`, the generator measured on the CS463. When
-  `rng_current` is `none`, unreadable, or anything else, it skips the credit and
-  leaves the kernel to its own estimate.
-- It refuses output that repeats with any period, constant output included.
-- It gives up after 2 s, and an answer that arrives later is never credited.
+line is `credited the hardware RNG to the kernel` (`source: rng-caam`,
+`bits_offered`, and `entropy_avail` before and after).
+- It credits only `rng-caam`, the generator measured on the CS463. For any other
+  `rng_current` (`none`, unreadable, …) it skips and leaves the kernel alone.
+- It refuses output in which any 16-byte window appears twice: constant output,
+  a cycle starting anywhere, or a tail that sticks partway.
+- It gives up after 2 s and never credits a later answer.
 
 A failure is only a warning: the reader falls back to the old slow boot.
 
@@ -236,9 +236,8 @@ Why it is built this way:
   works on the first boot after a reflash (which wipes `/opt`) and after a power
   pull. Crediting a saved seed is unsafe on exactly those boots: one that is
   never rewritten gets credited twice.
-- **Not `rng_core.default_quality=` on the kernel command line.** That edits the
-  bootloader environment on a customer's reader, and no update over the broker
-  can do it.
+- **Not `rng_core.default_quality=` on the kernel command line.** That edits
+  the bootloader environment, which no update over the broker can do.
 
 Measured on cs463-212 (2026-11-09), over 5 clean reboots (seconds of uptime):
 
@@ -250,12 +249,10 @@ Measured on cs463-212 (2026-11-09), over 5 clean reboots (seconds of uptime):
 | 4 | 24.2 | 24.6 | 26.7 |
 | 5 | 15.9 | 16.5 | 18.5 |
 
-The same reader's previous boot, before this change: `crng init done` at 106.8 s,
-and the daemon waited 96 s on `crypto/rand` before it connected. With the change,
-the vendor CloudServer was on the broker within seconds of `/API` serving, or
-before it. In boot 4, the only one where SSH came up early enough to watch, it
-connected at 110.8 s. Boot 3 hit the vendor-app wedge (see below); the reader
-app restart cleared it.
+Before the change, the same reader's `crng init done` was at 106.8 s and the
+daemon waited 96 s on `crypto/rand`. After it, the vendor CloudServer was on the
+broker within seconds of `/API` serving (boot 4: 110.8 s). Boot 3 hit the
+vendor-app wedge (see below); the reader app restart cleared it.
 
 See [ADR 0024](../docs/adr/0024-a-remote-update-is-undone-by-what-it-cannot-replace.md)
 for why only the daemon binary changes over the air.

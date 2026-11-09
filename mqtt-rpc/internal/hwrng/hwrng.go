@@ -16,7 +16,6 @@
 package hwrng
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -24,7 +23,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -59,24 +57,16 @@ type Pool interface {
 	AddEntropy(data []byte, bits int) error
 }
 
-// Credit reads n bytes from src and credits them to pool at 8 bits a byte.
-// Output that repeats with any period up to half its length (constant output is
-// period 1) is refused and never credited: a hardware RNG that fails usually
-// fails that way.
-func Credit(src io.Reader, pool Pool, n int) (int, error) {
-	buf, err := read(src, n)
-	if err != nil {
-		return 0, err
-	}
-	return credit(pool, buf)
-}
-
+// read takes n bytes from src. Output with any 16-byte window that appears
+// twice is refused and never credited: a hardware RNG that fails usually fails
+// by going constant, cycling, or stalling into zeros partway through, and each
+// of those repeats a window.
 func read(src io.Reader, n int) ([]byte, error) {
 	buf := make([]byte, n)
 	if _, err := io.ReadFull(src, buf); err != nil {
 		return nil, fmt.Errorf("read hardware RNG: %w", err)
 	}
-	if periodic(buf) {
+	if repeats(buf) {
 		return nil, ErrStuck
 	}
 	return buf, nil
@@ -90,16 +80,26 @@ func credit(pool Pool, buf []byte) (int, error) {
 	return bits, nil
 }
 
-// periodic reports whether buf repeats with some period p <= len(buf)/2.
-// Quadratic in the worst case, which at 512 bytes is nothing.
-func periodic(buf []byte) bool {
+// window is long enough that genuinely random output almost never repeats one:
+// at 512 bytes there are 497 windows, and the chance that any two of the
+// 123k pairs match is about 4e-34. An 8-byte window would be about 7e-15, a
+// 4-byte one 3e-5.
+const window = 16
+
+// repeats reports whether any window-byte run of buf appears twice, at any two
+// offsets. That catches a cycle of any period up to len(buf)-window wherever it
+// starts, constant output (period 1), and a stuck tail of a repeated byte.
+func repeats(buf []byte) bool {
 	if len(buf) == 0 {
 		return true
 	}
-	for p := 1; p <= len(buf)/2; p++ {
-		if bytes.Equal(buf[:len(buf)-p], buf[p:]) {
+	seen := make(map[[window]byte]struct{}, len(buf))
+	for i := 0; i+window <= len(buf); i++ {
+		w := [window]byte(buf[i : i+window])
+		if _, ok := seen[w]; ok {
 			return true
 		}
+		seen[w] = struct{}{}
 	}
 	return false
 }
@@ -119,7 +119,7 @@ type Config struct {
 type Result struct {
 	Skip        string // why nothing was credited, when that is not a fault
 	Source      string // the kernel's current generator, e.g. "rng-caam"
-	Bits        int    // credited
+	Bits        int    // offered to the kernel; entropy_avail shows what it kept
 	AvailBefore int    // entropy_avail before, -1 if unreadable
 	AvailAfter  int    // entropy_avail after, -1 if unreadable
 	Err         error
@@ -148,55 +148,37 @@ func Seed(cfg Config) Result {
 		return res
 	}
 
-	type outcome struct {
-		bits int
-		err  error
+	type answer struct {
+		buf []byte
+		err error
 	}
-	done := make(chan outcome, 1)
-	// Once Seed has given up, a late answer is not credited: Seed has already
-	// reported the timeout, and the log line must stay true.
-	var mu sync.Mutex
-	abandoned := false
+	// The goroutine only opens and reads; crediting happens here, and only for an
+	// answer that beat the timer, so a late answer is never credited. An open or
+	// read that never returns strands that goroutine, not the daemon.
+	done := make(chan answer, 1)
 	go func() {
-		// An open or read that never returns strands this goroutine, not the
-		// daemon.
-		bits, err := func() (int, error) {
-			src, err := os.Open(cfg.HWRNG)
-			if err != nil {
-				return 0, fmt.Errorf("open hardware RNG: %w", err)
-			}
-			defer src.Close()
-			buf, err := read(src, cfg.Bytes)
-			if err != nil {
-				return 0, err
-			}
-			mu.Lock()
-			defer mu.Unlock()
-			if abandoned {
-				return 0, ErrTimeout
-			}
-			return credit(cfg.Pool, buf)
-		}()
-		done <- outcome{bits, err}
+		src, err := os.Open(cfg.HWRNG)
+		if err != nil {
+			done <- answer{err: fmt.Errorf("open hardware RNG: %w", err)}
+			return
+		}
+		defer src.Close()
+		buf, err := read(src, cfg.Bytes)
+		done <- answer{buf, err}
 	}()
 
 	timer := time.NewTimer(cfg.Timeout)
 	defer timer.Stop()
-	var o outcome
 	select {
-	case o = <-done:
-	case <-timer.C:
-		mu.Lock()
-		abandoned = true
-		mu.Unlock()
-		// The credit may have finished between the timer and the lock.
-		select {
-		case o = <-done:
-		default:
-			o.err = ErrTimeout
+	case a := <-done:
+		if a.err != nil {
+			res.Err = a.err
+		} else {
+			res.Bits, res.Err = credit(cfg.Pool, a.buf)
 		}
+	case <-timer.C:
+		res.Err = ErrTimeout
 	}
-	res.Bits, res.Err = o.bits, o.err
 	res.AvailAfter = readInt(cfg.EntropyAvail)
 	return res
 }

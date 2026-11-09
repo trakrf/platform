@@ -2,12 +2,12 @@ package hwrng
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,9 +37,13 @@ func (p *recordingPool) Calls() int {
 	return p.calls
 }
 
-func randomish(n int) []byte {
+func randomish(n int) []byte { return randomishFrom(2463534242, n) }
+
+// randomishFrom is xorshift32 from seed: a different seed gives a stream that
+// shares no 16-byte window with randomish.
+func randomishFrom(seed uint32, n int) []byte {
 	b := make([]byte, n)
-	x := uint32(2463534242)
+	x := seed
 	for i := range b {
 		x ^= x << 13
 		x ^= x >> 17
@@ -53,7 +57,9 @@ func TestCreditPassesEveryByteAtEightBitsEach(t *testing.T) {
 	src := randomish(512)
 	pool := &recordingPool{}
 
-	bits, err := Credit(bytes.NewReader(src), pool, 512)
+	buf, err := read(bytes.NewReader(src), 512)
+	require.NoError(t, err)
+	bits, err := credit(pool, buf)
 
 	require.NoError(t, err)
 	assert.Equal(t, 4096, bits)
@@ -62,58 +68,75 @@ func TestCreditPassesEveryByteAtEightBitsEach(t *testing.T) {
 	assert.Equal(t, 4096, pool.bits)
 }
 
-func TestCreditRefusesAStuckSource(t *testing.T) {
-	pool := &recordingPool{}
-
-	_, err := Credit(bytes.NewReader(make([]byte, 512)), pool, 512)
+func TestReadRefusesAStuckSource(t *testing.T) {
+	_, err := read(bytes.NewReader(make([]byte, 512)), 512)
 
 	require.ErrorIs(t, err, ErrStuck)
-	assert.Zero(t, pool.Calls(), "a stuck source must never be credited")
 }
 
 // A generator stuck in a cycle repeats with that cycle's period, whatever it
 // is: aligned to nothing in particular, and as long as half the read.
-func TestCreditRefusesARepeatingCycleOfAnyLength(t *testing.T) {
+func TestReadRefusesARepeatingCycleOfAnyLength(t *testing.T) {
 	for _, period := range []int{1, 2, 32, 33, 48, 64, 200, 256} {
 		cycle := randomish(period)
 		src := bytes.Repeat(cycle, 512/period+1)[:512]
-		pool := &recordingPool{}
 
-		_, err := Credit(bytes.NewReader(src), pool, 512)
+		_, err := read(bytes.NewReader(src), 512)
 
 		require.ErrorIs(t, err, ErrStuck, "period %d", period)
-		assert.Zero(t, pool.Calls(), "period %d", period)
 	}
 }
 
-func TestCreditRefusesAShortRead(t *testing.T) {
-	pool := &recordingPool{}
+// A generator that fails partway through: good output, then a stuck tail, or
+// a cycle that starts mid-read.
+func TestReadRefusesOutputThatGoesBadPartway(t *testing.T) {
+	cases := map[string][]byte{
+		"zero tail":       append(randomish(200), make([]byte, 312)...),
+		"constant tail":   append(randomish(480), bytes.Repeat([]byte{0xa5}, 32)...),
+		"cycle mid-read":  append(randomish(100), bytes.Repeat(randomishFrom(88172645, 48), 9)[:412]...),
+		"one block twice": append(randomish(496), randomish(16)...), // the opening 16 bytes again,
+	}
+	for name, src := range cases {
+		require.Len(t, src, 512, name)
 
-	_, err := Credit(bytes.NewReader(randomish(100)), pool, 512)
+		_, err := read(bytes.NewReader(src), 512)
+
+		require.ErrorIs(t, err, ErrStuck, name)
+	}
+}
+
+func TestReadRefusesAShortRead(t *testing.T) {
+	_, err := read(bytes.NewReader(randomish(100)), 512)
 
 	require.Error(t, err)
-	assert.Zero(t, pool.Calls(), "a short read must never be credited")
 }
 
 func TestCreditReportsAPoolError(t *testing.T) {
 	pool := &recordingPool{err: errors.New("EPERM")}
 
-	_, err := Credit(bytes.NewReader(randomish(512)), pool, 512)
+	_, err := credit(pool, randomish(512))
 
 	require.Error(t, err)
 }
 
 // struct rand_pool_info in <linux/random.h>: int entropy_count (bits) at
-// offset 0, int buf_size (bytes) at offset 4, the bytes from offset 8.
+// offset 0, int buf_size (bytes) at offset 4, the bytes from offset 8. The
+// buffer is read back through a Go mirror of that struct, the way the kernel
+// reads it, not through encoding/binary.
 func TestPoolInfoMatchesTheKernelLayout(t *testing.T) {
+	type randPoolInfo struct {
+		entropyCount int32
+		bufSize      int32
+	}
 	data := []byte{1, 2, 3, 4, 5, 6, 7, 8}
 
 	got := poolInfo(data, 64)
 
-	require.Len(t, got, 8+len(data))
-	assert.Equal(t, int32(64), int32(binary.NativeEndian.Uint32(got[0:4])))
-	assert.Equal(t, int32(len(data)), int32(binary.NativeEndian.Uint32(got[4:8])))
-	assert.Equal(t, data, got[8:])
+	require.Len(t, got, int(unsafe.Sizeof(randPoolInfo{}))+len(data))
+	hdr := (*randPoolInfo)(unsafe.Pointer(&got[0]))
+	assert.Equal(t, int32(64), hdr.entropyCount)
+	assert.Equal(t, int32(len(data)), hdr.bufSize)
+	assert.Equal(t, data, got[unsafe.Sizeof(randPoolInfo{}):])
 }
 
 // fakeSystem lays out the files Seed reads, in a temp dir.

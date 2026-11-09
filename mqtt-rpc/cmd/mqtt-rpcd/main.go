@@ -167,7 +167,7 @@ func seedKernelRNG(logger *zerolog.Logger) {
 			Int("entropy_avail", res.AvailBefore).
 			Msg("could not credit the hardware RNG; TLS may wait for the kernel to seed itself")
 	default:
-		logger.Info().Str("source", res.Source).Int("bits", res.Bits).
+		logger.Info().Str("source", res.Source).Int("bits_offered", res.Bits).
 			Int("entropy_avail_before", res.AvailBefore).
 			Int("entropy_avail_after", res.AvailAfter).
 			Msg("credited the hardware RNG to the kernel")
