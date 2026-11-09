@@ -17,6 +17,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/trakrf/platform/mqtt-rpc/internal/hwrng"
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerd"
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerd/cs463"
 	"github.com/trakrf/platform/mqtt-rpc/internal/update"
@@ -31,6 +32,12 @@ func main() {
 		Str("service", "mqtt-rpcd").
 		Str("version", version).
 		Logger()
+
+	// First, before anything reaches for crypto/rand: credit the reader's
+	// hardware RNG to the kernel. Without it the CS463's kernel takes 90–390 s
+	// after a boot to seed itself, and every TLS client on the reader — this
+	// daemon's broker link and the vendor app's CloudServer — waits that long.
+	seedKernelRNG(&logger)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -145,6 +152,24 @@ func main() {
 		// Exit cleanly; systemd (Restart=always) starts the binary the active
 		// link now points at, and the guard's ExecStartPre counts the start.
 		logger.Info().Msg("mqtt-rpcd exiting to restart onto the updated version")
+	}
+}
+
+// seedKernelRNG never stops the daemon: a failure costs only the old slow boot.
+func seedKernelRNG(logger *zerolog.Logger) {
+	res := hwrng.Seed(hwrng.Config{})
+	switch {
+	case res.Skipped:
+		logger.Info().Msg("no hardware RNG; the kernel seeds itself")
+	case res.Err != nil:
+		logger.Warn().Err(res.Err).Str("source", res.Source).
+			Int("entropy_avail", res.AvailBefore).
+			Msg("could not credit the hardware RNG; TLS may wait for the kernel to seed itself")
+	default:
+		logger.Info().Str("source", res.Source).Int("bits", res.Bits).
+			Int("entropy_avail_before", res.AvailBefore).
+			Int("entropy_avail_after", res.AvailAfter).
+			Msg("credited the hardware RNG to the kernel")
 	}
 }
 
