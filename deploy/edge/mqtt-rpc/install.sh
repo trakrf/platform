@@ -35,11 +35,15 @@ set -eu
 cd /opt/trakrf
 chmod 755 .mqtt-rpcd-guard.upload
 mv -f .mqtt-rpcd-guard.upload mqtt-rpcd-guard
-# The guard's install step stops its timer. Start it again however this script
-# ends — an error under set -e, or the SSH session dropping — so a failed
-# install never leaves a reader with no no-commit rollback until its next boot.
-restart_guard_timer() { systemctl start mqtt-rpcd-guard.timer >/dev/null 2>&1 || true; }
-trap restart_guard_timer EXIT
+# The guard's place step stops its timer and the daemon. Start both again
+# however this script ends — an error under set -e, or the SSH session
+# dropping — so a failed install never leaves a reader with no daemon, or no
+# no-commit rollback, until its next boot. start is a no-op on a running unit.
+restart_units() {
+  systemctl start mqtt-rpcd >/dev/null 2>&1 || true
+  systemctl start mqtt-rpcd-guard.timer >/dev/null 2>&1 || true
+}
+trap restart_units EXIT
 trap 'exit 1' HUP INT TERM
 # Stop the timer, disarm any remote update on probation, move the binary in,
 # and swap the link — keeping a pre-versioning plain binary as "legacy" (a

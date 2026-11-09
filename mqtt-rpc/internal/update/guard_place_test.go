@@ -86,7 +86,11 @@ func TestGuardPlace_ReRunAfterAnInterruptedMigrationConverges(t *testing.T) {
 	assert.Equal(t, "plain", string(legacy))
 }
 
-func TestGuardPlace_StopsTheTimerAndDisarmsBeforeTheBinaryMovesIn(t *testing.T) {
+// The guard runs from two units: its timer's service, and the daemon's
+// ExecStartPre on every restart of a crash-looping build. Stopping the timer
+// alone leaves a tick already running, and the next crash-loop restart, free to
+// roll back mid-install.
+func TestGuardPlace_StopsEveryGuardRunAndDisarmsBeforeTheBinaryMovesIn(t *testing.T) {
 	l := installed(t, "v2", "v1")
 	require.NoError(t, WritePending(l, Pending{Target: "v2", From: "v1"}))
 	for _, f := range []string{"starts", "ticks", "rollback.claim", "pending.commit"} {
@@ -100,8 +104,10 @@ func TestGuardPlace_StopsTheTimerAndDisarmsBeforeTheBinaryMovesIn(t *testing.T) 
 	out, code, _ := runGuardEnv(t, l, snapshotStub(t, l, "v2"), "place", "v2")
 	require.Equal(t, 0, code, out)
 
-	assert.Equal(t, "stop mqtt-rpcd-guard.timer pending=yes binary=no\n", snapshotCalls(t, l),
-		"the timer stops first, while nothing has changed yet")
+	assert.Equal(t, "stop mqtt-rpcd-guard.timer pending=yes binary=no\n"+
+		"stop mqtt-rpcd-guard.service pending=yes binary=no\n"+
+		"stop mqtt-rpcd.service pending=yes binary=no\n",
+		snapshotCalls(t, l), "every guard run stops first, while nothing has changed yet")
 	for _, f := range []string{"pending", "starts", "ticks", "rollback.claim", "pending.commit"} {
 		assert.NoFileExists(t, filepath.Join(l.StateDir(), f))
 	}

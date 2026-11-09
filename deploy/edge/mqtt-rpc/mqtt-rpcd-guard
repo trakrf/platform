@@ -324,9 +324,15 @@ place)
 		log "place: no upload for version '$v' at $up"
 		exit 1
 	fi
-	# No guard tick may act while the install changes what it acts on.
-	# install.sh starts the timer again when it finishes, however it finishes.
-	"$SYSTEMCTL" stop mqtt-rpcd-guard.timer 2>/dev/null || true
+	# No guard may act while the install changes what it acts on. It runs from
+	# the timer's service (a tick may already be running) and as the daemon's
+	# ExecStartPre (every restart of a crash-looping build), so stop all three,
+	# one at a time: on a first install a unit may not be loaded yet. stop waits
+	# for a running guard to end. install.sh starts the timer and the daemon
+	# again when it finishes, however it finishes.
+	for unit in mqtt-rpcd-guard.timer mqtt-rpcd-guard.service mqtt-rpcd.service; do
+		"$SYSTEMCTL" stop "$unit" 2>/dev/null || true
+	done
 	# An SSH install supersedes any remote update on probation. Disarm BEFORE
 	# the new binary moves in: a rollback of a same-version update would
 	# otherwise delete the binary just installed. The claim goes first, since
