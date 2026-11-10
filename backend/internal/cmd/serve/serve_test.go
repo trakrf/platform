@@ -55,7 +55,7 @@ func setupTestRouter(t *testing.T, notificationRuntimes ...notification.RouteReg
 	usersHandler := usershandler.NewHandler(store)
 	assetsHandler := assetshandler.NewHandler(store)
 	locationsHandler := locationshandler.NewHandler(store)
-	inventoryHandler := inventoryhandler.NewHandler(store, nil)
+	inventoryHandler := inventoryhandler.NewHandler(store, nil, nil)
 	reportsHandler := reportshandler.NewHandler(store)
 	scanDevicesHandler := scandeviceshandler.NewHandler(store, nil)
 	scanPointsHandler := scanpointshandler.NewHandler(store)

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/trakrf/platform/backend/internal/middleware"
@@ -32,9 +33,13 @@ type mockInventoryStorage struct {
 
 	assetIDsByIdentifiers      map[string]int
 	assetIDsByIdentifiersError error
+
+	// record is the hook the handler forwarded on the last save.
+	record storage.SaveRecordFunc
 }
 
-func (m *mockInventoryStorage) SaveInventoryScans(ctx context.Context, orgID int, req storage.SaveInventoryRequest) (*storage.SaveInventoryResult, error) {
+func (m *mockInventoryStorage) SaveInventoryScansRecord(ctx context.Context, orgID int, req storage.SaveInventoryRequest, record storage.SaveRecordFunc) (*storage.SaveInventoryResult, error) {
+	m.record = record
 	return m.saveResult, m.saveError
 }
 
@@ -75,7 +80,7 @@ func newTestRequest(t *testing.T, body any, orgID int) *http.Request {
 }
 
 func TestSave_MissingOrgContext(t *testing.T) {
-	handler := NewHandler(nil, nil)
+	handler := NewHandler(nil, nil, nil)
 
 	body := SaveRequest{
 		LocationIdentifier: ptr("WH-01"),
@@ -105,7 +110,7 @@ func TestSave_MissingOrgContext(t *testing.T) {
 }
 
 func TestSave_InvalidJSON(t *testing.T) {
-	handler := NewHandler(nil, nil)
+	handler := NewHandler(nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/save", bytes.NewReader([]byte("invalid json")))
 	req.Header.Set("Content-Type", "application/json")
@@ -126,7 +131,7 @@ func TestSave_InvalidJSON(t *testing.T) {
 }
 
 func TestSave_NeitherLocationFieldProvided(t *testing.T) {
-	handler := NewHandler(&mockInventoryStorage{}, nil)
+	handler := NewHandler(&mockInventoryStorage{}, nil, nil)
 
 	body := map[string]any{
 		"asset_identifiers": []string{"ASSET-0001"},
@@ -153,7 +158,7 @@ func TestSave_NeitherLocationFieldProvided(t *testing.T) {
 }
 
 func TestSave_EmptyAssetIdentifiers(t *testing.T) {
-	handler := NewHandler(&mockInventoryStorage{}, nil)
+	handler := NewHandler(&mockInventoryStorage{}, nil, nil)
 
 	body := SaveRequest{
 		LocationIdentifier: ptr("WH-01"),
@@ -204,7 +209,7 @@ func TestSave_RouteRegistration(t *testing.T) {
 	// POST /api/v1/inventory/save is now wired in cmd/serve/router.go under the
 	// public-write group (TRA-397); Handler.RegisterRoutes is intentionally empty.
 	// Wire the route directly here to verify handler-level plumbing.
-	handler := NewHandler(nil, nil)
+	handler := NewHandler(nil, nil, nil)
 
 	r := chi.NewRouter()
 	r.Post("/api/v1/inventory/save", handler.Save)
@@ -407,7 +412,7 @@ func TestInventorySave_MalformedBody_StableDetail(t *testing.T) {
 	ctx := context.WithValue(req.Context(), middleware.UserClaimsKey, claims)
 	req = req.WithContext(ctx)
 
-	handler := NewHandler(nil, nil)
+	handler := NewHandler(nil, nil, nil)
 	w := httptest.NewRecorder()
 	handler.Save(w, req)
 
@@ -445,7 +450,7 @@ func TestInventorySave_BadBody_CrossFieldEnvelope(t *testing.T) {
 	ctx := context.WithValue(req.Context(), middleware.UserClaimsKey, claims)
 	req = req.WithContext(ctx)
 
-	handler := NewHandler(&mockInventoryStorage{}, nil)
+	handler := NewHandler(&mockInventoryStorage{}, nil, nil)
 	w := httptest.NewRecorder()
 	handler.Save(w, req)
 
@@ -481,7 +486,7 @@ func TestSave_LocationAccessDenied(t *testing.T) {
 		},
 		assetIDsByIdentifiers: map[string]int{"ASSET-0001": 100, "ASSET-0002": 101},
 	}
-	handler := NewHandler(mock, nil)
+	handler := NewHandler(mock, nil, nil)
 
 	body := map[string]any{
 		"location_identifier": "WH-99",
@@ -514,7 +519,7 @@ func TestSave_AssetAccessDenied(t *testing.T) {
 		},
 		assetIDsByIdentifiers: map[string]int{"ASSET-1": 1, "ASSET-2": 2, "ASSET-3": 3},
 	}
-	handler := NewHandler(mock, nil)
+	handler := NewHandler(mock, nil, nil)
 
 	body := map[string]any{
 		"location_identifier": "WH-01",
@@ -540,7 +545,7 @@ func TestSave_InternalStorageError(t *testing.T) {
 		},
 		assetIDsByIdentifiers: map[string]int{"ASSET-0001": 100},
 	}
-	handler := NewHandler(mock, nil)
+	handler := NewHandler(mock, nil, nil)
 
 	body := map[string]any{
 		"location_identifier": "WH-01",
@@ -569,7 +574,7 @@ func TestSave_Success(t *testing.T) {
 		},
 		assetIDsByIdentifiers: map[string]int{"ASSET-1": 1, "ASSET-2": 2, "ASSET-3": 3},
 	}
-	handler := NewHandler(mock, nil)
+	handler := NewHandler(mock, nil, nil)
 
 	body := map[string]any{
 		"location_identifier": "WH-B",
@@ -593,7 +598,7 @@ func TestSave_Success(t *testing.T) {
 }
 
 func TestSave_RequiresAtLeastOneLocationField(t *testing.T) {
-	handler := NewHandler(&mockInventoryStorage{}, nil)
+	handler := NewHandler(&mockInventoryStorage{}, nil, nil)
 	req := newTestRequest(t, map[string]any{"asset_identifiers": []string{"ASSET-0001"}}, 1)
 	w := httptest.NewRecorder()
 	handler.Save(w, req)
@@ -603,7 +608,7 @@ func TestSave_RequiresAtLeastOneLocationField(t *testing.T) {
 }
 
 func TestSave_RequiresAtLeastOneAssetField(t *testing.T) {
-	handler := NewHandler(&mockInventoryStorage{}, nil)
+	handler := NewHandler(&mockInventoryStorage{}, nil, nil)
 	req := newTestRequest(t, map[string]any{"location_identifier": "WH-01"}, 1)
 	w := httptest.NewRecorder()
 	handler.Save(w, req)
@@ -616,7 +621,7 @@ func TestSave_LocationIdentifierNotFound_Rejected(t *testing.T) {
 	mock := &mockInventoryStorage{
 		locationByIdentifier: map[string]*location.LocationWithParent{}, // ghost
 	}
-	handler := NewHandler(mock, nil)
+	handler := NewHandler(mock, nil, nil)
 	body := map[string]any{
 		"location_identifier": "ghost",
 		"asset_identifiers":   []string{"ASSET-0001"},
@@ -639,7 +644,7 @@ func TestSave_AssetIdentifierNotFound_Rejected(t *testing.T) {
 			// "ASSET-GHOST" intentionally absent
 		},
 	}
-	handler := NewHandler(mock, nil)
+	handler := NewHandler(mock, nil, nil)
 	body := map[string]any{
 		"location_identifier": "WH-01",
 		"asset_identifiers":   []string{"ASSET-1", "ASSET-GHOST"},
@@ -666,7 +671,7 @@ func TestSave_IdentifierHappyPath_ResolvesAndSucceeds(t *testing.T) {
 			"ASSET-2": 8,
 		},
 	}
-	handler := NewHandler(mock, nil)
+	handler := NewHandler(mock, nil, nil)
 	body := map[string]any{
 		"location_identifier": "WH-01",
 		"asset_identifiers":   []string{"ASSET-1", "ASSET-2"},
@@ -725,7 +730,7 @@ func TestSave_FiresMovedDetectionAfterCommit(t *testing.T) {
 		assetIDsByIdentifiers: map[string]int{"ASSET-1": 100, "ASSET-2": 101},
 	}
 	moved := &recordingMovedEvaluator{}
-	handler := NewHandler(mock, moved)
+	handler := NewHandler(mock, moved, nil)
 
 	req := newTestRequest(t, map[string]any{
 		"location_identifier": "WH-01",
@@ -756,7 +761,7 @@ func TestSave_SkipsDetectionWhenNothingInserted(t *testing.T) {
 		assetIDsByIdentifiers: map[string]int{"ASSET-1": 100},
 	}
 	moved := &recordingMovedEvaluator{}
-	handler := NewHandler(mock, moved)
+	handler := NewHandler(mock, moved, nil)
 
 	req := newTestRequest(t, map[string]any{
 		"location_identifier": "WH-01",
@@ -785,7 +790,7 @@ func TestSave_FiresOverrideDetection(t *testing.T) {
 		assetIDsByIdentifiers: map[string]int{"ASSET-1": 100},
 	}
 	moved := &recordingMovedEvaluator{}
-	handler := NewHandler(mock, moved)
+	handler := NewHandler(mock, moved, nil)
 
 	req := newTestRequest(t, map[string]any{
 		"location_identifier": "WH-01",
@@ -812,7 +817,7 @@ func TestSave_DoesNotFireDetectionOnFailure(t *testing.T) {
 		assetIDsByIdentifiers: map[string]int{"ASSET-1": 100},
 	}
 	moved := &recordingMovedEvaluator{}
-	handler := NewHandler(mock, moved)
+	handler := NewHandler(mock, moved, nil)
 
 	req := newTestRequest(t, map[string]any{
 		"location_identifier": "WH-01",
@@ -833,7 +838,7 @@ func TestSave_NilMovedEvaluatorIsSafe(t *testing.T) {
 		},
 		assetIDsByIdentifiers: map[string]int{"ASSET-1": 100},
 	}
-	handler := NewHandler(mock, nil)
+	handler := NewHandler(mock, nil, nil)
 
 	req := newTestRequest(t, map[string]any{
 		"location_identifier": "WH-01",
@@ -842,4 +847,45 @@ func TestSave_NilMovedEvaluatorIsSafe(t *testing.T) {
 	w := httptest.NewRecorder()
 	require.NotPanics(t, func() { handler.Save(w, req) })
 	require.Equal(t, http.StatusCreated, w.Code)
+}
+
+// The handler hands storage the record func it was built with, so a manual
+// save records its location changes inside the save transaction.
+func TestSave_ForwardsRecordFunc(t *testing.T) {
+	newMock := func() *mockInventoryStorage {
+		return &mockInventoryStorage{
+			saveResult: &storage.SaveInventoryResult{Count: 1, LocationID: 1, Timestamp: time.Now()},
+			locationByIdentifier: map[string]*location.LocationWithParent{
+				"WH-01": {LocationView: location.LocationView{Location: location.Location{ID: 1, ExternalKey: "WH-01"}}},
+			},
+			assetIDsByIdentifiers: map[string]int{"ASSET-1": 100},
+		}
+	}
+	body := map[string]any{"location_identifier": "WH-01", "asset_identifiers": []string{"ASSET-1"}}
+
+	t.Run("forwards the func it was given", func(t *testing.T) {
+		mock := newMock()
+		called := false
+		record := func(context.Context, pgx.Tx, storage.SavedInventory) error { called = true; return nil }
+		handler := NewHandler(mock, nil, record)
+
+		w := httptest.NewRecorder()
+		handler.Save(w, newTestRequest(t, body, 7))
+
+		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+		require.NotNil(t, mock.record)
+		require.NoError(t, mock.record(context.Background(), nil, storage.SavedInventory{}))
+		assert.True(t, called, "the forwarded func is the handler's own")
+	})
+
+	t.Run("nil when none was given", func(t *testing.T) {
+		mock := newMock()
+		handler := NewHandler(mock, nil, nil)
+
+		w := httptest.NewRecorder()
+		handler.Save(w, newTestRequest(t, body, 7))
+
+		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+		assert.Nil(t, mock.record)
+	})
 }
