@@ -12,6 +12,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/nyaruka/phonenumbers v1.8.1
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/pashagolub/pgxmock/v3 v3.4.0
 	github.com/prometheus/client_golang v1.23.2
@@ -82,5 +83,5 @@ require (
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
-	google.golang.org/protobuf v1.36.8 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 )

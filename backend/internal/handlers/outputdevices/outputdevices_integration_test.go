@@ -40,12 +40,14 @@ type setCall struct {
 }
 
 type fakeDriver struct {
-	calls   []setCall
-	failURL string
+	calls     []setCall
+	offAfters []int // offAfterSec of each call, parallel to calls
+	failURL   string
 }
 
-func (d *fakeDriver) Set(_ context.Context, dev outputdevice.OutputDevice, on bool, _ int) error {
+func (d *fakeDriver) Set(_ context.Context, dev outputdevice.OutputDevice, on bool, offAfterSec int) error {
 	d.calls = append(d.calls, setCall{dev.BaseURL, dev.SwitchID, on})
+	d.offAfters = append(d.offAfters, offAfterSec)
 	if dev.BaseURL == d.failURL {
 		return errors.New("device unreachable")
 	}
@@ -54,7 +56,13 @@ func (d *fakeDriver) Set(_ context.Context, dev outputdevice.OutputDevice, on bo
 
 func newTestServer(t *testing.T, drv *fakeDriver) (*chi.Mux, int) {
 	t.Helper()
-	db := testutil.SetupTestDBFull(t)
+	return newTestServerOn(t, testutil.SetupTestDBFull(t), drv)
+}
+
+// newTestServerOn is newTestServer on a caller-held DB, for tests that seed
+// rows or org defaults directly.
+func newTestServerOn(t *testing.T, db *testutil.TestDB, drv *fakeDriver) (*chi.Mux, int) {
+	t.Helper()
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -84,6 +92,7 @@ func TestOutputDevicesHandler_RoundTrip(t *testing.T) {
 	// Create with defaults.
 	rec := do(http.MethodPost, "/api/v1/output-devices", map[string]any{
 		"name": "Demo Strobe", "base_url": "http://192.168.50.66",
+		"metadata": egressAutoOff,
 	})
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 	var created struct {
@@ -160,6 +169,7 @@ func TestOutputDevicesHandler_ClearLocation(t *testing.T) {
 	// Create an output device bound to the location.
 	rec := do(http.MethodPost, "/api/v1/output-devices", map[string]any{
 		"name": "Bound Strobe", "base_url": "http://192.168.50.66", "location_id": loc.ID,
+		"metadata": egressAutoOff,
 	})
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 	var created locResp
@@ -203,6 +213,7 @@ func TestOutputDevicesHandler_CreateMQTT(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, json.NewEncoder(&buf).Encode(map[string]any{
 		"name": "Dock Strobe", "transport": "mqtt", "command_topic": "trakrf.id/dock-strobe",
+		"metadata": egressAutoOff,
 	}))
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/output-devices", &buf)
 	req.Header.Set("Content-Type", "application/json")
@@ -228,6 +239,7 @@ func TestOutputDevicesHandler_MQTTRequiresCommandTopic(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, json.NewEncoder(&buf).Encode(map[string]any{
 		"name": "Dock Strobe", "transport": "mqtt", // no command_topic
+		"metadata": egressAutoOff,
 	}))
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/output-devices", &buf)
 	req.Header.Set("Content-Type", "application/json")
@@ -242,7 +254,8 @@ func TestOutputDevicesHandler_HTTPRequiresBaseURL(t *testing.T) {
 
 	var buf bytes.Buffer
 	require.NoError(t, json.NewEncoder(&buf).Encode(map[string]any{
-		"name": "Dock Strobe", // default http transport, no base_url
+		"name":     "Dock Strobe", // default http transport, no base_url
+		"metadata": egressAutoOff,
 	}))
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/output-devices", &buf)
 	req.Header.Set("Content-Type", "application/json")
@@ -348,6 +361,7 @@ func TestOutputDevicesHandler_CreateGPORequiresScanDeviceID(t *testing.T) {
 
 	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
 		"name": "Reader GPO", "type": "csl_gpo", "transport": "mqtt", "switch_id": 1,
+		"metadata": egressAutoOff,
 	})
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 }
@@ -368,6 +382,7 @@ func TestOutputDevicesHandler_CreateGPORejectsForeignScanDeviceID(t *testing.T) 
 	// Nonexistent id.
 	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
 		"name": "Reader GPO", "type": "csl_gpo", "transport": "mqtt", "switch_id": 1,
+		"metadata":       egressAutoOff,
 		"scan_device_id": 99999999,
 	})
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
@@ -382,6 +397,7 @@ func TestOutputDevicesHandler_CreateGPORejectsForeignScanDeviceID(t *testing.T) 
 
 	rec = doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
 		"name": "Reader GPO", "type": "csl_gpo", "transport": "mqtt", "switch_id": 1,
+		"metadata":       egressAutoOff,
 		"scan_device_id": readerB.ID,
 	})
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
@@ -409,6 +425,7 @@ func TestOutputDevicesHandler_CreateGPORejectsWrongReaderType(t *testing.T) {
 
 	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
 		"name": "Reader GPO", "type": "csl_gpo", "transport": "mqtt", "switch_id": 1,
+		"metadata":       egressAutoOff,
 		"scan_device_id": glReader.ID,
 	})
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
@@ -436,6 +453,7 @@ func TestOutputDevicesHandler_CreateGPORejectsReaderWithNoPublishTopic(t *testin
 
 	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
 		"name": "Reader GPO", "type": "csl_gpo", "transport": "mqtt", "switch_id": 1,
+		"metadata":       egressAutoOff,
 		"scan_device_id": noTopicReader.ID,
 	})
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
@@ -460,6 +478,7 @@ func TestOutputDevicesHandler_CreateGPOWithValidScanDeviceID(t *testing.T) {
 
 	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
 		"name": "Reader GPO", "type": "csl_gpo", "transport": "mqtt", "switch_id": 1,
+		"metadata":       egressAutoOff,
 		"scan_device_id": reader.ID,
 	})
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
@@ -501,6 +520,7 @@ func TestOutputDevicesHandler_UpdateGPOKeepsStoredScanDeviceID(t *testing.T) {
 
 	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
 		"name": "Reader GPO", "type": "csl_gpo", "transport": "mqtt", "switch_id": 1,
+		"metadata":       egressAutoOff,
 		"scan_device_id": reader.ID,
 	})
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
@@ -529,6 +549,10 @@ func TestOutputDevicesHandler_TestFireMissingIs404(t *testing.T) {
 
 // helpers
 
+// egressAutoOff gives a default (egress) device the off edge TRA-1273 requires,
+// so each test fails or passes on the rule it is about.
+var egressAutoOff = map[string]any{"auto_off_seconds": 5}
+
 func doReq(t *testing.T, r *chi.Mux, orgID int, method, path string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	var buf bytes.Buffer
@@ -548,6 +572,7 @@ func createMQTTDevice(t *testing.T, r *chi.Mux, orgID int, topic string) int {
 	t.Helper()
 	rec := doReq(t, r, orgID, http.MethodPost, "/api/v1/output-devices", map[string]any{
 		"name": "D", "transport": "mqtt", "command_topic": topic,
+		"metadata": egressAutoOff,
 	})
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 	var created struct {
@@ -562,7 +587,7 @@ func createMQTTDevice(t *testing.T, r *chi.Mux, orgID int, topic string) int {
 func createDevice(t *testing.T, r *chi.Mux, orgID int, baseURL string) int {
 	t.Helper()
 	var buf bytes.Buffer
-	require.NoError(t, json.NewEncoder(&buf).Encode(map[string]any{"name": "D", "base_url": baseURL}))
+	require.NoError(t, json.NewEncoder(&buf).Encode(map[string]any{"name": "D", "base_url": baseURL, "metadata": egressAutoOff}))
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/output-devices", &buf)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()

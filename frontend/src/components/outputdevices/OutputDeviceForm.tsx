@@ -3,6 +3,8 @@ import { validateName } from '@/lib/location/validators';
 import { useLocations } from '@/hooks/locations';
 import { useScanDevices } from '@/hooks/scandevices';
 import { PaidGate } from '@/components/entitlement';
+import { useGeofenceDefaults } from '@/hooks/orgs/useGeofenceDefaults';
+import { MAX_AUTO_OFF_SECONDS, validateAutoOff } from './autoOff';
 import type {
   OutputDevice,
   OutputDeviceType,
@@ -115,6 +117,8 @@ export function OutputDeviceForm({
   const { locations } = useLocations();
   const { scanDevices } = useScanDevices();
   const readerDevices = scanDevices.filter((d) => GPO_READER_TYPES.includes(d.type));
+  const orgAutoOff = useGeofenceDefaults()?.defaults.auto_off_seconds;
+  const orgSuppliesAutoOff = orgAutoOff != null && orgAutoOff > 0;
 
   useEffect(() => {
     if (mode === 'edit' && device) {
@@ -173,7 +177,7 @@ export function OutputDeviceForm({
     const ageErr = validateOptInt(formData.age_out_seconds, {});
     if (ageErr) errors.age_out_seconds = ageErr;
     if (formData.mode === 'egress') {
-      const offErr = validateOptInt(formData.auto_off_seconds, {});
+      const offErr = validateAutoOff(formData.auto_off_seconds, orgAutoOff);
       if (offErr) errors.auto_off_seconds = offErr;
     }
     const rssiErr = validateOptInt(formData.rssi_threshold, { allowNegative: true });
@@ -544,12 +548,13 @@ export function OutputDeviceForm({
           <input
             type="number"
             id="auto_off_seconds"
-            min={0}
+            min={1}
+            max={MAX_AUTO_OFF_SECONDS}
             value={formData.mode === 'presence' ? '' : formData.auto_off_seconds}
             onChange={(e) => handleChange('auto_off_seconds', e.target.value)}
             disabled={loading || formData.mode === 'presence'}
             className={inputClass(!!fieldErrors.auto_off_seconds)}
-            placeholder="0 = until manual reset"
+            placeholder={orgSuppliesAutoOff ? `Org default (${orgAutoOff})` : `Required, 1-${MAX_AUTO_OFF_SECONDS}`}
           />
           {fieldErrors.auto_off_seconds && (
             <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.auto_off_seconds}</p>
@@ -557,7 +562,8 @@ export function OutputDeviceForm({
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             {formData.mode === 'presence'
               ? 'Managed automatically by presence detection.'
-              : 'Device flips itself off after N seconds. 0 or blank = stay on until manual reset.'}
+              : `Device flips itself off after N seconds (1-${MAX_AUTO_OFF_SECONDS}). This is egress's only off.` +
+                (orgSuppliesAutoOff ? ' Blank = org default.' : '')}
           </p>
         </div>
       </div>

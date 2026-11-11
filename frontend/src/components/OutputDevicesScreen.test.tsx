@@ -272,6 +272,89 @@ describe('OutputDevicesScreen row expander (TRA-938)', () => {
   });
 });
 
+// TRA-1273: delete drives the output off first. When that off cannot be
+// delivered the backend keeps the row (502) so Reset still works; the screen
+// then offers a deliberate "delete anyway".
+describe('OutputDevicesScreen delete when the output cannot be turned off', () => {
+  let del: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuthStore.setState({ isAuthenticated: true });
+    (useOutputDevices as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      outputDevices: [device({ id: 1, name: 'Dock Strobe' })],
+      isLoading: false,
+    });
+    del = vi.fn();
+    (useOutputDeviceMutations as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      delete: del,
+      test: vi.fn(),
+      reset: vi.fn(),
+    });
+  });
+  afterEach(() => cleanup());
+
+  const startDelete = () => {
+    render(<OutputDevicesScreen />);
+    fireEvent.click(screen.getByLabelText('Delete output device Dock Strobe'));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+  };
+
+  it('deletes without force on the first confirm', async () => {
+    del.mockResolvedValue(1);
+    startDelete();
+    await waitFor(() => expect(del).toHaveBeenCalledTimes(1));
+    expect(del).toHaveBeenCalledWith({ id: 1 });
+  });
+
+  it('offers delete-anyway on a 502 and retries with force', async () => {
+    del.mockRejectedValueOnce({ isAxiosError: true, response: { status: 502 } });
+    del.mockResolvedValueOnce(1);
+    startDelete();
+
+    expect(await screen.findByText(/so it was not deleted/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete anyway' }));
+
+    await waitFor(() => expect(del).toHaveBeenCalledTimes(2));
+    expect(del).toHaveBeenLastCalledWith({ id: 1, force: true });
+  });
+
+  it('shows progress and takes no second click while the delete runs', async () => {
+    let settle: (v: number) => void = () => {};
+    del.mockReturnValueOnce(new Promise<number>((r) => (settle = r)));
+    startDelete();
+
+    const confirm = await screen.findByTestId('modal-confirm-button');
+    await waitFor(() => expect(confirm).toHaveTextContent('Turning off…'));
+    expect(confirm).toBeDisabled();
+    fireEvent.click(confirm);
+    expect(del).toHaveBeenCalledTimes(1);
+
+    settle(1);
+    await waitFor(() => expect(screen.queryByTestId('modal-confirm-button')).not.toBeInTheDocument());
+  });
+
+  it('shows progress on delete-anyway too', async () => {
+    let settle: (v: number) => void = () => {};
+    del.mockRejectedValueOnce({ isAxiosError: true, response: { status: 502 } });
+    del.mockReturnValueOnce(new Promise<number>((r) => (settle = r)));
+    startDelete();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete anyway' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('modal-confirm-button')).toHaveTextContent('Deleting…')
+    );
+    settle(1);
+    await waitFor(() => expect(screen.queryByTestId('modal-confirm-button')).not.toBeInTheDocument());
+  });
+
+  it('does not offer delete-anyway for other failures', async () => {
+    del.mockRejectedValueOnce({ isAxiosError: true, response: { status: 500 } });
+    startDelete();
+    await waitFor(() => expect(del).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('button', { name: 'Delete anyway' })).not.toBeInTheDocument();
+  });
+});
+
 /**
  * This screen owns its heading (no PAGE_TITLES entry), so it must read as the
  * sidebar entry that opens it — "Outputs", not "Output Devices" (TRA-1071).

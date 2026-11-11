@@ -54,6 +54,9 @@ type fakeAdapter struct {
 	lastGpoPort  int
 	lastGpoOn    bool
 	lastGpoPulse int
+
+	outputsOff    []bool // the final flag of each OutputsOff call
+	outputsOffErr error
 }
 
 func (f *fakeAdapter) GetCapabilities(_ context.Context) (readerrpc.Capabilities, error) {
@@ -84,6 +87,11 @@ func (f *fakeAdapter) GpoSet(_ context.Context, port int, on bool, pulseMs int) 
 	f.lastGpoOn = on
 	f.lastGpoPulse = pulseMs
 	return f.gpoErr
+}
+
+func (f *fakeAdapter) OutputsOff(_ context.Context, final bool) error {
+	f.outputsOff = append(f.outputsOff, final)
+	return f.outputsOffErr
 }
 
 func newTestDaemon(a *fakeAdapter) *Daemon {
@@ -282,12 +290,15 @@ func TestHandleRPC_UnparseableDropped(t *testing.T) {
 	}
 }
 
-// fakeMessage is a minimal mqtt.Message carrying only a payload.
-type fakeMessage struct{ payload []byte }
+// fakeMessage is a minimal mqtt.Message carrying a payload and the retain flag.
+type fakeMessage struct {
+	payload  []byte
+	retained bool
+}
 
 func (m fakeMessage) Duplicate() bool   { return false }
 func (m fakeMessage) Qos() byte         { return 1 }
-func (m fakeMessage) Retained() bool    { return false }
+func (m fakeMessage) Retained() bool    { return m.retained }
 func (m fakeMessage) Topic() string     { return "trakrf.id/cs463-212/rpc" }
 func (m fakeMessage) MessageID() uint16 { return 0 }
 func (m fakeMessage) Payload() []byte   { return m.payload }

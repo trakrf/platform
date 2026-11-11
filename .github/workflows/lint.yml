@@ -23,7 +23,13 @@ permissions:
 
 jobs:
   lint-test:
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest. This is the only job that installs a browser,
+    # and "playwright install --with-deps" pulls system packages with apt. On
+    # the Ubuntu 26.04 image every run since 2026-11-11 failed there with
+    # "Temporary failure resolving 'security.ubuntu.com'", across reruns and
+    # branches, while GitHub reported Actions healthy. Move it back to
+    # ubuntu-latest once a run on 26.04 installs the browser cleanly.
+    runs-on: ubuntu-24.04
     # Without this the job inherits the 360-minute Actions default. A hung test
     # runner would then occupy a runner for six hours and emit no signal about
     # what happened — see TRA-1050. The job takes ~5 min when healthy.
@@ -45,7 +51,9 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # 22, not 20: Playwright 1.65 is no longer tested on Node 20, and
+          # Node 20 is past end of life. 22 is what local dev runs.
+          node-version: '22'
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
@@ -84,6 +92,10 @@ jobs:
         # step that hung instead of just failing the whole job on timeout.
         timeout-minutes: 10
         run: just test
+
+      - name: Test mqtt-rpc (reader daemon + deploy scripts)
+        timeout-minutes: 10
+        run: just test-mqtt-rpc
 
       # ── The e2e gate (TRA-1253 item 2, ADR 0022) ────────────────────────────
       #

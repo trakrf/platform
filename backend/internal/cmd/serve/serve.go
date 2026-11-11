@@ -15,6 +15,8 @@ import (
 	"github.com/trakrf/platform/backend/internal/alarm/shelly"
 	"github.com/trakrf/platform/backend/internal/assetevent"
 	"github.com/trakrf/platform/backend/internal/buildinfo"
+	"github.com/trakrf/platform/backend/internal/crossing"
+	"github.com/trakrf/platform/backend/internal/detection"
 	"github.com/trakrf/platform/backend/internal/geofence"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
@@ -41,8 +43,10 @@ import (
 	"github.com/trakrf/platform/backend/internal/mustering"
 	"github.com/trakrf/platform/backend/internal/notification"
 	"github.com/trakrf/platform/backend/internal/notification/resend"
+	"github.com/trakrf/platform/backend/internal/notification/routing"
 	"github.com/trakrf/platform/backend/internal/notification/twilio"
 	"github.com/trakrf/platform/backend/internal/readercontrol"
+	"github.com/trakrf/platform/backend/internal/readerrelease"
 	authservice "github.com/trakrf/platform/backend/internal/services/auth"
 	"github.com/trakrf/platform/backend/internal/services/email"
 	orgsservice "github.com/trakrf/platform/backend/internal/services/orgs"
@@ -124,6 +128,49 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	}
 	log.Info().Bool("enabled", emailConfig.Enabled).Msg("Notification email integration configured")
 
+	// The delivery stack: planner, channel adapter and the queue runtime that
+	// runs trigger and delivery jobs. Config and templates are checked here so
+	// a bad phone region or a broken template refuses to start. The runtime runs
+	// trigger and delivery jobs; triggerJobs is how detection queues the triggers.
+	routingConfig, err := routing.ConfigFromEnv()
+	if err != nil {
+		return err
+	}
+	deliveryRuntime, triggerJobs, err := newNotificationDelivery(notificationDeliveryDeps{
+		Store:    store,
+		Pool:     store.Pool().(*pgxpool.Pool),
+		Email:    emailRuntime.Sender,
+		SMS:      smsRuntime.Sender,
+		Routing:  routingConfig,
+		Registry: prometheus.DefaultRegisterer,
+		Log:      *log,
+	})
+	if err != nil {
+		return err
+	}
+	// Not the serve context: cancelling a River start context is an abrupt
+	// shutdown that cancels running jobs, and ctx is cancelled on SIGTERM.
+	// Stop below drains them instead.
+	if err := deliveryRuntime.Start(context.WithoutCancel(ctx)); err != nil {
+		return err
+	}
+	// Every return below this point, not just the normal shutdown, must stop
+	// the runtime before store.Close() closes its pool, or a failed boot would
+	// leave sends running against a closed pool. Defers run in reverse order.
+	stopDeliveryRuntime := stopOnce(deliveryRuntime.Stop, func(err error) {
+		log.Error().Err(err).Msg("Notification delivery runtime stop error")
+	})
+	defer func() {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stopCancel()
+		stopDeliveryRuntime(stopCtx)
+	}()
+	log.Info().
+		Str("phone_region", routingConfig.PhoneRegion).
+		Bool("email_enabled", emailConfig.Enabled).
+		Bool("sms_enabled", smsConfig.Enabled()).
+		Msg("notification delivery runtime started")
+
 	// Say it at boot as well as on /health (TRA-1190). The endpoint is what a
 	// test suite can check; this line is what a developer actually sees, and
 	// `just dev` completing against a schema two migrations behind is the root
@@ -187,10 +234,14 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// engine joins the ingest fan-out via the MultiEvaluator below when MQTT is on.
 	musterBroadcaster := mustering.NewBroadcaster()
 	musterEngine := mustering.NewEngine(store, musterBroadcaster, log)
-	// Evaluator fan-out shared by the subscriber (hardware reads) and the
-	// mustering simulate handler (synthetic reads). Geofence is prepended when
-	// ingestion is enabled (it only exists then). nil-safe.
+	// Evaluator fan-out for the mustering simulate handler (synthetic reads).
+	// Geofence is prepended when ingestion is enabled (it only exists then).
+	// nil-safe.
 	musterEvaluators := ingest.MultiEvaluator{musterEngine, assetEventEvaluator}
+
+	// The recorder writes location changes and queues their alerts, for the
+	// reader stages and for handheld saves, which happen with ingestion off.
+	recorder := detection.NewRecorder(store, triggerJobs)
 
 	mqttCfg := ingest.ConfigFromEnv()
 	var alarmDispatcher alarm.Dispatcher
@@ -220,13 +271,24 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 		geofenceEngine.Start()
 		defer geofenceEngine.Stop()
 
-		// TRA-978: prepend geofence to the fan-out so the subscriber drives both
-		// geofence and mustering off the same membership-passing reads.
-		// TRA-1043 joins the same fan-out, so one message drives geofence,
-		// mustering, and asset-event detection off the same resolved reads.
+		// The simulator's fan-out keeps geofence: simulated reads reach the engine
+		// through Evaluate, which never queues a trigger.
 		musterEvaluators = ingest.MultiEvaluator{geofenceEngine, musterEngine, assetEventEvaluator}
 
-		subscriber := ingest.NewSubscriber(mqttCfg, store, topicRegistry, musterEvaluators, readBroadcaster, log)
+		// Hardware reads reach geofence through its detection stage instead, so its
+		// fan-out must leave the engine out: Evaluate would decide each read a second
+		// time, and anything it fired would be recorded and driven outside the scan
+		// transaction, with no trigger. Geofence runs first, so the relay decision is
+		// not behind the other writes.
+		detector := detection.NewPipeline(log,
+			geofenceEngine.Stage(store, recorder),
+			assetevent.NewMoveStage(store, recorder),
+			crossing.NewStage(crossing.NewTracker(crossing.ConfigFromEnv()), store, recorder),
+		)
+		subscriberEvaluators := ingest.MultiEvaluator{musterEngine, assetEventEvaluator}
+
+		subscriber := ingest.NewSubscriber(mqttCfg, store, topicRegistry, subscriberEvaluators, readBroadcaster, log)
+		subscriber.SetDetector(detector)
 		if err := subscriber.Start(); err != nil {
 			log.Error().Err(err).Msg("Failed to start MQTT subscriber")
 			return err
@@ -275,8 +337,9 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	usersHandler := usershandler.NewHandler(store)
 	assetsHandler := assetshandler.NewHandler(store)
 	locationsHandler := locationshandler.NewHandler(store)
-	// TRA-1043: the inventory handler fires detection post-commit on Save.
-	inventoryHandler := inventoryhandler.NewHandler(store, assetEventEvaluator)
+	// The inventory handler fires webhook detection post-commit on Save; the
+	// owners' alerts are recorded inside the save transaction.
+	inventoryHandler := inventoryhandler.NewHandler(store, assetEventEvaluator, assetevent.NewManualSave(store, recorder).Record)
 	reportsHandler := reportshandler.NewHandler(store)
 	scanDevicesHandler := scandeviceshandler.NewHandler(store, topicRegistry)
 	scanPointsHandler := scanpointshandler.NewHandler(store)
@@ -292,6 +355,11 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 		readerRPC = readerClient
 	}
 	readerConfigHandler := readerconfighandler.NewHandler(store, readerRPC)
+	if readerClient != nil {
+		// TRA-1317: remote mqtt-rpcd updates. The cloud only relays the signed
+		// manifest; the reader verifies it against its own compiled-in keys.
+		readerConfigHandler.WithSoftware(readerClient, readerrelease.NewSource(os.Getenv("MQTT_RPCD_RELEASE_BASE_URL")))
+	}
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(store.Pool().(*pgxpool.Pool), info, startTime)
 	// TRA-924: Live Reads is now served by the org-enforced SSE endpoint, so the
@@ -348,9 +416,20 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Error().Err(err).Msg("Shutdown error")
-		return err
+	// The runtime stops concurrently with HTTP, not after it: Shutdown waits
+	// for open SSE streams and can use the whole budget, which would leave the
+	// runtime an expired context and abandon running sends. Its own soft-stop
+	// timeout (3s) keeps it inside the same 5s. Stop runs even if Shutdown fails.
+	runtimeStopped := make(chan struct{})
+	go func() {
+		defer close(runtimeStopped)
+		stopDeliveryRuntime(shutdownCtx)
+	}()
+	shutdownErr := server.Shutdown(shutdownCtx)
+	<-runtimeStopped
+	if shutdownErr != nil {
+		log.Error().Err(shutdownErr).Msg("Shutdown error")
+		return shutdownErr
 	}
 
 	<-serverErr

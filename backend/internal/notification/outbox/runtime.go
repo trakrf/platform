@@ -3,6 +3,7 @@ package outbox
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,22 +26,40 @@ type Runtime struct {
 // *pgxpool.Pool backing Storage — Storage's own PgxPool interface exists for
 // pgxmock compatibility and is not sufficient here, since riverpgxv5.New
 // requires the concrete pgxpool type for its own maintenance queries).
-func NewRuntime(pool *pgxpool.Pool, adapter ChannelAdapter, store deliveryWorkerStore, metrics *Metrics) (*Runtime, error) {
+func NewRuntime(pool *pgxpool.Pool, adapter ChannelAdapter, store deliveryWorkerStore, metrics *Metrics, register ...func(*river.Workers)) (*Runtime, error) {
 	workers := river.NewWorkers()
 	river.AddWorker(workers, NewDeliveryWorker(store, adapter, metrics))
+	for _, add := range register {
+		add(workers)
+	}
 
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Queues: map[string]river.QueueConfig{
 			river.QueueDefault: {MaxWorkers: 10},
 		},
-		Workers:     workers,
-		RetryPolicy: NewRetryLadder(),
+		Workers: workers,
+		// Under serve's 5s shutdown budget: after a soft Stop, a send still
+		// running at 3s has its context cancelled and is recorded as a quick
+		// retry, instead of being abandoned mid-send when the process exits.
+		SoftStopTimeout: 3 * time.Second,
+		RetryPolicy:     NewRetryLadder(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct river client: %w", err)
 	}
 
 	return &Runtime{Client: client}, nil
+}
+
+// NewInserter builds an insert-only River client: no queues and no workers,
+// so it never claims a job. With no worker bundle River does not check that an
+// inserted kind has a worker, so it can queue any job kind.
+func NewInserter(pool *pgxpool.Pool) (*river.Client[pgx.Tx], error) {
+	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct river inserter: %w", err)
+	}
+	return client, nil
 }
 
 func (r *Runtime) Start(ctx context.Context) error {

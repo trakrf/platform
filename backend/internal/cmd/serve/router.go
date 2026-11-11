@@ -208,7 +208,7 @@ func setupRouter(
 		// consumers are the geofence engine and the alarm dispatcher.
 		outputDevicesHandler.RegisterRoutes(r, requireCap(capability.Geofence), paidGate)
 		// TRA-993: internal-only reader live get/set config over MQTT-RPC.
-		readerConfigHandler.RegisterRoutes(r, paidGate)
+		readerConfigHandler.RegisterRoutes(r, paidGate, middleware.RequireCurrentOrgRole(store, models.RoleAdmin))
 		lookupHandler.RegisterRoutes(r)
 		// TRA-924: org-enforced Live Reads SSE stream (session-auth, internal).
 		readstreamHandler.RegisterRoutes(r)

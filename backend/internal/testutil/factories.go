@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/trakrf/platform/backend/internal/models/asset"
+	"github.com/trakrf/platform/backend/internal/models/scandevice"
 	"github.com/trakrf/platform/backend/internal/models/shared"
 )
 
@@ -178,4 +179,70 @@ func CreateTestAsset(t *testing.T, pool *pgxpool.Pool, orgID int, externalKey st
 		ValidTo:     &validTo,
 		IsActive:    true,
 	}
+}
+
+// CreateTestNotificationEvent inserts a gate alarm for assetID and a
+// notification_events row from it, and returns the event's id. key names the
+// reader the alarm is read on, so it must be unique per test.
+func CreateTestNotificationEvent(t *testing.T, db *TestDB, orgID, assetID int, key string) int {
+	t.Helper()
+	ctx := context.Background()
+	topic := "trakrf.id/" + key + "/reads"
+	dev, err := db.Store.CreateScanDevice(ctx, orgID, scandevice.CreateScanDeviceRequest{
+		Name: "Test Reader " + key, Type: scandevice.DeviceTypeCS463, PublishTopic: &topic,
+	})
+	if err != nil {
+		t.Fatalf("Failed to create test scan device: %v", err)
+	}
+	var eventID int
+	err = db.AdminPool.QueryRow(ctx, `
+		WITH alarm AS (
+			INSERT INTO trakrf.alarm_events (org_id, asset_id, scan_point_id, epc)
+			SELECT $1, $2, id, 'E2801160600002' FROM trakrf.scan_points
+			WHERE org_id = $1 AND scan_device_id = $3 AND antenna_port = 1
+			RETURNING id, asset_id, fired_at
+		)
+		INSERT INTO trakrf.notification_events (org_id, source, alarm_event_id, asset_id, occurred_at)
+		SELECT $1, 'alarm', id, asset_id, fired_at FROM alarm
+		RETURNING id
+	`, orgID, assetID, dev.ID).Scan(&eventID)
+	if err != nil {
+		t.Fatalf("Failed to create test notification event: %v", err)
+	}
+	return eventID
+}
+
+// CreateTestLocationChange inserts a location change for assetID into
+// toLocationID at `at` and returns its id. scanPointID must be set exactly when
+// origin is "reader".
+func CreateTestLocationChange(t *testing.T, db *TestDB, orgID, assetID, toLocationID int, origin string, scanPointID *int, at time.Time) int {
+	t.Helper()
+	var id int
+	err := db.AdminPool.QueryRow(context.Background(), `
+		INSERT INTO trakrf.location_changes (org_id, asset_id, to_location_id, origin, scan_point_id, detected_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id
+	`, orgID, assetID, toLocationID, origin, scanPointID, at).Scan(&id)
+	if err != nil {
+		t.Fatalf("Failed to create test location change: %v", err)
+	}
+	return id
+}
+
+// CreateTestLocationChangeNotificationEvent inserts a manual-save location
+// change and a notification_events row from it, and returns the event's id.
+func CreateTestLocationChangeNotificationEvent(t *testing.T, db *TestDB, orgID, assetID, toLocationID int, at time.Time) int {
+	t.Helper()
+	changeID := CreateTestLocationChange(t, db, orgID, assetID, toLocationID, "manual_save", nil, at)
+	var eventID int
+	err := db.AdminPool.QueryRow(context.Background(), `
+		INSERT INTO trakrf.notification_events (org_id, source, location_change_id, asset_id, occurred_at)
+		SELECT org_id, 'location_change', id, asset_id, detected_at
+		FROM trakrf.location_changes WHERE id = $1
+		RETURNING id
+	`, changeID).Scan(&eventID)
+	if err != nil {
+		t.Fatalf("Failed to create test location-change notification event: %v", err)
+	}
+	return eventID
 }

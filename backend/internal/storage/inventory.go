@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog/log"
 )
 
 // SaveInventoryRequest represents the request to save inventory scans
@@ -106,6 +107,26 @@ func (e *InventoryAccessError) IsAccessDenied() bool {
 // to the handler log. The user-facing surface stays generic ("N of M assets
 // are unavailable") so callers cannot probe other orgs by ID.
 func (s *Storage) SaveInventoryScans(ctx context.Context, orgID int, req SaveInventoryRequest) (*SaveInventoryResult, error) {
+	return s.SaveInventoryScansRecord(ctx, orgID, req, nil)
+}
+
+// SavedInventory is what a SaveRecordFunc sees: the org and location saved,
+// the saved minute, and the same provenance SaveInventoryResult carries.
+type SavedInventory struct {
+	OrgID, LocationID int
+	Timestamp         time.Time
+	InsertedAssetIDs  []int
+	OverriddenFrom    map[int]*int
+}
+
+// SaveRecordFunc runs inside the save transaction, after every asset_scans
+// upsert, on a savepoint of it. An error rolls back only what the hook wrote;
+// the save still commits.
+type SaveRecordFunc func(ctx context.Context, tx pgx.Tx, saved SavedInventory) error
+
+// SaveInventoryScansRecord is SaveInventoryScans with a hook that runs last in
+// the same transaction. A nil hook is a no-op.
+func (s *Storage) SaveInventoryScansRecord(ctx context.Context, orgID int, req SaveInventoryRequest, record SaveRecordFunc) (*SaveInventoryResult, error) {
 	if len(req.AssetIDs) == 0 {
 		return nil, fmt.Errorf("no assets to save")
 	}
@@ -237,7 +258,18 @@ func (s *Storage) SaveInventoryScans(ctx context.Context, orgID int, req SaveInv
 			}
 		}
 
-		return nil
+		// Nothing inserted and nothing overridden is a re-scan of an unchanged
+		// location: no location change to record, so no savepoint round trips.
+		if record == nil || (len(insertedAssetIDs) == 0 && len(overriddenFrom) == 0) {
+			return nil
+		}
+		return runSaveRecord(ctx, tx, record, SavedInventory{
+			OrgID:            orgID,
+			LocationID:       req.LocationID,
+			Timestamp:        timestamp,
+			InsertedAssetIDs: insertedAssetIDs,
+			OverriddenFrom:   overriddenFrom,
+		})
 	})
 
 	if err != nil {
@@ -252,6 +284,44 @@ func (s *Storage) SaveInventoryScans(ctx context.Context, orgID int, req SaveInv
 		LocationName:     locationName,
 		Timestamp:        timestamp,
 	}, nil
+}
+
+// runSaveRecord runs the hook on a savepoint of tx. A hook error or panic
+// rolls the savepoint back and is logged here, once, never returned: a missing
+// alert is better than a lost scan. Only a failure to open or release the
+// savepoint fails the save, since the transaction is then in an unknown state.
+func runSaveRecord(ctx context.Context, tx pgx.Tx, record SaveRecordFunc, saved SavedInventory) error {
+	sp, err := tx.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin save record savepoint: %w", err)
+	}
+	if err := callSaveRecord(ctx, sp, record, saved); err != nil {
+		log.Error().Err(err).
+			Int("org_id", saved.OrgID).
+			Int("location_id", saved.LocationID).
+			Int("inserted", len(saved.InsertedAssetIDs)).
+			Int("overridden", len(saved.OverriddenFrom)).
+			Msg("recording inventory save location changes failed; the save still commits")
+		if rbErr := sp.Rollback(ctx); rbErr != nil {
+			return fmt.Errorf("roll back save record savepoint: %w", rbErr)
+		}
+		return nil
+	}
+	if err := sp.Commit(ctx); err != nil {
+		return fmt.Errorf("release save record savepoint: %w", err)
+	}
+	return nil
+}
+
+// callSaveRecord runs the hook and turns a panic into an error, so a bug in a
+// recorder takes the same path as a failed write instead of losing the scan.
+func callSaveRecord(ctx context.Context, sp pgx.Tx, record SaveRecordFunc, saved SavedInventory) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("save record hook panicked: %v", r)
+		}
+	}()
+	return record(ctx, sp, saved)
 }
 
 // dedupInts returns input with duplicates removed, first-seen order preserved.

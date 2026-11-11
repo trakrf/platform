@@ -94,10 +94,16 @@ func (w *DeliveryWorker) Work(ctx context.Context, job *river.Job[DeliveryJobArg
 		return err
 	}
 
+	// A redelivered job for a row that already finished must not send again.
+	if delivery.State == notificationdelivery.StateDelivered || delivery.State == notificationdelivery.StatePermanentlyFailed {
+		return nil
+	}
+
 	cmd := Command{
 		DeliveryID: delivery.DeliveryID,
 		OrgID:      job.Args.OrgID,
 		Channel:    delivery.Channel,
+		Payload:    delivery.Payload,
 	}
 
 	result, sendErr := w.adapter.Send(ctx, cmd)
@@ -113,7 +119,7 @@ func (w *DeliveryWorker) Work(ctx context.Context, job *river.Job[DeliveryJobArg
 		providerMessageIDPtr = &result.ProviderMessageID
 	case DeliveryPermanentFailure:
 		state = notificationdelivery.StatePermanentlyFailed
-		kind := string(ErrorPermanent)
+		kind := errorKind(sendErr, ErrorPermanent)
 		errorKindPtr = &kind
 	default: // DeliveryRetryableFailure
 		// River discards a job itself once Attempt reaches MaxAttempts; no
@@ -129,15 +135,13 @@ func (w *DeliveryWorker) Work(ctx context.Context, job *river.Job[DeliveryJobArg
 		// outcome-unknown) rather than hardcoding transient: this is the
 		// distinction support needs between "definitely not sent" and "may
 		// have already been accepted."
-		kind := string(ErrorTransient)
-		var providerErr *ProviderError
-		if errors.As(sendErr, &providerErr) && providerErr.Kind != "" {
-			kind = string(providerErr.Kind)
-		}
+		kind := errorKind(sendErr, ErrorTransient)
 		errorKindPtr = &kind
 	}
 
-	if updateErr := w.store.UpdateNotificationDeliveryState(ctx, job.Args.OrgID, delivery.ID, state, errorKindPtr, providerMessageIDPtr); updateErr != nil {
+	// The send already happened, so record it even if shutdown cancelled the
+	// job meanwhile. Otherwise River retries and the message goes out twice.
+	if updateErr := w.store.UpdateNotificationDeliveryState(context.WithoutCancel(ctx), job.Args.OrgID, delivery.ID, state, errorKindPtr, providerMessageIDPtr); updateErr != nil {
 		return updateErr
 	}
 
@@ -157,4 +161,20 @@ func (w *DeliveryWorker) Work(ctx context.Context, job *river.Job[DeliveryJobArg
 		// retry/discard logic classify it the same way for every job kind.
 		return sendErr
 	}
+}
+
+// errorKind picks the bounded label recorded as last_error_kind: an adapter's
+// ErrorReasoner reason first, then ProviderError.Kind, then fallback.
+func errorKind(err error, fallback ErrorKind) string {
+	var reasoner ErrorReasoner
+	if errors.As(err, &reasoner) {
+		if reason := reasoner.ErrorReason(); reason != "" {
+			return reason
+		}
+	}
+	var providerErr *ProviderError
+	if errors.As(err, &providerErr) && providerErr.Kind != "" {
+		return string(providerErr.Kind)
+	}
+	return string(fallback)
 }

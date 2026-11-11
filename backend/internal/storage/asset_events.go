@@ -89,6 +89,22 @@ LEFT JOIN LATERAL (
 // Both run inside one WithOrgTx: the base-table read needs the org GUC for RLS,
 // and holding them in one transaction gives both a single consistent snapshot.
 func (s *Storage) PreviousAssetLocations(ctx context.Context, orgID int, assetIDs []int, before time.Time) (map[int]PreviousLocation, error) {
+	var out map[int]PreviousLocation
+	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		var err error
+		out, err = s.PreviousAssetLocationsTx(ctx, tx, orgID, assetIDs, before)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// PreviousAssetLocationsTx is PreviousAssetLocations on a caller's transaction,
+// which must already carry the org context. It takes no pooled connection, so
+// a caller holding a transaction open cannot stall on pool exhaustion.
+func (s *Storage) PreviousAssetLocationsTx(ctx context.Context, tx pgx.Tx, orgID int, assetIDs []int, before time.Time) (map[int]PreviousLocation, error) {
 	out := make(map[int]PreviousLocation, len(assetIDs))
 	if len(assetIDs) == 0 {
 		return out, nil
@@ -125,17 +141,11 @@ func (s *Storage) PreviousAssetLocations(ctx context.Context, orgID int, assetID
 		return rows.Err()
 	}
 
-	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		if err := collect(tx, prevFromCAGG); err != nil {
-			return fmt.Errorf("cagg lookup: %w", err)
-		}
-		if err := collect(tx, prevFromTail); err != nil {
-			return fmt.Errorf("base tail lookup: %w", err)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to look up previous asset locations: %w", err)
+	if err := collect(tx, prevFromCAGG); err != nil {
+		return nil, fmt.Errorf("failed to look up previous asset locations: cagg lookup: %w", err)
+	}
+	if err := collect(tx, prevFromTail); err != nil {
+		return nil, fmt.Errorf("failed to look up previous asset locations: base tail lookup: %w", err)
 	}
 	return out, nil
 }

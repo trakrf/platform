@@ -1,7 +1,7 @@
 // Package outbox is the durable, provider-neutral notification delivery
 // outbox (TRA-1192). It owns the transactional enqueue contract and the
-// generic worker; it does NOT call any real provider. A future ticket wires
-// ChannelAdapter to email.Sender (TRA-1267) / sms.Sender (TRA-1201).
+// generic worker; it does NOT call any real provider. The adapter that wires
+// ChannelAdapter to the email and SMS senders lives in notification/dispatch.
 package outbox
 
 import (
@@ -18,10 +18,14 @@ type Command struct {
 	DeliveryID string
 	OrgID      int
 	Channel    notificationdelivery.Channel
-	// Payload is reserved for a future caller/adapter integration: this
-	// ticket's Enqueue and Work do not yet persist or thread it anywhere. A
-	// follow-up wiring a real ChannelAdapter must decide where it is stored
-	// before any adapter can read it back.
+	// Routing context recorded on the delivery row. A zero value is stored
+	// as NULL.
+	EventID     int
+	RecipientID int
+	AssetID     int
+	// Payload is the rendered message (raw JSON). The batch enqueue path
+	// persists it to notification_deliveries.payload; it contains PII, so it
+	// must never be put in River job args or logs.
 	Payload []byte
 }
 
@@ -55,8 +59,13 @@ func (err *ProviderError) Error() string {
 }
 
 // ChannelAdapter is the seam between the outbox and a real provider sender.
-// A future ticket implements this for email (wrapping email.Sender) and SMS
-// (wrapping sms.Sender). Tests in this package use a fake.
+// notification/dispatch implements it for email and SMS. Tests in this
+// package use a fake.
 type ChannelAdapter interface {
 	Send(ctx context.Context, cmd Command) (Result, error)
 }
+
+// ErrorReasoner is an optional extension of an adapter error: a bounded,
+// more specific label (e.g. "opted_out") recorded as last_error_kind.
+// Never payload or provider text. Empty means "use ProviderError.Kind".
+type ErrorReasoner interface{ ErrorReason() string }

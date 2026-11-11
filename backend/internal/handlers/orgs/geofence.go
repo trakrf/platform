@@ -2,8 +2,10 @@ package orgs
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trakrf/platform/backend/internal/geofence"
@@ -34,10 +36,25 @@ func validateGeofenceDefaults(d organization.GeofenceDefaults) error {
 	if d.AgeOutSeconds != nil && *d.AgeOutSeconds < 1 {
 		return fmt.Errorf("age_out_seconds must be >= 1")
 	}
-	if d.AutoOffSeconds != nil && *d.AutoOffSeconds < 0 {
-		return fmt.Errorf("auto_off_seconds must be >= 0")
+	if msg := geofence.OrgDefaultsError(d); msg != "" {
+		return errors.New(msg)
 	}
 	return nil
+}
+
+// strandedOutputs names the devices that have an off edge under oldDefaults and
+// lose it under newDefaults (TRA-1273): an egress output whose auto-off came from
+// the org tier would latch on forever once that tier stops supplying one. A
+// device already invalid under oldDefaults is not stranded by this change, so it
+// does not block an unrelated edit; editing that device is what surfaces it.
+func strandedOutputs(oldDefaults, newDefaults organization.GeofenceDefaults, devs []outputdevice.OutputDevice) []string {
+	var names []string
+	for _, d := range devs {
+		if geofence.OutputTuningError(oldDefaults, d) == "" && geofence.OutputTuningError(newDefaults, d) != "" {
+			names = append(names, d.Name)
+		}
+	}
+	return names
 }
 
 func geofenceDefaultsView(d organization.GeofenceDefaults) GeofenceDefaultsView {
@@ -114,6 +131,27 @@ func (h *Handler) PatchGeofenceDefaults(w http.ResponseWriter, r *http.Request) 
 	if err := validateGeofenceDefaults(req); err != nil {
 		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
 			err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	current, err := h.storage.GetOrgGeofenceDefaults(r.Context(), id)
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+			"Failed to get geofence defaults", middleware.GetRequestID(r.Context()))
+		return
+	}
+	devs, err := h.storage.ListAllOutputDevices(r.Context(), id)
+	if err != nil {
+		httputil.WriteJSONError(w, r, http.StatusInternalServerError, modelerrors.ErrInternal,
+			"Failed to list output devices", middleware.GetRequestID(r.Context()))
+		return
+	}
+	if names := strandedOutputs(current, req, devs); len(names) > 0 {
+		httputil.WriteJSONError(w, r, http.StatusBadRequest, modelerrors.ErrValidation,
+			fmt.Sprintf("this change leaves egress output(s) %s with no auto-off, so they would turn on and never turn off: "+
+				"set auto_off_seconds on them first, or keep an org auto-off of 1-%d seconds",
+				strings.Join(names, ", "), geofence.MaxAutoOffSeconds),
+			middleware.GetRequestID(r.Context()))
 		return
 	}
 
