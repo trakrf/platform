@@ -4,6 +4,7 @@ package storage_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -49,6 +50,52 @@ func TestInsertAlarmEvent_WritesUnderOrgContext(t *testing.T) {
 		`SELECT count(*) FROM trakrf.alarm_events WHERE org_id = $1 AND epc = $2`,
 		orgID, testEPC).Scan(&n))
 	assert.Equal(t, 1, n, "exactly one alarm_events row written")
+}
+
+func TestInsertAlarmEventTx_ReturnsIDAndHonoursCallerTx(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+	dev := registerDevice(t, db, orgID, "cs463-214")
+	asset := testutil.CreateTestAsset(t, db.AdminPool, orgID, "alarm-tx-asset")
+	row := storage.AlarmEventRow{
+		AssetID:     asset.ID,
+		ScanPointID: scanPointID(t, db, orgID, dev.ID),
+		EPC:         testEPC,
+		RSSI:        -50,
+		TagScanID:   123,
+		FiredAt:     time.Now(),
+	}
+	count := func(id int) int {
+		var n int
+		require.NoError(t, db.AdminPool.QueryRow(ctx,
+			`SELECT count(*) FROM trakrf.alarm_events WHERE org_id = $1 AND id = $2`,
+			orgID, id).Scan(&n))
+		return n
+	}
+
+	// The caller's rollback takes the row with it.
+	errRollback := errors.New("roll back")
+	var rolledBack int
+	err := db.Store.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		var err error
+		rolledBack, err = db.Store.InsertAlarmEventTx(ctx, tx, orgID, row)
+		require.NoError(t, err)
+		return errRollback
+	})
+	require.ErrorIs(t, err, errRollback)
+	assert.Positive(t, rolledBack)
+	assert.Equal(t, 0, count(rolledBack), "a rollback must leave no row")
+
+	// The caller's commit keeps it, under the id returned.
+	var committed int
+	require.NoError(t, db.Store.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		var err error
+		committed, err = db.Store.InsertAlarmEventTx(ctx, tx, orgID, row)
+		return err
+	}))
+	assert.Positive(t, committed)
+	assert.Equal(t, 1, count(committed), "a commit must keep the returned row")
 }
 
 func TestInsertAlarmEvent_RLSIsolatesByOrg(t *testing.T) {
