@@ -28,6 +28,7 @@ type Origin string
 
 const (
 	OriginReader         Origin = "reader"          // fixed reader
+	OriginReaderCrossing Origin = "reader_crossing" // asset passed a gate: seen at a reader, moving between locations
 	OriginManualSave     Origin = "manual_save"     // handheld inventory save
 	OriginManualOverride Origin = "manual_override" // same-minute correction of a reader row
 )
@@ -40,7 +41,7 @@ type LocationChange struct {
 	FromLocationID *int // nil on a first sighting or when the previous scan had no location
 	ToLocationID   int
 	Origin         Origin
-	ScanPointID    *int // set exactly when Origin is OriginReader
+	ScanPointID    *int // set exactly when Origin is OriginReader or OriginReaderCrossing
 	DetectedAt     time.Time
 }
 
@@ -64,6 +65,13 @@ func (c LocationChange) Validate() error {
 	case OriginReader:
 		if c.ScanPointID == nil {
 			return invalid("a reader location change needs its scan point")
+		}
+	case OriginReaderCrossing:
+		if c.ScanPointID == nil {
+			return invalid("a crossing location change needs its scan point")
+		}
+		if c.FromLocationID == nil {
+			return invalid("a crossing location change needs the location it left")
 		}
 	case OriginManualSave, OriginManualOverride:
 		if c.ScanPointID != nil {
