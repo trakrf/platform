@@ -64,7 +64,7 @@ func (h *Handler) ListRecipients(w http.ResponseWriter, r *http.Request) {
 		httputil.RespondStorageError(w, r, err, reqID)
 		return
 	}
-	httputil.WriteJSON(w, http.StatusOK, dataResponse[[]notificationrecipient.Recipient]{Data: items})
+	httputil.WriteJSON(w, http.StatusOK, dataResponse[[]notificationrecipient.RecipientWithCount]{Data: items})
 }
 
 func (h *Handler) CreateRecipient(w http.ResponseWriter, r *http.Request) {
@@ -117,7 +117,7 @@ func (h *Handler) GetRecipient(w http.ResponseWriter, r *http.Request) {
 		httputil.Respond404(w, r, "notification recipient not found", reqID)
 		return
 	}
-	httputil.WriteJSON(w, http.StatusOK, dataResponse[notificationrecipient.Recipient]{Data: *rec})
+	httputil.WriteJSON(w, http.StatusOK, dataResponse[notificationrecipient.RecipientWithCount]{Data: *rec})
 }
 
 func (h *Handler) UpdateRecipient(w http.ResponseWriter, r *http.Request) {
