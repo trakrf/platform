@@ -16,3 +16,9 @@ location_change:
     body: "{{.AssetName}} ({{.AssetKey}}) was seen at {{.LocationName}} at {{.OccurredAt}} UTC."
   sms:
     body: "TrakRF: {{.AssetName}} was seen at {{.LocationName}} at {{.OccurredAt}} UTC."
+location_crossing:
+  email:
+    subject: "Moved: {{.AssetName}}"
+    body: "{{.AssetName}} ({{.AssetKey}}) moved from {{.FromLocationName}} to {{.LocationName}} at {{.OccurredAt}} UTC."
+  sms:
+    body: "TrakRF: {{.AssetName}} moved from {{.FromLocationName}} to {{.LocationName}} at {{.OccurredAt}} UTC."

@@ -233,6 +233,9 @@ func (p *DeliveryPlanner) loadNames(ctx context.Context, orgID int, occ notifica
 	if occ.LocationID != nil {
 		locationIDs = []int{*occ.LocationID}
 	}
+	if occ.IsCrossing() {
+		locationIDs = append(locationIDs, *occ.FromLocationID)
+	}
 	assets, locations, err := p.store.LookupMoveNames(ctx, orgID, []int{occ.AssetID}, locationIDs)
 	if err != nil {
 		return TemplateData{}, false, fmt.Errorf("routing: look up names for asset %d: %w", occ.AssetID, err)
@@ -245,19 +248,27 @@ func (p *DeliveryPlanner) loadNames(ctx context.Context, orgID int, occ notifica
 	if occ.LocationID != nil {
 		location = locations[*occ.LocationID]
 	}
-	return newTemplateData(asset, location, occ.OccurredAt), true, nil
+	data := newTemplateData(asset, location, occ.OccurredAt)
+	if occ.IsCrossing() && locations[*occ.FromLocationID] != "" {
+		data.FromLocationName = locations[*occ.FromLocationID]
+	}
+	return data, true, nil
 }
 
 // buildMessages renders every eligible candidate. Rendering happens before
 // any write, so a template error leaves nothing behind. EventID is not known
 // yet and is filled in inside the transaction.
 func (p *DeliveryPlanner) buildMessages(source notificationevent.Source, occ notificationevent.Occurrence, data TemplateData, cands []candidate) ([]planned, error) {
+	templateSource := source
+	if occ.IsCrossing() {
+		templateSource = crossingSource
+	}
 	var out []planned
 	for i, c := range cands {
 		if c.Outcome != "" {
 			continue
 		}
-		r, err := p.renderer.Render(source, c.Channel, data)
+		r, err := p.renderer.Render(templateSource, c.Channel, data)
 		if err != nil {
 			return nil, fmt.Errorf("routing: render for recipient %d: %w", c.Subscriber.RecipientID, err)
 		}
