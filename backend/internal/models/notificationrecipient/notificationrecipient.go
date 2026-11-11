@@ -21,6 +21,15 @@ type Recipient struct {
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
 
+// RecipientWithCount is a recipient as the contact reads return it.
+// SubscribedAssetCount is the number of assets, not subscriptions: a contact on
+// one asset by both email and SMS counts once. Deleted assets and switched-off
+// subscriptions don't count, but a paused contact's subscriptions do.
+type RecipientWithCount struct {
+	Recipient
+	SubscribedAssetCount int `json:"subscribed_asset_count"`
+}
+
 type CreateRecipientRequest struct {
 	Name     string  `json:"name" validate:"required,max=255"`
 	Email    *string `json:"email,omitempty" validate:"omitempty,email,max=320"`

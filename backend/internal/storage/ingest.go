@@ -100,6 +100,9 @@ type ResolvedRead struct {
 	LocationID  *int
 	EPC         string
 	RSSI        int // scanread.Read.RSSI; 0 == parser sentinel for "no usable RSSI"
+	// ReaderTimestamp is the reader's own clock for the read. Informational:
+	// stored history uses server time.
+	ReaderTimestamp time.Time
 	// Stored is true iff this read's asset_scans insert landed a row (TRA-1118).
 	// A false value means the minute bucket already held a row for the asset, so
 	// stored history did not change. Geofence ignores it — presence at the
@@ -122,6 +125,27 @@ type ResolvedRead struct {
 // reader clock is ignored, and the stored timestamp is truncated to
 // ScanGranularity (TRA-1118) so the PK dedups to one row per asset per minute.
 func (s *Storage) PersistReads(ctx context.Context, orgID, scanDeviceID int, tagScanID int64, receivedAt time.Time, reads []scanread.Read) (PersistResult, error) {
+	return s.PersistReadsDetect(ctx, orgID, scanDeviceID, tagScanID, receivedAt, reads, nil)
+}
+
+// DetectInput is what a DetectFunc sees: the scan's resolved reads and the raw
+// server receive time, not truncated to ScanGranularity.
+type DetectInput struct {
+	OrgID, ScanDeviceID int
+	TagScanID           int64
+	ReceivedAt          time.Time
+	Reads               []ResolvedRead
+}
+
+// DetectFunc runs inside the scan transaction, after every asset_scans insert,
+// so rows it writes on tx commit or roll back together with the scan. An error
+// rolls the scan back.
+type DetectFunc func(ctx context.Context, tx pgx.Tx, in DetectInput) error
+
+// PersistReadsDetect is PersistReads with a hook that runs last in the same
+// transaction, only when at least one read resolved. A nil hook is a no-op.
+func (s *Storage) PersistReadsDetect(ctx context.Context, orgID, scanDeviceID int, tagScanID int64, receivedAt time.Time, reads []scanread.Read, detect DetectFunc) (PersistResult, error) {
+	rawReceivedAt := receivedAt
 	receivedAt = receivedAt.Truncate(ScanGranularity)
 	res := PersistResult{Dropped: map[string]int{}}
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
@@ -176,6 +200,8 @@ func (s *Storage) PersistReads(ctx context.Context, orgID, scanDeviceID int, tag
 				LocationID:  locationID,
 				EPC:         rd.EPC,
 				RSSI:        rd.RSSI,
+
+				ReaderTimestamp: rd.ReaderTimestamp,
 			})
 
 			ct, err := tx.Exec(ctx,
@@ -194,6 +220,15 @@ func (s *Storage) PersistReads(ctx context.Context, orgID, scanDeviceID int, tag
 				continue
 			}
 			res.Inserted++
+		}
+		if detect != nil && len(res.Resolved) > 0 {
+			return detect(ctx, tx, DetectInput{
+				OrgID:        orgID,
+				ScanDeviceID: scanDeviceID,
+				TagScanID:    tagScanID,
+				ReceivedAt:   rawReceivedAt,
+				Reads:        res.Resolved,
+			})
 		}
 		return nil
 	})

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -181,4 +182,41 @@ func TestLookupMoveNames(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, assets)
 	require.Empty(t, locations)
+}
+
+// The Tx variant must answer the same as the pooled one when run on the scan's
+// own transaction inside a detection savepoint, including a row that
+// transaction wrote but has not committed.
+func TestPreviousAssetLocationsTx_SeesSameRowsInsideSavepoint(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+	asset := testutil.CreateTestAsset(t, db.AdminPool, orgID, "PREV-TX")
+	loc := seedLocation(t, db.AdminPool, orgID, "TX-A", "Dock")
+	other := seedLocation(t, db.AdminPool, orgID, "TX-B", "Yard")
+
+	now := time.Now()
+	seedScan(t, db.AdminPool, orgID, asset.ID, &loc, now.Add(-30*time.Second))
+	want, err := db.Store.PreviousAssetLocations(ctx, orgID, []int{asset.ID}, now)
+	require.NoError(t, err)
+
+	err = db.Store.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, "SAVEPOINT detection_stage")
+		require.NoError(t, err)
+		got, err := db.Store.PreviousAssetLocationsTx(ctx, tx, orgID, []int{asset.ID}, now)
+		require.NoError(t, err)
+		require.Equal(t, want, got)
+
+		_, err = tx.Exec(ctx, `INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id) VALUES ($1, $2, $3, $4)`,
+			now.Add(-10*time.Second), orgID, asset.ID, other)
+		require.NoError(t, err)
+		got, err = db.Store.PreviousAssetLocationsTx(ctx, tx, orgID, []int{asset.ID}, now)
+		require.NoError(t, err)
+		require.NotNil(t, got[asset.ID].LocationID)
+		require.Equal(t, other, *got[asset.ID].LocationID)
+		_, err = tx.Exec(ctx, "RELEASE SAVEPOINT detection_stage")
+		require.NoError(t, err)
+		return nil
+	})
+	require.NoError(t, err)
 }

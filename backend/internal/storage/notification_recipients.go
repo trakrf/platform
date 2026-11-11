@@ -21,6 +21,19 @@ func scanNotificationRecipient(row pgx.Row, r *notificationrecipient.Recipient) 
 	return row.Scan(&r.ID, &r.OrgID, &r.Name, &r.Email, &r.Phone, &r.IsActive, &r.CreatedAt, &r.UpdatedAt, &r.DeletedAt)
 }
 
+// selectRecipientWithCount reads recipients aliased r with their count of
+// non-deleted assets that have at least one active subscription.
+const selectRecipientWithCount = `SELECT ` + notificationRecipientColumns + `,
+		(SELECT count(DISTINCT sub.asset_id)
+		   FROM trakrf.asset_notification_recipients sub
+		   JOIN trakrf.assets a ON a.id = sub.asset_id AND a.deleted_at IS NULL
+		  WHERE sub.org_id = r.org_id AND sub.recipient_id = r.id AND sub.is_active)
+		FROM trakrf.notification_recipients r`
+
+func scanRecipientWithCount(row pgx.Row, r *notificationrecipient.RecipientWithCount) error {
+	return row.Scan(&r.ID, &r.OrgID, &r.Name, &r.Email, &r.Phone, &r.IsActive, &r.CreatedAt, &r.UpdatedAt, &r.DeletedAt, &r.SubscribedAssetCount)
+}
+
 func (s *Storage) CreateNotificationRecipient(ctx context.Context, orgID int, req notificationrecipient.CreateRecipientRequest) (*notificationrecipient.Recipient, error) {
 	isActive := true
 	if req.IsActive != nil {
@@ -41,12 +54,11 @@ func (s *Storage) CreateNotificationRecipient(ctx context.Context, orgID int, re
 	return &r, nil
 }
 
-func (s *Storage) ListNotificationRecipients(ctx context.Context, orgID int) ([]notificationrecipient.Recipient, error) {
-	query := `SELECT ` + notificationRecipientColumns + `
-		FROM trakrf.notification_recipients
-		WHERE org_id = $1 AND deleted_at IS NULL
-		ORDER BY created_at DESC`
-	out := []notificationrecipient.Recipient{}
+func (s *Storage) ListNotificationRecipients(ctx context.Context, orgID int) ([]notificationrecipient.RecipientWithCount, error) {
+	query := selectRecipientWithCount + `
+		WHERE r.org_id = $1 AND r.deleted_at IS NULL
+		ORDER BY r.created_at DESC`
+	out := []notificationrecipient.RecipientWithCount{}
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, orgID)
 		if err != nil {
@@ -54,8 +66,8 @@ func (s *Storage) ListNotificationRecipients(ctx context.Context, orgID int) ([]
 		}
 		defer rows.Close()
 		for rows.Next() {
-			var r notificationrecipient.Recipient
-			if err := scanNotificationRecipient(rows, &r); err != nil {
+			var r notificationrecipient.RecipientWithCount
+			if err := scanRecipientWithCount(rows, &r); err != nil {
 				return err
 			}
 			out = append(out, r)
@@ -69,13 +81,12 @@ func (s *Storage) ListNotificationRecipients(ctx context.Context, orgID int) ([]
 }
 
 // GetNotificationRecipient returns the live recipient or (nil, nil) if not found.
-func (s *Storage) GetNotificationRecipient(ctx context.Context, orgID, id int) (*notificationrecipient.Recipient, error) {
-	query := `SELECT ` + notificationRecipientColumns + `
-		FROM trakrf.notification_recipients
-		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL`
-	var r notificationrecipient.Recipient
+func (s *Storage) GetNotificationRecipient(ctx context.Context, orgID, id int) (*notificationrecipient.RecipientWithCount, error) {
+	query := selectRecipientWithCount + `
+		WHERE r.id = $1 AND r.org_id = $2 AND r.deleted_at IS NULL`
+	var r notificationrecipient.RecipientWithCount
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
-		return scanNotificationRecipient(tx.QueryRow(ctx, query, id, orgID), &r)
+		return scanRecipientWithCount(tx.QueryRow(ctx, query, id, orgID), &r)
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

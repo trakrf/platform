@@ -89,6 +89,25 @@ func TestInsertLocationChange_EachOriginRoundTrips(t *testing.T) {
 	}
 }
 
+func TestInsertLocationChange_ReaderCrossing(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	orgID := testutil.CreateTestAccount(t, db.AdminPool)
+	f := newEventFixture(t, db, orgID, "ilc-crossing")
+	var yard int
+	require.NoError(t, db.AdminPool.QueryRow(context.Background(),
+		`INSERT INTO trakrf.locations (org_id, external_key, name) VALUES ($1, 'ilc-crossing-yard', 'Yard') RETURNING id`,
+		orgID,
+	).Scan(&yard))
+
+	id, inserted, err := insertChange(t, db, orgID, notificationevent.LocationChange{
+		OrgID: orgID, AssetID: f.assetID, FromLocationID: &yard, ToLocationID: f.locationID,
+		Origin: notificationevent.OriginReaderCrossing, ScanPointID: &f.scanPointID, DetectedAt: testInstant,
+	})
+	require.NoError(t, err)
+	require.True(t, inserted)
+	require.Greater(t, id, 0)
+}
+
 func TestInsertLocationChange_ReplayIsNotInserted(t *testing.T) {
 	db := testutil.SetupTestDBFull(t)
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)

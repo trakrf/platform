@@ -148,6 +148,22 @@ func (p *presence) expire(key string, gen uint64) {
 	}
 }
 
+// forget drops an output's state and stops its age-out timer without driving it
+// off, so the next read is a new ON edge. It is for an ON that was never driven.
+func (p *presence) forget(orgID, outputID int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	k := presenceKey(orgID, outputID)
+	po := p.outputs[k]
+	if po == nil {
+		return
+	}
+	if po.timer != nil {
+		po.timer.Stop()
+	}
+	delete(p.outputs, k)
+}
+
 // Close stops all outstanding timers and blocks further observes. Idempotent.
 func (p *presence) Close() {
 	p.mu.Lock()
