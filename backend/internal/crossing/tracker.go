@@ -34,7 +34,11 @@ type Seed struct {
 
 // Crossing is an asset moving between two of a reader's locations. ScanPointID
 // is the read that settled it.
-type Crossing struct{ AssetID, From, To, ScanPointID int }
+type Crossing struct {
+	AssetID, From, To, ScanPointID int
+	// Cold marks a crossing that came from a Seed rather than tracked state.
+	Cold bool
+}
 
 // Result is the outcome of one message. Pass it to Apply once the crossings are
 // safely recorded; dropping it leaves the tracker as it was.
@@ -56,8 +60,9 @@ type stateKey struct{ org, asset, reader int }
 type route struct{ from, to int }
 
 type recentRead struct {
-	at   time.Time
-	rssi int
+	at          time.Time
+	rssi        int
+	scanPointID int
 }
 
 // assetState always has a leader: it is created by the first usable read.
@@ -92,7 +97,7 @@ func (s *assetState) clone() *assetState {
 }
 
 // observe drops reads older than the window, then adds this one.
-func (s *assetState) observe(loc int, at time.Time, rssi int, window time.Duration) {
+func (s *assetState) observe(loc int, at time.Time, rssi, scanPointID int, window time.Duration) {
 	for l, reads := range s.recent {
 		reads = slices.DeleteFunc(reads, func(r recentRead) bool { return at.Sub(r.at) > window })
 		if len(reads) == 0 {
@@ -101,13 +106,13 @@ func (s *assetState) observe(loc int, at time.Time, rssi int, window time.Durati
 		}
 		s.recent[l] = reads
 	}
-	s.recent[loc] = append(s.recent[loc], recentRead{at: at, rssi: rssi})
+	s.recent[loc] = append(s.recent[loc], recentRead{at: at, rssi: rssi, scanPointID: scanPointID})
 }
 
 // strongest returns a location's strongest recent read. Callers must first check
-// the location has one: 0 is not a safe "nothing here" value, as it beats any read.
-func (s *assetState) strongest(loc int) int {
-	return slices.MaxFunc(s.recent[loc], func(a, b recentRead) int { return a.rssi - b.rssi }).rssi
+// the location has one: the zero read has RSSI 0, which beats any real read.
+func (s *assetState) strongest(loc int) recentRead {
+	return slices.MaxFunc(s.recent[loc], func(a, b recentRead) int { return a.rssi - b.rssi })
 }
 
 // Tracker holds the leader and recent reads for each (org, asset, reader). State
@@ -168,17 +173,21 @@ func (t *Tracker) Apply(r Result) {
 // step handles a read for an asset that already has a leader.
 func (t *Tracker) step(res *Result, s *assetState, at time.Time, r Read) {
 	loc := *r.LocationID
-	s.observe(loc, at, r.RSSI, t.cfg.Window)
+	s.observe(loc, at, r.RSSI, r.ScanPointID, t.cfg.Window)
 
 	switch {
 	case loc == s.leader:
 	case len(s.recent[s.leader]) == 0:
-		t.cross(res, s, at, r)
-	case beats(s.strongest(loc), s.strongest(s.leader), t.cfg.MarginDB):
-		t.cross(res, s, at, r)
+		t.cross(res, s, at, r.AssetID, loc, s.strongest(loc).scanPointID)
+	case beats(s.strongest(loc).rssi, s.strongest(s.leader).rssi, t.cfg.MarginDB):
+		// The crossing is settled by the strongest recent read at the new
+		// location, which may not be the read that triggered the check.
+		t.cross(res, s, at, r.AssetID, loc, s.strongest(loc).scanPointID)
+	case beats(s.strongest(s.leader).rssi, s.strongest(loc).rssi, t.cfg.MarginDB):
+		// The leader is clearly stronger: not a tie, nothing to report.
 	default:
-		// A run of tied reads is one event: it ends with a crossing, or once a
-		// whole window passes with no tied read.
+		// Neither side wins by the margin. A run of tied reads is one event: it
+		// ends with a crossing, or once a whole window passes with no tied read.
 		if s.lastTie.IsZero() || at.Sub(s.lastTie) > t.cfg.Window {
 			res.Ties++
 		}
@@ -199,18 +208,19 @@ func (t *Tracker) coldStart(res *Result, at time.Time, r Read, seed Seed) *asset
 		leader = seed.LocationID
 	}
 	s := newAssetState(leader)
-	s.observe(loc, at, r.RSSI, t.cfg.Window)
+	s.observe(loc, at, r.RSSI, r.ScanPointID, t.cfg.Window)
 	if midPass {
-		t.cross(res, s, at, r)
+		t.cross(res, s, at, r.AssetID, loc, r.ScanPointID)
+		res.Crossings[len(res.Crossings)-1].Cold = true
 		res.ColdCrossings++
 	}
 	return s
 }
 
-// cross moves the leader to the read's location, and records a crossing unless
-// it repeats a recent one.
-func (t *Tracker) cross(res *Result, s *assetState, at time.Time, r Read) {
-	rt := route{from: s.leader, to: *r.LocationID}
+// cross moves the leader to a location, and records a crossing unless it
+// repeats a recent one. scanPointID is the read that settled it.
+func (t *Tracker) cross(res *Result, s *assetState, at time.Time, assetID, to, scanPointID int) {
+	rt := route{from: s.leader, to: to}
 	s.leader = rt.to
 	s.lastTie = time.Time{}
 
@@ -220,6 +230,6 @@ func (t *Tracker) cross(res *Result, s *assetState, at time.Time, r Read) {
 	}
 	s.recorded[rt] = at
 	res.Crossings = append(res.Crossings, Crossing{
-		AssetID: r.AssetID, From: rt.from, To: rt.to, ScanPointID: r.ScanPointID,
+		AssetID: assetID, From: rt.from, To: rt.to, ScanPointID: scanPointID,
 	})
 }
