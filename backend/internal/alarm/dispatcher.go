@@ -3,8 +3,11 @@ package alarm
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/trakrf/platform/backend/internal/logger"
 	"github.com/trakrf/platform/backend/internal/models/outputdevice"
+	"github.com/trakrf/platform/backend/internal/readerrpc"
 )
 
 // gpoPortMin/gpoPortMax bound the CS463's general purpose output ports. Other CSL
@@ -49,12 +52,47 @@ func NewDispatcher(http httpSetter, mqtt mqttPublisher, gpo gpoSetter) Dispatche
 	return Dispatcher{http: http, mqtt: mqtt, gpo: gpo}
 }
 
+// defaultOnSeconds and maxOnSeconds bound every ON on every transport (ADR
+// 0026: no ON latches, and nothing stays on past 60 s without a fresh ON). They
+// are the reader daemon's own bounds, so a Shelly and a CS463 GPO behave alike.
+var (
+	defaultOnSeconds = int(readerrpc.GpoDefaultOn / time.Second)
+	maxOnSeconds     = int(readerrpc.GpoMaxOn / time.Second)
+)
+
+// onTimeSeconds is the device-side on-time an ON asking for offAfterSec gets:
+// the default when it names none, and never more than the cap. capped reports
+// that a longer request was cut.
+func onTimeSeconds(offAfterSec int) (sec int, capped bool) {
+	switch {
+	case offAfterSec <= 0:
+		return defaultOnSeconds, false
+	case offAfterSec > maxOnSeconds:
+		return maxOnSeconds, true
+	default:
+		return offAfterSec, false
+	}
+}
+
 // Set drives the device on/off using its configured transport and type.
-// offAfterSec, when on and > 0, is the DEVICE-side flip-back timer in seconds
-// (Shelly toggle_after; the reader's own one-shot for a GPO); 0 means it stays
-// on until an explicit off. Because the timer runs on the device, the OFF edge
-// survives a backend restart and needs no second message.
+// offAfterSec, when on, is the DEVICE-side flip-back timer in seconds (Shelly
+// toggle_after; the reader's own one-shot for a GPO). No ON latches: 0 means the
+// default on-time (30 s), and a request over 60 s is cut to 60 s with a warning
+// (ADR 0026). A caller holds a wanted output on by re-sending ON. Because the
+// timer runs on the device, the OFF edge survives a lost connection or a backend
+// restart and needs no second message. offAfterSec is ignored for an OFF.
 func (d Dispatcher) Set(ctx context.Context, dev outputdevice.OutputDevice, on bool, offAfterSec int) error {
+	if on {
+		sec, capped := onTimeSeconds(offAfterSec)
+		if capped {
+			logger.Get().Warn().Int("output_device_id", dev.ID).Int("requested_s", offAfterSec).
+				Int("capped_s", sec).Msg("output on-time cut to the cap")
+		}
+		offAfterSec = sec
+	} else {
+		offAfterSec = 0
+	}
+
 	// M1: a cs463 gpo is reader-addressed over mqtt only. Reject a non-mqtt
 	// transport here, before the transport branch, rather than falling through
 	// to the http/Shelly path below.
@@ -83,11 +121,7 @@ func (d Dispatcher) Set(ctx context.Context, dev outputdevice.OutputDevice, on b
 		if dev.SwitchID < gpoPortMin || dev.SwitchID > gpoPortMax {
 			return fmt.Errorf("alarm: device %d has gpo port %d, want %d-%d", dev.ID, dev.SwitchID, gpoPortMin, gpoPortMax)
 		}
-		pulseMs := 0
-		if on && offAfterSec > 0 {
-			pulseMs = offAfterSec * 1000
-		}
-		return d.gpo.GpoSet(ctx, dev.ReaderBaseTopic, dev.SwitchID, on, pulseMs)
+		return d.gpo.GpoSet(ctx, dev.ReaderBaseTopic, dev.SwitchID, on, offAfterSec*1000)
 	}
 
 	if dev.CommandTopic == nil || *dev.CommandTopic == "" {

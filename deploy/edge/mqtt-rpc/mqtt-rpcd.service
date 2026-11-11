@@ -1,9 +1,17 @@
 [Unit]
 Description=trakrf mqtt-rpcd — MQTT-RPC reader control daemon (CS463)
-After=network-online.target
+# Ordering after the vendor app only narrows the boot race: GlassFish is
+# "active" minutes before /API answers. The daemon's health monitor is what
+# waits for /API content before reconciling.
+After=network-online.target embeddedglassfish.service
 Wants=network-online.target
 
 [Service]
+# The rollback guard counts starts while a remote update is on probation and
+# repoints /opt/trakrf/mqtt-rpcd at the previous version on a crash loop. The
+# leading "-" means it can never stop the daemon from starting.
+ExecStartPre=-/opt/trakrf/mqtt-rpcd-guard start
+# A symlink to /opt/trakrf/versions/mqtt-rpcd-<active version>.
 ExecStart=/opt/trakrf/mqtt-rpcd
 EnvironmentFile=-/opt/trakrf/mqtt-rpcd.env
 Restart=always

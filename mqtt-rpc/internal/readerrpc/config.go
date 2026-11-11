@@ -1,5 +1,7 @@
 package readerrpc
 
+import "time"
+
 // AntennaConfig is the enablement + transmit power for a single antenna port. It
 // is the per-antenna unit of both GetOperProfile (current state) and
 // SetOperProfile (desired state).
@@ -36,8 +38,8 @@ type ReaderConfig struct {
 }
 
 // OperProfileParams are the params for Reader.GetOperProfile. Force requests a
-// force-logout-then-proceed when the reader's single root session is held by
-// another client (see BusyError).
+// force-logout-then-proceed when the reader session for the daemon's user is
+// held by another client (see BusyError).
 type OperProfileParams struct {
 	Force bool `json:"force,omitempty"`
 }
@@ -56,15 +58,28 @@ type SetOperProfileParams struct {
 // the delay with no second message. It is the reader-side analog of the Shelly
 // toggle_after timer, so an output device's auto_off_seconds maps straight onto
 // it and the OFF edge never depends on a second round trip surviving. PulseMs is
-// ignored for off commands, and 0 means "stay on until an explicit off".
+// ignored for off commands.
+//
+// No ON latches. PulseMs 0 means the daemon's default on-time (GpoDefaultOn
+// unless the reader is configured otherwise), and every ON is cut to GpoMaxOn
+// whatever PulseMs asks for. A wanted output is held on by re-sending ON before
+// it expires; a lost connection then stops it within the on-time.
 type GpoSetParams struct {
 	Port    int  `json:"port"`
 	On      bool `json:"on"`
 	PulseMs int  `json:"pulse_ms,omitempty"`
 }
 
+// GpoDefaultOn and GpoMaxOn bound every GPO ON (see GpoSetParams). Alarm
+// outputs fail toward off: a horn stuck on in a hospital is worse than one cut
+// short.
+const (
+	GpoDefaultOn = 30 * time.Second
+	GpoMaxOn     = 60 * time.Second
+)
+
 // GpoSetResult is the response to Gpo.Set. Pulsed reports whether the reader
-// armed a one-shot release timer for this call.
+// armed a one-shot release timer for this call, which it does for every ON.
 type GpoSetResult struct {
 	Port   int  `json:"port"`
 	On     bool `json:"on"`
@@ -86,9 +101,12 @@ type Capabilities struct {
 	TxPower         TxPowerCap `json:"tx_power"`
 	Supports        []string   `json:"supports"`
 	Unsupported     []string   `json:"unsupported"`
+	// Daemon is the on-reader daemon's own version and last update result. It
+	// is filled in by the daemon, not the reader adapter.
+	Daemon *DaemonInfo `json:"daemon,omitempty"`
 }
 
-// Status is the response to Reader.GetStatus and the status-topic payload.
+// Status is the response to Reader.GetStatus. The status topic carries StatusDoc.
 type Status struct {
 	Online        bool   `json:"online"`
 	Reading       bool   `json:"reading"`

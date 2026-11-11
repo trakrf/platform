@@ -56,13 +56,20 @@ func (s *Stage) Name() string { return "geofence" }
 // The deferred drives use ctx, so they stay inside the message's time limit, as
 // they do in Evaluate.
 func (s *Stage) Detect(ctx context.Context, tx pgx.Tx, in storage.DetectInput) (detection.Pending, error) {
-	fires := s.engine.decide(ctx, in.OrgID, in.ReceivedAt, in.Reads)
-	if len(fires) == 0 {
+	fires, refreshes := s.engine.decide(ctx, in.OrgID, in.ReceivedAt, in.Reads)
+	if len(fires) == 0 && len(refreshes) == 0 {
 		return detection.Pending{}, nil
 	}
+	// A presence refresh is not an alarm: it writes nothing and has nothing to
+	// undo, so it is sent whether the scan commits or rolls back. Either way the
+	// tag was in view, and a missed refresh lets the output time out.
+	refresh := func() { s.engine.refreshPresence(ctx, in.OrgID, in.ReceivedAt, refreshes) }
 	pending := detection.Pending{
-		OnCommit:   func(rowsKept bool) { s.settle(ctx, in.OrgID, fires, rowsKept) },
-		OnRollback: func() { undoAll(fires) },
+		OnCommit:   func(rowsKept bool) { s.settle(ctx, in.OrgID, fires, rowsKept); refresh() },
+		OnRollback: func() { undoAll(fires); refresh() },
+	}
+	if len(fires) == 0 {
+		return pending, nil
 	}
 	return pending, s.write(ctx, tx, in, fires)
 }

@@ -19,6 +19,8 @@ import type {
   ReaderConfigResponse,
   SetReaderConfigRequest,
   SetReaderConfigResponse,
+  ReaderSoftwareResponse,
+  StartReaderUpdateResponse,
 } from '@/types/scandevices';
 
 /**
@@ -113,6 +115,26 @@ export const scanDevicesApi = {
     apiClient.patch<SetReaderConfigResponse>(
       `/scan-devices/${id}/reader-config${force ? '?force=true' : ''}`,
       body,
+      { headers: { 'Content-Type': 'application/json' } }
+    ),
+
+  /**
+   * The reader daemon's version and last update result (TRA-1317). Never
+   * touches the reader's vendor app, so it answers even when that is wedged.
+   * GET /api/v1/scan-devices/:id/reader-software
+   */
+  getReaderSoftware: (id: number) =>
+    apiClient.get<ReaderSoftwareResponse>(`/scan-devices/${id}/reader-software`),
+
+  /**
+   * Start a remote update of the reader daemon to a published release. 202 once
+   * the reader has verified and accepted it; 422 with `reason` if it refused.
+   * POST /api/v1/scan-devices/:id/reader-software/update
+   */
+  startReaderUpdate: (id: number, version: string) =>
+    apiClient.post<StartReaderUpdateResponse>(
+      `/scan-devices/${id}/reader-software/update`,
+      { version },
       { headers: { 'Content-Type': 'application/json' } }
     ),
 };

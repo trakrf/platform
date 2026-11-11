@@ -75,7 +75,7 @@ func TestDecide_LookupTimeoutDoesNotBlock(t *testing.T) {
 
 	errsBefore := fireErrors(t)
 	start := time.Now()
-	fires := e.decide(ctx, 42, time.Unix(1000, 0), reads(readAt("EPC1", 9), readAt("EPC2", 9), readAt("EPC3", 9)))
+	fires, _ := e.decide(ctx, 42, time.Unix(1000, 0), reads(readAt("EPC1", 9), readAt("EPC2", 9), readAt("EPC3", 9)))
 	elapsed := time.Since(start)
 
 	if len(fires) != 0 {
@@ -102,7 +102,7 @@ func TestDecide_LooksUpEachLocationOnce(t *testing.T) {
 	e := newTestEngine(Config{RSSIThreshold: -65, LatchTTL: time.Minute}, s, &fakeDriver{})
 	defer e.Stop()
 
-	fires := e.decide(context.Background(), 42, time.Unix(1000, 0), reads(
+	fires, _ := e.decide(context.Background(), 42, time.Unix(1000, 0), reads(
 		readAt("EPC1", 10), readAt("EPC2", 20), readAt("EPC3", 10),
 		readAt("EPC4", 30), readAt("EPC5", 30), readAt("EPC6", 20),
 	))
@@ -380,5 +380,36 @@ func TestEvaluate_EnqueuesNoTrigger(t *testing.T) {
 	}
 	if r.alarms.attempts != 0 || len(r.rec.ids) != 0 {
 		t.Fatalf("only the stage may write in the transaction or enqueue: attempts=%d triggers=%d", r.alarms.attempts, len(r.rec.ids))
+	}
+}
+
+// A presence refresh is not an alarm: nothing is written, so it goes out whether
+// the scan commits or rolls back, and a message with only refreshes still sends.
+func TestStage_PresenceRefreshSentOnCommitAndRollback(t *testing.T) {
+	r := newStageRig(t, dev(12, map[string]any{"mode": "presence"}))
+
+	edge := r.detect(t, detectInput(stageAt, read("EPC1", -50)))
+	edge.OnCommit(true)
+	if r.driver.onCount() != 1 {
+		t.Fatalf("the edge must drive once, got %d", r.driver.onCount())
+	}
+
+	later := stageAt.Add(presenceRefreshEvery)
+	refresh := r.detect(t, detectInput(later, read("EPC1", -50)))
+	if len(r.alarms.rows) != 1 {
+		t.Fatalf("a refresh must write no alarm, got %d rows", len(r.alarms.rows))
+	}
+	refresh.OnRollback()
+	if r.driver.onCount() != 2 {
+		t.Fatalf("a rolled-back scan must still send the refresh, got %d drives", r.driver.onCount())
+	}
+	if got := r.driver.calls[1].offAfter; got != presenceOnSeconds {
+		t.Fatalf("the refresh must carry the on-time, got %d", got)
+	}
+
+	again := r.detect(t, detectInput(later.Add(presenceRefreshEvery), read("EPC1", -50)))
+	again.OnCommit(true)
+	if r.driver.onCount() != 3 {
+		t.Fatalf("a committed scan must send the refresh, got %d drives", r.driver.onCount())
 	}
 }

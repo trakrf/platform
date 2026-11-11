@@ -39,9 +39,9 @@ export function useOutputDeviceMutations() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
+    mutationFn: async ({ id, force = false }: { id: number; force?: boolean }) => {
       await ensureOrgContext();
-      await outputDevicesApi.delete(id);
+      await outputDevicesApi.delete(id, force);
       return id;
     },
     onSuccess: (id) => {

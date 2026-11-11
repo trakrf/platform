@@ -30,6 +30,7 @@ import (
 
 	"github.com/trakrf/platform/backend/internal/models/organization"
 	"github.com/trakrf/platform/backend/internal/models/outputdevice"
+	"github.com/trakrf/platform/backend/internal/readerrpc"
 	"github.com/trakrf/platform/backend/internal/storage"
 )
 
@@ -123,8 +124,9 @@ func (e *Engine) withinStartupGrace(receivedAt time.Time) bool {
 // fireDrive is one output a fire turns on.
 type fireDrive struct {
 	dev      outputdevice.OutputDevice
-	offAfter int           // device-side auto-off handed to the driver; 0 for presence
+	offAfter int           // device-side auto-off handed to the driver; the on-time for presence
 	pulse    time.Duration // pulse-guard window this drive marked; 0 if it marked none
+	presence bool          // a presence ON edge, whose result the presence state records
 }
 
 // fire is a read that decide resolved to an alarm. It holds the read to record,
@@ -157,10 +159,12 @@ func (f fire) undo() {
 // output path can never lose a scan or kill ingestion. receivedAt (server time) is
 // both the dedup/presence timestamp and the alarm's FiredAt.
 func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, receivedAt time.Time, reads []storage.ResolvedRead) {
-	for _, f := range e.decide(ctx, orgID, receivedAt, reads) {
+	fires, refreshes := e.decide(ctx, orgID, receivedAt, reads)
+	for _, f := range fires {
 		e.driveFire(ctx, orgID, f)
 		e.recordFire(ctx, orgID, f, tagScanID, receivedAt)
 	}
+	e.refreshPresence(ctx, orgID, receivedAt, refreshes)
 }
 
 // decide applies each read's output devices and modes and returns the reads that
@@ -175,7 +179,7 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 // one per distinct location in the message. ctx itself gets no timeout here, so
 // cancelling a lookup never reaches a query on the caller's transaction, which
 // pgx would answer by closing the connection and losing the transaction.
-func (e *Engine) decide(ctx context.Context, orgID int, receivedAt time.Time, reads []storage.ResolvedRead) []fire {
+func (e *Engine) decide(ctx context.Context, orgID int, receivedAt time.Time, reads []storage.ResolvedRead) (fires []fire, refreshes []outputdevice.OutputDevice) {
 	// Org-default tuning tier (TRA-955). Fetched once per message — cheaper than
 	// the per-read device lookup below, and runtime-fresh (UI edits take effect on
 	// the next message, no restart). Best-effort: a lookup error falls back to the
@@ -193,7 +197,6 @@ func (e *Engine) decide(ctx context.Context, orgID int, receivedAt time.Time, re
 	inGrace := e.withinStartupGrace(receivedAt)
 
 	located := map[int]deviceLookup{}
-	var fires []fire
 	for _, rd := range reads {
 		metricEvaluated.Inc()
 
@@ -235,7 +238,9 @@ func (e *Engine) decide(ctx context.Context, orgID int, receivedAt time.Time, re
 			if tuning.Mode == outputdevice.ModePresence {
 				// Presence: ON on the 0->1 edge; OFF fires from the output's age-out
 				// timer when no member is read for age-out. auto_off is ignored
-				// (the engine owns the OFF edge).
+				// (the engine owns the OFF edge). No ON latches (TRA-1138): each
+				// carries the reader's on-time, and is re-sent while the tag stays
+				// in view, so a lost connection stops the output within it.
 				if e.presence.observe(orgID, dev, ttl, rd.EPC) {
 					// observe already armed the age-out timer (state seeded); only the
 					// ON drive is held back during the startup grace window.
@@ -243,8 +248,14 @@ func (e *Engine) decide(ctx context.Context, orgID int, receivedAt time.Time, re
 						metricSuppressed.WithLabelValues("startup_grace").Inc()
 						continue
 					}
-					f.drives = append(f.drives, fireDrive{dev: dev})
+					f.drives = append(f.drives, fireDrive{dev: dev, offAfter: presenceOnSeconds, presence: true})
 					f.undos = append(f.undos, func() { e.presence.forget(orgID, dev.ID) })
+					continue
+				}
+				if e.presence.refreshDue(orgID, dev.ID, receivedAt) {
+					// A refresh, or the retry of a failed ON. Not a fire: no
+					// alarm_events row and nothing to undo.
+					refreshes = append(refreshes, dev)
 				}
 				continue
 			}
@@ -286,7 +297,7 @@ func (e *Engine) decide(ctx context.Context, orgID int, receivedAt time.Time, re
 			fires = append(fires, f)
 		}
 	}
-	return fires
+	return fires, refreshes
 }
 
 // orgDefaults reads the org tuning tier, bounded by lookupTimeout.
@@ -322,12 +333,32 @@ func (e *Engine) devicesAt(ctx context.Context, orgID, locationID int) deviceLoo
 // outputs still drive.
 func (e *Engine) driveFire(ctx context.Context, orgID int, f fire) {
 	for _, d := range f.drives {
-		if !e.drive(ctx, orgID, d.dev, true, d.offAfter) {
+		ok := e.drive(ctx, orgID, d.dev, true, d.offAfter)
+		if d.presence {
+			// A failed ON leaves the output due, so the next read retries it.
+			e.presence.driven(orgID, d.dev.ID, f.receivedAt, ok)
+			continue
+		}
+		if !ok {
 			// A failed ON must not hold the output busy for the whole window.
 			e.pulses.release(orgID, d.dev.ID, f.receivedAt, d.pulse)
 		}
 	}
 }
+
+// refreshPresence re-sends the ON of each held presence output decide found
+// due. Best-effort like driveFire; a failed refresh is retried on the next read.
+func (e *Engine) refreshPresence(ctx context.Context, orgID int, receivedAt time.Time, devs []outputdevice.OutputDevice) {
+	for _, dev := range devs {
+		ok := e.drive(ctx, orgID, dev, true, presenceOnSeconds)
+		e.presence.driven(orgID, dev.ID, receivedAt, ok)
+	}
+}
+
+// presenceOnSeconds is the on-time every presence ON carries: the reader's
+// default on-time, sent explicitly so the backend and the daemon cannot drift
+// apart. A Shelly gets it as toggle_after, a CS463 GPO as pulse_ms.
+var presenceOnSeconds = int(readerrpc.GpoDefaultOn / time.Second)
 
 // drive turns a device on/off, folding any error into the best-effort metric.
 // It reports whether the drive succeeded.

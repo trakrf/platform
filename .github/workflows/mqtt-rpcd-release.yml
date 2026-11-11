@@ -1,0 +1,96 @@
+name: mqtt-rpcd release
+
+# Builds, signs and publishes an mqtt-rpcd release that readers can install over
+# RPC (Daemon.Update). Manual on purpose: a release is something a reader may be
+# told to run, so it is cut deliberately, not on every merge.
+#
+# Output: a GitHub prerelease tagged mqtt-rpcd-<version> with two assets,
+#   mqtt-rpcd-linux-armv7  the static CS463 binary
+#   manifest.json          {version, url, sha256, signature} — the exact
+#                          Daemon.Update params (mqtt-rpcctl update -manifest URL)
+# Prerelease, so it never becomes this repo's "latest" platform release.
+#
+# The signing key is the secret MQTT_RPCD_SIGNING_KEY (base64 Ed25519 seed, key
+# id ci-2026-11 in mqtt-rpc/internal/update/keys.go). See mqtt-rpc/README.md
+# "Remote update" for key custody and rotation.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit, branch or tag to build
+        required: true
+        default: main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mqtt-rpcd-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          # The daemon version is `git describe`, which needs history and tags.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: mqtt-rpc/go.mod
+          cache-dependency-path: mqtt-rpc/go.sum
+
+      - name: Test
+        working-directory: mqtt-rpc
+        run: go test ./...
+
+      - name: Resolve version
+        id: version
+        run: |
+          # --match keeps this workflow's own mqtt-rpcd-* tags out of the version.
+          v=$(git describe --tags --match 'v[0-9]*' --always)
+          case "$v" in *[!A-Za-z0-9._+-]*) echo "unusable version '$v'"; exit 1 ;; esac
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "mqtt-rpcd $v"
+
+      - name: Build linux/armv7 static
+        working-directory: mqtt-rpc
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p ../dist
+          GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 \
+            go build -ldflags "-X main.version=$VERSION" \
+            -o ../dist/mqtt-rpcd-linux-armv7 ./cmd/mqtt-rpcd
+
+      - name: Sign
+        working-directory: mqtt-rpc
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          MQTT_RPCD_SIGNING_KEY: ${{ secrets.MQTT_RPCD_SIGNING_KEY }}
+          REPO: ${{ github.repository }}
+        run: |
+          go run ./cmd/mqtt-rpcctl sign \
+            -version "$VERSION" \
+            -binary ../dist/mqtt-rpcd-linux-armv7 \
+            -url "https://github.com/$REPO/releases/download/mqtt-rpcd-$VERSION/mqtt-rpcd-linux-armv7" \
+            -out ../dist/manifest.json
+          cat ../dist/manifest.json
+
+      - name: Publish prerelease
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "mqtt-rpcd-$VERSION" \
+            dist/mqtt-rpcd-linux-armv7 dist/manifest.json \
+            --prerelease \
+            --target "$(git rev-parse HEAD)" \
+            --title "mqtt-rpcd $VERSION" \
+            --notes "Signed mqtt-rpcd build for CS463 readers. Install over RPC: \`mqtt-rpcctl update -base <reader base topic> -manifest https://github.com/${{ github.repository }}/releases/download/mqtt-rpcd-$VERSION/manifest.json\`, or from the reader's software panel in the app."

@@ -61,7 +61,7 @@ test: test-ops test-release-guards test-db-init test-env-drift test-bootstrap (f
 
 build: (frontend "build") (backend "build") (cli "build")
 
-validate: lint test build
+validate: lint test test-mqtt-rpc build
 
 # Alias for CSW integration
 check: validate
@@ -132,6 +132,14 @@ test-ops:
 # tag decision. Pure bash, no registry or cluster needed.
 test-release-guards:
     @./scripts/test-release-guards.sh
+
+# The on-reader daemon (its own Go module) and its deploy scripts. Customer
+# readers keep whatever updater and rollback guard they were installed with, so
+# this is the gate that matters most before a release (TRA-1317). Run by
+# `validate` and by its own CI step in lint-test, not by `test`.
+test-mqtt-rpc:
+    cd mqtt-rpc && go vet ./... && go test -race ./...
+    shellcheck -s sh deploy/edge/mqtt-rpc/mqtt-rpcd-guard deploy/edge/mqtt-rpc/install.sh deploy/edge/mqtt-rpc/rollback.sh deploy/edge/mqtt-rpc/set-recover-password.sh deploy/edge/mqtt-rpc/update-to-release.sh
 
 # TRA-1085 item 4 — a clean VERSION requires its CHANGELOG.md section. Inert
 # during development (VERSION carries -dev). Run in CI inside `lint-test` so it
