@@ -206,13 +206,3 @@ func TestRecover_NoInternetChangesNothingButStillReboots(t *testing.T) {
 	assert.Equal(t, "reboot\n", calls)
 	assert.Contains(t, out, "internet", "the operator is told what to check")
 }
-
-// `legacy` is the pre-update daemon kept by install.sh. It has no updater, so
-// switching to it ends remote updates until someone reinstalls over SSH.
-func TestGuard_RollbackToLegacyWarnsThatItEndsRemoteUpdates(t *testing.T) {
-	l := installed(t, "v2", "legacy")
-	out, code, _ := runGuard(t, l, "rollback", "legacy")
-	require.Equal(t, 0, code, out)
-	assert.Equal(t, "legacy", activeOf(t, l))
-	assert.Contains(t, out, "no remote update")
-}

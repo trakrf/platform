@@ -262,9 +262,10 @@ func TestEvaluate_PresenceFiresOnceAutoOffIgnored(t *testing.T) {
 	if d.onCount() != 1 {
 		t.Fatalf("presence should fire ON once for a continuously present tag, got %d", d.onCount())
 	}
-	// auto_off must be ignored in presence (offAfter == 0).
-	if got := d.first().offAfter; got != 0 {
-		t.Fatalf("presence ON must pass offAfter=0, got %d", got)
+	// auto_off is ignored in presence: the ON carries the reader's on-time
+	// (TRA-1138), never the configured auto_off.
+	if got := d.first().offAfter; got != wantOnSec {
+		t.Fatalf("presence ON must pass offAfter=%d, got %d", wantOnSec, got)
 	}
 }
 

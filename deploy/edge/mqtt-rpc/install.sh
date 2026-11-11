@@ -33,16 +33,27 @@ scp "$HERE/mqtt-rpcd.env.example" "$HOST:/tmp/mqtt-rpcd.env.example"
 ssh "$HOST" "VERSION='$VERSION' sh -s" <<'REMOTE'
 set -eu
 cd /opt/trakrf
-chmod 755 "versions/.mqtt-rpcd-$VERSION.upload" .mqtt-rpcd-guard.upload
-mv -f "versions/.mqtt-rpcd-$VERSION.upload" "versions/mqtt-rpcd-$VERSION"
+chmod 755 .mqtt-rpcd-guard.upload
 mv -f .mqtt-rpcd-guard.upload mqtt-rpcd-guard
-# A pre-versioning install has a plain file here: keep it as a manual rollback
-# target named "legacy" (it has no updater, so rolling back to it ends OTA).
-if [ -f mqtt-rpcd ] && [ ! -L mqtt-rpcd ]; then mv -f mqtt-rpcd versions/mqtt-rpcd-legacy; fi
-# An SSH install supersedes any remote update on probation.
-rm -f update/pending update/starts update/ticks
-rm -f .mqtt-rpcd.link
-ln -s "versions/mqtt-rpcd-$VERSION" .mqtt-rpcd.link && mv -f .mqtt-rpcd.link mqtt-rpcd
+# The guard's place step stops its timer and the daemon. Start both again
+# however this script ends — an error under set -e, or the SSH session
+# dropping — so a failed install never leaves a reader with no daemon, or no
+# no-commit rollback, until its next boot. start is a no-op on a running unit.
+restart_units() {
+  # A second signal (sshd's session unit stopping after a PIPE) must not cut
+  # this short between the two starts.
+  trap '' HUP PIPE INT QUIT TERM
+  systemctl start mqtt-rpcd >/dev/null 2>&1 || true
+  systemctl start mqtt-rpcd-guard.timer >/dev/null 2>&1 || true
+}
+trap restart_units EXIT
+# A shell killed by a signal it does not trap skips the EXIT trap. A dropped
+# SSH session can arrive as HUP, or as PIPE on the next write to it.
+trap 'exit 1' HUP PIPE INT QUIT TERM
+# Stop the guard and the daemon, disarm any remote update on probation, move
+# the binary in and swap the link. Each step is safe to interrupt and re-run;
+# see mqtt-rpcd-guard "place".
+./mqtt-rpcd-guard place "$VERSION"
 test -f mqtt-rpcd.env || mv /tmp/mqtt-rpcd.env.example mqtt-rpcd.env
 chmod 600 mqtt-rpcd.env
 

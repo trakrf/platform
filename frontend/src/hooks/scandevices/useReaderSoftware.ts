@@ -14,7 +14,13 @@ export const UPDATE_POLL_MS = 5_000;
  */
 export const UPDATE_WATCH_MS = 25 * 60 * 1000;
 
-export type UpdateOutcome = 'watching' | 'done' | 'rolled_back' | 'failed' | 'timeout';
+export type UpdateOutcome =
+  | 'watching'
+  | 'done'
+  | 'rolled_back'
+  | 'failed'
+  | 'unguarded'
+  | 'timeout';
 
 /**
  * Where an update to `target`, started at `startedAt`, stands given the latest
@@ -23,13 +29,18 @@ export type UpdateOutcome = 'watching' | 'done' | 'rolled_back' | 'failed' | 'ti
  * rollback is not mistaken for this one's — and only a report fetched after the
  * update started (`fetchedAt`), so a retry of the same version is not judged by
  * the previous attempt's cached result.
+ *
+ * `checkedAt` is the last time the reader was asked, answered or not. Timeout
+ * needs a check after the deadline: in a background tab the clock runs on while
+ * refetches pause, and a deadline that passed unobserved proves nothing.
  */
 export function updateOutcome(
   target: string,
   software: ReaderSoftware | undefined,
   startedAt: number,
   now: number,
-  fetchedAt: number = Number.POSITIVE_INFINITY
+  fetchedAt: number = Number.POSITIVE_INFINITY,
+  checkedAt: number = now
 ): UpdateOutcome {
   const fresh = fetchedAt > startedAt;
   const daemon = fresh ? software?.daemon : undefined;
@@ -37,7 +48,9 @@ export function updateOutcome(
   if (daemon?.version === target && update?.state === 'committed') return 'done';
   if (update?.target === target && update.state === 'rolled_back') return 'rolled_back';
   if (update?.target === target && update.state === 'failed') return 'failed';
-  if (now - startedAt > UPDATE_WATCH_MS) return 'timeout';
+  if (update?.target === target && update.state === 'unguarded') return 'unguarded';
+  if (now - startedAt > UPDATE_WATCH_MS && checkedAt - startedAt > UPDATE_WATCH_MS)
+    return 'timeout';
   return 'watching';
 }
 
@@ -49,6 +62,11 @@ export function updateOutcome(
 export function readerUpdateInFlight(software: ReaderSoftware | undefined): boolean {
   const state = software?.daemon?.update?.state;
   return state === 'downloading' || state === 'installing' || state === 'pending';
+}
+
+/** The start request was sent but its reply was lost (backend 504). */
+function replyLost(err: unknown): boolean {
+  return (err as { response?: { status?: number } } | null)?.response?.status === 504;
 }
 
 interface Watch {
@@ -80,7 +98,14 @@ export function useReaderSoftware(deviceId: number | null) {
 
   const outcome: UpdateOutcome | null = watch
     ? (watch.settled ??
-      updateOutcome(watch.target, query.data, watch.startedAt, now, query.dataUpdatedAt))
+      updateOutcome(
+        watch.target,
+        query.data,
+        watch.startedAt,
+        now,
+        query.dataUpdatedAt,
+        Math.max(query.dataUpdatedAt, query.errorUpdatedAt)
+      ))
     : null;
 
   useEffect(() => {
@@ -105,6 +130,16 @@ export function useReaderSoftware(deviceId: number | null) {
       setNow(startedAt);
       setWatch({ target: res.to, startedAt });
     },
+    onError: (err, version) => {
+      // 504: the request reached the reader but its reply was lost, so the
+      // update may be running. Watch for its outcome rather than report it as
+      // not started; a reader that never got it settles as a timeout.
+      if (replyLost(err)) {
+        const startedAt = Date.now();
+        setNow(startedAt);
+        setWatch({ target: version, startedAt });
+      }
+    },
   });
 
   return {
@@ -115,7 +150,7 @@ export function useReaderSoftware(deviceId: number | null) {
       await mutation.mutateAsync(version);
     },
     isStarting: mutation.isPending,
-    startError: mutation.error as unknown,
+    startError: replyLost(mutation.error) ? null : (mutation.error as unknown),
     target: watch?.target ?? null,
     outcome,
     /** The reader reports an update in flight, whoever started it. */

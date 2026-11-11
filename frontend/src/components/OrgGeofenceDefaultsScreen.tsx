@@ -11,9 +11,11 @@
 
 import { useState, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useOrgStore } from '@/stores';
 import { orgsApi } from '@/lib/api/orgs';
 import type { GeofenceDefaults, GeofenceTuning } from '@/types/org';
+import { MAX_AUTO_OFF_SECONDS, validateOrgAutoOff } from '@/components/outputdevices/autoOff';
 import toast from 'react-hot-toast';
 
 type ModeField = '' | 'egress' | 'presence';
@@ -21,6 +23,7 @@ type ModeField = '' | 'egress' | 'presence';
 export default function OrgGeofenceDefaultsScreen() {
   const { currentOrg, currentRole } = useOrgStore();
   const isAdmin = currentRole === 'owner' || currentRole === 'admin';
+  const queryClient = useQueryClient();
 
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -86,6 +89,8 @@ export default function OrgGeofenceDefaultsScreen() {
       setAgeOut(numToField(defaults.age_out_seconds));
       setAutoOff(numToField(defaults.auto_off_seconds));
       setMode((defaults.mode ?? '') as ModeField);
+      // The output-device form reads these to decide whether Auto-off is required.
+      queryClient.invalidateQueries({ queryKey: ['geofenceDefaults', currentOrg.id] });
       toast.success('Geofence defaults updated');
     } catch (err: unknown) {
       setError(extractErrorMessage(err, 'Failed to update geofence defaults'));
@@ -99,9 +104,7 @@ export default function OrgGeofenceDefaultsScreen() {
     if (r !== null && (r < -120 || r > 0)) return 'RSSI threshold must be between -120 and 0 dBm.';
     const a = fieldToNum(ageOut);
     if (a !== null && a < 1) return 'Age-out must be at least 1 second.';
-    const o = fieldToNum(autoOff);
-    if (o !== null && o < 0) return 'Auto-off cannot be negative.';
-    return null;
+    return validateOrgAutoOff(fieldToNum(autoOff));
   };
 
   if (!currentOrg) {
@@ -190,16 +193,17 @@ export default function OrgGeofenceDefaultsScreen() {
               <input
                 id="gf-auto-off"
                 type="number"
-                min={0}
+                min={1}
+                max={MAX_AUTO_OFF_SECONDS}
                 value={autoOff}
                 onChange={(e) => setAutoOff(e.target.value)}
-                placeholder={system ? String(system.auto_off_seconds) : 'System default'}
+                placeholder="None"
                 disabled={!isAdmin || isSaving}
                 className={inputClass}
               />
               <p className="mt-1 text-xs text-gray-500">
-                Egress only: device flips itself off after N seconds. 0 = stay on until manual reset. Blank = system
-                default.
+                Egress only: device flips itself off after N seconds (1-{MAX_AUTO_OFF_SECONDS}). Blank = none, so
+                each egress output must set its own.
               </p>
             </div>
 

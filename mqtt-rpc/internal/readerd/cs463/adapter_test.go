@@ -48,6 +48,12 @@ type fakeOps struct {
 	mu       sync.Mutex
 	gpoCalls []gpoCall
 	gpoErr   error
+	// gpoOffErr, when set, fails only off writes: the vendor app wedged
+	// after the port was energised.
+	gpoOffErr error
+	// ioOrder records every GPO write, /API and sysfs, as "api|sysfs:port:on",
+	// in the order they happened.
+	ioOrder []string
 	// gpoOffDelay, when set, simulates slow reader-side HTTP latency on the
 	// RELEASE (off) write only — used to widen the window in which a stale,
 	// in-flight release can be observed racing a superseding command's write
@@ -149,6 +155,10 @@ func (f *fakeOps) DirectIOOutput(ctx context.Context, port int, on bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.gpoCalls = append(f.gpoCalls, gpoCall{port: port, on: on})
+	f.ioOrder = append(f.ioOrder, "api:"+strconv.Itoa(port)+":"+strconv.FormatBool(on))
+	if !on && f.gpoOffErr != nil {
+		return f.gpoOffErr
+	}
 	return f.gpoErr
 }
 
@@ -204,10 +214,11 @@ func TestGetCapabilities(t *testing.T) {
 	if !reflect.DeepEqual(caps.Supports, wantSupports) {
 		t.Errorf("supports = %v, want %v", caps.Supports, wantSupports)
 	}
+	// Reader.Reboot and Reader.Shutdown are the daemon's, not the adapter's: it
+	// advertises them itself when it has a host to run them on.
 	wantUnsupported := []string{
 		readerrpc.MethodScanStart,
 		readerrpc.MethodScanStop,
-		readerrpc.MethodReboot,
 	}
 	if !reflect.DeepEqual(caps.Unsupported, wantUnsupported) {
 		t.Errorf("unsupported = %v, want %v", caps.Unsupported, wantUnsupported)
@@ -583,24 +594,6 @@ func (f *fakeOps) gpoSnapshot() []gpoCall {
 	return append([]gpoCall(nil), f.gpoCalls...)
 }
 
-// A plain on with no pulse must drive the port and leave it latched: no release
-// is scheduled, so the output stays on until an explicit off.
-func TestGpoSet_NoPulseLatchesOn(t *testing.T) {
-	f := &fakeOps{}
-	a := NewAdapter(f, AdapterConfig{AntennaCount: 4})
-
-	if err := a.GpoSet(context.Background(), 1, true, 0); err != nil {
-		t.Fatalf("GpoSet: %v", err)
-	}
-	time.Sleep(30 * time.Millisecond) // give any (incorrectly) scheduled release a chance to fire
-
-	got := f.gpoSnapshot()
-	want := []gpoCall{{port: 1, on: true}}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("calls = %+v, want %+v (a zero pulse must not schedule a release)", got, want)
-	}
-}
-
 // pulse_ms arms a reader-side one-shot: on now, off after the delay, with no
 // second request. This is the Shelly toggle_after analog the geofence engine's
 // auto_off_seconds maps onto.
@@ -702,12 +695,12 @@ func TestGpoSet_LongerPulseSupersedesPendingRelease(t *testing.T) {
 	}
 }
 
-// The explicit re-fire/latch case from the finding: an on:true,pulse_ms:0
-// (latch forever) call arriving while a pulse is pending must not be killed
-// by the stale pending timer either — the latch must win permanently.
-func TestGpoSet_LatchSupersedesPendingRelease(t *testing.T) {
+// The re-fire case from the finding: a no-pulse ON arriving while a shorter
+// pulse is pending must not be cut by the stale timer. It runs its own
+// default on-time instead (it used to latch forever; TRA-1138 ended that).
+func TestGpoSet_NoPulseOnSupersedesPendingRelease(t *testing.T) {
 	f := &fakeOps{}
-	a := NewAdapter(f, AdapterConfig{AntennaCount: 4})
+	a := NewAdapter(f, AdapterConfig{AntennaCount: 4, DefaultOn: 250 * time.Millisecond})
 
 	if err := a.GpoSet(context.Background(), 6, true, 40); err != nil {
 		t.Fatalf("GpoSet #1 (pulse): %v", err)
@@ -715,15 +708,23 @@ func TestGpoSet_LatchSupersedesPendingRelease(t *testing.T) {
 	time.Sleep(15 * time.Millisecond)
 
 	if err := a.GpoSet(context.Background(), 6, true, 0); err != nil {
-		t.Fatalf("GpoSet #2 (latch): %v", err)
+		t.Fatalf("GpoSet #2 (no pulse): %v", err)
 	}
 
-	// Wait well past pulse #1's original deadline; the latch must hold.
+	// Past pulse #1's original deadline: the port must still be on.
 	time.Sleep(120 * time.Millisecond)
 	got := f.gpoSnapshot()
 	want := []gpoCall{{port: 6, on: true}, {port: 6, on: true}}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("calls = %+v, want %+v (latch must survive the superseded pulse's deadline)", got, want)
+		t.Fatalf("calls = %+v, want %+v (the superseded pulse's deadline must not release the port)", got, want)
+	}
+
+	// Past #2's default on-time: exactly one release.
+	time.Sleep(250 * time.Millisecond)
+	got = f.gpoSnapshot()
+	want = append(want, gpoCall{port: 6, on: false})
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("calls = %+v, want %+v (one release, from #2's default on-time)", got, want)
 	}
 }
 
@@ -759,7 +760,7 @@ func TestGpoSet_OffCancelsPendingRelease(t *testing.T) {
 // whether it had been superseded, and that write was not serialized against
 // the superseding call at all. Interleaving: pulse #1 elapses and its
 // release goroutine begins a (slow) OFF write; before that OFF lands, a
-// superseding on:true,pulse_ms:0 latch arrives and writes ON; the slow OFF
+// superseding on:true,pulse_ms:0 ON arrives and writes ON; the slow OFF
 // then finally lands, landing LAST — leaving the port physically OFF when
 // the last real intent was ON. The reviewer reproduced this 200/200 against
 // the prior fix.

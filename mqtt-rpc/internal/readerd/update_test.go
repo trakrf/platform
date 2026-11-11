@@ -1,21 +1,25 @@
 package readerd
 
 import (
+	"bytes"
 	"encoding/json"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
+	"github.com/trakrf/platform/mqtt-rpc/internal/update"
 )
 
 type fakeUpdater struct {
 	mu        sync.Mutex
 	probation bool
 	commits   int
+	commitErr error
 	started   []readerrpc.DaemonUpdateParams
 	startErr  error
 	info      readerrpc.DaemonInfo
@@ -41,7 +45,7 @@ func (f *fakeUpdater) Commit() error {
 	defer f.mu.Unlock()
 	f.commits++
 	f.probation = false
-	return nil
+	return f.commitErr
 }
 func (f *fakeUpdater) commitCount() int {
 	f.mu.Lock()
@@ -186,6 +190,39 @@ func TestProbation_NoCommitBeforeTheMinimumUptime(t *testing.T) {
 	assert.Equal(t, 1, u.commitCount())
 	assert.GreaterOrEqual(t, DefaultCommitAfter, 2*time.Minute)
 	assert.Less(t, DefaultCommitAfter, 15*time.Minute, "well inside the guard's 15-20 min no-commit window")
+}
+
+// Two replies race through answered(): both saw probation, and the loser's
+// Commit reports the winner's commit. That is not a failure and must not be
+// logged as one.
+func TestAnswered_LosingACommitRaceToItselfIsNotAnError(t *testing.T) {
+	var buf bytes.Buffer
+	log := zerolog.New(&buf)
+	d := New(Config{Broker: BrokerConfig{BaseTopic: "trakrf.id/cs463-212"}}, &fakeAdapter{}, &log)
+	u := &fakeUpdater{probation: true, commitErr: update.ErrAlreadyCommitted}
+	d.SetUpdater(u)
+	d.now = func() time.Time { return d.started.Add(DefaultCommitAfter) }
+
+	d.answered()
+	assert.Equal(t, 1, u.commitCount())
+	assert.NotContains(t, buf.String(), "commit failed")
+	assert.NotContains(t, buf.String(), `"level":"error"`)
+}
+
+// The guard ended probation without a rollback (nothing to roll back to). A
+// commit then finds no pending; saying the guard will roll back would be false.
+func TestAnswered_ProbationSettledByTheGuardIsNotARollbackWarning(t *testing.T) {
+	var buf bytes.Buffer
+	log := zerolog.New(&buf)
+	d := New(Config{Broker: BrokerConfig{BaseTopic: "trakrf.id/cs463-212"}}, &fakeAdapter{}, &log)
+	u := &fakeUpdater{probation: true, commitErr: update.ErrNotPending}
+	d.SetUpdater(u)
+	d.now = func() time.Time { return d.started.Add(DefaultCommitAfter) }
+
+	d.answered()
+	assert.NotContains(t, buf.String(), "will roll back")
+	assert.NotContains(t, buf.String(), `"level":"error"`)
+	assert.Contains(t, buf.String(), "the guard settled")
 }
 
 func TestNoCommitWhenReplyPublishFails(t *testing.T) {

@@ -26,7 +26,7 @@ shared Go package — so a port to another language changes nothing here.
 |---|---|---|
 | `trakrf.id/{client_id}/rpc` | cloud → daemon | RPC requests (daemon subscribes) |
 | *(the request's `src`)* | daemon → cloud | response, routed to the caller's `src` topic |
-| `trakrf.id/{client_id}/status` | daemon → cloud | retained online/offline status + MQTT LWT |
+| `trakrf.id/{client_id}/status` | daemon → cloud | retained status document (presence, version, reader-API health) + MQTT LWT; see "Reader-API health and wedge recovery" |
 
 The daemon connects with a **distinct** MQTT client id (`{client_id}-rpc`) so it
 never evicts the reader's own reads connection.
@@ -53,10 +53,13 @@ never evicts the reader's own reads connection.
 - `Reader.SetConfig(params=ReaderConfig, partial)` → `{applied: "immediate"|"pending_reload", effective_at?}`
 - `Reader.GetStatus` → `{online, reading, active_profile?}`
 
-**Capability-flagged management** (reserved; declared `unsupported` by the CS463 adapter): `Scan.Start`, `Scan.Stop`, `Gpo.Set`, `Reader.Reboot`.
+**Capability-flagged management** (declared per adapter in `supports[]` / `unsupported[]`):
+- `Gpo.Set(params={port, on, pulse_ms?})` → `{port, on, pulsed}` — supported by the CS463 adapter. See "Alarm outputs".
+- `Scan.Start`, `Scan.Stop` — reserved; `unsupported` on the CS463.
 
 **Daemon** (acts on mqtt-rpcd itself; never touches the vendor `/API`):
 - `Daemon.Update(params={version, url, sha256, signature})` → `{accepted, from, to}` once verified; the install follows the reply. Refusals are error `-33002`. See "Remote update".
+- `Reader.Reboot`, `Reader.Shutdown(params={requested_by?})` → `{action: "reboot"|"shutdown", in_ms}`; the clean reboot or power-off follows the reply. Listed in `supports[]` when the daemon runs on a host it can reboot. Refusals are error `-33003`. See "Reboot and shutdown".
 
 Rules: neutral config (no vendor terms like "operation profile" leak into the
 wire); a new tunable is a field, not a method; `applied` is explicit; the contract
@@ -70,6 +73,23 @@ is versioned via `contract_version`.
   auth — the `/API` `setOperProfile` can't set antenna enablement on web-app
   1.3.23), then re-arms the inventory event so reads resume on the new config
   (a brief read pause), and verifies antenna enablement survived the write.
+
+### Alarm outputs (`Gpo.Set`)
+Alarm outputs fail toward off: a horn stuck on is worse than one cut short
+(`docs/adr/0026-an-alarm-output-fails-toward-off.md`).
+- **No ON latches.** Every ON releases itself: after `pulse_ms`, or after the
+  default on-time when it names none (30 s, `READERD_GPO_DEFAULT_ON`), and never
+  later than the **60 s hard cap**, whatever is asked for (a longer request is
+  cut, with a warning). The cloud holds a wanted output on by re-sending ON.
+- **Safe state at start and stop.** The daemon drives all four ports off when it
+  starts (a crash, a `kill -9` or the previous version may have left one on) and
+  again when it stops (a release timer dies with the process, and a halted
+  board on PoE holds its last GPO state). After the stop sweep it refuses ON.
+  Each port's result is logged.
+- **Every OFF also goes below the vendor app.** It writes the kernel GPIO line
+  (`/sys/class/gpio`, needs root), then `/API`, then the line again, so it
+  lands while `/API` is wedged. ON uses `/API` only. Pin map and timings:
+  `docs/cs463-reader-references.md`.
 
 ---
 
@@ -97,10 +117,13 @@ live test covers the wire + the firmware behavior the fakes can't.
 
 ## Golden-config reconcile (TRA-1002)
 
-On startup the daemon **converges the reader to the golden `TrakRF mqtt-rpc`-named
+Once the reader's `/API` answers, the daemon **converges the reader to the golden `TrakRF mqtt-rpc`-named
 entities** — the exact ingest wiring validated in TRA-994 — so every reader provably
 has what ingest needs, idempotently and safe to re-run. The golden definitions are
 owned as code (`internal/readerd/cs463/golden.go`); reconcile is list-then-add-or-mod.
+The health monitor decides when it runs: when `/API` first answers after the daemon
+starts, again after every outage, and every 5 min while one keeps failing. See
+"Reader-API health and wedge recovery".
 
 ### Owned entities (all `TrakRF mqtt-rpc`-prefixed — the name *is* the ownership claim)
 | Entity | Name | Reconciled |
@@ -145,7 +168,7 @@ activation mechanism); on reboot the reader activates the enabled event's profil
 inventory still needs the startup re-arm (above) to begin publishing.
 
 ### Config
-- `READERD_RECONCILE` — `true` (default) runs reconcile on startup; `false` pins config.
+- `READERD_RECONCILE` — `true` (default) runs reconcile whenever `/API` is healthy and the config is not yet applied; `false` pins config.
 - `READERD_CLOUDSERVER_ID` — defaults to `TrakRF mqtt-rpc MQTT Server`.
 
 ### Bench verification (cs463-212, 2026-06-17) — VALIDATED on live hardware
@@ -180,6 +203,183 @@ To re-run on a reader: `CS463_LIVE=1 CS463_IP=… CS463_WEB_PASS=… go test ./i
 Open (non-blocking): **partial-failure policy** — reconcile aborts on first entity
 error (logged, non-fatal to RPC); revisit if a real reader ever needs
 best-effort-continue.
+
+---
+
+## Boot entropy: the hardware RNG
+
+The CS463 kernel (i.MX6, 4.14) seeds its RNG only from interrupts: it registers
+the SoC's CAAM generator as `/dev/hwrng` but never credits it (`rng_core`
+quality 0), and the image has no `rngd` or `haveged`. So `random: crng init done`
+landed **96–388 s** after a boot. Until then `getrandom(2)` blocks, and both TLS
+clients wait: this daemon's broker link (`crypto/rand: blocked for 60 seconds`)
+and the vendor app's CloudServer MQTT client, which carries the reads.
+
+The first thing `mqtt-rpcd` does at start is read 512 bytes from `/dev/hwrng`
+and credit them to the kernel with `RNDADDENTROPY` (`internal/hwrng`). The log
+line is `credited the hardware RNG to the kernel` (`source: rng-caam`,
+`bits_offered`, and `entropy_avail` before and after).
+- It credits only `rng-caam`, the generator measured on the CS463. For any other
+  `rng_current` (`none`, unreadable, …) it skips and leaves the kernel alone.
+- It refuses output in which any 16-byte window appears twice: constant output,
+  a cycle starting anywhere, or a tail that sticks partway.
+- It gives up after 2 s and never credits a later answer.
+
+A failure is only a warning: the reader falls back to the old slow boot.
+
+Why it is built this way:
+- **In the daemon, not in a separate unit.** `Daemon.Update` replaces only this
+  binary, so a fix anywhere else would never reach a reader that has no SSH.
+  The daemon starts at about 15 s of uptime, well before the vendor app's first
+  TLS handshake.
+- **From the hardware, not from a saved seed.** It needs no saved state, so it
+  works on the first boot after a reflash (which wipes `/opt`) and after a power
+  pull. Crediting a saved seed is unsafe on exactly those boots: one that is
+  never rewritten gets credited twice.
+- **Not `rng_core.default_quality=` on the kernel command line.** That edits
+  the bootloader environment, which no update over the broker can do.
+
+Measured on cs463-212 (2026-11-09), over 5 clean reboots (seconds of uptime):
+
+| Boot | daemon start | `crng init done` | daemon on broker |
+|---|---|---|---|
+| 1 | 15.4 | 16.0 | 18.1 |
+| 2 | 15.9 | 16.5 | 18.5 |
+| 3 | 15.7 | 16.3 | 18.2 |
+| 4 | 24.2 | 24.6 | 26.7 |
+| 5 | 15.9 | 16.5 | 18.5 |
+
+Before the change, the same reader's `crng init done` was at 106.8 s and the
+daemon waited 96 s on `crypto/rand`. After it, the vendor CloudServer was on the
+broker within seconds of `/API` serving (boot 4: 110.8 s). Boot 3 hit the
+vendor-app wedge (see below); the reader app restart cleared it.
+
+See [ADR 0024](../docs/adr/0024-a-remote-update-is-undone-by-what-it-cannot-replace.md)
+for why only the daemon binary changes over the air.
+
+## Reader-API health and wedge recovery
+
+The CS463 vendor app can come up **answering every `/API` request with HTTP 200
+and an empty body**. When it does, the radio keeps reading, systemd says
+`active`, the daemon stays on the broker, and no reads reach the cloud. Clean
+reboots have caused it as well as power cuts. GlassFish's classloader throws
+`NullPointerException` in `WebDirContext.lookupFromJars` on every request. The
+daemon detects this itself and recovers from it.
+
+### Probe
+Every 30 s the daemon sends `GET /API?command=directIOInput&username=…&password=…`.
+It is sessionless, so it never takes the reader's single session slot (a
+`command=login` probe would). It mutates nothing, and it goes through the same
+servlet path that fails. **The reply is judged on its parsed body, never on its
+status code:**
+
+| `api` | Means |
+|---|---|
+| `healthy` | `<CSL><Command>directIOInput</Command>` with `<Input …/>`, or with `<Error …/>` (a wrong password still means the servlet is serving, and no restart fixes a credential) |
+| `degraded` | a 2xx that is empty, unparseable, or names another command. **This is the wedge.** |
+| `unreachable` | no connection, or a non-2xx (nginx answers 502 while GlassFish is down or still deploying) |
+| `unknown` | not probed yet |
+
+Detection rests only on `/API` content. It does not scrape `lookupFromJars` from
+the log, and a slow broker connection after a boot is not a wedge.
+
+### Recovery ladder
+`/API` unhealthy for **6 min** without a break (`READERD_WEDGE_AFTER`; a boot
+takes about 3 min to serve) marks the reader `wedged`. Then, once per episode:
+
+1. **Restart the vendor app.** `systemctl stop embeddedglassfish`, then SIGTERM
+   whatever is left in the unit's cgroup, then SIGKILL after 30 s, then `start`.
+   `systemctl restart` alone is not enough here. The vendor init script stops
+   only the pid in a pidfile that is not always written, and the generated unit
+   is `KillMode=process` with no main pid, so a plain restart can start a second
+   java beside the first. If a process survives SIGKILL, the daemon does not
+   start the app.
+2. **Still unhealthy 6 min later: a clean reboot.** The daemon records the
+   reboot, publishes the retained status offline with `reason: "auto-recovery"`,
+   then runs `sync` and `systemctl reboot`. It never power-resets.
+
+**Boot-loop cap:** at most **2** automatic reboots, counted in
+`/opt/trakrf/recovery/auto-reboots.json`, which survives the reboots it counts.
+The count resets after **1 h** of continuous health, measured on the process
+clock. It is not a wall-clock window, because the CS463 RTC has booted at 2019
+before NTP corrected it, and a timestamp window would then expire every entry.
+Past the cap, or if the file cannot be read, the daemon stays up and reports
+`auto_reboots_exhausted: true`, and a person decides.
+
+Every unhealthy → healthy transition (two or more failed probes) re-runs the
+golden-config reconcile, because an app restart stops inventory and the
+reconcile re-arms it.
+
+`READERD_AUTO_RECOVERY=false` keeps the probe, the status and the reconcile
+retry, but takes no recovery action. Use it on a bench that has to hold a wedge
+for diagnosis.
+
+If systemd refuses the reboot, the reader is still up: the daemon republishes
+the status online and tries again after the next window.
+
+### Reboot and shutdown (`Reader.Reboot`, `Reader.Shutdown`)
+A clean reboot or power-off an operator asks for over the broker, for a reader
+with no SSH. A reboot is the known fix for the vendor-app wedge; a shutdown
+before planned power work avoids the unclean power cut that causes it.
+
+```sh
+MQTT_URL=… mqtt-rpcctl reboot   -base trakrf.id/cs463-212 -yes
+MQTT_URL=… mqtt-rpcctl shutdown -base trakrf.id/cs463-212 -yes   # back only after an on-site power-cycle
+```
+
+1. The daemon logs the request (`requested_by`, the reply topic, `asked_at`) and
+   replies `{action, in_ms: 2000}`.
+2. 2 s later it publishes the retained status offline with `reason: "reboot"`
+   or `"shutdown"`, then runs `sync` and `systemctl reboot` or
+   `systemctl poweroff`. Never a power reset. systemd then stops the daemon,
+   whose stop drives every output off and keeps the reason on the status.
+3. One owner at a time takes the reader down. A second request while one is
+   under way, or while an automatic recovery reboot is announced, is refused
+   (`-33003`, "already going down"). An automatic recovery reboot that comes
+   due inside an operator's 2 s does not reboot and does not count against the
+   cap, so a requested shutdown stays a shutdown.
+4. A request while a `Daemon.Update` is downloading or installing is refused
+   (`-33003`), and a `Daemon.Update` while the reader is going down is refused
+   (`-33002`). A new build on probation can still be rebooted: the guard
+   counts the start and rolls back across it, and a reboot is the fix for a
+   build that cannot commit (a read-only filesystem, for one).
+5. If systemd refuses, the status goes back online and a retry is accepted.
+
+The daemon never serves a **retained** request on `<base>/rpc`: the broker
+would hand it back on every reconnect, and a retained reboot would loop the
+reader. It logs "retained rpc request dropped". Clear one with an empty retained
+publish to the topic (`mosquitto_pub -r -n -t <base>/rpc`); the live daemon
+gets that empty frame too and logs it as an unparseable request, harmlessly.
+
+After a reboot the daemon takes 2–7 min to reach the broker again (boot-time
+entropy for TLS).
+
+### Status document (retained `<base>/status`)
+```jsonc
+{"online": true, "at": "2026-11-08T17:40:00Z", "version": "v1.5.0-330-g…",
+ "health": {"api": "degraded", "since": "2026-11-08T17:31:00Z",
+            "detail": "http 200 with an empty body", "wedged": true,
+            "recovery": "app_restart",            // or "reboot"; absent while healthy
+            "auto_reboots": 1, "auto_reboots_exhausted": false,
+            "golden_config": "pending",           // "applied" | "pending" | "off"
+            "cloudserver_fault": "cleanSession is false; golden is true"}}  // absent when clean
+// before a planned outage, and after it via Stop. reason is "auto-recovery"
+// (the daemon's own), or "reboot" / "shutdown" (Reader.Reboot / Reader.Shutdown):
+{"online": false, "reason": "auto-recovery", "version": "…", "health": {…}}
+// MQTT Last Will (the daemon died without Stop):
+{"online": false}
+```
+`cloudserver_fault` lists what is wrong with the golden CloudServer the
+reader's own app publishes through. A trust bundle CSL cannot use, or a broker
+chain that does not reach the bundle's first certificate, stops reads. Drift
+from qos 0, cleanSession or TLSv1.2 is listed too. The rules and the reasons
+for them are in `deploy/edge/mqtt-rpc/README.md` ("The golden CloudServer").
+The entry is re-checked on every probe, independently of `/API`, and the chain
+on every broker handshake.
+
+It is published when the health changes and on every reconnect, and not on
+every probe. To read it: `MQTT_URL=… mqtt-rpcctl status -base <base topic>`
+prints the retained document, and `-watch` prints one line per change.
 
 ---
 
@@ -229,10 +429,23 @@ reconcile: `docs/adr/0024-a-remote-update-is-undone-by-what-it-cannot-replace.md
      `pending` stays armed for the next run; a rollback interrupted mid-way
      resumes. Commit and rollback both claim `pending` by rename, so exactly one
      wins.
+   - If `from` is no longer installed, it falls back to the newest other
+     installed version. With nothing else installed the failed build stays
+     live, unguarded.
 
 `update/last` is reported in `GetCapabilities().daemon.update`:
-`committed`, `rolled_back` (`error`: `crash_loop` | `no_commit` | `manual`) or
-`failed` (nothing replaced). The updater never reads or writes
+`committed`, `rolled_back` (`error`: `crash_loop` | `no_commit` | `manual`,
+with `_fallback` when it fell back past a missing `from`), `unguarded`
+(`<why>_no_from`: the target is live and nothing was left to roll back to) or
+`failed` (nothing replaced). The guard does not restart a build it leaves
+`unguarded`, so the running daemon reports it as soon as `pending` is gone,
+not on its next start. A guard installed before `unguarded` existed records
+`failed` (`<why>_no_from`) for the same case, and the daemon reports that too;
+a reader keeps its guard until `install.sh` runs again.
+
+Downloads trust the reader's CA bundle plus Mozilla roots embedded in the
+binary (`golang.org/x/crypto/x509roots/fallback`), so every update refreshes
+them; the firmware bundle itself is never updated. The updater never reads or writes
 `/opt/trakrf/mqtt-rpcd.env` — it holds the only on-device copy of the reader
 password.
 

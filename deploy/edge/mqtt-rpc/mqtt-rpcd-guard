@@ -18,6 +18,10 @@
 #   list               Print the installed versions; `*` marks the active one.
 #   rollback <version> Operator recovery over SSH: point the link at <version>,
 #                      drop any pending update, restart.
+#   place <version>    install.sh's step on the reader: stop the guard timer,
+#                      the guard service and the daemon, disarm any pending
+#                      update, move the uploaded binary in and point the link
+#                      at it. install.sh starts the daemon and timer after.
 #   recover            The on-site operator's one command (the `recover` SSH
 #                      login runs it and nothing else): fetch the newest daemon
 #                      release from GitHub, check it against its manifest's
@@ -113,6 +117,20 @@ resume_claim() {
 	fi
 }
 
+# fallback_version <exclude>: the newest installed version (by mtime) other
+# than <exclude>. Prints nothing when there is no candidate at all.
+fallback_version() {
+	# ls -t is the only mtime sort the reader's busybox has; every name is
+	# checked by valid_version before use, so odd filenames cannot leak through.
+	# shellcheck disable=SC2012
+	ls -t "$DIR/versions" 2>/dev/null | sed -n 's/^mqtt-rpcd-//p' | while read -r cand; do
+		if valid_version "$cand" && [ "$cand" != "$1" ] && [ -f "$DIR/versions/mqtt-rpcd-$cand" ]; then
+			echo "$cand"
+			break
+		fi
+	done
+}
+
 # auto_rollback <reason>: claim the pending update and point back at `from`.
 # Returns 0 only when the link was moved (the caller restarts). Every failure
 # leaves the target in place and pending armed, so the next run retries:
@@ -121,13 +139,24 @@ auto_rollback() {
 	mv "$PENDING" "$CLAIM" 2>/dev/null || return 1 # the daemon committed first
 	target=$(field target "$CLAIM")
 	from=$(field from "$CLAIM")
+	reason="$1"
 	if ! valid_version "$from" || [ ! -f "$DIR/versions/mqtt-rpcd-$from" ]; then
-		write_last failed "$target" "${1}_no_from"
-		log "cannot roll back $target: version '$from' is not installed ($1)"
-		rm -f "$CLAIM"
-		clear_counters
-		"$SYNC"
-		return 1
+		# The recorded version is gone (removed by hand, or never recorded).
+		# Any other build beats leaving the failing one live with no guard.
+		gone="$from"
+		from=$(fallback_version "$target")
+		if [ -z "$from" ]; then
+			# Nothing else to run. The target stays live, unguarded; say so
+			# rather than "failed", which reads as "nothing replaced".
+			write_last unguarded "$target" "${1}_no_from"
+			log "cannot roll back $target: '$gone' is not installed and no other version is ($1)"
+			rm -f "$CLAIM"
+			clear_counters
+			"$SYNC"
+			return 1
+		fi
+		reason="${1}_fallback"
+		log "version '$gone' is not installed; falling back to $from ($1)"
 	fi
 	if ! point_at "$from"; then
 		mv "$CLAIM" "$PENDING" 2>/dev/null
@@ -135,7 +164,7 @@ auto_rollback() {
 		return 1
 	fi
 	"$SYNC" # the link swap is durable before anything is deleted
-	write_last rolled_back "$target" "$1"
+	write_last rolled_back "$target" "$reason"
 	# A build that failed probation is never a rollback target and must not push
 	# a good version out of retention.
 	if valid_version "$target" && [ "$target" != "$from" ]; then
@@ -144,7 +173,7 @@ auto_rollback() {
 	rm -f "$CLAIM"
 	clear_counters
 	"$SYNC"
-	log "rolled back $target -> $from ($1); removed $target"
+	log "rolled back $target -> $from ($reason); removed $target"
 	return 0
 }
 
@@ -275,10 +304,45 @@ rollback)
 	write_last rolled_back "$was" manual
 	"$SYNC"
 	log "rolled back $was -> $v (manual)"
-	if [ "$v" = legacy ]; then
-		log "warning: legacy is the daemon from before remote updates. It has no remote update support: this reader takes no updates over RPC until install.sh runs again."
-	fi
 	"$SYSTEMCTL" restart mqtt-rpcd
+	exit 0
+	;;
+place)
+	# install.sh's binary-and-link step, run on the reader after it uploads
+	# versions/.mqtt-rpcd-<version>.upload. Every step is safe to interrupt
+	# (an SSH drop) and to re-run.
+	v="${2:-}"
+	up="$DIR/versions/.mqtt-rpcd-$v.upload"
+	if ! valid_version "$v" || [ ! -f "$up" ]; then
+		log "place: no upload for version '$v' at $up"
+		exit 1
+	fi
+	# No guard may act while the install changes what it acts on. It runs from
+	# the timer's service (a tick may already be running) and as the daemon's
+	# ExecStartPre (every restart of a crash-looping build), so stop all three,
+	# one at a time: on a first install a unit may not be loaded yet. stop
+	# terminates a running guard and returns once it has exited; whatever it
+	# left half done, the steps below overwrite. install.sh starts the timer
+	# and the daemon again when it finishes, however it finishes.
+	for unit in mqtt-rpcd-guard.timer mqtt-rpcd-guard.service mqtt-rpcd.service; do
+		"$SYSTEMCTL" stop "$unit" 2>/dev/null || true
+	done
+	# An SSH install supersedes any remote update on probation. Disarm BEFORE
+	# the new binary moves in: a rollback of a same-version update would
+	# otherwise delete the binary just installed. The claim goes first, since
+	# resume_claim turns a lone claim back into pending.
+	rm -f "$CLAIM" "$PENDING.commit" "$PENDING" "$STATE/starts" "$STATE/ticks"
+	"$SYNC"
+	if ! { chmod 755 "$up" && mv -f "$up" "$DIR/versions/mqtt-rpcd-$v"; }; then
+		log "place: could not put $v in place"
+		exit 1
+	fi
+	if ! point_at "$v"; then
+		log "place: could not point the link at $v"
+		exit 1
+	fi
+	"$SYNC"
+	log "installed $v"
 	exit 0
 	;;
 recover)
@@ -310,7 +374,7 @@ recover)
 	exit "$rc"
 	;;
 *)
-	echo "usage: $0 start|tick|list|rollback <version>|recover" >&2
+	echo "usage: $0 start|tick|list|rollback <version>|place <version>|recover" >&2
 	exit 2
 	;;
 esac

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 const multiServerCloudServer = `[
@@ -217,5 +218,115 @@ func TestReconcileInvalidErrors(t *testing.T) {
 	t.Setenv("READERD_RECONCILE", "notabool")
 	if _, err := LoadConfig(); err == nil {
 		t.Error("invalid READERD_RECONCILE must error")
+	}
+}
+
+func TestHealthDefaults(t *testing.T) {
+	brokerEnv(t)
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if !cfg.AutoRecover {
+		t.Error("auto-recovery must default on")
+	}
+	if cfg.WedgeAfter != DefaultHealthPolicy().WedgeAfter {
+		t.Errorf("WedgeAfter = %s, want the policy default", cfg.WedgeAfter)
+	}
+}
+
+func TestHealthOverrides(t *testing.T) {
+	brokerEnv(t)
+	t.Setenv("READERD_AUTO_RECOVERY", "false")
+	t.Setenv("READERD_WEDGE_AFTER", "10m")
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.AutoRecover {
+		t.Error("READERD_AUTO_RECOVERY=false must disable recovery actions")
+	}
+	if cfg.WedgeAfter != 10*time.Minute {
+		t.Errorf("WedgeAfter = %s, want 10m", cfg.WedgeAfter)
+	}
+}
+
+func TestLoadConfig_DirectBrokerHasNoCloudServerToCheck(t *testing.T) {
+	brokerEnv(t)
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.CloudServer != nil {
+		t.Fatalf("CloudServer = %+v, want nil for a directly configured broker", cfg.CloudServer)
+	}
+	if got := CloudServerFault(cfg.CloudServer, time.Now()); got != "" {
+		t.Fatalf("CloudServerFault(nil) = %q, want empty", got)
+	}
+}
+
+func TestLoadConfig_DiscoveredBrokerRecordsItsCloudServer(t *testing.T) {
+	cs := filepath.Join(t.TempDir(), "CloudServer")
+	if err := os.WriteFile(cs, []byte(multiServerCloudServer), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("READERD_CLOUDSERVER_FILE", cs)
+	t.Setenv("READERD_CLOUDSERVER_ID", "TrakRF MQTT")
+	t.Setenv("READERD_CERT_DIR", "/certs")
+	t.Setenv("READERD_EVENT_ID", "TrakRF mqtt-rpc Event")
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := CloudServerSource{File: cs, ServerID: "TrakRF MQTT", CertDir: "/certs"}
+	if cfg.CloudServer == nil || *cfg.CloudServer != want {
+		t.Fatalf("CloudServer = %+v, want %+v", cfg.CloudServer, want)
+	}
+}
+
+func TestHealthInvalidValuesError(t *testing.T) {
+	for _, kv := range [][2]string{
+		{"READERD_AUTO_RECOVERY", "maybe"},
+		{"READERD_WEDGE_AFTER", "soon"},
+		// Shorter than a boot takes to serve would flag every boot as wedged.
+		{"READERD_WEDGE_AFTER", "2m"},
+	} {
+		t.Run(kv[0]+"="+kv[1], func(t *testing.T) {
+			brokerEnv(t)
+			t.Setenv(kv[0], kv[1])
+			if _, err := LoadConfig(); err == nil {
+				t.Errorf("%s=%s must error", kv[0], kv[1])
+			}
+		})
+	}
+}
+
+// TRA-1138: an ON with no pulse gets this on-time. 30 s by default; it may be
+// shortened, never raised past the 60 s hard cap.
+func TestGpoDefaultOn(t *testing.T) {
+	brokerEnv(t)
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.GpoDefaultOn != 30*time.Second {
+		t.Errorf("GpoDefaultOn = %s, want 30s", cfg.GpoDefaultOn)
+	}
+
+	t.Setenv("READERD_GPO_DEFAULT_ON", "20s")
+	if cfg, err = LoadConfig(); err != nil || cfg.GpoDefaultOn != 20*time.Second {
+		t.Errorf("READERD_GPO_DEFAULT_ON=20s gave %s, %v; want 20s", cfg.GpoDefaultOn, err)
+	}
+}
+
+func TestGpoDefaultOnInvalidValuesError(t *testing.T) {
+	for _, v := range []string{"soon", "0s", "-5s", "61s", "5m"} {
+		t.Run(v, func(t *testing.T) {
+			brokerEnv(t)
+			t.Setenv("READERD_GPO_DEFAULT_ON", v)
+			if _, err := LoadConfig(); err == nil {
+				t.Errorf("READERD_GPO_DEFAULT_ON=%s must error", v)
+			}
+		})
 	}
 }

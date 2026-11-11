@@ -7,6 +7,7 @@ package update
 // anything a shell would interpret.
 //
 //	update/pending   target=<v> from=<v> at=<ts>   an update is on probation
+//	update/rollback.claim   pending, claimed by the guard while it rolls back
 //	update/last      state=<s> target=<v> reason=<r> at=<ts>   last outcome
 //	update/starts    integer, bumped by the guard on every unit start
 //	update/ticks     integer, bumped by the guard's timer
@@ -138,6 +139,17 @@ func CheckPending(l Layout, running string) (bool, error) {
 	}
 	clearCounters(l)
 	return false, writeLast(l, readerrpc.UpdateStateFailed, p.Target, "swap_incomplete")
+}
+
+// probationArmed reports whether an update is still on probation on disk:
+// pending, or the guard's claim on it while a rollback runs.
+func probationArmed(l Layout) bool {
+	for _, p := range []string{l.Pending(), filepath.Join(l.StateDir(), "rollback.claim")} {
+		if _, err := os.Stat(p); err == nil || !errors.Is(err, os.ErrNotExist) {
+			return true // present, or unreadable: assume still armed
+		}
+	}
+	return false
 }
 
 // Commit ends running's probation: the guard will no longer roll it back.

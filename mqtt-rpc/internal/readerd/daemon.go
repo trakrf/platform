@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
+	"sync"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -21,6 +23,9 @@ const (
 	connectRetryInterval = 5 * time.Second
 	publishTimeout       = 5 * time.Second
 	rpcTimeout           = 10 * time.Second
+	// safeStateTimeout bounds the start and stop output sweeps (four ports,
+	// each bounded again by the adapter).
+	safeStateTimeout = 15 * time.Second
 )
 
 // Daemon is the on-reader MQTT JSON-RPC control endpoint. It subscribes to the
@@ -43,6 +48,35 @@ type Daemon struct {
 
 	started     time.Time     // process start, for the commit uptime floor
 	commitAfter time.Duration // minimum uptime before a probation commit
+
+	// publishRetained is the retained-status seam, set by Start (status.go).
+	publishRetained func(topic string, payload []byte) error
+
+	// host runs Reader.Reboot and Reader.Shutdown (SetHost); nil disables them.
+	// after schedules the delayed power action; a seam for tests.
+	host       Host
+	powerDelay time.Duration
+	after      func(time.Duration, func())
+
+	statusMu sync.Mutex
+	health   *readerrpc.Health // latest from the health monitor
+	claim    string            // owner of the going-down claim (status.go); "" when free
+	reason   string            // the claim, once GoingDown has announced it on the status
+
+	anchor anchorCheck // the last broker handshake, judged as CSL would
+}
+
+// CloudServerFault is the golden CloudServer fault for the retained health:
+// CheckCloudServer's static findings, then whether the broker's chain reached
+// the bundle's first certificate on the last handshake.
+func (d *Daemon) CloudServerFault(src *CloudServerSource, now time.Time) string {
+	var faults []string
+	for _, f := range []string{CloudServerFault(src, now), d.anchor.Fault()} {
+		if f != "" {
+			faults = append(faults, f)
+		}
+	}
+	return strings.Join(faults, "; ")
 }
 
 // New builds a Daemon. It does not connect; call Start.
@@ -56,30 +90,20 @@ func New(cfg Config, adapter Adapter, log *zerolog.Logger) *Daemon {
 
 		started:     time.Now(),
 		commitAfter: DefaultCommitAfter,
+
+		powerDelay: DefaultPowerDelay,
+		after:      func(wait time.Duration, f func()) { time.AfterFunc(wait, f) },
 	}
-}
-
-// statusPayload is the retained presence document published on the status topic.
-type statusPayload struct {
-	Online  bool   `json:"online"`
-	At      string `json:"at,omitempty"`
-	Version string `json:"version,omitempty"`
-}
-
-func (d *Daemon) onlinePayload() []byte {
-	b, _ := json.Marshal(statusPayload{Online: true, At: d.now().UTC().Format(time.RFC3339), Version: d.cfg.Version})
-	return b
-}
-
-func offlinePayload() []byte {
-	b, _ := json.Marshal(statusPayload{Online: false})
-	return b
 }
 
 // Start connects to the broker in the background and returns immediately. The
 // connection self-heals via AutoReconnect + ConnectRetry; OnConnect publishes the
 // retained online status and (re)subscribes the RPC topic.
 func (d *Daemon) Start() error {
+	// Before serving anything: clear an output left on by a crash, a kill -9 or
+	// the previous version. Not final; the daemon goes on to serve Gpo.Set.
+	d.outputsOff(false)
+
 	statusTopic := readerrpc.StatusTopic(d.cfg.Broker.BaseTopic)
 	rpcTopic := readerrpc.RPCTopic(d.cfg.Broker.BaseTopic)
 
@@ -92,7 +116,7 @@ func (d *Daemon) Start() error {
 		SetConnectRetryInterval(connectRetryInterval).
 		// Last Will: if the daemon drops without a clean Stop, the broker publishes
 		// the retained offline document so the cloud sees the reader go away.
-		SetBinaryWill(statusTopic, offlinePayload(), 1, true).
+		SetBinaryWill(statusTopic, lastWillPayload(), 1, true).
 		SetOnConnectHandler(func(c mqtt.Client) {
 			if tok := c.Publish(statusTopic, 1, true, d.onlinePayload()); tok.WaitTimeout(publishTimeout) && tok.Error() != nil {
 				d.log.Error().Err(tok.Error()).Str("topic", statusTopic).Msg("publish online status failed")
@@ -115,16 +139,24 @@ func (d *Daemon) Start() error {
 		})
 
 	if d.cfg.Broker.CACertPath != "" {
-		tlsCfg, err := loadTLS(d.cfg.Broker.CACertPath)
-		if err != nil {
-			return fmt.Errorf("readerd: load CA cert: %w", err)
-		}
-		opts.SetTLSConfig(tlsCfg)
+		opts.SetTLSConfig(brokerTLS(d.cfg.Broker.CACertPath, &d.log, &d.anchor))
 	}
 
 	d.client = mqtt.NewClient(opts)
 	d.publish = func(topic string, payload []byte) error {
 		tok := d.client.Publish(topic, 1, false, payload)
+		if !tok.WaitTimeout(publishTimeout) {
+			return fmt.Errorf("readerd: publish to %s timed out (broker unreachable?)", topic)
+		}
+		return tok.Error()
+	}
+	d.publishRetained = func(topic string, payload []byte) error {
+		// IsConnectionOpen, not IsConnected: with ConnectRetry, IsConnected is
+		// true while still connecting, and a publish then waits out its timeout.
+		if !d.client.IsConnectionOpen() {
+			return nil // OnConnect publishes the current document
+		}
+		tok := d.client.Publish(topic, 1, true, payload)
 		if !tok.WaitTimeout(publishTimeout) {
 			return fmt.Errorf("readerd: publish to %s timed out (broker unreachable?)", topic)
 		}
@@ -157,22 +189,61 @@ func redactBrokerURL(raw string) string {
 	return u.String()
 }
 
-// Stop publishes the retained offline status (best-effort) then disconnects.
+// Stop drives every output off, then publishes the retained offline status
+// (best-effort) and disconnects. The outputs go first and do not depend on the
+// broker: a shutdown is exactly when no OFF from the cloud will arrive.
 func (d *Daemon) Stop() {
 	select {
 	case <-d.stopCh:
 	default:
 		close(d.stopCh)
 	}
+	d.outputsOff(true)
 	if d.client == nil || !d.client.IsConnected() {
 		return
 	}
 	statusTopic := readerrpc.StatusTopic(d.cfg.Broker.BaseTopic)
-	if tok := d.client.Publish(statusTopic, 1, true, offlinePayload()); tok.WaitTimeout(publishTimeout) && tok.Error() != nil {
+	if tok := d.client.Publish(statusTopic, 1, true, d.offlinePayload()); tok.WaitTimeout(publishTimeout) && tok.Error() != nil {
 		d.log.Warn().Err(tok.Error()).Msg("publish offline status failed")
 	}
 	d.client.Disconnect(250)
 	d.log.Info().Msg("readerd disconnected")
+}
+
+// brokerTLS trusts the CloudServer's bundle at path, as the reader's own app
+// does, and falls back to the system roots when the bundle is unusable rather
+// than failing. The daemon is the only remote path to the reader: refusing to
+// start over a bundle that has already silenced the reader's reads would cut
+// that path too, and would hide the fault the health status exists to report.
+//
+// With a usable bundle, every handshake is also judged against the bundle's
+// first certificate alone and recorded in anchor (nil records nothing). That
+// judgement never fails the daemon's own handshake.
+func brokerTLS(path string, log *zerolog.Logger, anchor *anchorCheck) *tls.Config {
+	cfg, err := loadTLS(path)
+	if err != nil {
+		log.Error().Err(err).Str("ca_cert", path).Msg("cannot use the CloudServer trust bundle; trusting the system roots instead")
+		return &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+	if pemData, err := os.ReadFile(path); err == nil && anchor != nil {
+		if first := firstCertificate(pemData); first != nil {
+			cfg.VerifyConnection = func(cs tls.ConnectionState) error {
+				anchor.observe(first, cs.PeerCertificates, time.Now())
+				return nil
+			}
+		}
+	}
+	return cfg
+}
+
+// outputsOff runs the adapter's output safe state. A failure is already logged
+// per port by the adapter; it never stops a start or a stop.
+func (d *Daemon) outputsOff(final bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), safeStateTimeout)
+	defer cancel()
+	if err := d.adapter.OutputsOff(ctx, final); err != nil {
+		d.log.Error().Err(err).Bool("final", final).Msg("outputs safe state incomplete; an output may still be on")
+	}
 }
 
 // loadTLS builds a TLS config trusting the CA bundle at path.
@@ -203,6 +274,14 @@ func (d *Daemon) handleMessage(_ mqtt.Client, m mqtt.Message) {
 			d.log.Error().Interface("panic", r).Str("topic", m.Topic()).Msg("recovered from panic in rpc handler")
 		}
 	}()
+
+	// A request is never replayed. The broker hands a retained one back on
+	// every reconnect, so a retained Reader.Reboot would reboot the reader each
+	// time it came back. A live publish with -r still arrives unflagged.
+	if m.Retained() {
+		d.log.Warn().Str("topic", m.Topic()).Msg("retained rpc request dropped; clear it on the broker with an empty retained publish")
+		return
+	}
 
 	replyTopic, reply := d.handleRPC(m.Payload())
 	if replyTopic == "" || reply == nil {
@@ -250,10 +329,16 @@ func (d *Daemon) dispatch(ctx context.Context, req readerrpc.Request) readerrpc.
 		if err != nil {
 			return readerrpc.NewError(req, readerrpc.CodeInternal, err.Error())
 		}
-		return d.result(req, d.withDaemonInfo(caps))
+		return d.result(req, d.withPowerMethods(d.withDaemonInfo(caps)))
 
 	case readerrpc.MethodDaemonUpdate:
 		return d.daemonUpdate(req)
+
+	case readerrpc.MethodReboot:
+		return d.power(req, readerrpc.StatusReasonReboot)
+
+	case readerrpc.MethodShutdown:
+		return d.power(req, readerrpc.StatusReasonShutdown)
 
 	case readerrpc.MethodGetOperProfile:
 		var p readerrpc.OperProfileParams
@@ -290,7 +375,7 @@ func (d *Daemon) dispatch(ctx context.Context, req readerrpc.Request) readerrpc.
 		return d.result(req, readerrpc.GpoSetResult{
 			Port:   p.Port,
 			On:     p.On,
-			Pulsed: p.On && p.PulseMs > 0,
+			Pulsed: p.On, // every ON arms a release; none latches
 		})
 
 	case readerrpc.MethodGetStatus:

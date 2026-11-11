@@ -15,6 +15,7 @@ import (
 
 	"github.com/trakrf/platform/backend/internal/middleware"
 	modelerrors "github.com/trakrf/platform/backend/internal/models/errors"
+	"github.com/trakrf/platform/backend/internal/readercontrol"
 	"github.com/trakrf/platform/backend/internal/readerrelease"
 	"github.com/trakrf/platform/backend/internal/readerrpc"
 	"github.com/trakrf/platform/backend/internal/util/httputil"
@@ -156,14 +157,17 @@ func (h *Handler) UpdateSoftware(w http.ResponseWriter, r *http.Request) {
 	res, err := h.daemon.UpdateDaemon(r.Context(), base, manifest)
 	if err != nil {
 		var re *readerrpc.UpdateRefusedError
-		if errors.As(err, &re) {
-			httputil.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{
-				"error":  "update_refused",
-				"reason": re.Reason,
-			})
-			return
+		switch {
+		case errors.As(err, &re):
+			// The reader checked the request and changed nothing; detail is its reason.
+			httputil.WriteJSONError(w, r, http.StatusUnprocessableEntity, modelerrors.ErrValidation, re.Reason, reqID)
+		case errors.Is(err, readercontrol.ErrNoReply):
+			// Sent, but the reply was lost: the update may be running. 504, not
+			// 502, so the app watches the reader instead of saying "not started".
+			httputil.WriteJSONError(w, r, http.StatusGatewayTimeout, modelerrors.ErrInternal, err.Error(), reqID)
+		default:
+			httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal, err.Error(), reqID)
 		}
-		httputil.WriteJSONError(w, r, http.StatusBadGateway, modelerrors.ErrInternal, err.Error(), reqID)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusAccepted, map[string]any{"data": res})

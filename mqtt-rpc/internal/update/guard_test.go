@@ -127,7 +127,9 @@ func TestGuard_MissingFromClearsWithoutSwap(t *testing.T) {
 	_, ok, _ := ReadPending(l)
 	assert.False(t, ok)
 	last, _ := ReadLast(l)
-	assert.Equal(t, readerrpc.UpdateStateFailed, last.State)
+	// Not "failed": that reads as "nothing replaced", and v2 is live.
+	assert.Equal(t, readerrpc.UpdateStateUnguarded, last.State)
+	assert.Equal(t, "v2", last.Target)
 	assert.Equal(t, "no_commit_no_from", last.Error)
 }
 
