@@ -35,12 +35,13 @@ func (fakeTx) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
 	return pgconn.CommandTag{}, nil
 }
 
-// fakeScanStore stands in for the database. persistErr fails the scan after the
-// hook ran, as a failed commit does.
+// fakeScanStore stands in for the database. After the hook ran, persistErr fails
+// the scan, as a failed commit does, and persistPanic panics.
 type fakeScanStore struct {
-	persistErr error
-	plain      int
-	withHook   int
+	persistErr   error
+	persistPanic bool
+	plain        int
+	withHook     int
 }
 
 func (*fakeScanStore) InsertRawTagScan(context.Context, string, []byte) (int64, error) {
@@ -62,6 +63,9 @@ func (f *fakeScanStore) PersistReadsDetect(ctx context.Context, orgID, scanDevic
 	err := detect(ctx, fakeTx{}, storage.DetectInput{
 		OrgID: orgID, ScanDeviceID: scanDeviceID, TagScanID: tagScanID, ReceivedAt: receivedAt, Reads: resolved,
 	})
+	if f.persistPanic {
+		panic("persist blew up")
+	}
 	if err == nil {
 		err = f.persistErr
 	}
@@ -72,7 +76,11 @@ func (f *fakeScanStore) PersistReadsDetect(ctx context.Context, orgID, scanDevic
 }
 
 // eventLog records the order the scan's outcome reaches each collaborator.
-type eventLog struct{ events []string }
+// commitPanics makes its OnCommit panic after recording.
+type eventLog struct {
+	events       []string
+	commitPanics bool
+}
 
 func (l *eventLog) add(e string) { l.events = append(l.events, e) }
 
@@ -81,7 +89,12 @@ func (l *eventLog) Name() string { return "recording" }
 func (l *eventLog) Detect(context.Context, pgx.Tx, storage.DetectInput) (detection.Pending, error) {
 	l.add("detect")
 	return detection.Pending{
-		OnCommit:   func(bool) { l.add("committed") },
+		OnCommit: func(bool) {
+			l.add("committed")
+			if l.commitPanics {
+				panic("drive blew up")
+			}
+		},
 		OnRollback: func() { l.add("rolled_back") },
 	}, nil
 }
@@ -117,6 +130,28 @@ func TestHandleMessage_PersistFailure_RollsBackRun(t *testing.T) {
 	s.handleMessage(nil, fakeMessage{})
 
 	assert.Equal(t, []string{"detect", "rolled_back"}, events.events)
+}
+
+func TestHandleMessage_PersistPanic_RollsBackRun(t *testing.T) {
+	store, events := &fakeScanStore{persistPanic: true}, &eventLog{}
+	log := zerolog.Nop()
+	s := newDetectSubscriber(store, events)
+	s.SetDetector(detection.NewPipeline(&log, events))
+
+	assert.NotPanics(t, func() { s.handleMessage(nil, fakeMessage{}) })
+
+	assert.Equal(t, []string{"detect", "rolled_back"}, events.events)
+}
+
+func TestHandleMessage_PanicAfterCommit_DoesNotRollBack(t *testing.T) {
+	store, events := &fakeScanStore{}, &eventLog{commitPanics: true}
+	log := zerolog.Nop()
+	s := newDetectSubscriber(store, events)
+	s.SetDetector(detection.NewPipeline(&log, events))
+
+	assert.NotPanics(t, func() { s.handleMessage(nil, fakeMessage{}) })
+
+	assert.Equal(t, []string{"detect", "committed"}, events.events, "a committed scan must not be undone")
 }
 
 func TestHandleMessage_NoDetector_UsesPersistReads(t *testing.T) {

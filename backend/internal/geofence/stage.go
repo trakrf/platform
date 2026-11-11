@@ -2,6 +2,8 @@ package geofence
 
 import (
 	"context"
+	"fmt"
+	"runtime/debug"
 
 	"github.com/jackc/pgx/v5"
 
@@ -53,9 +55,11 @@ func (s *Stage) Name() string { return "geofence" }
 // Detect writes an alarm and its trigger for every fire. On a write error it stops
 // writing and returns that error with a Pending covering every fire, written or
 // not: the pipeline rolls back this stage's rows, but the outputs must still drive.
+// A panic while writing is treated the same way: decide has already changed latch,
+// pulse and presence state, and only this Pending can settle it.
 // The deferred drives use ctx, so they stay inside the message's time limit, as
 // they do in Evaluate.
-func (s *Stage) Detect(ctx context.Context, tx pgx.Tx, in storage.DetectInput) (detection.Pending, error) {
+func (s *Stage) Detect(ctx context.Context, tx pgx.Tx, in storage.DetectInput) (pending detection.Pending, err error) {
 	fires, refreshes := s.engine.decide(ctx, in.OrgID, in.ReceivedAt, in.Reads)
 	if len(fires) == 0 && len(refreshes) == 0 {
 		return detection.Pending{}, nil
@@ -64,13 +68,19 @@ func (s *Stage) Detect(ctx context.Context, tx pgx.Tx, in storage.DetectInput) (
 	// undo, so it is sent whether the scan commits or rolls back. Either way the
 	// tag was in view, and a missed refresh lets the output time out.
 	refresh := func() { s.engine.refreshPresence(ctx, in.OrgID, in.ReceivedAt, refreshes) }
-	pending := detection.Pending{
+	pending = detection.Pending{
 		OnCommit:   func(rowsKept bool) { s.settle(ctx, in.OrgID, fires, rowsKept); refresh() },
 		OnRollback: func() { undoAll(fires); refresh() },
 	}
 	if len(fires) == 0 {
 		return pending, nil
 	}
+	defer func() {
+		if p := recover(); p != nil {
+			metricEventWriteErrors.Inc()
+			err = fmt.Errorf("alarm write panicked: %v\n%s", p, debug.Stack())
+		}
+	}()
 	return pending, s.write(ctx, tx, in, fires)
 }
 

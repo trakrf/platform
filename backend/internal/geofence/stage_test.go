@@ -123,15 +123,20 @@ func TestDecide_LooksUpEachLocationOnce(t *testing.T) {
 	}
 }
 
-// fakeAlarmTx records alarm writes and fails the failAt-th one (1-based).
+// fakeAlarmTx records alarm writes. It fails the failAt-th one and panics on the
+// panicAt-th one (both 1-based).
 type fakeAlarmTx struct {
 	rows     []storage.AlarmEventRow
 	attempts int
 	failAt   int
+	panicAt  int
 }
 
 func (s *fakeAlarmTx) InsertAlarmEventTx(_ context.Context, _ pgx.Tx, _ int, ev storage.AlarmEventRow) (int, error) {
 	s.attempts++
+	if s.attempts == s.panicAt {
+		panic("alarm write panicked")
+	}
 	if s.attempts == s.failAt {
 		return 0, errors.New("alarm write failed")
 	}
@@ -274,6 +279,39 @@ func TestStage_AlarmWriteFailureStillDrives(t *testing.T) {
 	}
 	if got := firedTotal(t) - before; got != 0 {
 		t.Fatalf("no alarm was kept, so none counts, got %v", got)
+	}
+}
+
+func TestStage_WritePanicStillDrives(t *testing.T) {
+	r := newStageRig(t, dev(11, nil))
+	r.alarms.panicAt = 2
+
+	pending, err := r.stage.Detect(context.Background(), nil,
+		detectInput(stageAt, read("EPC1", -50), read("EPC2", -50), read("EPC3", -50)))
+
+	if err == nil {
+		t.Fatal("a panic must return an error so the savepoint rolls back")
+	}
+	pending.OnCommit(false)
+	if r.driver.onCount() != 3 {
+		t.Fatalf("every fire must still drive, including unwritten ones, got %d", r.driver.onCount())
+	}
+}
+
+func TestStage_WritePanicThenRollbackLetsTheNextReadFire(t *testing.T) {
+	r := newStageRig(t, dev(11, nil))
+	r.alarms.panicAt = 1
+
+	pending, err := r.stage.Detect(context.Background(), nil, detectInput(stageAt, read("EPC1", -50)))
+	if err == nil {
+		t.Fatal("a panic must return an error so the savepoint rolls back")
+	}
+	pending.OnRollback()
+
+	next := r.detect(t, detectInput(stageAt.Add(time.Second), read("EPC1", -50)))
+	next.OnCommit(true)
+	if len(r.alarms.rows) != 1 || r.driver.onCount() != 1 {
+		t.Fatalf("the latch must be restored: rows=%d drives=%d", len(r.alarms.rows), r.driver.onCount())
 	}
 }
 
