@@ -47,6 +47,45 @@ type presenceOutput struct {
 	// scheduled with and no-ops if a newer read has since rescheduled (guards the
 	// timer-fire vs concurrent-observe race).
 	gen uint64
+	// wanted is set once the engine has tried to drive this output on (not for
+	// a startup-grace baseline); onAt is the read time of the last ON that
+	// succeeded. Together they decide when a refresh is due (refreshDue).
+	wanted bool
+	onAt   time.Time
+}
+
+// presenceRefreshEvery is how often a held presence output's ON is re-sent
+// (TRA-1138). Every ON carries the reader's on-time (readerrpc.GpoDefaultOn,
+// 30 s), and the device turns itself off when it runs out. So a wanted alarm
+// holds while reads keep arriving, survives two lost refreshes in a row, and a
+// lost connection stops it within the on-time. Refreshes piggyback on incoming
+// reads: no reads means no refresh, and the age-out OFF follows anyway.
+const presenceRefreshEvery = 10 * time.Second
+
+// driven records the result of an ON the engine sent for an output: on the
+// edge, or on a refresh. A failed ON leaves onAt alone, so the next read
+// retries it.
+func (p *presence) driven(orgID, outputID int, at time.Time, ok bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	po := p.outputs[presenceKey(orgID, outputID)]
+	if po == nil {
+		return // aged out meanwhile; the OFF already went
+	}
+	po.wanted = true
+	if ok {
+		po.onAt = at
+	}
+}
+
+// refreshDue reports whether a held output's ON should be re-sent for a read at
+// at: it is wanted, and its last good ON is presenceRefreshEvery old (or never
+// succeeded). A startup-grace baseline is never wanted, so never refreshed.
+func (p *presence) refreshDue(orgID, outputID int, at time.Time) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	po := p.outputs[presenceKey(orgID, outputID)]
+	return po != nil && po.wanted && at.Sub(po.onAt) >= presenceRefreshEvery
 }
 
 func newPresence(driver outputDriver, log zerolog.Logger) *presence {

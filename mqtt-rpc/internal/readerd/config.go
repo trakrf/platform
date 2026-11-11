@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/trakrf/platform/mqtt-rpc/internal/readerrpc"
 )
 
 // Default on-reader file locations and identifiers. The reader's own EmbeddedGlassFish
@@ -49,11 +52,30 @@ type Config struct {
 	Broker       BrokerConfig
 	EventID      string
 	AntennaCount int
-	// Reconcile, when true (default), runs the golden-config reconcile on startup.
+	// Reconcile, when true (default), runs the golden-config reconcile whenever
+	// /API is healthy and the config is not yet applied (see Monitor).
 	Reconcile bool
 	// Version is the daemon build version, reported in capabilities and status.
 	Version string
+	// AutoRecover enables the wedge recovery actions (READERD_AUTO_RECOVERY,
+	// default true). Off, the health monitor only reports. That suits a bench
+	// that has to hold a wedge for diagnosis.
+	AutoRecover bool
+	// WedgeAfter is how long /API must stay unhealthy before it counts as
+	// wedged (READERD_WEDGE_AFTER, a Go duration, at least minWedgeAfter).
+	WedgeAfter time.Duration
+	// CloudServer is where the broker config was discovered, for
+	// CheckCloudServer. nil when READERD_BROKER_URL configured it directly.
+	CloudServer *CloudServerSource
+	// GpoDefaultOn is the on-time of a Gpo.Set ON that names no pulse
+	// (READERD_GPO_DEFAULT_ON, a Go duration, default readerrpc.GpoDefaultOn,
+	// at most readerrpc.GpoMaxOn).
+	GpoDefaultOn time.Duration
 }
+
+// minWedgeAfter: a boot takes about 3 min to serve /API. A shorter grace would
+// flag every boot as wedged.
+const minWedgeAfter = 4 * time.Minute
 
 // cloudServerEntry mirrors one object in the reader's CloudServer config array.
 type cloudServerEntry struct {
@@ -164,6 +186,7 @@ func LoadConfig() (Config, error) {
 			return Config{}, err
 		}
 		cfg.Broker = bc
+		cfg.CloudServer = &CloudServerSource{File: csFile, ServerID: serverID, CertDir: certDir}
 	}
 
 	// Reconcile golden config on startup (default on). Determined before EventID
@@ -199,6 +222,37 @@ func LoadConfig() (Config, error) {
 			return Config{}, err
 		}
 		cfg.EventID = ev
+	}
+
+	cfg.AutoRecover = true
+	if v := os.Getenv("READERD_AUTO_RECOVERY"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("readerd: invalid READERD_AUTO_RECOVERY %q: %w", v, err)
+		}
+		cfg.AutoRecover = b
+	}
+	cfg.WedgeAfter = DefaultHealthPolicy().WedgeAfter
+	if v := os.Getenv("READERD_WEDGE_AFTER"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("readerd: invalid READERD_WEDGE_AFTER %q: %w", v, err)
+		}
+		if d < minWedgeAfter {
+			return Config{}, fmt.Errorf("readerd: READERD_WEDGE_AFTER %s is shorter than a boot takes to serve (minimum %s)", d, minWedgeAfter)
+		}
+		cfg.WedgeAfter = d
+	}
+	cfg.GpoDefaultOn = readerrpc.GpoDefaultOn
+	if v := os.Getenv("READERD_GPO_DEFAULT_ON"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("readerd: invalid READERD_GPO_DEFAULT_ON %q: %w", v, err)
+		}
+		if d <= 0 || d > readerrpc.GpoMaxOn {
+			return Config{}, fmt.Errorf("readerd: READERD_GPO_DEFAULT_ON %s must be above 0 and at most the %s hard cap", d, readerrpc.GpoMaxOn)
+		}
+		cfg.GpoDefaultOn = d
 	}
 
 	// AntennaCount.

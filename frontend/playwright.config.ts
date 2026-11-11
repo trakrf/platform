@@ -63,13 +63,14 @@ export default defineConfig({
   workers: 1,
 
   /*
-   * The `process.env.CI` branches below have never run.
+   * The `process.env.CI` branches below run in `lint-test`
+   * (`.github/workflows/lint.yml`), which runs `--grep-invert @hardware`.
+   * GitHub Actions sets CI=true, so there: retries are 2, the reporter is
+   * `github`, and the webServer branch further down starts vite itself.
    *
-   * Verified 2026-08-28: no workflow under `.github/workflows/` references
-   * playwright or `test:e2e`. Playwright e2e is deliberately not in CI — it
-   * needs hardware — so green CI says nothing about this suite, and these
-   * branches are kept for whenever that changes rather than because they are
-   * exercised. Do not read their presence as coverage.
+   * Only the non-hardware half runs there. The @hardware specs need the one
+   * bench reader and never run in CI, so a green `lint-test` says nothing
+   * about them — run `pnpm test:e2e` on the bench for those.
    */
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

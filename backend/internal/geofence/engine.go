@@ -21,6 +21,7 @@ import (
 
 	"github.com/trakrf/platform/backend/internal/models/organization"
 	"github.com/trakrf/platform/backend/internal/models/outputdevice"
+	"github.com/trakrf/platform/backend/internal/readerrpc"
 	"github.com/trakrf/platform/backend/internal/storage"
 )
 
@@ -168,7 +169,9 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 			if tuning.Mode == outputdevice.ModePresence {
 				// Presence: ON on the 0->1 edge; OFF fires from the output's age-out
 				// timer when no member is read for age-out. auto_off is ignored
-				// (the engine owns the OFF edge).
+				// (the engine owns the OFF edge). No ON latches (TRA-1138): each
+				// carries the reader's on-time, and is re-sent while the tag stays
+				// in view, so a lost connection stops the output within it.
 				if e.presence.observe(orgID, dev, ttl, rd.EPC) {
 					// observe already armed the age-out timer (state seeded); only the
 					// ON drive is held back during the startup grace window.
@@ -177,7 +180,15 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 						continue
 					}
 					firedAny = true
-					e.drive(ctx, orgID, dev, true, 0)
+					ok := e.drive(ctx, orgID, dev, true, presenceOnSeconds)
+					e.presence.driven(orgID, dev.ID, receivedAt, ok)
+					continue
+				}
+				if e.presence.refreshDue(orgID, dev.ID, receivedAt) {
+					// A refresh, or the retry of a failed ON. Not a fire: no
+					// alarm_events row.
+					ok := e.drive(ctx, orgID, dev, true, presenceOnSeconds)
+					e.presence.driven(orgID, dev.ID, receivedAt, ok)
 				}
 				continue
 			}
@@ -214,6 +225,11 @@ func (e *Engine) Evaluate(ctx context.Context, orgID int, tagScanID int64, recei
 		}
 	}
 }
+
+// presenceOnSeconds is the on-time every presence ON carries: the reader's
+// default on-time, sent explicitly so the backend and the daemon cannot drift
+// apart. A Shelly gets it as toggle_after, a CS463 GPO as pulse_ms.
+var presenceOnSeconds = int(readerrpc.GpoDefaultOn / time.Second)
 
 // drive turns a device on/off, folding any error into the best-effort metric.
 // It reports whether the drive succeeded.

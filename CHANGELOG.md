@@ -7,6 +7,360 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-09
+
+Nine weeks of `main`, 404 commits across 92 pull requests (102 merge commits),
+fourteen migrations (`000041`–`000054`). Prod moves from `v1.5.0` (schema
+version 40) to schema version 54.
+
+Most of the visible change is about lapsed subscriptions and fixed readers. An
+org whose subscription has run out now loses capture and webhooks after a grace
+period, and its admins are warned on the way there. A CS463 reader can be put on
+a new daemon build from the app, and rolls itself back if that build is bad. No
+alarm output can latch on any more: every ON has an on-time, nothing stays on
+past 60 s, and a presence alarm is held on by refreshing it. Asset history lists
+where an asset stayed, not one row per minute of it sitting there.
+
+Most of the migrations, and most of the backend diff, are notification delivery:
+email and SMS senders, a durable outbox on the River job queue, subscriptions,
+opt-outs and a delivery planner. **It ships dark.** Nothing on `main` produces a
+notification trigger yet, so no notification can be sent, whatever the
+configuration. It is here because it is merged, not because it is on.
+
+### Upgrading
+
+**Lapsed orgs are cut off at deploy, and their admins are emailed at deploy**
+(TRA-1047, `000049`, `000050`). `trakrf.org_is_entitled` now treats
+`expires_at + grace` as the cutoff, and the paid-write gate, webhook delivery and
+the MQTT topic list all read it. An org past that point stops being captured on
+the next reconcile: its readers keep publishing and see no error, and those QoS 0
+reads are discarded, not replayed later. Grace is the `app.subscription_grace_period`
+database setting, three days when unset. An hourly job emails org admins at 14
+days before expiry, 3 days before, at expiry and at cutoff. On the first run after
+deploy, every org inside 14 days of expiry, or cut off in the last 7 days, gets
+its email straight away. Check which prod orgs have an `expires_at` before you
+promote. A `NULL` expiry is still perpetual, and an org with an active
+`subscriptions` row is entitled whatever `subscription_enabled` says.
+
+**The notification job runtime always starts, so its tables are a boot
+dependency** (`000043`). River's tables (`trakrf.river_job`, `river_queue`,
+`river_leader` and the rest) are created by the migrate role, and the app role
+gets them through the same default privileges as every other migration-created
+table. Without those grants the backend fails at boot, not on first use.
+
+**Notification settings are off by default, and two of them can refuse a boot.**
+Notification email stays off unless `NOTIFICATION_EMAIL_ENABLED=true`, which then
+requires `NOTIFICATION_EMAIL_FROM` and `RESEND_WEBHOOK_SECRET`. `RESEND_API_KEY`
+alone still only drives transactional email. Twilio SMS is off when all six
+`TWILIO_*` settings are empty. A *partial* Twilio config refuses to boot.
+`NOTIFICATION_DEFAULT_PHONE_REGION` defaults to `US`, and a value that is not a
+valid region refuses to boot. Message templates are also checked at boot. Prod
+needs none of these set to deploy.
+
+**Backend logs change format and level** (TRA-1284). The logger chose its profile
+from `ENVIRONMENT`, which nothing sets, so prod and preview both ran the dev
+profile: debug level, console output with ANSI escapes, caller and stack on every
+line, `env=dev`. It now reads `APP_ENV`, fails closed, and prod gets **JSON at
+`info`**. The DBG lines go, and the INF lines ops reads stay: startup,
+`mqtt subscriber connecting`, `Request completed`, `api.write`. `LOG_LEVEL` still
+overrides the level. Nine `log/slog` call sites in `httputil`, `health` and
+`storage` still print plain text, not JSON.
+
+**Remote reader updates need outbound access to GitHub** (TRA-1317). The backend
+fetches the signed release manifest from this repo's GitHub releases. A reader
+downloads from `github.com`, `api.github.com` and
+`release-assets.githubusercontent.com` on 443. Releases are signed in CI with the
+`MQTT_RPCD_SIGNING_KEY` Actions secret.
+
+**Alarm outputs now fail toward off** (TRA-1138, TRA-1332, TRA-1273, #774–#776,
+ADR 0026). A reader on the new daemon caps **any ON with no on-time at 30 s** and
+**any ON at all at 60 s**, and drives every GPO off when the daemon starts and
+when it stops. The backend now applies the same 30 s / 60 s bounds to every
+output, Shelly included, and **refreshes a presence ON every 10 s** while a tag
+stays in view, so a wanted horn holds and an unwanted one stops within 30 s of
+the backend going quiet. The two halves depend on each other: a reader on the
+new daemon talking to a backend older than this release sounds a presence alarm
+for a fixed 30 s when a tag appears, then goes silent while the tag is still
+there. Update the backend no later than the readers. The output-device API now
+returns 400 for an egress output whose resolved auto-off is 0 (one that would
+never turn off) or for any auto-off over 60 s, and the org geofence defaults
+PATCH refuses a change that would leave an egress output with no off edge. No
+existing prod or preview row is affected (read-only audit, 2026-11-08).
+
+**`/metrics` is not on the public ingress** (infra TRA-1268). It now carries
+per-route HTTP histograms (below), and the existing ServiceMonitor scrapes it from
+inside the cluster.
+
+| migration | what it does |
+| -- | -- |
+| `000041`, `000042` | platform-owned inboxes for verified SMS and email provider callbacks |
+| `000043` | River's job-queue tables |
+| `000044` | `notification_deliveries`, the org-scoped audit record of each send |
+| `000045`–`000047` | notification recipients and asset subscriptions; trigger `search_path` pinned; subscriptions switch off instead of being deleted |
+| `000048` | delivery routing columns and `notification_suppressions` (opt-outs) |
+| `000049`, `000050` | subscription grace and cutoff, `subscription_notices` |
+| `000051`, `000054` | `notification_events`, linked to the alarm or location change that caused each one |
+| `000052` | `sms_callback_events.event_key` BYTEA → lowercase hex TEXT; existing rows convert to what the new code writes |
+| `000053` | each opt-out links to the provider callback that created it |
+
+### Security
+
+- **A reader takes only a signed build, and only an org admin can start an update**
+  (TRA-1317, #765). The daemon checks an Ed25519 signature over the version and
+  sha256 against keys compiled into the running binary, and refuses plain http,
+  before it downloads anything. The backend's update endpoint sits behind both
+  the paid gate and an admin check.
+- **The logger's redaction settings are removed, because they never did anything**
+  (TRA-1284). `SanitizeEmails`, `SanitizeIPs` and `MaxBodySize` were read nowhere,
+  so the prod profile claimed a redaction that never happened. PII stays out of
+  log lines at the call site, as the notification code does: it logs ids, never
+  addresses.
+
+### Added
+
+- **Update a CS463's reader software from the app** (TRA-1317, #765). A "Reader
+  software" panel under the CS463 antenna settings shows the daemon version and the
+  last update result. It starts an update, then follows it until the reader commits,
+  rolls back or fails. A new build commits only after it has been up for 3 minutes
+  and answered an RPC through the broker. Otherwise a guard on the reader, which
+  remote updates never replace, rolls it back to the previous build. Backed by
+  `GET /scan-devices/{id}/reader-software` and `POST …/reader-software/update`.
+  The daemon side ships separately; see below.
+- **Lapsed-subscription notices and status** (TRA-1047). Every screen shows a
+  notice under the header in the last 14 days before expiry, during grace and
+  after cutoff. The cutoff banner says readers may look online while nothing is
+  recorded. The superadmin org list shows Active / Grace / Cut off and how many
+  fixed readers are not being recorded. The backend logs a WARN naming the org and
+  device when a cutoff drops a reader's topic.
+- **Capture TID and USER memory during inventory** (TRA-1251). A new **Capture all
+  tag data** setting, off by default. With it on, a scan reads each tag's TID and
+  USER banks, and the PC word, TID and User Data go into the Share, CSV, Excel and
+  PDF exports. It is opt-in because bank data comes only in normal-mode responses,
+  and normal mode is slower than compact mode. Verified on a CS108: a bank the tag
+  refuses costs only that bank's data, never the tag.
+- **Per-route HTTP latency on `/metrics`** (TRA-494).
+  `http_request_duration_seconds` and `http_requests_total`, labelled by method,
+  chi route template and status, plus `http_requests_in_flight`. Labels are
+  bounded, a handler that panics counts as a 500, and health checks, `/metrics`
+  and the two SSE streams are left out.
+- **The public API spec points integrators at the Markdown docs** (TRA-862, #680)
+  through an `llms-api.txt` link. The spec, the CLI's vendored copy and the typed
+  client are regenerated.
+- **Notification delivery groundwork, shipped dark** (TRA-1201, TRA-1267, TRA-1192,
+  TRA-1275, TRA-1277). This is the backend for alerting an asset's subscribers by
+  email or SMS. It has a Twilio sender with signed STOP/START callbacks (#645), a
+  Resend sender with signed, idempotent callbacks (#682–#690), and a durable
+  outbox on River (#692–#705). An outbox insert happens in the caller's
+  transaction. Retries follow a fixed 1s / 5s / 30s / 5m / 30m ladder, and an
+  "outcome unknown" send is retried through the provider's idempotency key, never
+  re-sent blind. It also has recipients and asset subscriptions (#706–#710), opt-outs
+  that are case-insensitive and fail closed (#712, #714, #720), and E.164 phone
+  normalisation, so a STOP matches however the number was typed (#725). A planner
+  turns one alarm or location change into one event plus a delivery per eligible
+  subscriber, all-or-nothing (#713, #715–#717, #726–#734). A channel adapter checks
+  opt-outs again at send time (#749–#752). A send the provider accepted is still
+  recorded as sent when shutdown cancels the job, so it is never sent twice (#753).
+  The only route exposed is the session-authenticated recipients and subscriptions
+  API, with mutations behind the paid gate. It is not in the public spec and no
+  frontend uses it.
+
+#### Reader daemon (`mqtt-rpcd`, released on its own `mqtt-rpcd-v*` tags)
+
+These ship with the daemon, not with this release. They are listed here because
+the remote update above is what installs them.
+
+- **A wedged vendor app is detected and recovered without a site visit**
+  (TRA-1041, #769, ADR 0025). The CS463 vendor app can come up answering every
+  `/API` call with HTTP 200 and an empty body. The radio keeps reading, systemd says
+  `active`, and no reads reach the cloud. The daemon probes `/API` every 30s and
+  judges health by the parsed body. After 6 minutes unhealthy it restarts the
+  vendor app. If that fails it does a clean reboot, at most twice until `/API` has
+  stayed healthy for an hour. Golden-config reconcile now runs whenever `/API`
+  becomes healthy, where before it ran once at startup and always lost the boot
+  race. The retained `<base>/status` document carries the health state. Backend
+  and app consumption of that block is follow-up work. The same PR stops the
+  reader-API password leaking into the journal and RPC error replies through a
+  printed `*url.Error`.
+- **Reboot or shut down a reader over the broker** (TRA-1316, #778).
+  `Reader.Reboot` and a new `Reader.Shutdown` reply first, mark the retained
+  status offline with the reason, then `sync` and hand off to systemd 2 s later.
+  They never power-reset. Only one request at a time can take the reader down,
+  and both are refused (`-33003`) while an update is downloading or installing.
+  A retained request on `<base>/rpc` is dropped, so it cannot reboot-loop the
+  reader on every reconnect. `mqtt-rpcctl reboot` / `shutdown` need `-yes`. The
+  backend client and the app button come in a later release.
+- **The daemon reports a CloudServer entry the reader cannot publish through**
+  (TRA-1110, #773). The vendor app trusts only the first certificate in its
+  CloudServer trust bundle. A bundle that led with a Let's Encrypt intermediate
+  stopped ingestion for two days when the broker's chain rotated, with nothing
+  logged anywhere. The daemon now checks the golden entry and bundle the way the
+  vendor app reads them, verifies the broker's live chain against the first
+  certificate alone on every handshake, and reports any fault as
+  `health.cloudserver_fault` in the retained status. It reports and never
+  rewrites. A missing or empty bundle no longer stops the daemon from starting.
+- **An on-site `recover` login** (TRA-1317, #766). An SSH login with no shell:
+  it fetches the newest daemon release, checks its sha256, switches to it and
+  reboots cleanly. This is the fallback when remote update stops working on a
+  customer reader. `update-to-release.sh` moves an installed reader onto a
+  published release over the same RPC path the app uses.
+
+### Changed
+
+- **Asset history lists stays, not scans** (TRA-1265). Scans have been stored once
+  per asset per minute since 1.5.0, so a parked tag showed in Reports as about 10k
+  identical one-minute entries over 7 days. Each item of
+  `GET /api/v1/assets/{asset_id}/history` is now an unbroken run at one location.
+  `event_observed_at` is when the stay began. `duration_seconds` runs until the
+  asset was first seen anywhere else, and is `null` while the stay is ongoing.
+  `total_count` and paging count stays. `from`/`to` choose which stays are listed
+  but don't clip them. The response shape is unchanged and the public spec
+  describes the new meaning. The query reads the per-minute aggregate: 90 days
+  went from 8.6s to 157ms on preview.
+- **Lapsed orgs stop being captured and stop receiving webhooks** (TRA-1047). See
+  Upgrading. Reactivating an org resubscribes its readers on the next reconcile,
+  with no restart. Data retention for cancelled orgs is not part of this.
+- **Transmit power reads `dBm EIRP`, and 30 is labelled as the regulatory cap**
+  (TRA-391, #674). The sled reaches +31.5 dBm EIRP where that is permitted. Raising
+  the cap needs a region setting the app does not have, not a constant edit. Both
+  sliders now take their range from one source, instead of six hardcoded values
+  that included the gradient-fill divisor.
+- **A presence alarm is held on by refreshing it, and no output latches on**
+  (TRA-1138, #775). See Upgrading. Every presence ON sends a 30 s on-time
+  instead of "stay on until told off", and is re-sent once the last good ON is
+  10 s old while a tag stays in view, so the horn survives two lost refreshes in
+  a row. The refresh rides on incoming reads, with no new timers, and writes no
+  `alarm_events` row. Every drive goes through one seam, which turns an ON with
+  no on-time into 30 s and cuts anything over 60 s with a warning. Before, an
+  egress Shelly with no auto-off latched on, and one with `auto_off_seconds: 600`
+  stayed on for ten minutes.
+- **A reader refusing an update is a 422, and a reader that never answers is a
+  504** (TRA-1319, #779). The update endpoint returned 502 for both. A failed
+  publish is still 502. On a 504 the Reader software panel follows the requested
+  version instead of showing "Could not start".
+
+### Fixed
+
+- **A failed connect could not be retried without reloading the page** (TRA-1250,
+  #656, #657). The device singleton was assigned before bring-up and never cleared
+  when bring-up failed, so every later attempt got `Device already connected`. The
+  same PR feeds the BLE packet-history buffer, which the reassembly error dump had
+  always printed as `(0 captured)` because nothing wrote to it.
+- **One unanswered `START_INVENTORY` left the reader in `Error`** (TRA-1262). The
+  start sequence had no retry schedule, which means exactly one attempt. It now
+  retries, as the stop path and the Locate mask write already did. Across the soak
+  arm, `Failed to start scanning` was in every failed rep and in none of the 27
+  passes.
+- **A barcode scan could leave the reader stuck in Barcode mode** (TRA-1244). The
+  end-of-scan path awaited an unguarded stop, so a rejection skipped the mode
+  restore. Capture and unmount now return the reader through one helper, which
+  restores the mode even when the stop rejects.
+- **The asset panel's Download History CSV button did nothing** (TRA-1266). It
+  only logged to the console. It now fetches every stay in the chosen range, not
+  just the loaded pages, and opens the same export dialog as the Asset History tab.
+- **Two tags entering an egress zone together drove one output twice** (TRA-1119).
+  On a Shelly the pulse ran longer. On a CS463 the second GPO pulse was swallowed.
+  While an output is inside a pulse, later fires for that output are now dropped
+  and counted as `geofence_alarms_suppressed_total{reason="pulse_active"}`. Manual
+  Test/Reset and presence mode are not affected.
+- **The inventory CSV never carried an asset's description** (TRA-1251). The
+  header was declared, but the column was always written empty. Excel and PDF had
+  it.
+- **An egress output with no auto-off latched on for good** (TRA-1273, #776). An
+  egress output only ever sends ON, so its off edge is the device's auto-off
+  timer. Leaving Auto-off blank saved an output that turned on at its first read
+  and never turned off. Create, update and the org defaults now refuse that, and
+  any auto-off over 60 s (see Upgrading). In egress mode the form requires
+  Auto-off, 1–60 s, unless the org default supplies one. Deleting an output now
+  drives it off first; if that off can't be delivered the delete returns 502 and
+  keeps the row, and **Delete anyway** (`?force=true`) removes it regardless.
+  Test-fire arms a device-side timer, so a lost OFF can't latch the output.
+- **Slow reader replies were lost on the way to the browser** (TRA-1319, #779).
+  The server's 10 s write timeout was shorter than one reader RPC (5 s publish +
+  10 s reply), so a late answer was written to a closed connection and the proxy
+  turned it into a 502. Every reader route (`reader-config` GET/PATCH,
+  `reader-software` GET, the update POST) now extends its write deadline to 45 s,
+  as the SSE streams already did. The Reader software panel no longer settles on
+  "timeout" without checking the reader after the deadline, which a background tab
+  with paused refetches used to do.
+
+#### Reader daemon (`mqtt-rpcd`)
+
+Like the daemon entries under Added, these reach a reader through a remote
+update, not through this release.
+
+- **Every GPO is driven off when the daemon stops and when it starts, and no ON
+  outlives 60 s** (TRA-1332, TRA-1138, #774, ADR 0026). `Stop` turns all four
+  ports off before anything else and refuses any later ON. `Start` turns them
+  off before connecting, which clears a port left on by a crash, a `kill -9` or
+  an earlier build. Each OFF writes sysfs, then `/API`, then sysfs again,
+  because `/API` does nothing to the pins while the vendor app is wedged. An ON
+  with no `pulse_ms` gets a 30 s on-time (`READERD_GPO_DEFAULT_ON`), and every ON
+  is capped at 60 s, with a warning naming both figures. Verified on hardware
+  across restart, `kill -9`, `systemctl stop`, reboot, poweroff and a power
+  cycle.
+- **A CS463 reaches the broker seconds after a boot, not minutes** (TRA-1293,
+  #781). The reader's kernel took 96–388 s to initialise its random number
+  generator, and until then every TLS client on it waited: the daemon's broker
+  connection and the vendor app's CloudServer connection that carries the reads.
+  The SoC's hardware RNG was registered but never credited. The daemon now reads
+  512 bytes from `/dev/hwrng` at start and credits them, but only from the
+  measured `rng-caam` generator, only if it answers within 2 s, and never output
+  that repeats. On the bench the kernel was ready at about 16 s after five clean
+  reboots, against 106.8 s the same morning without it. A failure is only a
+  warning, and the reader falls back to the old slow boot.
+- **The remote updater, hardened** (TRA-1319, #779), from the nine findings the
+  remote-update review deferred. An update is refused unless the rollback guard's
+  timer is enabled, not just installed. The new binary's directory is fsynced
+  before `pending` names it. Partial downloads left by a killed transfer are
+  cleaned up. The download client adds the current Mozilla roots to the system
+  pool, so a stale firmware bundle can't block an update; the signature and
+  sha256 still decide what installs. When the version to roll back to is gone,
+  the guard falls back to the newest other installed build, or records a new
+  `unguarded` state, which the panel shows as running but unconfirmed. The guard
+  and `install.sh` changes reach a reader only through `install.sh`.
+- **Reader daemon commands were serialised 5 seconds apart** (#699). Each RPC
+  reply waited for the broker's ack inside the MQTT callback, so two GPO outputs
+  bound to one reader switched about 5s apart. Replies now publish off the
+  callback, and command order is kept.
+
+### Internal
+
+No runtime behaviour.
+
+The non-hardware half of the Playwright suite now gates CI inside `lint-test`
+(TRA-1253, #668, ADR 0022), after its instruments were made able to fail and the
+suite was driven to green on hardware (#666). That work deleted a console monitor
+that could fail nothing and was double-counting two measured signals (#667). It
+also gave the console allowlist a red state, after 15 of its 16 entries turned out
+to match nothing (TRA-1224). Playwright moves 1.56 → 1.65 and `lint-test` to Node
+22, back on `ubuntu-latest` (TRA-1327).
+
+Hardware test access is now arbitrated by `ble-radio-lock` rather than by
+convention (TRA-1241), and `ble-mcp-test` moved 0.16 → 0.18 (TRA-1194, TRA-1255),
+along with removing a vestigial frontend lockfile that pinned 0.7.3 (TRA-1194).
+The soak harness's rep counters now report failures that name no test, and their
+owner was fixed (TRA-1243, #675, #676). The harness also names the cause of a
+lost `CONNECTED` and makes sure that signal reaches the log (TRA-1259, #670, #671,
+still open). New guards cover the trigger bring-up window, the mode change that
+revokes a simulated trigger level (TRA-1247, ADR 0016 restated, ADR 0019 recorded),
+the inventory/locate handler boundary (TRA-1254), and the stop's quiet window
+(TRA-1199).
+
+Also: `.env.local` resolves from the repo root at five call sites, not three
+(TRA-1195). The hardware captures are in version control, after a bare `data/`
+ignore rule had kept them on one machine (TRA-1215, ADR 0021). CSL's retry policy
+was derived from vendor source (TRA-1215). The Go toolchain moves to 1.26, as
+River requires, and `pgx` to 5.10 (#696, #705); `mqtt-rpc` follows to Go 1.26
+for the embedded root bundle (#779). sync-preview pages through every open PR,
+where before it read only the oldest 30 and silently left newer PRs off preview
+(TRA-1343, #777). `mqtt-rpc` tests run in
+`just validate` and `lint-test` (#765). `just backend smoke-test` honours
+`BACKEND_PORT` (#709). A slow-runner flake in a lazy-route test is fixed (#711).
+There are runbook corrections from the 1.5.0 release (TRA-1142) and soak-arm
+preconditions (#672, #673), plus ADRs 0024 and 0025 (proposed) for the reader
+update and health model, and ADR 0026 (proposed), "An alarm output fails toward
+off".
+
 ## [1.5.0] - 2026-09-04
 
 Three weeks of `main`, 294 commits across 74 pull requests, one migration

@@ -315,7 +315,7 @@ func TestSetProfilePowerExtraBankWordCountAtLeastOne(t *testing.T) {
 	defer f.close()
 
 	fields := sampleProfileFields()
-	fields["firstExtraBankLength"] = "0"  // as a real reader profile carries it
+	fields["firstExtraBankLength"] = "0" // as a real reader profile carries it
 	fields["secondExtraBankLength"] = "0"
 
 	err := f.client().SetProfilePower(context.Background(), NameProfile, 4,

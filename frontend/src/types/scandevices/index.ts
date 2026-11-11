@@ -154,7 +154,10 @@ export type DaemonUpdateState =
   | 'pending'
   | 'committed'
   | 'rolled_back'
-  | 'failed';
+  | 'failed'
+  // The target never committed and the reader had no other version to roll
+  // back to, so the target is still running with no rollback armed.
+  | 'unguarded';
 
 export interface DaemonUpdateInfo {
   state: DaemonUpdateState;
