@@ -9,6 +9,7 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/rs/zerolog"
 
+	"github.com/trakrf/platform/backend/internal/detection"
 	"github.com/trakrf/platform/backend/internal/models/scanread"
 	"github.com/trakrf/platform/backend/internal/services/topicroute"
 	"github.com/trakrf/platform/backend/internal/storage"
@@ -31,20 +32,30 @@ type ReadPublisher interface {
 	Publish(orgID int, topic string, reads []scanread.Read)
 }
 
+// scanStore is the storage surface handleMessage needs; *storage.Storage
+// satisfies it. Narrowed so unit tests can drive a message without a database.
+type scanStore interface {
+	InsertRawTagScan(ctx context.Context, topic string, payload []byte) (int64, error)
+	ResolveScanTopic(ctx context.Context, topic string) (storage.ScanRoute, bool, error)
+	PersistReads(ctx context.Context, orgID, scanDeviceID int, tagScanID int64, receivedAt time.Time, reads []scanread.Read) (storage.PersistResult, error)
+	PersistReadsDetect(ctx context.Context, orgID, scanDeviceID int, tagScanID int64, receivedAt time.Time, reads []scanread.Read, detect storage.DetectFunc) (storage.PersistResult, error)
+}
+
 // Subscriber consumes MQTT reads and derives asset_scans (TRA-900). It is the
 // observable replacement for the silent process_tag_scans trigger.
 type Subscriber struct {
 	cfg      Config
-	store    *storage.Storage
+	store    scanStore
 	registry *topicroute.Registry // routing map + subscription set (TRA-922)
-	eval     ReadEvaluator        // optional; nil disables geofence evaluation
+	eval     ReadEvaluator        // optional; nil disables post-commit evaluation
 	feed     ReadPublisher        // optional; nil disables live-feed fan-out
+	detector *detection.Pipeline  // optional; nil disables in-transaction detection
 	log      zerolog.Logger
 	client   mqtt.Client
 }
 
 // NewSubscriber builds a subscriber. It does not connect; call Start. eval and
-// feed may each be nil (no geofence evaluation / no live-feed fan-out). The
+// feed may each be nil (no post-commit evaluation / no live-feed fan-out). The
 // subscriber registers itself as the registry's SubscriptionManager so CRUD and
 // the reconcile ticker drive its broker subscriptions (TRA-922).
 func NewSubscriber(cfg Config, store *storage.Storage, registry *topicroute.Registry, eval ReadEvaluator, feed ReadPublisher, log *zerolog.Logger) *Subscriber {
@@ -52,6 +63,10 @@ func NewSubscriber(cfg Config, store *storage.Storage, registry *topicroute.Regi
 	registry.SetManager(s)
 	return s
 }
+
+// SetDetector runs d inside each scan's transaction. Call it before Start: the
+// message handler reads it without a lock.
+func (s *Subscriber) SetDetector(d *detection.Pipeline) { s.detector = d }
 
 // Subscribe adds a single topic to the live broker subscription (TRA-922).
 // Called by the registry when a scan device is created/updated. While
@@ -208,10 +223,9 @@ func (s *Subscriber) handleMessage(_ mqtt.Client, m mqtt.Message) {
 		s.feed.Publish(route.OrgID, topic, reads)
 	}
 
-	// 4. Derive asset_scans under org context (RLS-correct).
-	// TRA-901 seam: `reads` is also where the geofence engine will be handed the
-	// parsed observations for the immediate-on-entry alarm decision.
-	res, err := s.store.PersistReads(ctx, route.OrgID, route.ScanDeviceID, tagScanID, receivedAt, reads)
+	// 4. Derive asset_scans under org context (RLS-correct), with detection in the
+	// same transaction.
+	res, err := s.persist(ctx, route, tagScanID, receivedAt, reads)
 	if err != nil {
 		// The raw message is already durable in tag_scans (audit row above), so a
 		// transient failure here loses only the derivation, which is reproducible
@@ -225,14 +239,31 @@ func (s *Subscriber) handleMessage(_ mqtt.Client, m mqtt.Message) {
 		metricReadsDropped.WithLabelValues(reason).Add(float64(n))
 	}
 
-	// 5. Geofence evaluation (TRA-901). Best-effort and outside the derivation
-	// transaction: a slow/failed alarm path must never lose a scan. Only the
+	// 5. Post-commit evaluation. Best-effort and outside the derivation
+	// transaction: a slow or failed consumer must never lose a scan. Only the
 	// membership-passing reads are handed off.
 	if s.eval != nil && len(res.Resolved) > 0 {
 		s.eval.Evaluate(ctx, route.OrgID, tagScanID, receivedAt, res.Resolved)
 	}
 
 	s.logMessageProcessed(topic, route.OrgID, res, len(reads))
+}
+
+// persist derives the message's asset_scans. With a detector, its stages write
+// inside the same transaction, and the outcome is reported to them before persist
+// returns: outputs drive here, after commit and before post-commit evaluation.
+func (s *Subscriber) persist(ctx context.Context, route storage.ScanRoute, tagScanID int64, receivedAt time.Time, reads []scanread.Read) (storage.PersistResult, error) {
+	if s.detector == nil {
+		return s.store.PersistReads(ctx, route.OrgID, route.ScanDeviceID, tagScanID, receivedAt, reads)
+	}
+	run := s.detector.Begin()
+	res, err := s.store.PersistReadsDetect(ctx, route.OrgID, route.ScanDeviceID, tagScanID, receivedAt, reads, run.Detect)
+	if err != nil {
+		run.RolledBack()
+		return res, err
+	}
+	run.Committed()
+	return res, nil
 }
 
 // logMessageProcessed emits the per-message processing summary. It is Debug, not

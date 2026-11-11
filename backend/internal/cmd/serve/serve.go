@@ -15,6 +15,8 @@ import (
 	"github.com/trakrf/platform/backend/internal/alarm/shelly"
 	"github.com/trakrf/platform/backend/internal/assetevent"
 	"github.com/trakrf/platform/backend/internal/buildinfo"
+	"github.com/trakrf/platform/backend/internal/crossing"
+	"github.com/trakrf/platform/backend/internal/detection"
 	"github.com/trakrf/platform/backend/internal/geofence"
 	assetshandler "github.com/trakrf/platform/backend/internal/handlers/assets"
 	authhandler "github.com/trakrf/platform/backend/internal/handlers/auth"
@@ -129,13 +131,12 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// The delivery stack: planner, channel adapter and the queue runtime that
 	// runs trigger and delivery jobs. Config and templates are checked here so
 	// a bad phone region or a broken template refuses to start. The runtime runs
-	// trigger and delivery jobs; producing triggers from detection is not wired
-	// yet.
+	// trigger and delivery jobs; triggerJobs is how detection queues the triggers.
 	routingConfig, err := routing.ConfigFromEnv()
 	if err != nil {
 		return err
 	}
-	deliveryRuntime, err := newNotificationDelivery(notificationDeliveryDeps{
+	deliveryRuntime, triggerJobs, err := newNotificationDelivery(notificationDeliveryDeps{
 		Store:    store,
 		Pool:     store.Pool().(*pgxpool.Pool),
 		Email:    emailRuntime.Sender,
@@ -233,9 +234,9 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// engine joins the ingest fan-out via the MultiEvaluator below when MQTT is on.
 	musterBroadcaster := mustering.NewBroadcaster()
 	musterEngine := mustering.NewEngine(store, musterBroadcaster, log)
-	// Evaluator fan-out shared by the subscriber (hardware reads) and the
-	// mustering simulate handler (synthetic reads). Geofence is prepended when
-	// ingestion is enabled (it only exists then). nil-safe.
+	// Evaluator fan-out for the mustering simulate handler (synthetic reads).
+	// Geofence is prepended when ingestion is enabled (it only exists then).
+	// nil-safe.
 	musterEvaluators := ingest.MultiEvaluator{musterEngine, assetEventEvaluator}
 
 	mqttCfg := ingest.ConfigFromEnv()
@@ -266,13 +267,25 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 		geofenceEngine.Start()
 		defer geofenceEngine.Stop()
 
-		// TRA-978: prepend geofence to the fan-out so the subscriber drives both
-		// geofence and mustering off the same membership-passing reads.
-		// TRA-1043 joins the same fan-out, so one message drives geofence,
-		// mustering, and asset-event detection off the same resolved reads.
+		// The simulator's fan-out keeps geofence: simulated reads reach the engine
+		// through Evaluate, which never queues a trigger.
 		musterEvaluators = ingest.MultiEvaluator{geofenceEngine, musterEngine, assetEventEvaluator}
 
-		subscriber := ingest.NewSubscriber(mqttCfg, store, topicRegistry, musterEvaluators, readBroadcaster, log)
+		// Hardware reads reach geofence through its detection stage instead, so its
+		// fan-out must leave the engine out: Evaluate would decide each read a second
+		// time, and anything it fired would be recorded and driven outside the scan
+		// transaction, with no trigger. Geofence runs first, so the relay decision is
+		// not behind the other writes.
+		recorder := detection.NewRecorder(store, triggerJobs)
+		detector := detection.NewPipeline(log,
+			geofenceEngine.Stage(store, recorder),
+			assetevent.NewMoveStage(store, recorder),
+			crossing.NewStage(crossing.NewTracker(crossing.ConfigFromEnv()), store, recorder),
+		)
+		subscriberEvaluators := ingest.MultiEvaluator{musterEngine, assetEventEvaluator}
+
+		subscriber := ingest.NewSubscriber(mqttCfg, store, topicRegistry, subscriberEvaluators, readBroadcaster, log)
+		subscriber.SetDetector(detector)
 		if err := subscriber.Start(); err != nil {
 			log.Error().Err(err).Msg("Failed to start MQTT subscriber")
 			return err
