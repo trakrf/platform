@@ -134,6 +134,15 @@ type Occurrence struct {
 	AssetID    int
 	LocationID *int // nil for an alarm with no location
 	OccurredAt time.Time
+
+	FromLocationID *int   // where the asset was before a location change; nil otherwise
+	Origin         Origin // how a location change was detected; empty for an alarm
+}
+
+// IsCrossing reports whether the occurrence is a gate crossing with a known
+// place the asset came from.
+func (o Occurrence) IsCrossing() bool {
+	return o.Origin == OriginReaderCrossing && o.FromLocationID != nil
 }
 
 func invalid(msg string) error {
