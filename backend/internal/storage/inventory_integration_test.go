@@ -4,12 +4,15 @@ package storage_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/trakrf/platform/backend/internal/models/notificationevent"
 	"github.com/trakrf/platform/backend/internal/models/scanread"
 	"github.com/trakrf/platform/backend/internal/storage"
 	"github.com/trakrf/platform/backend/internal/testutil"
@@ -84,4 +87,185 @@ func TestSaveInventoryScans_CollidesWithReaderRowUpdatesInPlace(t *testing.T) {
 	assert.Equal(t, saveLoc, gotLoc, "operator's explicit save beats the passive reader read")
 	assert.Nil(t, scanPointID)
 	assert.Nil(t, tagScanID)
+}
+
+// saveFixture creates an org with two locations and two assets, and returns
+// the ids the save tests need.
+type saveFixture struct {
+	orgID, locA, locB, asset1, asset2 int
+}
+
+func newSaveFixture(t *testing.T, db *testutil.TestDB) saveFixture {
+	t.Helper()
+	ctx := context.Background()
+	f := saveFixture{orgID: testutil.CreateTestAccount(t, db.AdminPool)}
+	require.NoError(t, db.AdminPool.QueryRow(ctx,
+		`INSERT INTO trakrf.locations (org_id, external_key, name) VALUES ($1, 'a', 'A') RETURNING id`,
+		f.orgID).Scan(&f.locA))
+	require.NoError(t, db.AdminPool.QueryRow(ctx,
+		`INSERT INTO trakrf.locations (org_id, external_key, name) VALUES ($1, 'b', 'B') RETURNING id`,
+		f.orgID).Scan(&f.locB))
+	f.asset1 = testutil.CreateTestAsset(t, db.AdminPool, f.orgID, "asset-1").ID
+	f.asset2 = testutil.CreateTestAsset(t, db.AdminPool, f.orgID, "asset-2").ID
+	return f
+}
+
+func TestSaveInventoryScansRecord_HookSeesInsertedAndOverridden(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	f := newSaveFixture(t, db)
+
+	// asset2 already has this minute's row at A, so saving it at B is an
+	// override; asset1 has no row, so its save is an insert. Both time.Now()
+	// calls are microseconds apart, as in the collision test above.
+	_, err := db.AdminPool.Exec(ctx,
+		`INSERT INTO trakrf.asset_scans (timestamp, org_id, asset_id, location_id) VALUES ($1, $2, $3, $4)`,
+		time.Now().Truncate(storage.ScanGranularity), f.orgID, f.asset2, f.locA)
+	require.NoError(t, err)
+
+	var got storage.SavedInventory
+	var hookOrg int
+	calls := 0
+	hook := func(ctx context.Context, tx pgx.Tx, saved storage.SavedInventory) error {
+		calls++
+		got = saved
+		// The org GUC proves the hook is on the save's own transaction.
+		return tx.QueryRow(ctx, `SELECT current_setting('app.current_org_id')::bigint`).Scan(&hookOrg)
+	}
+	result, err := db.Store.SaveInventoryScansRecord(ctx, f.orgID, storage.SaveInventoryRequest{
+		LocationID: f.locB,
+		AssetIDs:   []int{f.asset1, f.asset2},
+	}, hook)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, calls)
+	assert.Equal(t, f.orgID, hookOrg)
+	assert.Equal(t, f.orgID, got.OrgID)
+	assert.Equal(t, f.locB, got.LocationID)
+	assert.Equal(t, result.Timestamp, got.Timestamp)
+	assert.True(t, got.Timestamp.Equal(got.Timestamp.Truncate(storage.ScanGranularity)), "the saved minute")
+	assert.Equal(t, []int{f.asset1}, got.InsertedAssetIDs)
+	require.Contains(t, got.OverriddenFrom, f.asset2)
+	require.NotNil(t, got.OverriddenFrom[f.asset2])
+	assert.Equal(t, f.locA, *got.OverriddenFrom[f.asset2])
+}
+
+func TestSaveInventoryScansRecord_HookErrorKeepsSave(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	f := newSaveFixture(t, db)
+
+	hook := func(ctx context.Context, tx pgx.Tx, saved storage.SavedInventory) error {
+		_, _, err := db.Store.InsertLocationChangeIfAbsentTx(ctx, tx, saved.OrgID, notificationevent.LocationChange{
+			OrgID: saved.OrgID, AssetID: f.asset1, ToLocationID: saved.LocationID,
+			Origin: notificationevent.OriginManualSave, DetectedAt: saved.Timestamp,
+		})
+		require.NoError(t, err)
+		return errors.New("hook exploded after writing")
+	}
+	result, err := db.Store.SaveInventoryScansRecord(ctx, f.orgID, storage.SaveInventoryRequest{
+		LocationID: f.locB,
+		AssetIDs:   []int{f.asset1},
+	}, hook)
+	require.NoError(t, err, "a hook error never fails the save")
+	assert.Equal(t, 1, result.Count)
+
+	var scans, changes int
+	require.NoError(t, db.AdminPool.QueryRow(ctx,
+		`SELECT count(*) FROM trakrf.asset_scans WHERE org_id = $1`, f.orgID).Scan(&scans))
+	require.NoError(t, db.AdminPool.QueryRow(ctx,
+		`SELECT count(*) FROM trakrf.location_changes WHERE org_id = $1`, f.orgID).Scan(&changes))
+	assert.Equal(t, 1, scans, "the scan row committed")
+	assert.Zero(t, changes, "the hook's own write rolled back to the savepoint")
+}
+
+func TestSaveInventoryScansRecord_NilHookIsSaveInventoryScans(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	f := newSaveFixture(t, db)
+
+	result, err := db.Store.SaveInventoryScansRecord(ctx, f.orgID, storage.SaveInventoryRequest{
+		LocationID: f.locA,
+		AssetIDs:   []int{f.asset1},
+	}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []int{f.asset1}, result.InsertedAssetIDs)
+}
+
+func TestSaveInventoryScansRecord_HookWriteSurvivesRelease(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	f := newSaveFixture(t, db)
+
+	hook := func(ctx context.Context, tx pgx.Tx, saved storage.SavedInventory) error {
+		_, inserted, err := db.Store.InsertLocationChangeIfAbsentTx(ctx, tx, saved.OrgID, notificationevent.LocationChange{
+			OrgID: saved.OrgID, AssetID: f.asset1, ToLocationID: saved.LocationID,
+			Origin: notificationevent.OriginManualSave, DetectedAt: saved.Timestamp,
+		})
+		require.NoError(t, err)
+		require.True(t, inserted)
+		return nil
+	}
+	_, err := db.Store.SaveInventoryScansRecord(ctx, f.orgID, storage.SaveInventoryRequest{
+		LocationID: f.locB,
+		AssetIDs:   []int{f.asset1},
+	}, hook)
+	require.NoError(t, err)
+
+	var scans, changes int
+	require.NoError(t, db.AdminPool.QueryRow(ctx,
+		`SELECT count(*) FROM trakrf.asset_scans WHERE org_id = $1`, f.orgID).Scan(&scans))
+	require.NoError(t, db.AdminPool.QueryRow(ctx,
+		`SELECT count(*) FROM trakrf.location_changes WHERE org_id = $1`, f.orgID).Scan(&changes))
+	assert.Equal(t, 1, scans)
+	assert.Equal(t, 1, changes, "the hook's write committed with the save")
+}
+
+func TestSaveInventoryScansRecord_HookPanicKeepsSave(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	f := newSaveFixture(t, db)
+
+	hook := func(ctx context.Context, tx pgx.Tx, saved storage.SavedInventory) error {
+		var m map[int]int
+		m[f.asset1] = saved.LocationID // nil map write: the kind of bug a recorder could have
+		return nil
+	}
+	var result *storage.SaveInventoryResult
+	var err error
+	require.NotPanics(t, func() {
+		result, err = db.Store.SaveInventoryScansRecord(ctx, f.orgID, storage.SaveInventoryRequest{
+			LocationID: f.locB,
+			AssetIDs:   []int{f.asset1},
+		}, hook)
+	})
+	require.NoError(t, err, "a hook panic never fails the save")
+	assert.Equal(t, 1, result.Count)
+	assert.Equal(t, []int{f.asset1}, result.InsertedAssetIDs)
+
+	var scans int
+	require.NoError(t, db.AdminPool.QueryRow(ctx,
+		`SELECT count(*) FROM trakrf.asset_scans WHERE org_id = $1`, f.orgID).Scan(&scans))
+	assert.Equal(t, 1, scans, "the scan row committed")
+}
+
+func TestSaveInventoryScansRecord_UnchangedSaveSkipsHook(t *testing.T) {
+	db := testutil.SetupTestDBFull(t)
+	ctx := context.Background()
+	f := newSaveFixture(t, db)
+
+	calls := 0
+	hook := func(context.Context, pgx.Tx, storage.SavedInventory) error { calls++; return nil }
+	req := storage.SaveInventoryRequest{LocationID: f.locA, AssetIDs: []int{f.asset1}}
+	_, err := db.Store.SaveInventoryScansRecord(ctx, f.orgID, req, hook)
+	require.NoError(t, err)
+	require.Equal(t, 1, calls, "the first save inserted a row")
+
+	// Same minute, same location: neither inserted nor overridden.
+	result, err := db.Store.SaveInventoryScansRecord(ctx, f.orgID, req, hook)
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Count)
+	assert.Empty(t, result.InsertedAssetIDs)
+	assert.Empty(t, result.OverriddenFrom)
+	assert.Equal(t, 1, calls, "nothing to record, so the hook is not called")
 }

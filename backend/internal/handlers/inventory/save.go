@@ -25,7 +25,7 @@ var validate = func() *validator.Validate {
 
 // InventoryStorage defines the storage operations needed by the inventory handler.
 type InventoryStorage interface {
-	SaveInventoryScans(ctx context.Context, orgID int, req storage.SaveInventoryRequest) (*storage.SaveInventoryResult, error)
+	SaveInventoryScansRecord(ctx context.Context, orgID int, req storage.SaveInventoryRequest, record storage.SaveRecordFunc) (*storage.SaveInventoryResult, error)
 	GetLocationByExternalKey(ctx context.Context, orgID int, identifier string) (*location.LocationWithParent, error)
 	GetAssetIDsByExternalKeys(ctx context.Context, orgID int, externalKeys []string) (map[string]int, error)
 }
@@ -51,13 +51,17 @@ type MovedEvaluator interface {
 type Handler struct {
 	storage InventoryStorage
 	moved   MovedEvaluator
+	record  storage.SaveRecordFunc
 }
 
-// NewHandler creates a new inventory handler. moved may be nil.
-func NewHandler(storage InventoryStorage, moved MovedEvaluator) *Handler {
+// NewHandler creates a new inventory handler. moved may be nil. record runs
+// inside the save transaction and records the location changes a save made,
+// which queues the owners' alerts; nil records nothing.
+func NewHandler(storage InventoryStorage, moved MovedEvaluator, record storage.SaveRecordFunc) *Handler {
 	return &Handler{
 		storage: storage,
 		moved:   moved,
+		record:  record,
 	}
 }
 
@@ -161,10 +165,13 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.storage.SaveInventoryScans(r.Context(), orgID, storage.SaveInventoryRequest{
+	// The owners' alerts are recorded inside the save transaction, on a
+	// savepoint, so they commit with the scan and never without it. The webhook
+	// evaluation below stays post-commit.
+	result, err := h.storage.SaveInventoryScansRecord(r.Context(), orgID, storage.SaveInventoryRequest{
 		LocationID: locationID,
 		AssetIDs:   assetIDs,
-	})
+	}, h.record)
 
 	if err != nil {
 		var accessErr *storage.InventoryAccessError

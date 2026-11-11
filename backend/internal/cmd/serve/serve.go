@@ -239,6 +239,10 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	// nil-safe.
 	musterEvaluators := ingest.MultiEvaluator{musterEngine, assetEventEvaluator}
 
+	// The recorder writes location changes and queues their alerts, for the
+	// reader stages and for handheld saves, which happen with ingestion off.
+	recorder := detection.NewRecorder(store, triggerJobs)
+
 	mqttCfg := ingest.ConfigFromEnv()
 	var alarmDispatcher alarm.Dispatcher
 	// TRA-993: cloud reader-control RPC client. Only constructed when the broker
@@ -276,7 +280,6 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 		// time, and anything it fired would be recorded and driven outside the scan
 		// transaction, with no trigger. Geofence runs first, so the relay decision is
 		// not behind the other writes.
-		recorder := detection.NewRecorder(store, triggerJobs)
 		detector := detection.NewPipeline(log,
 			geofenceEngine.Stage(store, recorder),
 			assetevent.NewMoveStage(store, recorder),
@@ -334,8 +337,9 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 	usersHandler := usershandler.NewHandler(store)
 	assetsHandler := assetshandler.NewHandler(store)
 	locationsHandler := locationshandler.NewHandler(store)
-	// TRA-1043: the inventory handler fires detection post-commit on Save.
-	inventoryHandler := inventoryhandler.NewHandler(store, assetEventEvaluator)
+	// The inventory handler fires webhook detection post-commit on Save; the
+	// owners' alerts are recorded inside the save transaction.
+	inventoryHandler := inventoryhandler.NewHandler(store, assetEventEvaluator, assetevent.NewManualSave(store, recorder).Record)
 	reportsHandler := reportshandler.NewHandler(store)
 	scanDevicesHandler := scandeviceshandler.NewHandler(store, topicRegistry)
 	scanPointsHandler := scanpointshandler.NewHandler(store)
