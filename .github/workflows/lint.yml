@@ -23,7 +23,13 @@ permissions:
 
 jobs:
   lint-test:
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest. This is the only job that installs a browser,
+    # and "playwright install --with-deps" pulls system packages with apt. On
+    # the Ubuntu 26.04 image every run since 2026-11-11 failed there with
+    # "Temporary failure resolving 'security.ubuntu.com'", across reruns and
+    # branches, while GitHub reported Actions healthy. Move it back to
+    # ubuntu-latest once a run on 26.04 installs the browser cleanly.
+    runs-on: ubuntu-24.04
     # Without this the job inherits the 360-minute Actions default. A hung test
     # runner would then occupy a runner for six hours and emit no signal about
     # what happened — see TRA-1050. The job takes ~5 min when healthy.
