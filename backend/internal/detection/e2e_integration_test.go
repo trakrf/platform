@@ -203,6 +203,15 @@ func read(antenna, rssi int, at time.Time) scanread.Read {
 	return scanread.Read{EPC: epcOne, AntennaPort: antenna, RSSI: rssi, ReaderTimestamp: at}
 }
 
+// gatePass: two gate reads show growth, a third 30s on finds the shed silent.
+func gatePass(at time.Time) []scanread.Read {
+	return []scanread.Read{
+		read(antGate, -40, at.Add(time.Second)),
+		read(antGate, -40, at.Add(1500*time.Millisecond)),
+		read(antGate, -40, at.Add(31400*time.Millisecond)),
+	}
+}
+
 // recentMinute is a minute boundary inside the previous-location lookup's
 // ten-minute tail, with room for a test to use the minutes after it.
 func recentMinute() time.Time {
@@ -210,7 +219,8 @@ func recentMinute() time.Time {
 }
 
 // TestDetection_ExitQueuesTrigger plays the spec's worked example, one read per
-// message. The peak at 1.0s stays in the window, so only the 3.5s read settles it.
+// message, then a gate read once the shed's early reads are references: the shed
+// is 8 dB under its peak, the gate has grown, and the gate's -36 settles it.
 func TestDetection_ExitQueuesTrigger(t *testing.T) {
 	r := newRig(t)
 	p := pipeline(r.stages()...)
@@ -224,6 +234,7 @@ func TestDetection_ExitQueuesTrigger(t *testing.T) {
 		{1500 * time.Millisecond, antGate, -58},
 		{2500 * time.Millisecond, antGate, -44},
 		{3000 * time.Millisecond, antShed, -60},
+		{3500 * time.Millisecond, antGate, -36},
 	}
 	for _, s := range steps {
 		at := start.Add(s.after)
@@ -231,8 +242,8 @@ func TestDetection_ExitQueuesTrigger(t *testing.T) {
 		require.Zero(t, r.count(rowsCrossing), "no crossing before the deciding read")
 	}
 
-	at := start.Add(3500 * time.Millisecond)
-	r.scan(p, at, read(antGate, -36, at))
+	at := start.Add(6500 * time.Millisecond)
+	r.scan(p, at, read(antGate, -38, at))
 
 	var id, from, to, scanPoint int
 	var detected time.Time
@@ -262,8 +273,8 @@ func TestDetection_ScanRollbackLeavesNothing(t *testing.T) {
 	moves := r.count(rowsMove)
 
 	// The next minute, so the scan stores a row and a reader move is due as well.
-	exit := start.Add(10 * time.Second)
-	r.scanRollsBack(p, exit, read(antGate, -40, exit))
+	exit := start.Add(35 * time.Second)
+	r.scanRollsBack(p, exit, gatePass(start)...)
 
 	assert.Equal(t, scans, r.count(rowsScan))
 	assert.Equal(t, jobs, r.count(rowsJob))
@@ -272,16 +283,46 @@ func TestDetection_ScanRollbackLeavesNothing(t *testing.T) {
 	assert.Zero(t, r.count(rowsAlarm))
 	assert.Zero(t, r.relay.drives, "a rolled-back scan drives nothing")
 
-	// The same read again finds the tracker and latch as they were: the leader is
-	// still the shed, so it crosses, and the relay fires.
+	// The same reads again find the tracker and latch as they were: the leader
+	// is still the shed, so it crosses, and the relay fires.
 	retry := exit.Add(time.Second)
-	r.scan(p, retry, read(antGate, -40, retry))
+	r.scan(p, retry, gatePass(start)...)
 
 	assert.Equal(t, 1, r.count(rowsCrossing), "the tracker must not have moved on the rolled-back scan")
 	assert.Equal(t, moves+1, r.count(rowsMove))
 	assert.Equal(t, 1, r.count(rowsAlarm))
 	assert.Equal(t, 1, r.relay.drives, "the latch must be restored after the rollback")
 	assert.Equal(t, jobs+3, r.count(rowsJob))
+}
+
+// A silence crossing fired by another tag's message, in a scan that then rolls
+// back, fires again on the retry, once.
+func TestDetection_SilenceCrossingOnAnotherTagRollsBack(t *testing.T) {
+	r := newRig(t)
+	r.asset("BOAT-2", epcTwo)
+	p := pipeline(r.stages()...)
+	start := recentMinute().Add(10 * time.Second)
+	r.scan(p, start, read(antShed, -50, start))
+	gate := start.Add(time.Second)
+	r.scan(p, gate, read(antGate, -50, gate), read(antGate, -50, gate.Add(500*time.Millisecond)))
+	require.Zero(t, r.count(rowsCrossing))
+
+	otherTag := func(at time.Time) scanread.Read {
+		other := read(antShed, -60, at)
+		other.EPC = epcTwo
+		return other
+	}
+	due := start.Add(31 * time.Second)
+	r.scanRollsBack(p, due, otherTag(due))
+	assert.Zero(t, r.count(rowsCrossing), "rolled back with the scan")
+
+	retry := due.Add(time.Second)
+	r.scan(p, retry, otherTag(retry))
+	assert.Equal(t, 1, r.count(rowsCrossing), "the tracker must not have moved on the rolled-back scan")
+
+	again := retry.Add(time.Second)
+	r.scan(p, again, otherTag(again))
+	assert.Equal(t, 1, r.count(rowsCrossing), "applied once, it does not fire again")
 }
 
 // poisonStage records a change, then fails on a real database error, so the
@@ -314,7 +355,7 @@ func TestDetection_StageErrorKeepsScan(t *testing.T) {
 
 	r.scan(p, start, read(antShed, -50, start))
 	exit := start.Add(time.Minute)
-	r.scan(p, exit, read(antGate, -40, exit))
+	r.scan(p, exit, gatePass(start)...)
 
 	assert.Equal(t, 2, r.count(rowsScan), "a failing stage must keep the scan")
 	assert.Equal(t, 1, r.count(rowsAlarm), "the stage before the failure keeps its row")
@@ -426,10 +467,10 @@ func TestDetection_ColdStartLookupsUnderAppRole(t *testing.T) {
 	start := recentMinute().Add(10 * time.Second)
 	r.scan(pipeline(r.stages()...), start, read(antShed, -50, start))
 
-	// A fresh tracker is a restart. The asset last seen at the shed now reads at
-	// the gate, so only the lookups can tell it crossed.
+	// A fresh tracker is a restart. Only the lookups can make the shed lead the
+	// asset last seen there; the gate pass then finds it silent and crosses.
 	exit := start.Add(time.Minute)
-	r.scan(pipeline(r.stages()...), exit, read(antGate, -50, exit))
+	r.scan(pipeline(r.stages()...), exit.Add(32*time.Second), gatePass(exit)...)
 	assert.Equal(t, 1, r.count(rowsCrossing), "both lookups must see this org's rows")
 
 	lookups := func(contextOrg int) (map[int]storage.PreviousLocation, []int) {

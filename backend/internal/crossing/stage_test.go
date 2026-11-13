@@ -84,20 +84,50 @@ func detect(t *testing.T, s *Stage, in storage.DetectInput) (func(bool), error) 
 	return p.OnCommit, err
 }
 
-// warm commits a message so the stage tracks asset 42 with leader A and the
-// recorder starts empty.
+// warm commits a boat whose A was last heard 31s before at and whose B has grown
+// since, with a B read 15s before at to keep the gap closed: the next message
+// crosses by silence. The recorder starts empty.
 func warm(t *testing.T) (*Stage, *fakeStore, *fakeRecorder) {
 	t.Helper()
+	return warmAt(t, recvAt)
+}
+
+func warmAt(t *testing.T, at time.Time) (*Stage, *fakeStore, *fakeRecorder) {
+	t.Helper()
 	s, st, rec := seeded()
-	commit, err := detect(t, s, input(recvAt.Add(-time.Hour), rd(testAsset, 201, locA, -50, time.Time{})))
-	require.NoError(t, err)
-	commit(true)
+	for _, m := range []struct {
+		before time.Duration
+		reads  []storage.ResolvedRead
+	}{
+		{31 * time.Second, []storage.ResolvedRead{rd(testAsset, 201, locA, -45, time.Time{})}},
+		{30500 * time.Millisecond, twice(testAsset, 202, locB, -50, time.Time{})},
+		{15 * time.Second, []storage.ResolvedRead{rd(testAsset, 202, locB, -50, time.Time{})}},
+	} {
+		commit, err := detect(t, s, input(at.Add(-m.before), m.reads...))
+		require.NoError(t, err)
+		commit(true)
+	}
 	require.Empty(t, rec.got)
+	require.Equal(t, locA, leaderOf(s.tracker))
 	return s, st, rec
+}
+
+// twice is the same read two times: enough to show growth at a location with no
+// references.
+func twice(asset, sp, location, rssi int, ts time.Time) []storage.ResolvedRead {
+	return []storage.ResolvedRead{rd(asset, sp, location, rssi, ts), rd(asset, sp, location, rssi, ts)}
 }
 
 func routeOf(c notificationevent.LocationChange) [2]int {
 	return [2]int{*c.FromLocationID, c.ToLocationID}
+}
+
+func routes(cs []notificationevent.LocationChange) [][2]int {
+	var out [][2]int
+	for _, c := range cs {
+		out = append(out, routeOf(c))
+	}
+	return out
 }
 
 func TestStage_Name(t *testing.T) {
@@ -105,7 +135,7 @@ func TestStage_Name(t *testing.T) {
 }
 
 func TestStage_RecordsCrossing(t *testing.T) {
-	s, _, rec := seeded()
+	s, _, rec := warm(t)
 	commit, err := detect(t, s, input(recvAt, rd(testAsset, 202, locB, -50, time.Time{})))
 	require.NoError(t, err)
 	commit(true)
@@ -134,53 +164,99 @@ func TestStage_LookupsRunOnTheScanTransaction(t *testing.T) {
 	}
 }
 
+// twoHops is a message, received 31s after at, whose reader stamps span a warm
+// boat's crossing to B at at, C growing just after, and C again once B has been
+// silent 30s.
+func twoHops(at time.Time) []storage.ResolvedRead {
+	return []storage.ResolvedRead{
+		rd(testAsset, 202, locB, -40, at),
+		rd(testAsset, 203, locC, -20, at.Add(500*time.Millisecond)),
+		rd(testAsset, 203, locC, -20, at.Add(time.Second)),
+		rd(testAsset, 203, locC, -20, at.Add(30500*time.Millisecond)),
+	}
+}
+
 func TestStage_TwoCrossingsInOneMessageHaveDistinctTimes(t *testing.T) {
 	s, _, rec := warm(t)
-	t0 := recvAt.Add(-time.Second)
-	_, err := detect(t, s, input(recvAt,
-		rd(testAsset, 202, locB, -40, t0),
-		rd(testAsset, 203, locC, -20, t0.Add(time.Second)),
-	))
+	_, err := detect(t, s, input(recvAt.Add(31*time.Second), twoHops(recvAt)...))
 	require.NoError(t, err)
-	require.Len(t, rec.got, 2)
+	require.Equal(t, [][2]int{{locA, locB}, {locB, locC}}, routes(rec.got))
 	assert.Equal(t, time.Microsecond, rec.got[1].DetectedAt.Sub(rec.got[0].DetectedAt))
 }
 
-// Reader order is the input to direction. The leader is A at -50: read in order,
-// B (-40) then C (-20) is two crossings; read C first, B never beats C.
+// A receive time on a scan bucket floor, at the database's microsecond precision,
+// is also the reader move's detected_at, so crossings move on and stay distinct.
+func TestStage_CrossingsAvoidTheBucketFloor(t *testing.T) {
+	floor := recvAt.Truncate(storage.ScanGranularity).Add(storage.ScanGranularity)
+	stamped := floor.Add(-31 * time.Second)
+	for name, received := range map[string]time.Time{
+		"exactly on it":           floor,
+		"under a microsecond off": floor.Add(999 * time.Nanosecond),
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, _, rec := warmAt(t, stamped)
+			_, err := detect(t, s, input(received, twoHops(stamped)...))
+			require.NoError(t, err)
+			require.Len(t, rec.got, 2)
+			assert.Equal(t, floor.Add(time.Microsecond), rec.got[0].DetectedAt)
+			assert.Equal(t, floor.Add(2*time.Microsecond), rec.got[1].DetectedAt)
+		})
+	}
+	assert.Equal(t, floor.Add(time.Microsecond), crossingBase(floor.Add(time.Microsecond)), "a microsecond on needs no nudge")
+}
+
+// Reader order is the input to direction: however they arrive, B's read comes
+// first, so A to B then B to C.
 func TestStage_SortsByReaderTimestamp(t *testing.T) {
-	t0 := recvAt.Add(-time.Minute)
+	hops := twoHops(recvAt)
 	for name, reads := range map[string][]storage.ResolvedRead{
-		"in order":     {rd(testAsset, 202, locB, -40, t0), rd(testAsset, 203, locC, -20, t0.Add(time.Millisecond))},
-		"out of order": {rd(testAsset, 203, locC, -20, t0.Add(time.Millisecond)), rd(testAsset, 202, locB, -40, t0)},
+		"in order":     hops,
+		"out of order": {hops[3], hops[1], hops[2], hops[0]},
 	} {
 		t.Run(name, func(t *testing.T) {
 			s, _, rec := warm(t)
-			_, err := detect(t, s, input(recvAt, reads...))
+			_, err := detect(t, s, input(recvAt.Add(31*time.Second), reads...))
 			require.NoError(t, err)
-			require.Len(t, rec.got, 2)
-			assert.Equal(t, [2]int{locA, locB}, routeOf(rec.got[0]))
-			assert.Equal(t, [2]int{locB, locC}, routeOf(rec.got[1]))
+			assert.Equal(t, [][2]int{{locA, locB}, {locB, locC}}, routes(rec.got))
 		})
 	}
 }
 
-// With no reader clock the arrival order stands: B then C is two crossings, and
-// a reversed order would give one crossing A to C.
+// With no reader clock every read takes the receive time and the arrival order
+// stands. A has faded; B and C both grow in one message. Whichever comes first
+// takes the crossing, and the other, with the new leader heard alongside it and
+// no references to show a fade, does not.
 func TestStage_MissingReaderTimestampsKeepArrivalOrder(t *testing.T) {
-	s, _, rec := warm(t)
-	_, err := detect(t, s, input(recvAt,
-		rd(testAsset, 202, locB, -40, time.Time{}),
-		rd(testAsset, 203, locC, -20, time.Time{}),
-	))
-	require.NoError(t, err)
-	require.Len(t, rec.got, 2)
-	assert.Equal(t, [2]int{locA, locB}, routeOf(rec.got[0]))
-	assert.Equal(t, [2]int{locB, locC}, routeOf(rec.got[1]))
+	b := twice(testAsset, 202, locB, -40, time.Time{})
+	c := twice(testAsset, 203, locC, -20, time.Time{})
+	for name, tc := range map[string]struct {
+		reads []storage.ResolvedRead
+		want  [][2]int
+	}{
+		"B first": {append(b, c...), [][2]int{{locA, locB}}},
+		"C first": {append(c, b...), [][2]int{{locA, locC}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, _, rec := seeded()
+			for _, m := range []struct {
+				at    time.Duration
+				reads []storage.ResolvedRead
+			}{
+				{0, twice(testAsset, 201, locA, -40, time.Time{})},
+				{6 * time.Second, []storage.ResolvedRead{rd(testAsset, 201, locA, -50, time.Time{})}},
+				{6200 * time.Millisecond, tc.reads},
+			} {
+				commit, err := detect(t, s, input(recvAt.Add(m.at), m.reads...))
+				require.NoError(t, err)
+				commit(true)
+			}
+			assert.Equal(t, tc.want, routes(rec.got))
+		})
+	}
 }
 
 func TestStage_StateAppliedOnlyWhenRowsKept(t *testing.T) {
-	s, _, rec := seeded()
+	s, _, rec := warm(t)
 	in := input(recvAt, rd(testAsset, 202, locB, -50, time.Time{}))
 
 	commit, err := detect(t, s, in)
@@ -196,14 +272,14 @@ func TestStage_StateAppliedOnlyWhenRowsKept(t *testing.T) {
 	assert.Len(t, rec.got, 2, "state was applied, so the crossing is not detected again")
 }
 
-// A discarded message must leave warm state, recent reads included, as a stage
+// A discarded message must leave warm state, read history included, as a stage
 // that never saw it. The reference stage saw the same committed messages.
 func TestStage_DiscardedMessageLeavesWarmStateUnchanged(t *testing.T) {
 	committed := []storage.DetectInput{
-		input(recvAt, rd(testAsset, 201, locA, -40, time.Time{}), rd(testAsset, 202, locB, -44, time.Time{})),
+		input(recvAt, append(twice(testAsset, 202, locB, -44, time.Time{}), rd(testAsset, 201, locA, -40, time.Time{}))...),
 		input(recvAt.Add(time.Second), rd(testAsset, 201, locA, -45, time.Time{})),
 	}
-	s, _, _ := seeded()
+	s, _, rec := seeded()
 	ref, _, _ := seeded()
 	for _, in := range committed {
 		commit, err := detect(t, s, in)
@@ -214,14 +290,20 @@ func TestStage_DiscardedMessageLeavesWarmStateUnchanged(t *testing.T) {
 		commit(true)
 	}
 
-	// Ten seconds on every earlier read has aged out; this one also crosses.
-	commit, err := detect(t, s, input(recvAt.Add(10*time.Second), rd(testAsset, 203, locC, -50, time.Time{})))
+	// Thirty seconds on A is silent, and this message crosses to C. Dropped, it
+	// must leave nothing behind.
+	commit, err := detect(t, s, input(recvAt.Add(31*time.Second), twice(testAsset, 203, locC, -50, time.Time{})...))
 	require.NoError(t, err)
+	require.NotEmpty(t, rec.got)
 	commit(false)
 
 	assert.Equal(t, ref.tracker.states, s.tracker.states)
+	assert.Equal(t, ref.tracker.waiting, s.tracker.waiting)
 }
 
+// A restart with a yard of parked tags. The first hundred are heard on both
+// antennas, last seen on either side; the rest on one antenna, last seen there.
+// Nothing crosses on the first message, or on messages over the next minute.
 func TestStage_RestartWithParkedTags(t *testing.T) {
 	st := &fakeStore{prev: map[int]storage.PreviousLocation{}, locs: []int{locA, locB}}
 	var reads []storage.ResolvedRead
@@ -229,12 +311,20 @@ func TestStage_RestartWithParkedTags(t *testing.T) {
 		l := locA + i%2
 		st.prev[i] = storage.PreviousLocation{LocationID: loc(l)}
 		reads = append(reads, rd(i, 100+l, l, -50, time.Time{}))
+		if i <= 100 {
+			other := locA + locB - l
+			reads = append(reads, rd(i, 100+other, other, -52+i%5, time.Time{}))
+		}
 	}
 	rec := &fakeRecorder{}
 	s := NewStage(NewTracker(DefaultConfig()), st, rec)
 
-	_, err := detect(t, s, input(recvAt, reads...))
-	require.NoError(t, err)
+	for sec := 0; sec < 60; sec++ {
+		commit, err := detect(t, s, input(recvAt.Add(time.Duration(sec)*time.Second), reads...))
+		require.NoError(t, err)
+		commit(true)
+	}
+
 	assert.Empty(t, rec.got)
 	assert.Equal(t, 1, st.prevCalls)
 	assert.Equal(t, 1, st.locCalls)
@@ -246,34 +336,25 @@ func TestStage_RestartWithParkedTags(t *testing.T) {
 // reader's own, and a sighting with no location says nothing.
 func TestStage_SeedsFromTheLastKnownLocation(t *testing.T) {
 	tests := []struct {
-		name      string
-		prev      map[int]storage.PreviousLocation
-		locs      []int
-		wantRoute *[2]int
+		name       string
+		prev       map[int]storage.PreviousLocation
+		wantLeader int
 	}{
-		{name: "last seen at another of this reader's locations", prev: map[int]storage.PreviousLocation{testAsset: {LocationID: loc(locA)}},
-			locs: []int{locA, locB}, wantRoute: &[2]int{locA, locB}},
-		{name: "last seen elsewhere", prev: map[int]storage.PreviousLocation{testAsset: {LocationID: loc(locC)}},
-			locs: []int{locA, locB}},
-		{name: "last sighting had no location", prev: map[int]storage.PreviousLocation{testAsset: {}},
-			locs: []int{locA, locB}},
-		{name: "never seen", prev: map[int]storage.PreviousLocation{}, locs: []int{locA, locB}},
+		{name: "last seen at another of this reader's locations", prev: map[int]storage.PreviousLocation{testAsset: {LocationID: loc(locA)}}, wantLeader: locA},
+		{name: "last seen elsewhere", prev: map[int]storage.PreviousLocation{testAsset: {LocationID: loc(locC)}}, wantLeader: locB},
+		{name: "last sighting had no location", prev: map[int]storage.PreviousLocation{testAsset: {}}, wantLeader: locB},
+		{name: "never seen", prev: map[int]storage.PreviousLocation{}, wantLeader: locB},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := &fakeRecorder{}
-			s := NewStage(NewTracker(DefaultConfig()), &fakeStore{prev: tc.prev, locs: tc.locs}, rec)
+			s := NewStage(NewTracker(DefaultConfig()), &fakeStore{prev: tc.prev, locs: []int{locA, locB}}, rec)
 			commit, err := detect(t, s, input(recvAt, rd(testAsset, 202, locB, -50, time.Time{})))
 			require.NoError(t, err)
 			commit(true)
 
-			if tc.wantRoute == nil {
-				assert.Empty(t, rec.got)
-			} else {
-				require.Len(t, rec.got, 1)
-				assert.Equal(t, *tc.wantRoute, routeOf(rec.got[0]))
-			}
-			assert.Equal(t, locB, leaderOf(s.tracker), "the read's location leads either way")
+			assert.Empty(t, rec.got, "a restart never crosses by itself")
+			assert.Equal(t, tc.wantLeader, leaderOf(s.tracker))
 		})
 	}
 }
@@ -305,8 +386,58 @@ func TestStage_LookupErrorReturnsError(t *testing.T) {
 }
 
 func TestStage_RecordErrorReturnsError(t *testing.T) {
-	s, _, rec := seeded()
+	s, _, rec := warm(t)
 	rec.err = errors.New("insert failed")
 	_, err := detect(t, s, input(recvAt, rd(testAsset, 202, locB, -50, time.Time{})))
 	require.Error(t, err)
+}
+
+// A silence crossing fired by another tag's message and then dropped: the retry
+// records it once, and once kept it does not fire again.
+func TestStage_SilenceCrossingOnAnotherTagsMessageRollsBack(t *testing.T) {
+	s, _, rec := seeded()
+	boat := func(at time.Time, reads ...storage.ResolvedRead) {
+		commit, err := detect(t, s, input(at, reads...))
+		require.NoError(t, err)
+		commit(true)
+	}
+	boat(recvAt, rd(testAsset, 201, locA, -45, time.Time{}))
+	boat(recvAt.Add(time.Second), twice(testAsset, 202, locB, -50, time.Time{})...)
+	require.Empty(t, rec.got)
+
+	other := func(at time.Time) storage.DetectInput { return input(at, rd(99, 201, locA, -60, time.Time{})) }
+	dropped, err := detect(t, s, other(recvAt.Add(31*time.Second)))
+	require.NoError(t, err)
+	require.Len(t, rec.got, 1)
+	dropped(false)
+
+	kept, err := detect(t, s, other(recvAt.Add(32*time.Second)))
+	require.NoError(t, err)
+	require.Len(t, rec.got, 2, "dropped, so it fires again")
+	assert.Equal(t, testAsset, rec.got[1].AssetID)
+	assert.Equal(t, [2]int{locA, locB}, routeOf(rec.got[1]))
+	kept(true)
+
+	_, err = detect(t, s, other(recvAt.Add(33*time.Second)))
+	require.NoError(t, err)
+	assert.Len(t, rec.got, 2, "kept, so it does not fire again")
+}
+
+// stageRoutes plays a swap through the stage, one read per message, each delivered
+// after delay, and returns the recorded routes.
+func stageRoutes(t *testing.T, delay time.Duration, stamped bool) [][2]int {
+	t.Helper()
+	s, _, rec := seeded()
+	for _, r := range cycles(0, 60, swapAt(30,
+		map[int]int{locA: -40, locB: -60}, map[int]int{locA: -55, locB: -42}), locA, locB) {
+		at := recvAt.Add(time.Duration(r.sec * float64(time.Second)))
+		stamp := time.Time{}
+		if stamped {
+			stamp = at
+		}
+		commit, err := detect(t, s, input(at.Add(delay), rd(testAsset, scanPoint(r.loc, 0), r.loc, r.rssi, stamp)))
+		require.NoError(t, err)
+		commit(true)
+	}
+	return routes(rec.got)
 }
