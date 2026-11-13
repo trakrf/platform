@@ -32,7 +32,7 @@ func newRouter(t *testing.T) (*chi.Mux, *testutil.TestDB, int) {
 	orgID := testutil.CreateTestAccount(t, db.AdminPool)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	notificationrecipients.NewHandler(db.Store).RegisterRoutes(r, passThrough)
+	notificationrecipients.NewHandler(db.Store, "US").RegisterRoutes(r, passThrough)
 	return r, db, orgID
 }
 
@@ -224,4 +224,43 @@ func TestNotificationSubscriptions_PatchSmsWithoutPhoneIsBadRequest(t *testing.T
 	rec = do(t, r, orgID, http.MethodPatch, path+"/"+strconv.Itoa(sub.Data.ID), map[string]any{"channel": "sms"})
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.Equal(t, http.StatusNotFound, do(t, r, orgID, http.MethodPatch, path+"/"+strconv.Itoa(sub.Data.ID+1_000_000), map[string]any{"is_active": false}).Code)
+}
+
+func TestNotificationRecipients_PhoneStoredAsE164(t *testing.T) {
+	r, _, orgID := newRouter(t)
+	id := createRecipient(t, r, orgID, map[string]any{"name": "Fmt", "phone": "(555) 123-4567"})
+
+	rec := do(t, r, orgID, http.MethodGet, "/api/v1/notification-recipients/"+strconv.Itoa(id), nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	var got struct {
+		Data struct {
+			Phone string `json:"phone"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Equal(t, "+15551234567", got.Data.Phone)
+
+	rec = do(t, r, orgID, http.MethodPatch, "/api/v1/notification-recipients/"+strconv.Itoa(id), map[string]any{"phone": "+44 20 7946 0958"})
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Equal(t, "+442079460958", got.Data.Phone)
+}
+
+func TestNotificationRecipients_InvalidPhoneIsBadRequest(t *testing.T) {
+	r, _, orgID := newRouter(t)
+	rec := do(t, r, orgID, http.MethodPost, "/api/v1/notification-recipients", map[string]any{"name": "Bad", "phone": "call me"})
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "E.164")
+	require.NotContains(t, rec.Body.String(), "call me", "the submitted number is not echoed back")
+
+	id := createRecipient(t, r, orgID, map[string]any{"name": "Good", "phone": "+15551230001"})
+	rec = do(t, r, orgID, http.MethodPatch, "/api/v1/notification-recipients/"+strconv.Itoa(id), map[string]any{"phone": "123"})
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestNotificationRecipients_ReformattedPhoneIsConflict(t *testing.T) {
+	r, _, orgID := newRouter(t)
+	createRecipient(t, r, orgID, map[string]any{"name": "A", "phone": "+1 555 123 0002"})
+	rec := do(t, r, orgID, http.MethodPost, "/api/v1/notification-recipients", map[string]any{"name": "B", "phone": "555.123.0002"})
+	require.Equal(t, http.StatusConflict, rec.Code)
 }
