@@ -11,6 +11,7 @@ import {
   generateAssetHistoryExcel,
   generateAssetHistoryPDF,
 } from '@/utils/export';
+import { AssetNotificationsButton } from '@/components/notifications/AssetNotificationsButton';
 import { FreshnessBadge } from './FreshnessBadge';
 import { MovementTimeline } from './MovementTimeline';
 import type { ExportFormat, ExportResult } from '@/types/export';
@@ -99,6 +100,17 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
   }, [asset?.asset_id, dateRange, openExport]);
 
   if (!asset) return null;
+
+  // Rows without an asset id (deleted or unhydrated) have nothing to subscribe to.
+  const bellButton =
+    asset.asset_id != null ? (
+      <AssetNotificationsButton
+        assetId={asset.asset_id}
+        assetName={assetName}
+        assetKey={assetKey}
+        variant="icon"
+      />
+    ) : null;
 
   const showAssetKeySubtext = assetKey && assetKey !== assetName;
   const currentLocationName = getLocationName(
@@ -245,12 +257,15 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate pr-2">
             {assetName}
           </h2>
-          <button
-            onClick={handleClose}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex-shrink-0"
-          >
-            <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-          </button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {bellButton}
+            <button
+              onClick={handleClose}
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex-shrink-0"
+            >
+              <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+            </button>
+          </div>
         </div>
 
         <div className="p-4">{panelContent}</div>
@@ -272,12 +287,15 @@ export function AssetDetailPanel({ asset, onClose }: AssetDetailPanelProps) {
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate pr-2">
               {assetName}
             </h2>
-            <button
-              onClick={handleClose}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex-shrink-0"
-            >
-              <ChevronDown className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-            </button>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {bellButton}
+              <button
+                onClick={handleClose}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex-shrink-0"
+              >
+                <ChevronDown className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+              </button>
+            </div>
           </div>
 
           {/* Content */}
