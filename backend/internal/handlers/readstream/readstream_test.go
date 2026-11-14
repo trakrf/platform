@@ -64,6 +64,9 @@ func TestStream_OrgFilteredFramingSurvivesWriteTimeout(t *testing.T) {
 	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
 		t.Fatalf("content-type = %q", ct)
 	}
+	if cc := resp.Header.Get("Cache-Control"); !strings.Contains(cc, "no-transform") {
+		t.Fatalf("cache-control = %q, want no-transform", cc)
+	}
 
 	// Wait past the WriteTimeout window, then publish: a wrong-org read (must not
 	// arrive) and our org's read (must arrive after the deadline would have fired).

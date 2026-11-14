@@ -60,7 +60,7 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 	_ = rc.SetWriteDeadline(time.Time{})
 
 	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Cache-Control", "no-cache, no-transform") // no-transform: stop TLS-inspecting proxies compressing/buffering the stream
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no") // disable nginx/proxy response buffering
 	w.WriteHeader(http.StatusOK)

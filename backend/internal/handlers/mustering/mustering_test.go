@@ -230,6 +230,7 @@ func TestStream_SnapshotAndDelta(t *testing.T) {
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.True(t, strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream"))
+	require.Contains(t, resp.Header.Get("Cache-Control"), "no-transform")
 
 	sc := bufio.NewScanner(resp.Body)
 	// Expect a snapshot frame first.
