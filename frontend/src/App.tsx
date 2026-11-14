@@ -42,6 +42,7 @@ const ReportsScreen = lazyWithRetry(() => import('@/components/ReportsScreen'));
 const ReportsHistoryScreen = lazyWithRetry(() => import('@/components/ReportsHistoryScreen'));
 const SuperadminOrgsScreen = lazyWithRetry(() => import('@/components/SuperadminOrgsScreen'));
 const NotificationsScreen = lazyWithRetry(() => import('@/components/notifications/NotificationsScreen'));
+const ContactsScreen = lazyWithRetry(() => import('@/components/notifications/ContactsScreen'));
 const MusteringScreen = lazyWithRetry(() => import('@/components/mustering/MusteringScreen'));
 const KitsScreen = lazyWithRetry(() => import('@/components/kits/KitsScreen'));
 const ProfileScreen = lazyWithRetry(() => import('@/components/ProfileScreen'));
@@ -54,7 +55,7 @@ const ForcedPasswordChangeScreen = lazyWithRetry(() => import('@/components/auth
 // valid hash targets here; whether they *resolve* is decided by the capability
 // registry at render time, not by this list. Resolving them here would bounce a
 // granted user's bookmark on every cold load, before the profile lands.
-const VALID_TABS: TabType[] = ['scan', 'locate', 'kits', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'notifications', 'mustering', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'org-geofence-defaults', 'accept-invite', 'api-keys', 'webhooks', 'admin-orgs', 'profile'];
+const VALID_TABS: TabType[] = ['scan', 'locate', 'kits', 'assets', 'locations', 'scan-devices', 'output-devices', 'live-reads', 'reports', 'reports-history', 'notifications', 'notification-contacts', 'mustering', 'settings', 'help', 'login', 'signup', 'forgot-password', 'reset-password', 'create-org', 'org-members', 'org-settings', 'org-geofence-defaults', 'accept-invite', 'api-keys', 'webhooks', 'admin-orgs', 'profile'];
 
 export default function App() {
   const activeTab = useUIStore((state) => state.activeTab);
@@ -236,6 +237,7 @@ export default function App() {
       reports: ReportsScreen,
       'reports-history': ReportsHistoryScreen,
       notifications: NotificationsScreen,
+      'notification-contacts': ContactsScreen,
       mustering: MusteringScreen,
       'api-keys': APIKeysScreen,
       'webhooks': WebhooksScreen,
@@ -266,6 +268,7 @@ export default function App() {
       reports: LoadingScreen,
       'reports-history': LoadingScreen,
       notifications: LoadingScreen,
+      'notification-contacts': LoadingScreen,
       mustering: LoadingScreen,
       'api-keys': LoadingScreen,
       'webhooks': LoadingScreen,
