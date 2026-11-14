@@ -7,7 +7,6 @@ import type { NotificationRecipient } from '@/types/notifications';
 
 const deleteRecipient = vi.fn();
 const recipientsState = vi.fn();
-const countsState = vi.fn();
 
 vi.mock('@/hooks/notifications', () => ({
   useNotificationRecipients: () => recipientsState(),
@@ -16,9 +15,6 @@ vi.mock('@/hooks/notifications', () => ({
     update: vi.fn(),
     delete: deleteRecipient,
   }),
-}));
-vi.mock('@/hooks/notifications/useRecipientSubscriptionCounts', () => ({
-  useRecipientSubscriptionCounts: () => countsState(),
 }));
 vi.mock('@/hooks/entitlement/useEntitlement', () => ({
   useEntitlement: () => ({
@@ -36,13 +32,14 @@ function recipient(id: number, name: string, extra: Partial<NotificationRecipien
     org_id: 1,
     name,
     is_active: true,
+    subscribed_asset_count: 0,
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
     ...extra,
   } satisfies NotificationRecipient;
 }
 
-const jane = recipient(1, 'Jane Smith', { email: 'jane@example.com' });
+const jane = recipient(1, 'Jane Smith', { email: 'jane@example.com', subscribed_asset_count: 2 });
 const omar = recipient(2, 'Omar Diaz', { phone: '+15551234567' });
 
 const table = () => screen.getByTestId('contacts-table');
@@ -52,7 +49,6 @@ describe('ContactsScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     recipientsState.mockReturnValue({ recipients: [jane, omar], isLoading: false, error: null });
-    countsState.mockReturnValue({ counts: new Map([[1, 2]]), isLoading: false });
     deleteRecipient.mockResolvedValue(1);
   });
 
@@ -77,12 +73,6 @@ describe('ContactsScreen', () => {
     expect(screen.getByTestId('contact-count-1')).toHaveTextContent('2');
     expect(screen.getByTestId('contact-count-2')).toHaveTextContent('0');
     expect(screen.getByText('Subscribed to 2 assets')).toBeInTheDocument();
-  });
-
-  it('shows a placeholder while counts load', () => {
-    countsState.mockReturnValue({ counts: new Map(), isLoading: true });
-    render(<ContactsScreen />);
-    expect(screen.getByTestId('contact-count-1')).toHaveTextContent('…');
   });
 
   it('deletes a contact after confirming, with the count in the message', async () => {

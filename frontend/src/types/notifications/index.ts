@@ -17,6 +17,8 @@ export interface NotificationRecipient {
   email?: string;
   phone?: string;
   is_active: boolean;
+  /** Assets with at least one active subscription for this contact. */
+  subscribed_asset_count: number;
   created_at: string;
   updated_at: string;
   deleted_at?: string;
