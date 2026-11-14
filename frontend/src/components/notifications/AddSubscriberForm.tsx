@@ -6,14 +6,21 @@ import {
   useNotificationRecipients,
 } from '@/hooks/notifications';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
-import { normalizePhone, validateContact, type ContactErrors } from '@/lib/notifications/validators';
+import {
+  joinPhone,
+  validateContactForm,
+  type ContactErrors,
+  type ContactFormInput,
+} from '@/lib/notifications/validators';
 import { PaidGate } from '@/components/entitlement';
-import type { NotificationChannel, NotificationRecipient } from '@/types/notifications';
+import { PhoneInput } from './PhoneInput';
+import type { NotificationChannel } from '@/types/notifications';
 
 const CHANNELS: NotificationChannel[] = ['email', 'sms'];
 const CHANNEL_LABELS: Record<NotificationChannel, string> = { email: 'Email', sms: 'SMS' };
 
 type Mode = 'existing' | 'new';
+type NewField = 'name' | 'email' | 'phone';
 
 interface RetryState {
   recipientId: number;
@@ -45,10 +52,6 @@ function channelList(channels: NotificationChannel[]) {
     .join(' and ');
 }
 
-function contactSummary(r: NotificationRecipient) {
-  return [r.name, [r.email, r.phone].filter(Boolean).join(' · ')].filter(Boolean).join(' — ');
-}
-
 function isConflict(error: unknown) {
   return (error as { response?: { status?: number } })?.response?.status === 409;
 }
@@ -74,8 +77,16 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
 
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [form, setForm] = useState({ name: '', email: '', phone: '' });
-  const [fieldErrors, setFieldErrors] = useState<ContactErrors & { channels?: string }>({});
+  const [form, setForm] = useState<ContactFormInput>({
+    name: '',
+    email: '',
+    phoneCode: '',
+    phoneNumber: '',
+  });
+  // New-contact fields are checked once left, and all of them after a submit
+  // attempt; from then on the messages follow what is typed.
+  const [touched, setTouched] = useState<Partial<Record<NewField, boolean>>>({});
+  const [submitted, setSubmitted] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [unchecked, setUnchecked] = useState<Set<NotificationChannel>>(new Set());
   const [submitting, setSubmitting] = useState(false);
@@ -89,19 +100,31 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
     );
   }, [contacts, search]);
   const selected = filtered.find((r) => r.id === selectedId);
+  const phone = joinPhone({ code: form.phoneCode, number: form.phoneNumber });
 
   const hasDetail: Record<NotificationChannel, boolean> =
     mode === 'existing'
       ? { email: !!selected?.email, sms: !!selected?.phone }
-      : { email: form.email.trim() !== '', sms: form.phone.trim() !== '' };
+      : { email: form.email.trim() !== '', sms: phone !== '' };
   const checked = CHANNELS.filter((c) => hasDetail[c] && !unchecked.has(c));
   const locked = submitting || retry !== null;
+  const needsContact = mode === 'existing' && !selected;
 
-  const setField = (field: keyof typeof form, value: string) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
-    setFieldErrors((prev) => ({ ...prev, [field]: undefined, contact: undefined }));
+  const found: ContactErrors = mode === 'new' ? validateContactForm(form) : {};
+  const show = (field: NewField) => submitted || !!touched[field];
+  const fieldErrors: ContactErrors = {
+    name: show('name') ? found.name : undefined,
+    email: show('email') ? found.email : undefined,
+    phoneCode: show('phone') ? found.phoneCode : undefined,
+    phoneNumber: show('phone') ? found.phoneNumber : undefined,
+    contact: submitted || (touched.email && touched.phone) ? found.contact : undefined,
+  };
+
+  const setField = (patch: Partial<ContactFormInput>) => {
+    setForm((prev) => ({ ...prev, ...patch }));
     setServerError(null);
   };
+  const touch = (field: NewField) => setTouched((prev) => ({ ...prev, [field]: true }));
 
   const toggleChannel = (channel: NotificationChannel, on: boolean) => {
     setUnchecked((prev) => {
@@ -110,7 +133,6 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
       else next.add(channel);
       return next;
     });
-    setFieldErrors((prev) => ({ ...prev, channels: undefined }));
   };
 
   const runSubscribe = async (
@@ -144,13 +166,9 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
     e.preventDefault();
     if (locked) return;
 
-    const errors: ContactErrors & { channels?: string } =
-      mode === 'new' ? validateContact(form) : {};
-    if (mode === 'existing' && !selected) errors.contact = 'Choose a contact';
-    if (checked.length === 0) errors.channels = 'Choose at least one channel';
-    setFieldErrors(errors);
+    setSubmitted(true);
     setServerError(null);
-    if (Object.keys(errors).length > 0) return;
+    if (needsContact || checked.length === 0 || Object.values(found).some(Boolean)) return;
 
     setSubmitting(true);
     try {
@@ -160,7 +178,7 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
           recipient = await create({
             name: form.name.trim(),
             email: form.email.trim() || undefined,
-            phone: normalizePhone(form.phone) || undefined,
+            phone: phone || undefined,
           });
         } catch (err) {
           const message = getApiErrorMessage(err, 'Failed to create contact');
@@ -201,7 +219,8 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
       disabled={locked}
       onClick={() => {
         setModeChoice(value);
-        setFieldErrors({});
+        setTouched({});
+        setSubmitted(false);
         setServerError(null);
       }}
       className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors disabled:opacity-50 ${
@@ -248,31 +267,52 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
             onChange={(e) => setSearch(e.target.value)}
             className={inputClass(false)}
           />
-          <select
-            data-testid="add-subscriber-contact-select"
-            aria-label="Choose a contact"
-            size={Math.min(Math.max(filtered.length, 2), 5)}
-            value={selected ? String(selected.id) : ''}
-            disabled={locked}
-            onChange={(e) => {
-              setSelectedId(Number(e.target.value));
-              setUnchecked(new Set());
-              setFieldErrors((prev) => ({ ...prev, contact: undefined }));
-            }}
-            className={`mt-2 ${inputClass(!!fieldErrors.contact)}`}
-          >
-            {filtered.map((r) => (
-              <option key={r.id} value={r.id}>
-                {contactSummary(r)}
-              </option>
-            ))}
-          </select>
+          {/* Radio rows rather than a native list box: nothing looks picked
+              until the user picks, and long details wrap on narrow screens. */}
+          {filtered.length > 0 && (
+            <div
+              role="radiogroup"
+              aria-label="Choose a contact"
+              data-testid="add-subscriber-contact-select"
+              className="mt-2 max-h-48 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"
+            >
+              {filtered.map((r) => (
+                <label
+                  key={r.id}
+                  className={`flex items-start gap-3 px-3 py-2 cursor-pointer ${
+                    r.id === selectedId ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="add-subscriber-contact"
+                    data-testid={`add-subscriber-contact-${r.id}`}
+                    value={r.id}
+                    checked={r.id === selectedId}
+                    disabled={locked}
+                    onChange={() => {
+                      setSelectedId(r.id);
+                      setUnchecked(new Set());
+                    }}
+                    className="mt-1 h-4 w-4 text-blue-600 border-gray-300 dark:border-gray-600 focus:ring-blue-500"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {r.name}
+                    </span>
+                    <span className="block text-xs text-gray-500 dark:text-gray-400 break-all">
+                      {[r.email, r.phone].filter(Boolean).join(' · ')}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
           {filtered.length === 0 && (
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               {isLoading ? 'Loading contacts…' : 'No contacts match your search.'}
             </p>
           )}
-          {fieldErrors.contact && <p className={FIELD_ERROR}>{fieldErrors.contact}</p>}
         </div>
       ) : (
         <div className="space-y-3">
@@ -284,11 +324,10 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {(
               [
-                ['name', 'Name', 'text', undefined],
-                ['email', 'Email', 'email', undefined],
-                ['phone', 'Phone', 'tel', 'International format, e.g. +15551234567'],
+                ['name', 'Name', 'text'],
+                ['email', 'Email', 'email'],
               ] as const
-            ).map(([field, label, type, hint]) => (
+            ).map(([field, label, type]) => (
               <div key={field} className={field === 'name' ? 'sm:col-span-2' : undefined}>
                 <label htmlFor={`add-subscriber-${field}`} className={LABEL}>
                   {label}
@@ -300,16 +339,22 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
                   type={type}
                   value={form[field]}
                   disabled={locked}
-                  onChange={(e) => setField(field, e.target.value)}
+                  aria-invalid={!!fieldErrors[field]}
+                  onChange={(e) => setField({ [field]: e.target.value })}
+                  onBlur={() => touch(field)}
                   className={inputClass(!!fieldErrors[field])}
                 />
-                {fieldErrors[field] ? (
-                  <p className={FIELD_ERROR}>{fieldErrors[field]}</p>
-                ) : (
-                  hint && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{hint}</p>
-                )}
+                {fieldErrors[field] && <p className={FIELD_ERROR}>{fieldErrors[field]}</p>}
               </div>
             ))}
+            <PhoneInput
+              id="add-subscriber-phone"
+              value={{ code: form.phoneCode, number: form.phoneNumber }}
+              onChange={({ code, number }) => setField({ phoneCode: code, phoneNumber: number })}
+              onBlur={() => touch('phone')}
+              errors={{ phoneCode: fieldErrors.phoneCode, phoneNumber: fieldErrors.phoneNumber }}
+              disabled={locked}
+            />
           </div>
           {fieldErrors.contact && <p className={FIELD_ERROR}>{fieldErrors.contact}</p>}
         </div>
@@ -325,13 +370,13 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
                   type="checkbox"
                   data-testid={`add-subscriber-channel-${channel}`}
                   checked={checked.includes(channel)}
-                  disabled={locked || !hasDetail[channel]}
+                  disabled={locked || needsContact || !hasDetail[channel]}
                   onChange={(e) => toggleChannel(channel, e.target.checked)}
                   className="h-4 w-4 text-blue-600 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 disabled:opacity-50"
                 />
                 {CHANNEL_LABELS[channel]}
               </label>
-              {!hasDetail[channel] && (
+              {!hasDetail[channel] && !needsContact && (
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   {mode === 'new'
                     ? channel === 'email'
@@ -345,7 +390,12 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
             </div>
           ))}
         </div>
-        {fieldErrors.channels && <p className={FIELD_ERROR}>{fieldErrors.channels}</p>}
+        {needsContact ? (
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Choose a contact first</p>
+        ) : (
+          submitted &&
+          checked.length === 0 && <p className={FIELD_ERROR}>Choose at least one channel</p>
+        )}
       </fieldset>
 
       {retry && (
@@ -390,7 +440,7 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
             <button
               type="submit"
               data-testid="add-subscriber-submit"
-              disabled={submitting}
+              disabled={submitting || needsContact || checked.length === 0}
               className="w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
             >
               {submitting ? 'Subscribing…' : 'Subscribe'}

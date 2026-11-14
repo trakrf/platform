@@ -95,7 +95,7 @@ describe('AddSubscriberForm', () => {
     expect(screen.queryByRole('option', { name: /Off Olga/ })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByTestId('add-subscriber-contact-search'), { target: { value: 'ana' } });
-    fireEvent.change(screen.getByTestId('add-subscriber-contact-select'), { target: { value: '1' } });
+    fireEvent.click(screen.getByTestId('add-subscriber-contact-1'));
     expect(checkbox('email')).toBeChecked();
     fireEvent.click(screen.getByTestId('add-subscriber-submit'));
 
@@ -106,7 +106,7 @@ describe('AddSubscriberForm', () => {
 
   it('disables a channel the contact has no detail for', () => {
     renderForm();
-    fireEvent.change(screen.getByTestId('add-subscriber-contact-select'), { target: { value: '1' } });
+    fireEvent.click(screen.getByTestId('add-subscriber-contact-1'));
 
     expect(checkbox('sms')).toBeDisabled();
     expect(checkbox('sms')).not.toBeChecked();
@@ -133,7 +133,8 @@ describe('AddSubscriberForm', () => {
     fireEvent.click(screen.getByTestId('add-subscriber-mode-new'));
     fireEvent.change(screen.getByTestId('add-subscriber-name'), { target: { value: ' Cleo ' } });
     fireEvent.change(screen.getByTestId('add-subscriber-email'), { target: { value: 'cleo@example.com' } });
-    fireEvent.change(screen.getByTestId('add-subscriber-phone'), { target: { value: '+1 (555) 123-4567' } });
+    fireEvent.change(screen.getByTestId('add-subscriber-phone-code'), { target: { value: '+1' } });
+    fireEvent.change(screen.getByTestId('add-subscriber-phone-number'), { target: { value: '(555) 123-4567' } });
     expect(checkbox('email')).toBeChecked();
     expect(checkbox('sms')).toBeChecked();
     fireEvent.click(screen.getByTestId('add-subscriber-submit'));
@@ -174,7 +175,8 @@ describe('AddSubscriberForm', () => {
     fireEvent.click(screen.getByTestId('add-subscriber-mode-new'));
     fireEvent.change(screen.getByTestId('add-subscriber-name'), { target: { value: 'Cleo' } });
     fireEvent.change(screen.getByTestId('add-subscriber-email'), { target: { value: 'cleo@example.com' } });
-    fireEvent.change(screen.getByTestId('add-subscriber-phone'), { target: { value: '+15551234567' } });
+    fireEvent.change(screen.getByTestId('add-subscriber-phone-code'), { target: { value: '+1' } });
+    fireEvent.change(screen.getByTestId('add-subscriber-phone-number'), { target: { value: '5551234567' } });
     fireEvent.click(screen.getByTestId('add-subscriber-submit'));
 
     expect(await screen.findByText('SMS failed: SMS provider unavailable')).toBeInTheDocument();
@@ -201,12 +203,54 @@ describe('AddSubscriberForm', () => {
     expect(screen.getByTestId('add-subscriber-name')).toBeInTheDocument();
   });
 
-  it('requires a contact and a channel', async () => {
+  it('starts with no contact picked and the channels and Subscribe disabled', () => {
     renderForm();
+
+    expect(screen.getByRole('radiogroup', { name: 'Choose a contact' })).toBeInTheDocument();
+    expect(screen.getAllByRole('radio').every((r) => !(r as HTMLInputElement).checked)).toBe(true);
+    expect(checkbox('email')).toBeDisabled();
+    expect(checkbox('sms')).toBeDisabled();
+    expect(screen.getByText('Choose a contact first')).toBeInTheDocument();
+    expect(screen.queryByText('No email on file')).not.toBeInTheDocument();
+    expect(screen.getByTestId('add-subscriber-submit')).toBeDisabled();
+
+    fireEvent.click(screen.getByTestId('add-subscriber-contact-1'));
+    expect(screen.queryByText('Choose a contact first')).not.toBeInTheDocument();
+    expect(screen.getByTestId('add-subscriber-submit')).toBeEnabled();
+  });
+
+  it('disables Subscribe when every channel is unticked', () => {
+    renderForm();
+    fireEvent.click(screen.getByTestId('add-subscriber-contact-1'));
+    fireEvent.click(checkbox('email'));
+
+    expect(screen.getByTestId('add-subscriber-submit')).toBeDisabled();
+  });
+
+  it('checks new-contact fields once they are left', () => {
+    renderForm();
+    fireEvent.click(screen.getByTestId('add-subscriber-mode-new'));
+    fireEvent.blur(screen.getByTestId('add-subscriber-name'));
+    expect(screen.getByText('Name is required')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('add-subscriber-email'), { target: { value: 'cleo@' } });
+    fireEvent.blur(screen.getByTestId('add-subscriber-email'));
+    expect(screen.getByText('Enter a valid email address')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('add-subscriber-phone-number'), { target: { value: '07911123456' } });
+    fireEvent.blur(screen.getByTestId('add-subscriber-phone-number'), { relatedTarget: null });
+    expect(screen.getByText('Enter the country code, e.g. +1')).toBeInTheDocument();
+    expect(screen.getByText('Leave out the leading 0')).toBeInTheDocument();
+  });
+
+  it('blocks a new contact with invalid fields on submit', () => {
+    renderForm();
+    fireEvent.click(screen.getByTestId('add-subscriber-mode-new'));
+    fireEvent.change(screen.getByTestId('add-subscriber-email'), { target: { value: 'cleo@' } });
     fireEvent.click(screen.getByTestId('add-subscriber-submit'));
 
-    expect(await screen.findByText('Choose a contact')).toBeInTheDocument();
-    expect(screen.getByText('Choose at least one channel')).toBeInTheDocument();
-    expect(subscribe).not.toHaveBeenCalled();
+    expect(screen.getByText('Name is required')).toBeInTheDocument();
+    expect(screen.getByText('Enter a valid email address')).toBeInTheDocument();
+    expect(create).not.toHaveBeenCalled();
   });
 });
