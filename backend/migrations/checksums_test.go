@@ -170,12 +170,11 @@ func hashMigrations() (map[string]string, error) {
 		if e.IsDir() {
 			continue
 		}
-		body, err := fs.ReadFile(FS, e.Name())
+		sum, err := fileSHA256(FS, e.Name())
 		if err != nil {
-			return nil, fmt.Errorf("reading %s: %w", e.Name(), err)
+			return nil, err
 		}
-		sum := sha256.Sum256(body)
-		sums[e.Name()] = hex.EncodeToString(sum[:])
+		sums[e.Name()] = sum
 	}
 	return sums, nil
 }

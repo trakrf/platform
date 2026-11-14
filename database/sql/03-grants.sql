@@ -58,3 +58,13 @@ SELECT format('GRANT SELECT ON trakrf.schema_migrations TO %I', :'app_role')
 FROM pg_tables WHERE schemaname = 'trakrf' AND tablename = 'schema_migrations'\gexec
 SELECT format('REVOKE INSERT, UPDATE, DELETE ON trakrf.schema_migrations FROM %I', :'app_role')
 FROM pg_tables WHERE schemaname = 'trakrf' AND tablename = 'schema_migrations'\gexec
+
+-- The migrator's applied-file record, for the same reason and in the same
+-- shape. The migrator revokes the app role's write when it creates the table,
+-- but the blanket grant at the top of this file runs after migrating and would
+-- hand it straight back, letting the application rewrite the record that the
+-- migrate preflight trusts to refuse a reused version.
+SELECT format('GRANT SELECT ON trakrf.schema_migration_files TO %I', :'app_role')
+FROM pg_tables WHERE schemaname = 'trakrf' AND tablename = 'schema_migration_files'\gexec
+SELECT format('REVOKE INSERT, UPDATE, DELETE ON trakrf.schema_migration_files FROM %I', :'app_role')
+FROM pg_tables WHERE schemaname = 'trakrf' AND tablename = 'schema_migration_files'\gexec

@@ -172,6 +172,14 @@ sql_has "app role gets read on the migration ledger" "$grants_sql" \
 sql_has "app role gets no write on the migration ledger" "$grants_sql" \
     "REVOKE INSERT, UPDATE, DELETE ON trakrf.schema_migrations FROM %I', *:'app_role'"
 
+# The applied-file record the migrator's preflight trusts. The migrator revokes
+# the app role's write when it creates the table, but the blanket grant above
+# runs after migrating (init-grants Job, `just dev`) and hands it straight back.
+sql_has "app role gets read on the migration file history" "$grants_sql" \
+    "GRANT SELECT ON trakrf.schema_migration_files TO %I', *:'app_role'"
+sql_has "app role gets no write on the migration file history" "$grants_sql" \
+    "REVOKE INSERT, UPDATE, DELETE ON trakrf.schema_migration_files FROM %I', *:'app_role'"
+
 # TRUNCATE is not DELETE: it is not filtered by RLS policies, so granting it
 # would hand the app role a policy-free way to empty another org's rows. Checked
 # across all three files — nothing in the bootstrap may hand these out.
