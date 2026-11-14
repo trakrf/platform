@@ -8,6 +8,7 @@ import { TagCountBadge } from './TagCountBadge';
 import { TagsModal } from './TagsModal';
 import { LocateTagPopover } from './LocateTagPopover';
 import { PaidGate } from '@/components/entitlement';
+import { AssetNotificationsButton } from '@/components/notifications/AssetNotificationsButton';
 
 interface AssetCardProps {
   asset: Asset;
@@ -164,6 +165,12 @@ export function AssetCard({
                   isActive={asset.is_active}
                   variant="icon"
                 />
+                <AssetNotificationsButton
+                  assetId={asset.id}
+                  assetName={asset.name}
+                  assetKey={asset.external_key}
+                  variant="icon"
+                />
                 <PaidGate surface="assets-crud" silentImpression>
                   <div className="flex items-center gap-1 sm:gap-2">
                     <button
@@ -265,6 +272,12 @@ export function AssetCard({
               tags={localTags}
               entityIdentifier={asset.external_key}
               isActive={asset.is_active}
+              variant="button"
+            />
+            <AssetNotificationsButton
+              assetId={asset.id}
+              assetName={asset.name}
+              assetKey={asset.external_key}
               variant="button"
             />
             <PaidGate surface="assets-crud" silentImpression className="flex-1">
