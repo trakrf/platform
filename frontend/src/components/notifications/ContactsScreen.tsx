@@ -6,7 +6,6 @@ import {
   useNotificationRecipientMutations,
   useNotificationRecipients,
 } from '@/hooks/notifications';
-import { useRecipientSubscriptionCounts } from '@/hooks/notifications/useRecipientSubscriptionCounts';
 import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import { ConfirmModal, EmptyState } from '@/components/shared';
 import { PaidGate } from '@/components/entitlement';
@@ -56,7 +55,6 @@ function matches(recipient: NotificationRecipient, term: string) {
 export default function ContactsScreen() {
   const { setActiveTab } = useUIStore();
   const { recipients, isLoading, error } = useNotificationRecipients();
-  const { counts, isLoading: countsLoading } = useRecipientSubscriptionCounts();
   const { delete: deleteRecipient } = useNotificationRecipientMutations();
   const [search, setSearch] = useState('');
   const [form, setForm] = useState<FormState>(null);
@@ -83,13 +81,8 @@ export default function ContactsScreen() {
     }
   };
 
-  const countOf = (id: number) => counts.get(id) ?? 0;
-  const renderCount = (id: number, label: (n: number) => string) =>
-    countsLoading ? (
-      <span aria-label="Loading subscription count">…</span>
-    ) : (
-      label(countOf(id))
-    );
+  const renderCount = (r: NotificationRecipient, label: (n: number) => string) =>
+    label(r.subscribed_asset_count);
 
   const rowActions = (r: NotificationRecipient) => (
     <PaidGate surface="notifications-contacts" silentImpression>
@@ -210,7 +203,7 @@ export default function ContactsScreen() {
                   data-testid={`contact-count-${r.id}`}
                   className="px-3 text-gray-700 dark:text-gray-300"
                 >
-                  {renderCount(r.id, String)}
+                  {renderCount(r, String)}
                 </td>
                 <td className="px-3 text-right whitespace-nowrap">{rowActions(r)}</td>
               </tr>
@@ -241,7 +234,7 @@ export default function ContactsScreen() {
                 </p>
               )}
               <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">
-                {renderCount(r.id, (n) => `Subscribed to ${assetsPhrase(n)}`)}
+                {renderCount(r, (n) => `Subscribed to ${assetsPhrase(n)}`)}
               </p>
               <div className="flex pt-2 sm:pt-3 mt-2 border-t border-gray-200 dark:border-gray-700">
                 {cardActions(r)}
@@ -306,7 +299,7 @@ export default function ContactsScreen() {
         <ConfirmModal
           isOpen={deleting !== null}
           title="Delete contact"
-          message={deleting ? deleteMessage(deleting.name, countOf(deleting.id)) : ''}
+          message={deleting ? deleteMessage(deleting.name, deleting.subscribed_asset_count) : ''}
           confirmText="Delete"
           onConfirm={confirmDelete}
           onCancel={() => setDeleting(null)}
