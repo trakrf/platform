@@ -49,6 +49,10 @@ golang-migrate runs it:
    takes the ledger with it and leaves a genuinely empty database;
 4. refuses to run if a `schema_migrations` exists in another schema — a split
    history that would otherwise report a clean version over a mismatched schema.
+5. refuses to run if an object in `trakrf` is not owned by the migrating role;
+6. refuses to run if a version the database has applied is not the file this
+   image carries at that version, by the name and SHA-256 it records in
+   `trakrf.schema_migration_files` — see `CONVENTIONS.md`.
 
 Do not add another path that applies migrations. See `docs/adr/0003`.
 

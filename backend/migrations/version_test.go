@@ -1,6 +1,10 @@
 package migrations
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"testing/fstest"
+)
 
 // TestLatest reports the highest version in the embedded set.
 //
@@ -127,4 +131,39 @@ func TestPendingSince(t *testing.T) {
 			t.Errorf("PendingSince(latest+5) = %v, want empty", pending)
 		}
 	})
+}
+
+// UpFiles must hash exactly as checksums.txt does, or the migrator would record
+// an identity for a file that the manifest knows by a different one.
+func TestUpFilesMatchesTheChecksumManifest(t *testing.T) {
+	files, err := UpFiles(FS)
+	if err != nil {
+		t.Fatalf("UpFiles: %v", err)
+	}
+	sums, err := hashMigrations()
+	if err != nil {
+		t.Fatalf("hashMigrations: %v", err)
+	}
+	if len(files) == 0 {
+		t.Fatal("UpFiles returned nothing")
+	}
+	for _, f := range files {
+		if !strings.HasSuffix(f.Filename, upSuffix) {
+			t.Errorf("%s: only up-migrations belong in UpFiles", f.Filename)
+		}
+		if sums[f.Filename] != f.SHA256 {
+			t.Errorf("%s: UpFiles hashed %s, the manifest's algorithm gives %s",
+				f.Filename, f.SHA256, sums[f.Filename])
+		}
+	}
+}
+
+func TestUpFilesRejectsDuplicateVersions(t *testing.T) {
+	fsys := fstest.MapFS{
+		"000042_email_callback_events.up.sql":               {Data: []byte("SELECT 1;")},
+		"000042_subscription_expiration_offboarding.up.sql": {Data: []byte("SELECT 2;")},
+	}
+	if _, err := UpFiles(fsys); err == nil {
+		t.Fatal("expected a duplicate version to be refused")
+	}
 }
