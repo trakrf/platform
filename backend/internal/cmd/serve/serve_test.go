@@ -60,7 +60,7 @@ func setupTestRouter(t *testing.T, notificationRuntimes ...notification.RouteReg
 	scanDevicesHandler := scandeviceshandler.NewHandler(store, nil)
 	scanPointsHandler := scanpointshandler.NewHandler(store)
 	outputDevicesHandler := outputdeviceshandler.NewHandler(store, alarm.NewDispatcher(shelly.New(0), nil, nil), 0)
-	notificationRecipientsHandler := notificationrecipientshandler.NewHandler(store)
+	notificationRecipientsHandler := notificationrecipientshandler.NewHandler(store, "US")
 	readerConfigHandler := readerconfighandler.NewHandler(store, nil)
 	lookupHandler := lookuphandler.NewHandler(store)
 	healthHandler := healthhandler.NewHandler(nil, buildinfo.Info{Version: "test"}, time.Now())
