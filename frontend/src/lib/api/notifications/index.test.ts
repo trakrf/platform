@@ -26,6 +26,16 @@ describe('notificationsApi', () => {
     vi.mocked(apiClient.delete).mockResolvedValue({ data: undefined } as never);
   });
 
+  describe('alerts', () => {
+    it('lists alerts with the filters as query params', async () => {
+      const params = { asset_id: 4, page: 2, per_page: 10 };
+      await notificationsApi.listAlerts(params);
+      expect(apiClient.get).toHaveBeenCalledWith('/notification-alerts', {
+        params,
+      });
+    });
+  });
+
   describe('recipients', () => {
     it('lists recipients without query params', async () => {
       await notificationsApi.listRecipients();

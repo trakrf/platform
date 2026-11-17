@@ -1,176 +1,174 @@
-import { renderHook } from '@testing-library/react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { useNotificationAlerts, alertsMockEnabled } from './useNotificationAlerts';
-import { buildMockAlerts } from '@/lib/notifications/mockAlerts';
-import { getAppConfig } from '@/lib/appConfig';
-import { useAssets } from '@/hooks/assets';
-import { useNotificationRecipients } from './useNotificationRecipients';
-import type { NotificationAlertFilters, NotificationRecipient } from '@/types/notifications';
-import type { Asset } from '@/types/assets';
+import React, { type ReactNode } from 'react';
+import { renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { useNotificationAlerts, localDayBound, toAlertQuery } from './useNotificationAlerts';
+import { notificationsApi } from '@/lib/api/notifications';
+import type { NotificationAlert, NotificationAlertFilters } from '@/types/notifications';
 
-vi.mock('@/lib/appConfig', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/appConfig')>()),
-  getAppConfig: vi.fn(),
+vi.mock('@/lib/api/notifications');
+
+const mockOrgState = { currentOrg: { id: 7, name: 'Test Org' } };
+vi.mock('@/stores/orgStore', () => ({
+  useOrgStore: Object.assign(
+    vi.fn((selector) => (selector ? selector(mockOrgState) : mockOrgState)),
+    { getState: () => mockOrgState }
+  ),
 }));
-vi.mock('@/hooks/assets', () => ({ useAssets: vi.fn() }));
-vi.mock('./useNotificationRecipients', () => ({ useNotificationRecipients: vi.fn() }));
 
-const assets = Array.from(
-  { length: 10 },
-  (_, i) => ({ id: 1000 + i, name: `Asset ${i}`, external_key: `ASSET-${i}` }) as Asset
-);
+const alert: NotificationAlert = {
+  id: 11,
+  asset_id: 4,
+  asset_name: 'Pallet 4',
+  asset_external_key: 'PAL-004',
+  type: 'location_change',
+  occurred_at: '2026-10-01T10:00:00Z',
+  sent_at: '2026-10-01T10:00:05Z',
+  recipient_id: 3,
+  recipient_name: 'Dana',
+  channel: 'email',
+  subject: 'Pallet 4 moved',
+  body: 'Pallet 4 moved to Gate A',
+  details: { location: 'Gate A', direction: 'unknown' },
+};
 
-const recipients = [
-  { id: 1, name: 'Ana', email: 'ana@example.com', phone: '+15550000001' },
-  { id: 2, name: 'Ben', email: 'ben@example.com' },
-  { id: 3, name: 'Cy', phone: '+15550000003' },
-] as NotificationRecipient[];
+const createClient = () =>
+  new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
 
-const NOW = new Date('2026-10-21T12:00:00Z');
+const wrapperFor = (queryClient: QueryClient) =>
+  function Wrapper({ children }: { children: ReactNode }) {
+    return React.createElement(QueryClientProvider, { client: queryClient }, children);
+  };
 
-const setLabel = (environmentLabel: string) =>
-  vi.mocked(getAppConfig).mockReturnValue({ environmentLabel });
+describe('localDayBound', () => {
+  it('starts a bare date at local midnight with an offset', () => {
+    const s = localDayBound('2026-03-10', 'start');
+    expect(s).toMatch(/^2026-03-10T00:00:00\.000[+-]\d{2}:\d{2}$/);
+    expect(Date.parse(s)).toBe(new Date(2026, 2, 10, 0, 0, 0, 0).getTime());
+  });
+  it('ends a bare date at local 23:59:59.999', () => {
+    const s = localDayBound('2026-11-05', 'end');
+    expect(Date.parse(s)).toBe(new Date(2026, 10, 5, 23, 59, 59, 999).getTime());
+  });
+  it("uses each day's own offset across a DST change", () => {
+    for (const d of ['2026-01-15', '2026-07-15']) {
+      const [y, m, day] = d.split('-').map(Number);
+      expect(Date.parse(localDayBound(d, 'start'))).toBe(new Date(y, m - 1, day).getTime());
+    }
+  });
+});
 
-const run = (filters: NotificationAlertFilters = {}) =>
-  renderHook(() => useNotificationAlerts(filters)).result.current;
+describe('toAlertQuery', () => {
+  it('converts bare dates and defaults page and per_page', () => {
+    const q = toAlertQuery({ from: '2026-10-01', to: '2026-10-02' });
+    expect(q.from).toBe(localDayBound('2026-10-01', 'start'));
+    expect(q.to).toBe(localDayBound('2026-10-02', 'end'));
+    expect(q.page).toBe(1);
+    expect(q.per_page).toBe(20);
+  });
+  it('passes full timestamps through unchanged', () => {
+    expect(toAlertQuery({ from: '2026-10-01T05:00:00Z' }).from).toBe('2026-10-01T05:00:00Z');
+  });
+  it('drops filters that are not set', () => {
+    expect(Object.keys(toAlertQuery({ asset_id: 3, type: undefined })).sort()).toEqual([
+      'asset_id',
+      'page',
+      'per_page',
+    ]);
+  });
+});
 
 describe('useNotificationAlerts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Pin the clock so the hook and buildMockAlerts below share one `now`.
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(NOW);
-    // Deployed build: only the environment label can turn mock data on.
-    vi.stubEnv('DEV', false);
-    setLabel('preview');
-    vi.mocked(useAssets).mockReturnValue({ assets, isLoading: false } as unknown as ReturnType<
-      typeof useAssets
-    >);
-    vi.mocked(useNotificationRecipients).mockReturnValue({
-      recipients,
-      isLoading: false,
-    } as unknown as ReturnType<typeof useNotificationRecipients>);
   });
 
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.useRealTimers();
+  it('returns the server page and total', async () => {
+    vi.mocked(notificationsApi.listAlerts).mockResolvedValue({
+      data: { data: [alert], pagination: { page: 2, per_page: 10, total: 31 } },
+    } as any);
+
+    const { result } = renderHook(() => useNotificationAlerts({ page: 2, per_page: 10 }), {
+      wrapper: wrapperFor(createClient()),
+    });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.alerts).toEqual([alert]);
+    expect(result.current.total).toBe(31);
+    expect(result.current.page).toBe(2);
+    expect(result.current.perPage).toBe(10);
+    expect(result.current.error).toBeNull();
   });
 
-  describe('environment rule', () => {
-    it.each(['prod', 'production'])('returns nothing when the label is %s', (label) => {
-      setLabel(label);
-      expect(alertsMockEnabled()).toBe(false);
-      const result = run();
-      expect(result.alerts).toEqual([]);
-      expect(result.total).toBe(0);
-      expect(useAssets).toHaveBeenCalledWith({ enabled: false });
+  it('sends the converted query to the API', async () => {
+    vi.mocked(notificationsApi.listAlerts).mockResolvedValue({
+      data: { data: [], pagination: { page: 1, per_page: 20, total: 0 } },
+    } as any);
+    const filters = { asset_id: 4, from: '2026-10-01' };
+
+    const { result } = renderHook(() => useNotificationAlerts(filters), {
+      wrapper: wrapperFor(createClient()),
     });
 
-    it.each(['preview', 'staging'])('returns mock alerts when the label is %s', (label) => {
-      setLabel(label);
-      expect(alertsMockEnabled()).toBe(true);
-      expect(run().total).toBeGreaterThanOrEqual(40);
-    });
-
-    it('returns mock alerts in local dev with no label', () => {
-      vi.stubEnv('DEV', true);
-      setLabel('');
-      expect(run().total).toBeGreaterThan(0);
-    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(notificationsApi.listAlerts).toHaveBeenCalledWith(toAlertQuery(filters));
   });
 
-  describe('filters', () => {
-    const all = buildMockAlerts(assets, recipients, NOW);
+  it('keys the query by org and query', async () => {
+    vi.mocked(notificationsApi.listAlerts).mockResolvedValue({
+      data: { data: [], pagination: { page: 1, per_page: 20, total: 0 } },
+    } as any);
+    const queryClient = createClient();
 
-    it('narrows by asset', () => {
-      const target = all[0].asset_id;
-      const result = run({ asset_id: target, per_page: 100 });
-      expect(result.total).toBe(all.filter((a) => a.asset_id === target).length);
-      expect(result.total).toBeLessThan(all.length);
-      expect(result.alerts.every((a) => a.asset_id === target)).toBe(true);
+    const { result } = renderHook(() => useNotificationAlerts(), {
+      wrapper: wrapperFor(queryClient),
     });
 
-    it.each(['alarm', 'location_change'] as const)('narrows by type %s', (type) => {
-      const result = run({ type, per_page: 100 });
-      expect(result.total).toBeGreaterThan(0);
-      expect(result.total).toBeLessThan(all.length);
-      expect(result.alerts.every((a) => a.type === type)).toBe(true);
-    });
-
-    it('narrows by recipient', () => {
-      const result = run({ recipient_id: 2, per_page: 100 });
-      expect(result.total).toBeGreaterThan(0);
-      expect(result.alerts.every((a) => a.recipient_id === 2)).toBe(true);
-      // Ben has only an email address.
-      expect(result.alerts.every((a) => a.channel === 'email')).toBe(true);
-    });
-
-    it.each(['email', 'sms'] as const)('narrows by channel %s', (channel) => {
-      const result = run({ channel, per_page: 100 });
-      expect(result.total).toBeGreaterThan(0);
-      expect(result.total).toBeLessThan(all.length);
-      expect(result.alerts.every((a) => a.channel === channel)).toBe(true);
-      expect(result.alerts.every((a) => (a.subject === null) === (channel === 'sms'))).toBe(true);
-    });
-
-    it('narrows by an inclusive sent_at range', () => {
-      const sorted = [...all].sort((a, b) => Date.parse(a.sent_at) - Date.parse(b.sent_at));
-      const from = sorted[5].sent_at;
-      const to = sorted[15].sent_at;
-      const result = run({ from, to, per_page: 100 });
-      expect(result.total).toBe(
-        all.filter((a) => a.sent_at >= from && a.sent_at <= to).length
-      );
-      expect(result.alerts.map((a) => a.sent_at)).toEqual(expect.arrayContaining([from, to]));
-    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(
+      queryClient.getQueryCache().find({ queryKey: ['notificationAlerts', 7], exact: false })
+    ).toBeDefined();
   });
 
-  it('sorts newest sent_at first', () => {
-    const times = run({ per_page: 100 }).alerts.map((a) => Date.parse(a.sent_at));
-    expect(times).toEqual([...times].sort((a, b) => b - a));
+  it('keeps the previous page visible while the next one loads', async () => {
+    vi.mocked(notificationsApi.listAlerts)
+      .mockResolvedValueOnce({
+        data: {
+          data: [alert],
+          pagination: { page: 1, per_page: 20, total: 40 },
+        },
+      } as any)
+      .mockReturnValueOnce(new Promise(() => {}) as any);
+
+    const { result, rerender } = renderHook(
+      ({ filters }: { filters: NotificationAlertFilters }) => useNotificationAlerts(filters),
+      {
+        wrapper: wrapperFor(createClient()),
+        initialProps: { filters: { page: 1 } },
+      }
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.alerts).toEqual([alert]);
+
+    rerender({ filters: { page: 2 } });
+
+    await waitFor(() => expect(notificationsApi.listAlerts).toHaveBeenCalledTimes(2));
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.alerts).toEqual([alert]);
   });
 
-  it('paginates with a default of 20 per page', () => {
-    const first = run();
-    expect(first.page).toBe(1);
-    expect(first.perPage).toBe(20);
-    expect(first.alerts).toHaveLength(20);
+  it('exposes a request failure as error, with no alerts', async () => {
+    vi.mocked(notificationsApi.listAlerts).mockRejectedValue(new Error('boom'));
 
-    const lastPage = Math.ceil(first.total / 20);
-    const last = run({ page: lastPage });
-    expect(last.total).toBe(first.total);
-    expect(last.alerts).toHaveLength(first.total - (lastPage - 1) * 20);
-
-    const ids = new Set([...first.alerts, ...run({ page: 2 }).alerts].map((a) => a.id));
-    expect(ids.size).toBe(40);
-  });
-
-  describe('buildMockAlerts', () => {
-    const now = NOW;
-
-    it('is deterministic for the same input', () => {
-      expect(buildMockAlerts(assets, recipients, now)).toEqual(
-        buildMockAlerts([...assets].reverse(), recipients, now)
-      );
+    const { result } = renderHook(() => useNotificationAlerts(), {
+      wrapper: wrapperFor(createClient()),
     });
 
-    it('keeps ids unique and sent_at within the last 30 days', () => {
-      const rows = buildMockAlerts(assets, recipients, now);
-      expect(new Set(rows.map((a) => a.id)).size).toBe(rows.length);
-      const earliest = now.getTime() - 30 * 24 * 60 * 60 * 1000;
-      expect(rows.every((a) => Date.parse(a.occurred_at) >= earliest)).toBe(true);
-    });
-
-    it('falls back to sample assets and contacts when the org has none', () => {
-      const rows = buildMockAlerts([], recipients, now);
-      expect(rows.length).toBeGreaterThan(0);
-      expect(new Set(rows.map((a) => a.asset_name))).toEqual(
-        new Set(['Blue Wind RV', 'Sea Breeze 24ft', 'Trailer #12'])
-      );
-      expect(new Set(rows.map((a) => a.recipient_name))).toEqual(
-        new Set(['Maria Nguyen', 'Sam Okafor'])
-      );
-    });
+    await waitFor(() => expect(result.current.error).toBeInstanceOf(Error));
+    expect(result.current.alerts).toEqual([]);
+    expect(result.current.total).toBe(0);
   });
 });
