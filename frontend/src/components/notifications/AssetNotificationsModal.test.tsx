@@ -147,6 +147,21 @@ describe('AssetNotificationsModal', () => {
     expect(screen.queryByTestId('alert-row-1')).not.toBeInTheDocument();
   });
 
+  it('shows a load error instead of the empty text', () => {
+    mockAlerts.mockReturnValue({
+      alerts: [],
+      total: 0,
+      page: 1,
+      perPage: 10,
+      isLoading: false,
+      error: new Error(),
+    });
+    renderModal();
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed to load alerts');
+    expect(screen.queryByText('No alerts for this asset yet.')).not.toBeInTheDocument();
+  });
+
   it('pages forward and back', () => {
     returnAlerts([alert(1)], 25);
     renderModal();
