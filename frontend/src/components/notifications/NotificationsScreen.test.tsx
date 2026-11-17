@@ -79,6 +79,22 @@ describe('NotificationsScreen', () => {
     expect(screen.queryByTestId('alerts-no-match')).not.toBeInTheDocument();
   });
 
+  it('shows a load error instead of the empty state', () => {
+    mockAlerts.mockReturnValue({
+      alerts: [],
+      total: 0,
+      page: 1,
+      perPage: 20,
+      isLoading: false,
+      error: new Error(),
+    });
+    render(<NotificationsScreen />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed to load alerts');
+    expect(screen.queryByText('No alerts yet')).not.toBeInTheDocument();
+    expect(screen.getByTestId('alert-filter-from')).toBeInTheDocument();
+  });
+
   it('shows a no-match state with a clear action when filters exclude everything', () => {
     returnAlerts([alert]);
     render(<NotificationsScreen />);
