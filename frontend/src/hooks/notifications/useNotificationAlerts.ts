@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useOrgStore } from '@/stores/orgStore';
 import { notificationsApi } from '@/lib/api/notifications';
 import type { NotificationAlert, NotificationAlertFilters } from '@/types/notifications';
@@ -18,7 +18,7 @@ const pad = (n: number, width = 2) => String(n).padStart(width, '0');
 
 /**
  * A bare YYYY-MM-DD bound as a timestamp covering the whole local day: local
- * 00:00:00.000 or 23:59:59.999, with the offset that applies on that day.
+ * 00:00:00.000 or 23:59:59.999999 (the server stores microseconds), with the offset that applies on that day.
  */
 export function localDayBound(date: string, edge: 'start' | 'end'): string {
   const [y, m, d] = date.split('-').map(Number);
@@ -27,9 +27,10 @@ export function localDayBound(date: string, edge: 'start' | 'end'): string {
   const offset = -dt.getTimezoneOffset();
   const sign = offset < 0 ? '-' : '+';
   const abs = Math.abs(offset);
+  const frac = edge === 'start' ? '000' : '999999';
   return (
     `${pad(dt.getFullYear(), 4)}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}` +
-    `T${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}.${pad(dt.getMilliseconds(), 3)}` +
+    `T${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}.${frac}` +
     `${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`
   );
 }
@@ -63,7 +64,9 @@ export function useNotificationAlerts(
   const q = useQuery({
     queryKey: ['notificationAlerts', currentOrg?.id, query],
     queryFn: () => notificationsApi.listAlerts(query).then((r) => r.data),
-    placeholderData: keepPreviousData,
+    // Keep the previous page across paging, but never across an org switch.
+    placeholderData: (prev, prevQuery) =>
+      prevQuery?.queryKey[1] === currentOrg?.id ? prev : undefined,
     staleTime: 30_000,
   });
 

@@ -1,7 +1,7 @@
 import React, { type ReactNode } from 'react';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from 'vitest';
 import { useNotificationAlerts, localDayBound, toAlertQuery } from './useNotificationAlerts';
 import { notificationsApi } from '@/lib/api/notifications';
 import type { NotificationAlert, NotificationAlertFilters } from '@/types/notifications';
@@ -9,6 +9,7 @@ import type { NotificationAlert, NotificationAlertFilters } from '@/types/notifi
 vi.mock('@/lib/api/notifications');
 
 const mockOrgState = { currentOrg: { id: 7, name: 'Test Org' } };
+const ORG_7 = { id: 7, name: 'Test Org' };
 vi.mock('@/stores/orgStore', () => ({
   useOrgStore: Object.assign(
     vi.fn((selector) => (selector ? selector(mockOrgState) : mockOrgState)),
@@ -43,19 +44,34 @@ const wrapperFor = (queryClient: QueryClient) =>
   };
 
 describe('localDayBound', () => {
+  const originalTZ = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = 'America/New_York';
+  });
+  afterAll(() => {
+    if (originalTZ === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTZ;
+  });
+
   it('starts a bare date at local midnight with an offset', () => {
     const s = localDayBound('2026-03-10', 'start');
     expect(s).toMatch(/^2026-03-10T00:00:00\.000[+-]\d{2}:\d{2}$/);
     expect(Date.parse(s)).toBe(new Date(2026, 2, 10, 0, 0, 0, 0).getTime());
   });
-  it('ends a bare date at local 23:59:59.999', () => {
+  it('ends a bare date at local 23:59:59.999999', () => {
     const s = localDayBound('2026-11-05', 'end');
+    expect(s).toMatch(/^2026-11-05T23:59:59\.999999[+-]\d{2}:\d{2}$/);
     expect(Date.parse(s)).toBe(new Date(2026, 10, 5, 23, 59, 59, 999).getTime());
   });
   it("uses each day's own offset across a DST change", () => {
-    for (const d of ['2026-01-15', '2026-07-15']) {
+    expect(localDayBound('2026-01-15', 'start')).toMatch(/-05:00$/);
+    expect(localDayBound('2026-07-15', 'start')).toMatch(/-04:00$/);
+    for (const d of ['2026-01-15', '2026-03-08', '2026-07-15', '2026-11-01']) {
       const [y, m, day] = d.split('-').map(Number);
       expect(Date.parse(localDayBound(d, 'start'))).toBe(new Date(y, m - 1, day).getTime());
+      expect(Date.parse(localDayBound(d, 'end'))).toBe(
+        new Date(y, m - 1, day, 23, 59, 59, 999).getTime()
+      );
     }
   });
 });
@@ -158,6 +174,30 @@ describe('useNotificationAlerts', () => {
     await waitFor(() => expect(notificationsApi.listAlerts).toHaveBeenCalledTimes(2));
     expect(result.current.isLoading).toBe(false);
     expect(result.current.alerts).toEqual([alert]);
+  });
+
+  it('does not show the previous org\'s alerts after an org switch', async () => {
+    vi.mocked(notificationsApi.listAlerts)
+      .mockResolvedValueOnce({
+        data: { data: [alert], pagination: { page: 1, per_page: 20, total: 1 } },
+      } as any)
+      .mockReturnValueOnce(new Promise(() => {}) as any);
+
+    const { result, rerender } = renderHook(() => useNotificationAlerts(), {
+      wrapper: wrapperFor(createClient()),
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.alerts).toEqual([alert]);
+
+    mockOrgState.currentOrg = { id: 8, name: 'Other Org' };
+    try {
+      rerender();
+      await waitFor(() => expect(notificationsApi.listAlerts).toHaveBeenCalledTimes(2));
+      expect(result.current.alerts).toEqual([]);
+      expect(result.current.isLoading).toBe(true);
+    } finally {
+      mockOrgState.currentOrg = ORG_7;
+    }
   });
 
   it('exposes a request failure as error, with no alerts', async () => {
