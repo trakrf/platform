@@ -1,7 +1,7 @@
-import { useState, Fragment } from 'react';
-import { ChevronRight, ChevronDown, Mail, MessageSquare } from 'lucide-react';
-import { formatDate, formatTime } from '@/lib/reports/utils';
-import type { NotificationAlert } from '@/types/notifications';
+import { useState, Fragment } from "react";
+import { ChevronRight, ChevronDown, Mail, MessageSquare } from "lucide-react";
+import { formatDate, formatTime } from "@/lib/reports/utils";
+import type { NotificationAlert } from "@/types/notifications";
 
 interface AlertListProps {
   alerts: NotificationAlert[];
@@ -14,8 +14,8 @@ const formatSent = (iso: string) => {
   return `${formatDate(date)} ${formatTime(date)}`;
 };
 
-function TypeBadge({ type }: { type: NotificationAlert['type'] }) {
-  return type === 'alarm' ? (
+function TypeBadge({ type }: { type: NotificationAlert["type"] }) {
+  return type === "alarm" ? (
     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 whitespace-nowrap">
       Alarm
     </span>
@@ -26,12 +26,15 @@ function TypeBadge({ type }: { type: NotificationAlert['type'] }) {
   );
 }
 
-function ChannelLabel({ channel }: { channel: NotificationAlert['channel'] }) {
-  const Icon = channel === 'email' ? Mail : MessageSquare;
+function ChannelLabel({ channel }: { channel: NotificationAlert["channel"] }) {
+  const Icon = channel === "email" ? Mail : MessageSquare;
   return (
     <span className="inline-flex items-center gap-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">
-      <Icon className="w-4 h-4 text-gray-500 dark:text-gray-400" aria-hidden="true" />
-      {channel === 'email' ? 'Email' : 'SMS'}
+      <Icon
+        className="w-4 h-4 text-gray-500 dark:text-gray-400"
+        aria-hidden="true"
+      />
+      {channel === "email" ? "Email" : "SMS"}
     </span>
   );
 }
@@ -41,7 +44,9 @@ function AlertMessage({ alert }: { alert: NotificationAlert }) {
   return (
     <div className="space-y-3 text-sm">
       {alert.subject && (
-        <p className="font-medium text-gray-900 dark:text-gray-100">{alert.subject}</p>
+        <p className="font-medium text-gray-900 dark:text-gray-100">
+          {alert.subject}
+        </p>
       )}
       <p className="p-3 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words">
         {alert.body}
@@ -50,7 +55,9 @@ function AlertMessage({ alert }: { alert: NotificationAlert }) {
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
           {details.map(([key, value]) => (
             <Fragment key={key}>
-              <dt className="text-gray-500 dark:text-gray-400 capitalize">{key}</dt>
+              <dt className="text-gray-500 dark:text-gray-400 capitalize">
+                {key}
+              </dt>
               <dd className="text-gray-900 dark:text-gray-100">{value}</dd>
             </Fragment>
           ))}
@@ -63,8 +70,9 @@ function AlertMessage({ alert }: { alert: NotificationAlert }) {
 // Single-open expander, as on the output devices screen: opening one alert
 // closes the previous one.
 export function AlertList({ alerts, compact = false }: AlertListProps) {
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const toggle = (id: number) => setExpandedId((current) => (current === id ? null : id));
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const toggle = (id: string) =>
+    setExpandedId((current) => (current === id ? null : id));
   const columnCount = compact ? 5 : 6;
 
   return (
@@ -98,7 +106,7 @@ export function AlertList({ alerts, compact = false }: AlertListProps) {
                         toggle(alert.id);
                       }}
                       className="p-1.5 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
-                      aria-label={`${isExpanded ? 'Hide' : 'Show'} message for ${alert.asset_name}`}
+                      aria-label={`${isExpanded ? "Hide" : "Show"} message for ${alert.asset_name}`}
                       aria-expanded={isExpanded}
                     >
                       {isExpanded ? (
@@ -110,7 +118,9 @@ export function AlertList({ alerts, compact = false }: AlertListProps) {
                   </td>
                   {!compact && (
                     <td className="py-2 px-3">
-                      <div className="text-gray-900 dark:text-gray-100">{alert.asset_name}</div>
+                      <div className="text-gray-900 dark:text-gray-100">
+                        {alert.asset_name}
+                      </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400">
                         {alert.asset_external_key}
                       </div>
@@ -122,7 +132,9 @@ export function AlertList({ alerts, compact = false }: AlertListProps) {
                   <td className="px-3">
                     <TypeBadge type={alert.type} />
                   </td>
-                  <td className="px-3 text-gray-700 dark:text-gray-300">{alert.recipient_name}</td>
+                  <td className="px-3 text-gray-700 dark:text-gray-300">
+                    {alert.recipient_name}
+                  </td>
                   <td className="px-3">
                     <ChannelLabel channel={alert.channel} />
                   </td>
@@ -147,7 +159,11 @@ export function AlertList({ alerts, compact = false }: AlertListProps) {
         {alerts.map((alert) => {
           const isExpanded = expandedId === alert.id;
           return (
-            <div key={alert.id} data-testid={`alert-card-${alert.id}`} className="p-3 space-y-2">
+            <div
+              key={alert.id}
+              data-testid={`alert-card-${alert.id}`}
+              className="p-3 space-y-2"
+            >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   {!compact && (
@@ -178,7 +194,7 @@ export function AlertList({ alerts, compact = false }: AlertListProps) {
                 aria-expanded={isExpanded}
                 className="text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
               >
-                {isExpanded ? 'Hide message' : 'Show message'}
+                {isExpanded ? "Hide message" : "Show message"}
               </button>
               {isExpanded && <AlertMessage alert={alert} />}
             </div>
