@@ -79,6 +79,22 @@ describe('NotificationsScreen', () => {
     expect(screen.queryByTestId('alerts-no-match')).not.toBeInTheDocument();
   });
 
+  it('shows the server detail when the load error carries one', () => {
+    mockAlerts.mockReturnValue({
+      alerts: [],
+      total: 0,
+      page: 1,
+      perPage: 20,
+      isLoading: false,
+      error: Object.assign(new Error('Request failed with status code 400'), {
+        response: { data: { error: { detail: 'to must not be earlier than from' } } },
+      }),
+    });
+    render(<NotificationsScreen />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('to must not be earlier than from');
+  });
+
   it('shows a load error instead of the empty state', () => {
     mockAlerts.mockReturnValue({
       alerts: [],
