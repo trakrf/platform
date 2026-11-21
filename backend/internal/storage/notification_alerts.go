@@ -62,15 +62,17 @@ func (s *Storage) ListNotificationAlerts(ctx context.Context, orgID int, f notif
 		for rows.Next() {
 			var (
 				a                                    notificationalert.Alert
+				publicID                             int64
 				source, channel                      string
 				alarmLocation, toLocation, fromPlace *string
 			)
-			if err := rows.Scan(&a.ID, &a.AssetID, &a.AssetName, &a.AssetExternalKey, &source, &a.OccurredAt,
+			if err := rows.Scan(&publicID, &a.AssetID, &a.AssetName, &a.AssetExternalKey, &source, &a.OccurredAt,
 				&a.SentAt, &a.RecipientID, &a.RecipientName, &channel,
 				&a.Subject, &a.Body, &alarmLocation, &toLocation, &fromPlace); err != nil {
 				return err
 			}
 			a.Type = notificationevent.Source(source)
+			a.ID = notificationalert.FormatID(a.SentAt, a.Type, publicID)
 			a.Channel = notificationdelivery.Channel(channel)
 			a.Details = alertDetails(a.Type, alarmLocation, toLocation, fromPlace)
 			out = append(out, a)
