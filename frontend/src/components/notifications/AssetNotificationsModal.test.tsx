@@ -44,7 +44,7 @@ function entitlement(state: Entitlement['state']): Entitlement {
 }
 
 const alert = (id: number): NotificationAlert => ({
-  id,
+  id: String(id),
   asset_id: 5,
   asset_name: 'Forklift 3',
   asset_external_key: 'FL-003',

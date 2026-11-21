@@ -39,7 +39,7 @@ const { NotificationBell } = await import('./NotificationBell');
 function makeAlert(id: number): NotificationAlert {
   const sent = new Date(Date.now() - id * 60 * 60 * 1000).toISOString();
   return {
-    id,
+    id: String(id),
     asset_id: id,
     asset_name: `Asset ${id}`,
     asset_external_key: `A-${id}`,

@@ -62,6 +62,16 @@ describe('notificationsApi', () => {
     });
   });
 
+  describe('alerts', () => {
+    it('lists alerts with the query as params', async () => {
+      const query = { page: 2, per_page: 10, type: 'alarm' as const };
+      await notificationsApi.listAlerts(query);
+      expect(apiClient.get).toHaveBeenCalledWith('/notification-alerts', {
+        params: query,
+      });
+    });
+  });
+
   describe('asset subscriptions', () => {
     it('lists subscriptions under the asset', async () => {
       await notificationsApi.listAssetSubscriptions(12);
