@@ -42,7 +42,7 @@ vi.mock('@/components/shared/pagination', () => ({
 
 const mockAlerts = vi.mocked(useNotificationAlerts);
 
-const alert = { id: 1, asset_name: 'Blue Wind RV' } as NotificationAlert;
+const alert = { id: '1', asset_name: 'Blue Wind RV' } as NotificationAlert;
 
 function returnAlerts(alerts: NotificationAlert[], total = alerts.length) {
   mockAlerts.mockImplementation((filters = {}) => ({

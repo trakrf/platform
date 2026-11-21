@@ -97,7 +97,8 @@ export type NotificationAlertType = 'alarm' | 'location_change';
 
 /** One notification sent to one recipient about one asset event. */
 export interface NotificationAlert {
-  id: number;
+  /** Readable and unique, e.g. "alert-20261117T004422Z-alarm-2814749767106561". */
+  id: string;
   asset_id: number;
   asset_name: string;
   asset_external_key: string;
@@ -113,7 +114,10 @@ export interface NotificationAlert {
   subject: string | null;
   /** The message as sent. */
   body: string;
-  /** Event specifics, e.g. { location: 'Gate A', direction: 'unknown' }. */
+  /**
+   * Event specifics: an alarm has `location`; a location change has `to` and,
+   * when known, `from`.
+   */
   details: Record<string, string>;
 }
 
@@ -122,6 +126,7 @@ export interface NotificationAlertFilters {
   type?: NotificationAlertType;
   recipient_id?: number;
   channel?: NotificationChannel;
+  /** Inclusive bounds on the sent time. A bare YYYY-MM-DD covers that local day. */
   from?: string;
   to?: string;
   page?: number;

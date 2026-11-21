@@ -63,8 +63,8 @@ function AlertMessage({ alert }: { alert: NotificationAlert }) {
 // Single-open expander, as on the output devices screen: opening one alert
 // closes the previous one.
 export function AlertList({ alerts, compact = false }: AlertListProps) {
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const toggle = (id: number) => setExpandedId((current) => (current === id ? null : id));
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const toggle = (id: string) => setExpandedId((current) => (current === id ? null : id));
   const columnCount = compact ? 5 : 6;
 
   return (

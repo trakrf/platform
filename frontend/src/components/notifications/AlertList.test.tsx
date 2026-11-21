@@ -4,7 +4,7 @@ import { AlertList } from './AlertList';
 import type { NotificationAlert } from '@/types/notifications';
 
 const alarm: NotificationAlert = {
-  id: 1,
+  id: '1',
   asset_id: 10,
   asset_name: 'Blue Wind RV',
   asset_external_key: 'RV-0042',
@@ -21,7 +21,7 @@ const alarm: NotificationAlert = {
 
 const move: NotificationAlert = {
   ...alarm,
-  id: 2,
+  id: '2',
   type: 'location_change',
   recipient_name: 'Sam Okafor',
   channel: 'sms',

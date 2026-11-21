@@ -4,7 +4,7 @@
  * Type-safe wrapper around the session-authenticated notification recipient
  * and asset subscription endpoints. Uses the shared apiClient with automatic
  * JWT injection and org_id context. Errors propagate unchanged — callers
- * extract RFC 7807. Alert history has no endpoint yet, so no call here.
+ * extract RFC 7807.
  */
 
 import { apiClient } from '../client';
@@ -17,6 +17,8 @@ import type {
   ListNotificationSubscriptionsResponse,
   CreateNotificationSubscriptionRequest,
   UpdateNotificationSubscriptionRequest,
+  ListNotificationAlertsResponse,
+  NotificationAlertFilters,
 } from '@/types/notifications';
 
 /**
@@ -93,4 +95,14 @@ export const notificationsApi = {
       data,
       { headers: { 'Content-Type': 'application/json' } }
     ),
+
+  /**
+   * Sent alerts, newest first and paginated. from/to must be RFC 3339
+   * instants: the server rejects bare dates and empty values.
+   * GET /api/v1/notification-alerts
+   */
+  listAlerts: (query: NotificationAlertFilters) =>
+    apiClient.get<ListNotificationAlertsResponse>('/notification-alerts', {
+      params: query,
+    }),
 };

@@ -5,6 +5,8 @@ package storage_test
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -142,10 +144,14 @@ func listAlerts(t *testing.T, db *testutil.TestDB, orgID int, f notificationaler
 	return alerts, total
 }
 
-func alertIDs(alerts []notificationalert.Alert) []int64 {
+// alertIDs returns the public id at the end of each alert's id.
+func alertIDs(t *testing.T, alerts []notificationalert.Alert) []int64 {
+	t.Helper()
 	out := make([]int64, 0, len(alerts))
 	for _, a := range alerts {
-		out = append(out, a.ID)
+		n, err := strconv.ParseInt(a.ID[strings.LastIndex(a.ID, "-")+1:], 10, 64)
+		require.NoError(t, err, a.ID)
+		out = append(out, n)
 	}
 	return out
 }
@@ -156,9 +162,10 @@ func TestListNotificationAlerts_DeliveredOnlyNewestFirstWithNames(t *testing.T) 
 
 	alerts, total := listAlerts(t, db, f.orgID, notificationalert.ListFilter{})
 	require.Equal(t, 3, total)
-	require.Equal(t, []int64{f.alarmEmail, f.alarmSMS, f.moveEmail}, alertIDs(alerts))
+	require.Equal(t, []int64{f.alarmEmail, f.alarmSMS, f.moveEmail}, alertIDs(t, alerts))
 
 	email := alerts[0]
+	require.Equal(t, fmt.Sprintf("alert-20261020T110000Z-alarm-%d", f.alarmEmail), email.ID)
 	require.Equal(t, f.assetA, email.AssetID)
 	require.Equal(t, "Test Asset", email.AssetName)
 	require.Equal(t, "ALERT-A", email.AssetExternalKey)
@@ -204,7 +211,7 @@ func TestListNotificationAlerts_Filters(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			alerts, total := listAlerts(t, db, f.orgID, tc.filter)
-			require.Equal(t, tc.want, alertIDs(alerts))
+			require.Equal(t, tc.want, alertIDs(t, alerts))
 			require.Equal(t, len(tc.want), total)
 		})
 	}
@@ -216,7 +223,7 @@ func TestListNotificationAlerts_PagesKeepTheTotal(t *testing.T) {
 
 	alerts, total := listAlerts(t, db, f.orgID, notificationalert.ListFilter{Limit: 2, Offset: 2})
 	require.Equal(t, 3, total)
-	require.Equal(t, []int64{f.moveEmail}, alertIDs(alerts))
+	require.Equal(t, []int64{f.moveEmail}, alertIDs(t, alerts))
 
 	alerts, total = listAlerts(t, db, f.orgID, notificationalert.ListFilter{Limit: 2, Offset: 10})
 	require.Equal(t, 3, total, "a page past the end still reports the total")
@@ -273,6 +280,6 @@ func TestListNotificationAlerts_PublicIDsAreNotTheSequence(t *testing.T) {
 
 	alerts, _ := listAlerts(t, db, f.orgID, notificationalert.ListFilter{})
 	for _, a := range alerts {
-		require.NotContains(t, internal, a.ID)
+		require.NotContains(t, internal, alertIDs(t, []notificationalert.Alert{a})[0])
 	}
 }
