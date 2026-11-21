@@ -7,7 +7,7 @@
  */
 
 /** Delivery channel for a subscription. */
-export type NotificationChannel = "email" | "sms";
+export type NotificationChannel = 'email' | 'sms';
 
 /** A contact that can receive asset notifications. Has an email, a phone, or both. */
 export interface NotificationRecipient {
@@ -93,7 +93,7 @@ export interface ListNotificationSubscriptionsResponse {
  * against generated data until the backend implements this exact shape.
  */
 
-export type NotificationAlertType = "alarm" | "location_change";
+export type NotificationAlertType = 'alarm' | 'location_change';
 
 /** One notification sent to one recipient about one asset event. */
 export interface NotificationAlert {
