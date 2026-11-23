@@ -22,7 +22,7 @@ podman exec -i timescaledb psql -U postgres -d trakrf -v ON_ERROR_STOP=1 \
   < backend/database/seeds/contract_test_seed.sql >/dev/null
 echo "   tag $EPC -> asset = $(podman exec timescaledb psql -U postgres -d trakrf -tAc "SELECT asset_id IS NOT NULL FROM trakrf.tags WHERE value='$EPC'")"
 
-# The subscriber listens only on topics a scan device registers (TRA-922),
+# The subscriber listens only on topics a scan device registers,
 # and the contract seed registers none, so without this row step 3 can never
 # pass. Idempotent: keyed on the topic, not on an id (the id trigger mints one).
 podman exec -i timescaledb psql -U postgres -d trakrf -v ON_ERROR_STOP=1 -q <<SQL
