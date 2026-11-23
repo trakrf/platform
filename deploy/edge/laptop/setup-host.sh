@@ -67,14 +67,16 @@ step_tailscale() {
   command -v tailscale >/dev/null || curl -fsSL https://tailscale.com/install.sh | sh
   systemctl enable --now tailscaled
   # Login is interactive by design (a URL Mike approves); never automated here.
+  # Tailscale SSH stays OFF. With it on, tailscaled takes port 22 on the
+  # tailnet address, and the tailnet's 'check' policy then demands a browser
+  # approval per session: headless access dies, the trap the EliteDesk hit.
+  # Off, Tailscale is just the network and plain key-based OpenSSH answers.
   if tailscale status >/dev/null 2>&1; then
-    tailscale set --ssh
+    tailscale set --ssh=false
   else
-    log "  not logged in: run 'sudo tailscale up --ssh --hostname=$(hostname)'"
+    log "  not logged in: run 'sudo tailscale up --hostname=$(hostname)'"
     log "  then disable key expiry for this machine in the admin console"
   fi
-  # OpenSSH stays on as the headless path: a Tailscale SSH 'check' policy
-  # demands a browser re-auth, which no script can satisfy.
   # Ubuntu socket-activates sshd; enable whichever unit the release ships,
   # not both.
   if systemctl cat ssh.socket >/dev/null 2>&1; then
