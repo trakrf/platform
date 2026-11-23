@@ -1,0 +1,10 @@
+# /etc/apparmor.d/local/mosquitto, included by the stock Ubuntu profile.
+# Ubuntu 26.04's apparmor package ships a 'mosquitto' profile attached by
+# path to /usr/sbin/mosquitto. A rootless container is not AppArmor-confined
+# itself, so the eclipse-mosquitto image's binary execs at that same path and
+# picks up the HOST profile, which only allows /etc/mosquitto. The broker
+# then dies with "Unable to open config file /mosquitto/config/mosquitto.conf".
+# These are the container's paths (deploy/edge/quadlets/mosquitto.container).
+file /mosquitto/config/ r,
+file /mosquitto/config/** r,
+file /mosquitto/data/** rwk,

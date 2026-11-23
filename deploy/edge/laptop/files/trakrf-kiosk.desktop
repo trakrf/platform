@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=TrakRF kiosk
+Exec=/usr/local/bin/trakrf-kiosk @KIOSK_URL@
+X-GNOME-Autostart-enabled=true
+NoDisplay=true

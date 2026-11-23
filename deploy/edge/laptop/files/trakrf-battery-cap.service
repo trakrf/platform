@@ -1,0 +1,18 @@
+# Battery charge cap for a demo laptop that lives on AC (thinkpad_acpi).
+# Holding a Li-ion cell at 100 % on permanent AC ages it fastest; 75-80 %
+# leaves enough charge to ride out a power blip or carry the box between rooms.
+[Unit]
+Description=TrakRF demo box: battery charge cap 75-80%
+ConditionPathExists=/sys/class/power_supply/BAT0/charge_control_end_threshold
+
+[Service]
+Type=oneshot
+# The kernel rejects any write that leaves start >= end, so the safe order
+# depends on where the thresholds sit now (stock 95/100 needs start first; a
+# lower pair needs end first). Writing start, end, start covers both: the
+# first start write may fail, the second one cannot.
+ExecStart=/bin/sh -c 'B=/sys/class/power_supply/BAT0; echo 75 > $B/charge_control_start_threshold 2>/dev/null; echo 80 > $B/charge_control_end_threshold && echo 75 > $B/charge_control_start_threshold'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
