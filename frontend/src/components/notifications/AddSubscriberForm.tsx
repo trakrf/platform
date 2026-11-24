@@ -14,10 +14,12 @@ import {
 } from '@/lib/notifications/validators';
 import { PaidGate } from '@/components/entitlement';
 import { PhoneInput } from './PhoneInput';
+import { SmsConsentCheckbox } from './SmsConsentCheckbox';
 import type { NotificationChannel } from '@/types/notifications';
 
 const CHANNELS: NotificationChannel[] = ['email', 'sms'];
 const CHANNEL_LABELS: Record<NotificationChannel, string> = { email: 'Email', sms: 'SMS' };
+
 
 type Mode = 'existing' | 'new';
 type NewField = 'name' | 'email' | 'phone';
@@ -91,6 +93,10 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
   const [unchecked, setUnchecked] = useState<Set<NotificationChannel>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [retry, setRetry] = useState<RetryState | null>(null);
+  // Carrier rules require the operator to confirm, every time, that the
+  // contact agreed to texts; it is never pre-ticked and is cleared whenever
+  // the contact or the SMS choice changes.
+  const [smsConsent, setSmsConsent] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -111,6 +117,12 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
   const needsContact = mode === 'existing' && !selected;
 
   const found: ContactErrors = mode === 'new' ? validateContactForm(form) : {};
+  const wantsSms = checked.includes('sms');
+  const needsSmsConsent = wantsSms && !smsConsent;
+  const smsName = (mode === 'existing' ? selected?.name : form.name.trim()) || 'this contact';
+  // A half-typed number (no country code yet) is not shown as if it were real.
+  const typedPhone = found.phoneCode || found.phoneNumber ? '' : phone;
+  const smsPhone = (mode === 'existing' ? selected?.phone : typedPhone) || 'the number provided';
   const show = (field: NewField) => submitted || !!touched[field];
   const fieldErrors: ContactErrors = {
     name: show('name') ? found.name : undefined,
@@ -133,6 +145,7 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
       else next.add(channel);
       return next;
     });
+    if (channel === 'sms' && !on) setSmsConsent(false);
   };
 
   const runSubscribe = async (
@@ -168,7 +181,13 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
 
     setSubmitted(true);
     setServerError(null);
-    if (needsContact || checked.length === 0 || Object.values(found).some(Boolean)) return;
+    if (
+      needsContact ||
+      checked.length === 0 ||
+      needsSmsConsent ||
+      Object.values(found).some(Boolean)
+    )
+      return;
 
     setSubmitting(true);
     try {
@@ -222,6 +241,7 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
         setTouched({});
         setSubmitted(false);
         setServerError(null);
+        setSmsConsent(false);
       }}
       className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors disabled:opacity-50 ${
         mode === value
@@ -293,6 +313,7 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
                     onChange={() => {
                       setSelectedId(r.id);
                       setUnchecked(new Set());
+                      setSmsConsent(false);
                     }}
                     className="mt-1 h-4 w-4 text-blue-600 border-gray-300 dark:border-gray-600 focus:ring-blue-500"
                   />
@@ -350,7 +371,10 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
             <PhoneInput
               id="add-subscriber-phone"
               value={{ code: form.phoneCode, number: form.phoneNumber }}
-              onChange={({ code, number }) => setField({ phoneCode: code, phoneNumber: number })}
+              onChange={({ code, number }) => {
+                setField({ phoneCode: code, phoneNumber: number });
+                setSmsConsent(false);
+              }}
               onBlur={() => touch('phone')}
               errors={{ phoneCode: fieldErrors.phoneCode, phoneNumber: fieldErrors.phoneNumber }}
               disabled={locked}
@@ -398,6 +422,16 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
         )}
       </fieldset>
 
+      <SmsConsentCheckbox
+        contactName={smsName}
+        phone={smsPhone}
+        assetName={assetName}
+        smsChosen={wantsSms}
+        checked={smsConsent}
+        disabled={locked}
+        onChange={setSmsConsent}
+      />
+
       {retry && (
         <div role="alert" className="p-3 space-y-1 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm">
           {retry.done.length > 0 && (
@@ -440,7 +474,7 @@ export function AddSubscriberForm({ assetId, assetName, onDone, onCancel }: AddS
             <button
               type="submit"
               data-testid="add-subscriber-submit"
-              disabled={submitting || needsContact || checked.length === 0}
+              disabled={submitting || needsContact || checked.length === 0 || needsSmsConsent}
               className="w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
             >
               {submitting ? 'Subscribing…' : 'Subscribe'}

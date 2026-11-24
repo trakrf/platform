@@ -73,6 +73,9 @@ function renderForm() {
 const checkbox = (channel: NotificationChannel) =>
   screen.getByTestId(`add-subscriber-channel-${channel}`) as HTMLInputElement;
 
+const consent = () => screen.getByTestId('add-subscriber-sms-consent-checkbox') as HTMLInputElement;
+const submitButton = () => screen.getByTestId('add-subscriber-submit') as HTMLButtonElement;
+
 describe('AddSubscriberForm', () => {
   beforeEach(() => {
     hookState.recipients = [
@@ -137,6 +140,7 @@ describe('AddSubscriberForm', () => {
     fireEvent.change(screen.getByTestId('add-subscriber-phone-number'), { target: { value: '(555) 123-4567' } });
     expect(checkbox('email')).toBeChecked();
     expect(checkbox('sms')).toBeChecked();
+    fireEvent.click(consent());
     fireEvent.click(screen.getByTestId('add-subscriber-submit'));
 
     await waitFor(() => expect(onDone).toHaveBeenCalled());
@@ -177,6 +181,7 @@ describe('AddSubscriberForm', () => {
     fireEvent.change(screen.getByTestId('add-subscriber-email'), { target: { value: 'cleo@example.com' } });
     fireEvent.change(screen.getByTestId('add-subscriber-phone-code'), { target: { value: '+1' } });
     fireEvent.change(screen.getByTestId('add-subscriber-phone-number'), { target: { value: '5551234567' } });
+    fireEvent.click(consent());
     fireEvent.click(screen.getByTestId('add-subscriber-submit'));
 
     expect(await screen.findByText('SMS failed: SMS provider unavailable')).toBeInTheDocument();
@@ -252,5 +257,110 @@ describe('AddSubscriberForm', () => {
     expect(screen.getByText('Name is required')).toBeInTheDocument();
     expect(screen.getByText('Enter a valid email address')).toBeInTheDocument();
     expect(create).not.toHaveBeenCalled();
+  });
+
+  describe('SMS consent', () => {
+    const pickBen = () => fireEvent.click(screen.getByTestId('add-subscriber-contact-2'));
+
+    it('shows the consent box unticked, with the disclosures, when SMS is chosen', () => {
+      renderForm();
+      pickBen();
+
+      expect(checkbox('sms')).toBeChecked();
+      expect(consent()).not.toBeChecked();
+      const box = screen.getByTestId('add-subscriber-sms-consent');
+      expect(box).toHaveTextContent(
+        'I confirm Ben has agreed to receive recurring automated SMS alerts from TrakRF about Forklift 3 at +15551234567.'
+      );
+      expect(box).toHaveTextContent('Message frequency varies. Message and data rates may apply.');
+      expect(box).toHaveTextContent('Reply HELP for help or STOP to opt out.');
+      expect(screen.getByRole('link', { name: 'Terms of Service' })).toHaveAttribute('href', 'https://trakrf.id/tos');
+      expect(screen.getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
+        'href',
+        'https://trakrf.id/privacy-policy'
+      );
+    });
+
+    it('blocks Subscribe until consent is ticked', async () => {
+      subscribe.mockResolvedValue({ succeeded: [sub(11, 2, 'email'), sub(12, 2, 'sms')], failed: [] });
+      renderForm();
+      pickBen();
+
+      expect(submitButton()).toBeDisabled();
+      fireEvent.click(submitButton());
+      expect(subscribe).not.toHaveBeenCalled();
+
+      fireEvent.click(consent());
+      expect(submitButton()).toBeEnabled();
+      fireEvent.click(submitButton());
+      await waitFor(() => expect(onDone).toHaveBeenCalled());
+      expect(subscribe).toHaveBeenCalledWith({ recipientId: 2, channels: ['email', 'sms'] });
+    });
+
+    it('shows the consent box before any contact is picked, inactive', () => {
+      renderForm();
+
+      expect(screen.getByTestId('add-subscriber-sms-consent')).toHaveTextContent(
+        'I confirm this contact has agreed'
+      );
+      expect(consent()).toBeDisabled();
+      expect(consent()).not.toBeChecked();
+    });
+
+    it('keeps the consent box visible but inactive, and allows email-only, once SMS is unticked', () => {
+      renderForm();
+      pickBen();
+      fireEvent.click(consent());
+      fireEvent.click(checkbox('sms'));
+
+      expect(consent()).toBeDisabled();
+      expect(consent()).not.toBeChecked();
+      expect(screen.getByText(/Choose SMS above to subscribe by text/)).toBeInTheDocument();
+      expect(submitButton()).toBeEnabled();
+    });
+
+    it('clears consent when SMS is unticked and re-ticked', () => {
+      renderForm();
+      pickBen();
+      fireEvent.click(consent());
+      fireEvent.click(checkbox('sms'));
+      fireEvent.click(checkbox('sms'));
+
+      expect(consent()).not.toBeChecked();
+    });
+
+    it('clears consent when a different contact is picked', () => {
+      hookState.recipients = [...hookState.recipients, recipient(3, 'Cal', { phone: '+15559876543' })];
+      renderForm();
+      pickBen();
+      fireEvent.click(consent());
+      fireEvent.click(screen.getByTestId('add-subscriber-contact-3'));
+
+      expect(consent()).not.toBeChecked();
+      expect(screen.getByTestId('add-subscriber-sms-consent')).toHaveTextContent('I confirm Cal has agreed');
+    });
+
+    it('does not show a half-typed number as the number consented to', () => {
+      renderForm();
+      fireEvent.click(screen.getByTestId('add-subscriber-mode-new'));
+      fireEvent.change(screen.getByTestId('add-subscriber-name'), { target: { value: 'Dee' } });
+      fireEvent.change(screen.getByTestId('add-subscriber-phone-number'), { target: { value: '5551112222' } });
+      expect(screen.getByTestId('add-subscriber-sms-consent')).toHaveTextContent('at the number provided.');
+
+      fireEvent.change(screen.getByTestId('add-subscriber-phone-code'), { target: { value: '+1' } });
+      expect(screen.getByTestId('add-subscriber-sms-consent')).toHaveTextContent('at +15551112222.');
+    });
+
+    it('clears consent when a new contact\'s phone number changes', () => {
+      renderForm();
+      fireEvent.click(screen.getByTestId('add-subscriber-mode-new'));
+      fireEvent.change(screen.getByTestId('add-subscriber-name'), { target: { value: 'Dee' } });
+      fireEvent.change(screen.getByTestId('add-subscriber-phone-code'), { target: { value: '+1' } });
+      fireEvent.change(screen.getByTestId('add-subscriber-phone-number'), { target: { value: '5551112222' } });
+      fireEvent.click(consent());
+      fireEvent.change(screen.getByTestId('add-subscriber-phone-number'), { target: { value: '5551113333' } });
+
+      expect(consent()).not.toBeChecked();
+    });
   });
 });
