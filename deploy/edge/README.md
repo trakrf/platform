@@ -270,8 +270,9 @@ tracking `prod`, with manual `preview → demo` promotion.
 ## Known / follow-ups
 
 - Unclean-shutdown / resume-from-suspend forward-wedge resilience — handled by the
-  rootlessport watchdog (TRA-989, see above). Laptop rig + lid-as-power-button + kiosk +
-  BIOS restore-on-power-loss are a separate medium-term hardware ticket.
+  rootlessport watchdog (TRA-989, see above).
+- **Laptop kit:** a single ThinkPad as server, demo LAN and kiosk screen — power
+  key, lid, power-on-with-AC, its own access point, Chrome kiosk — is
+  [`laptop/`](laptop/README.md). This README stays the stack it runs.
 - Pin off the floating `:preview` tag (see Updates) — separate ticket.
-- gnome-kiosk deprioritized (laptop-driven demos); reopen for a trade-show booth.
 - Prometheus/Grafana = TRA-908 fast-follow (+2 quadlets).

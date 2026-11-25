@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Kiosk launcher for the demo laptop's own screen. Runs from the kiosk user's
+# GNOME autostart. Waits for the backend, then holds Chrome fullscreen on the
+# app and relaunches it if it exits.
+#
+# Escape hatch: Alt+F4 closes Chrome to the desktop; the loop relaunches it
+# after 10 s unless /tmp/trakrf-kiosk.stop exists. Ctrl+Alt+F3 gives a text
+# console for an admin login.
+set -u
+URL="${1:-http://localhost:8080}"
+STOP=/tmp/trakrf-kiosk.stop
+
+# A demo screen must not blank or lock mid-demo.
+gsettings set org.gnome.desktop.session idle-delay 0 2>/dev/null || true
+gsettings set org.gnome.desktop.screensaver lock-enabled false 2>/dev/null || true
+gsettings set org.gnome.settings-daemon.plugins.power idle-dim false 2>/dev/null || true
+
+# The stack starts at boot under the stack user's linger, often after this
+# session, so wait for health rather than opening onto a connection error.
+for _ in $(seq 1 180); do
+  curl -fsS -o /dev/null "$URL/health" && break
+  sleep 2
+done
+
+while [ ! -e "$STOP" ]; do
+  # Web Bluetooth on Linux Chrome still sits behind the experimental flag.
+  # localhost is a secure context, so no TLS is needed for it.
+  google-chrome --kiosk --no-first-run --noerrdialogs --disable-session-crashed-bubble \
+    --password-store=basic --enable-experimental-web-platform-features \
+    --user-data-dir="$HOME/.config/trakrf-kiosk-chrome" "$URL"
+  sleep 10
+done

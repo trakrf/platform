@@ -55,7 +55,12 @@ alias be := backend
 check-contributing:
     @./scripts/assert-contributing-paths.sh
 
-lint: check-contributing (frontend "lint") (backend "lint") (cli "lint")
+lint: check-contributing lint-edge (frontend "lint") (backend "lint") (cli "lint")
+
+# Demo-box host scripts: they run as root on a laptop at a venue, where a
+# quoting slip is found by Tim rather than by CI.
+lint-edge:
+    shellcheck deploy/edge/smoke-test.sh deploy/edge/laptop/setup-host.sh deploy/edge/laptop/seed.sh deploy/edge/laptop/files/trakrf-kiosk
 
 test: test-ops test-release-guards test-db-init test-env-drift test-bootstrap (frontend "test") (backend "test") (cli "test")
 

@@ -22,6 +22,26 @@ podman exec -i timescaledb psql -U postgres -d trakrf -v ON_ERROR_STOP=1 \
   < backend/database/seeds/contract_test_seed.sql >/dev/null
 echo "   tag $EPC -> asset = $(podman exec timescaledb psql -U postgres -d trakrf -tAc "SELECT asset_id IS NOT NULL FROM trakrf.tags WHERE value='$EPC'")"
 
+# The subscriber listens only on topics a scan device registers,
+# and the contract seed registers none, so without this row step 3 can never
+# pass. Idempotent: keyed on the topic, not on an id (the id trigger mints one).
+podman exec -i timescaledb psql -U postgres -d trakrf -v ON_ERROR_STOP=1 -q <<SQL
+INSERT INTO trakrf.scan_devices (org_id, name, type, transport, publish_topic)
+SELECT id, 'smoke-test $CAP', 'csl_cs463', 'mqtt', 'trakrf.id/$CAP'
+  FROM trakrf.organizations WHERE identifier = 'bb-test-org'
+   AND NOT EXISTS (SELECT 1 FROM trakrf.scan_devices
+                    WHERE publish_topic = 'trakrf.id/$CAP' AND deleted_at IS NULL);
+SQL
+# A direct DB insert reaches the subscriber only on its 5-minute reconcile
+# (CRUD through the API subscribes inline). Restart so the bulk subscribe on
+# connect picks the topic up now.
+if ! podman logs backend 2>&1 | grep -q "topic=trakrf.id/$CAP"; then
+  echo "   restarting backend to subscribe trakrf.id/$CAP"
+  systemctl --user restart backend.service
+  for _ in $(seq 1 60); do curl -fsS -o /dev/null http://127.0.0.1:8080/health && break; sleep 2; done
+  sleep 3
+fi
+
 echo "2) publish synthetic CS463 read on trakrf.id/$CAP"
 NOW_US=$(( $(date +%s) * 1000000 ))
 PAYLOAD=$(printf '{"tags":[{"epc":"%s","timeStampOfRead":%d,"antennaPort":1,"capturePointName":"%s","rssi":"-55"}]}' "$EPC" "$NOW_US" "$CAP")
