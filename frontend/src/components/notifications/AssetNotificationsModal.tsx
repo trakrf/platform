@@ -3,6 +3,7 @@ import { UserPlus, X } from 'lucide-react';
 import { useEscapeToClose } from '@/hooks/useEscapeToClose';
 import { PaidGate } from '@/components/entitlement';
 import { useNotificationAlerts } from '@/hooks/notifications/useNotificationAlerts';
+import { getApiErrorMessage } from '@/lib/api/errorMessage';
 import { AddSubscriberForm } from './AddSubscriberForm';
 import { AlertList } from './AlertList';
 import { NotificationsGate } from './NotificationsGate';
@@ -19,7 +20,7 @@ const PAGE_BUTTON =
  */
 function AssetAlertHistory({ assetId }: { assetId: number }) {
   const [page, setPage] = useState(1);
-  const { alerts, total, isLoading } = useNotificationAlerts({
+  const { alerts, total, isLoading, error } = useNotificationAlerts({
     asset_id: assetId,
     page,
     per_page: ALERTS_PER_PAGE,
@@ -29,6 +30,12 @@ function AssetAlertHistory({ assetId }: { assetId: number }) {
   let body;
   if (isLoading) {
     body = <p className="py-2 text-sm text-gray-500 dark:text-gray-400">Loading alerts…</p>;
+  } else if (error) {
+    body = (
+      <p role="alert" className="py-2 text-sm text-red-600 dark:text-red-400">
+        {getApiErrorMessage(error, 'Failed to load alerts')}
+      </p>
+    );
   } else if (total === 0) {
     body = (
       <p className="py-2 text-sm text-gray-500 dark:text-gray-400">

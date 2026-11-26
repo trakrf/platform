@@ -79,6 +79,38 @@ describe('NotificationsScreen', () => {
     expect(screen.queryByTestId('alerts-no-match')).not.toBeInTheDocument();
   });
 
+  it('shows the server detail when the load error carries one', () => {
+    mockAlerts.mockReturnValue({
+      alerts: [],
+      total: 0,
+      page: 1,
+      perPage: 20,
+      isLoading: false,
+      error: Object.assign(new Error('Request failed with status code 400'), {
+        response: { data: { error: { detail: 'to must not be earlier than from' } } },
+      }),
+    });
+    render(<NotificationsScreen />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('to must not be earlier than from');
+  });
+
+  it('shows a load error instead of the empty state', () => {
+    mockAlerts.mockReturnValue({
+      alerts: [],
+      total: 0,
+      page: 1,
+      perPage: 20,
+      isLoading: false,
+      error: new Error(),
+    });
+    render(<NotificationsScreen />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed to load alerts');
+    expect(screen.queryByText('No alerts yet')).not.toBeInTheDocument();
+    expect(screen.getByTestId('alert-filter-from')).toBeInTheDocument();
+  });
+
   it('shows a no-match state with a clear action when filters exclude everything', () => {
     returnAlerts([alert]);
     render(<NotificationsScreen />);

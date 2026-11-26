@@ -147,6 +147,37 @@ describe('AssetNotificationsModal', () => {
     expect(screen.queryByTestId('alert-row-1')).not.toBeInTheDocument();
   });
 
+  it('shows the server detail when the load error carries one', () => {
+    mockAlerts.mockReturnValue({
+      alerts: [],
+      total: 0,
+      page: 1,
+      perPage: 10,
+      isLoading: false,
+      error: Object.assign(new Error('Request failed with status code 400'), {
+        response: { data: { error: { detail: 'to must not be earlier than from' } } },
+      }),
+    });
+    renderModal();
+
+    expect(screen.getByRole('alert')).toHaveTextContent('to must not be earlier than from');
+  });
+
+  it('shows a load error instead of the empty text', () => {
+    mockAlerts.mockReturnValue({
+      alerts: [],
+      total: 0,
+      page: 1,
+      perPage: 10,
+      isLoading: false,
+      error: new Error(),
+    });
+    renderModal();
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed to load alerts');
+    expect(screen.queryByText('No alerts for this asset yet.')).not.toBeInTheDocument();
+  });
+
   it('pages forward and back', () => {
     returnAlerts([alert(1)], 25);
     renderModal();
