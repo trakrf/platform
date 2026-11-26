@@ -1,5 +1,5 @@
-const TERMS_URL = 'https://trakrf.id/tos';
-const PRIVACY_URL = 'https://trakrf.id/privacy-policy';
+const TERMS_URL = 'https://docs.trakrf.id/terms';
+const PRIVACY_URL = 'https://docs.trakrf.id/privacy';
 const LINK = 'text-blue-600 dark:text-blue-400 underline';
 
 interface SmsConsentCheckboxProps {
@@ -47,7 +47,7 @@ export function SmsConsentCheckbox({
           about {assetName} at {phone}. Consent is not a condition of purchase. Message frequency
           varies. Message and data rates may apply. Reply HELP for help or STOP to opt out. See the{' '}
           <a href={TERMS_URL} target="_blank" rel="noreferrer" className={LINK}>
-            Terms of Service
+            Terms and Conditions
           </a>{' '}
           and{' '}
           <a href={PRIVACY_URL} target="_blank" rel="noreferrer" className={LINK}>

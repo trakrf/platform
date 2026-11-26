@@ -274,10 +274,10 @@ describe('AddSubscriberForm', () => {
       );
       expect(box).toHaveTextContent('Message frequency varies. Message and data rates may apply.');
       expect(box).toHaveTextContent('Reply HELP for help or STOP to opt out.');
-      expect(screen.getByRole('link', { name: 'Terms of Service' })).toHaveAttribute('href', 'https://trakrf.id/tos');
+      expect(screen.getByRole('link', { name: 'Terms and Conditions' })).toHaveAttribute('href', 'https://docs.trakrf.id/terms');
       expect(screen.getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
         'href',
-        'https://trakrf.id/privacy-policy'
+        'https://docs.trakrf.id/privacy'
       );
     });
 
