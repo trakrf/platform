@@ -4,11 +4,12 @@ Takes a factory-fresh CSL CS463 to a reader that publishes reads to a TrakRF
 environment, with `mqtt-rpcd` running on it. Reads only: an alarm on a GPO port
 is a [separate step](cs463-alarm-output.md) on top of this one.
 
-Every step here was executed on a real reader. Where a step has a command, it is
-the command that ran. The daemon's own contract and golden config live in
-[`mqtt-rpc/README.md`](../../mqtt-rpc/README.md), and its installer in
-[`deploy/edge/mqtt-rpc/README.md`](../../deploy/edge/mqtt-rpc/README.md). This
-page links to them rather than restating them.
+Steps 0 to 7 and the install were executed on real readers; where one has a
+command, it is the command that ran. The fault texts and recovery timings on
+the [status page](cs463-status-and-updates.md) come from the daemon's source
+and documentation, not from a reader made to fail. The daemon's contract is in
+[`mqtt-rpc/README.md`](../../mqtt-rpc/README.md) and its installer in
+[`deploy/edge/mqtt-rpc/README.md`](../../deploy/edge/mqtt-rpc/README.md).
 
 **The order matters.** Move the reader to the address it ships with right
 after SSH and the clock (§3), so later checks run on that address. Register it
@@ -16,9 +17,10 @@ in the platform (§6) before building its CloudServer (§7), because registratio
 decides the topic; build the CloudServer before installing the daemon (§8),
 which exits without it.
 
-**Plan on about 10 minutes from power-on to reads**, every boot. The reader is
-ready when its retained status reads `api=healthy golden=applied` (§8), not
-when a timer runs out.
+**Plan on about 10 minutes from power-on to reads.** A healthy boot takes about
+2; one where the vendor app wedges and the daemon restarts it takes about 10,
+and that is common. The reader is ready when its retained status reads
+`api=healthy golden=applied` (§8), not when a timer runs out.
 
 ## 0. Before you start
 
@@ -37,16 +39,28 @@ You need:
   all claim the same address until §3 moves them.
 - **An operator machine** with Go (the installer cross-builds the daemon),
   `python3`, `curl`, `openssl`, `mosquitto-clients`, and optionally `sshpass`
-  for the first password login.
-- **The broker CA bundle the reader will trust.** The reader verifies the broker
-  against the PEM you upload in §7; it does not use a system store. Check the
-  bundle against the live broker before you upload it:
+  for the first password login. It needs this repo with its tags
+  (`git fetch --tags`; the build is named by `git describe`) and outbound HTTPS
+  to `github.com` and `api.github.com` (§8 downloads a release).
+- **The trust bundle the reader will verify the broker with.** The vendor app
+  uses the PEM you upload in §7 and no system store, and it **trusts only the
+  first certificate in the file**. So the bundle holds trust anchors only, with
+  a self-signed root first: for a Let's Encrypt broker, `ISRG Root X1`.
+  Cross-signed roots may follow it. Never lead with the broker's certificate or
+  its issuing intermediate: that works until the certificate is renewed under
+  another intermediate, and then the reader publishes nothing. Check the first
+  certificate alone against the live broker, the way the reader will use it:
 
   ```sh
-  echo | openssl s_client -connect <broker-host>:8883 -servername <broker-host> \
-      -CAfile ca.pem 2>/dev/null | grep 'Verify return'
+  openssl x509 -in anchors.pem -noout -subject -issuer -enddate   # subject = issuer
+  awk '/BEGIN CERT/{n++} n==1' anchors.pem > first.pem
+  openssl s_client -connect <broker-host>:8883 -servername <broker-host> \
+      -CAfile first.pem -verify_return_error </dev/null | grep 'Verify return'
   # Verify return code: 0 (ok)
   ```
+
+  A whole-file `-CAfile anchors.pem` check proves nothing here: a bundle that
+  leads with an intermediate passes it.
 
 - **The environment's broker credential** (`username` / `password` from the
   `trakrf-mosquitto-auth` secret in the environment's namespace). It is a shared
@@ -234,36 +248,10 @@ ssh cs463-xxyyzz 'tar -C /opt/EmbeddedGlassFish -czf - config cert' > cs463-xxyy
 
 ## 5. Remove every publishing entity
 
-The factory image carries demo CloudServers (HTTP, TCP, and an enabled MQTT
-entry with a random client id) and the actions, heartbeats and notifications
-that point at them. Left in place they collide with the golden config; a
-leftover MQTT entry caused client-id collisions on an earlier reader.
-
-**Only delete things that publish.** GPIO, display and USB examples publish
-nothing; leave them alone, as the daemon does.
-
-The reader refuses to delete anything still referenced, so map the references
-first (`listServer`, `listEvent`, `listResultantAction`, `listHeartBeat`,
-`listPowerUpNotification`, `listReaderErrorNotification`), then delete from the
-leaves inward. The ids contain spaces and parentheses, so URL-encode them:
-
-```sh
-del() { curl -s -G "$B" --data-urlencode "session_id=$S" \
-          --data-urlencode "command=$1" --data-urlencode "$2=$3"; echo; }
-```
-
-| Order | What | Command | Id parameter |
-|---|---|---|---|
-| 1 | Events whose `resultant_action` sends to a server | `delEvent` | `event_id` |
-| 2 | Actions with a non-empty `server_id` | `delResultantAction` | `action_id` |
-| 3 | Heartbeats with a non-empty `server_id` | `delHeartBeat` | `heart_beat_id` |
-| 4 | Power-up notifications | `delPowerUpNotification` | `notification_id` |
-| 5 | Reader-error notifications | `delReaderErrorNotification` | `notification_id` |
-| 6 | Every CloudServer | `delServerID` | `server_id` |
-
-On the factory image that came to four events, five actions, one heartbeat, one
-power-up and one reader-error notification, and four servers. Heartbeats with
-no server (the ARP and ping ones) stay.
+The factory image carries demo CloudServers and the events, actions, heartbeats
+and notifications that point at them. Left in place they collide with the
+golden config. Delete them in the order given in
+[Clearing a CS463's factory config](cs463-factory-config.md).
 
 **Done means:** `listServer` returns no `<Server>`; no action, heartbeat or
 notification has a non-empty `server_id`; and
@@ -328,25 +316,25 @@ via `curl --config -`, as in §0):
 | `server_ip` / `server_port` | the broker host / `8883` |
 | `client_id` | the reader key, `cs463-xxyyzz` — unique per physical unit; the broker evicts a duplicate |
 | `username` / `password` | the environment's broker credential |
-| `enable_ssl` / `ssl_version` | `true` / `TLSv1.2` |
+| `enable_ssl` / `ssl_version` | `true` / `TLSv1.2` — the newest this reader offers. A broker that requires TLS 1.3 drops every CS463 |
 | `two_way_authentication` | `false` |
 | `topic` | the registered `publish_topic`, verbatim |
 | `clean_session` | `true` — reads are QoS 0 and fire-and-forget; nothing should be held for a reader across a disconnect |
 | `qos` | `0` |
 
-Then upload the CA bundle with `setServerCertificate`. The PEM is the **POST
+Then upload the trust bundle (§0) with `setServerCertificate`. The PEM is the **POST
 body**; the parameters go in the query string. Do not use `curl -G` here: it
 moves the body into the query string as well, and no `<Ack>` comes back.
 
 ```sh
-U="$B?session_id=$S&command=setServerCertificate&server_id=TrakRF%20mqtt-rpc%20MQTT%20Server&serverCertFile=le-fullchain-plus-roots.pem"
-curl -s -X POST --data-binary @ca.pem -H 'Content-Type: application/octet-stream' "$U"
+U="$B?session_id=$S&command=setServerCertificate&server_id=TrakRF%20mqtt-rpc%20MQTT%20Server&serverCertFile=trust-anchors.pem"
+curl -s -X POST --data-binary @anchors.pem -H 'Content-Type: application/octet-stream' "$U"
 ```
 
 **Verify what landed, not what was acknowledged:**
 
 - `listServer` shows exactly one `<Server>`, with the fields above and
-  `server_certificate="le-fullchain-plus-roots.pem"`.
+  `server_certificate="trust-anchors.pem"`.
 - The PEM under `/opt/EmbeddedGlassFish/cert/CloudServer/TrakRF mqtt-rpc MQTT Server/`
   has the same `sha256sum` as your local bundle.
 - The credential in `/opt/EmbeddedGlassFish/config/CloudServer` matches the
@@ -365,11 +353,13 @@ content, not for systemd: a healthy API answers a bogus command with an error.
 until ssh cs463-xxyyzz 'curl -s "http://localhost/API?command=bogus"' | grep -q '<Error'; do sleep 10; done
 ```
 
-A boot takes about 3 minutes to serve. Once the daemon is installed (§8) it
-clears a wedge by itself. Here, before it is, do it by hand if the body is
-still empty after about 5 minutes: `systemctl restart embeddedglassfish`, then
-wait about 2 more ("the post-power-cycle wedge" in
-[`docs/cs463-reader-references.md`](../cs463-reader-references.md)).
+A boot takes about 3 minutes to serve. If the body is still empty after about
+5, `systemctl reboot` again, or go on to §8: the daemon clears a wedge by
+itself. **Do not `systemctl restart embeddedglassfish`:** on this image it can
+start a second process beside the old one ("the post-power-cycle wedge" in
+[`docs/cs463-reader-references.md`](../cs463-reader-references.md)). With no
+daemon yet, the vendor app's broker connection can also take several minutes
+after a boot, waiting for the kernel's random pool.
 
 ## 8. Install `mqtt-rpcd`
 
@@ -380,15 +370,21 @@ trips the reader's reflected-power guard (§9) and halts inventory.
 
 **Seed the env file before installing.** `install.sh` creates
 `/opt/trakrf/mqtt-rpcd.env` from the example only if it is absent, then starts
-the daemon at once, so the first start already uses the `trakrf` user from §2
-(without `READER_API_USER` it logs in as `root`):
+the daemon at once. The example already names the `trakrf` user from §2, which
+is also the daemon's default, but its password is `CHANGEME`, so an unseeded
+first start logs in with a wrong password:
 
 ```sh
 printf 'READER_API_USER=trakrf\nREADER_API_PASS=%s\n' "$TRAKRF_PASS" \
   | ssh cs463-xxyyzz 'umask 077; mkdir -p /opt/trakrf; cat > /opt/trakrf/mqtt-rpcd.env'
 ```
 
-Nothing else goes in it: the event self-bootstraps, and §7's exact name is the default.
+Nothing else is needed in it: the event self-bootstraps, and §7's exact name is
+the default. The optional switches are in
+[`mqtt-rpcd.env.example`](../../deploy/edge/mqtt-rpc/mqtt-rpcd.env.example). Two
+matter here: `READERD_AUTO_RECOVERY=false` holds a wedge for diagnosis on a
+bench and must not ship (§11), and `READERD_GPO_DEFAULT_ON` shortens an
+[alarm output](cs463-alarm-output.md)'s default on-time.
 
 Then, from an up-to-date `main` on the operator machine, follow "Bringing a
 reader onto a release before it leaves" in the
@@ -396,20 +392,34 @@ reader onto a release before it leaves" in the
 
 ```sh
 cd deploy/edge/mqtt-rpc
-./install.sh cs463-xxyyzz               # ends: mqtt-rpcd <version> active (NRestarts=0); rollback guard armed
+./install.sh cs463-xxyyzz               # prints: mqtt-rpcd <version> active (NRestarts=0); rollback guard armed
 ./set-recover-password.sh cs463-xxyyzz  # the on-site recovery login; save the password first
 ./update-to-release.sh cs463-xxyyzz     # ends: OK: <base> runs <version>, committed.  About 4 minutes
+ssh recover@cs463-xxyyzz                # proves the recovery login, then reboots the reader
 ```
 
-`install.sh` fails with the journal if the daemon could not stay up. The last
-step replaces the local build with the newest signed release over the broker,
-which also proves remote update works for this reader. **Do all three while SSH
-still works:** after it ships, the broker and the `recover` login are the only
-ways in.
+- **`install.sh`** fails with the journal if the daemon did not stay up for its
+  first 8 seconds. Passing does not show that the reconcile ran; the status
+  below does. Its last line, `Done. Set READER_API_USER…`, prints every time.
+- **The recover password** must be at least 12 characters with no `:`. It is
+  the one credential a site's IT is given, and it opens no shell.
+- **`update-to-release.sh`** replaces the local build with the newest signed
+  release over the broker, which also proves remote update works for this
+  reader. The version changes name, from the local build's (`v1.6.0-…`) to the
+  release's (`v1.5.0-404-ga9281202` when this was written); the lower-looking
+  name is not a downgrade. Its other endings are on the
+  [status page](cs463-status-and-updates.md#updating-a-reader).
+- **`ssh recover@…`** asks for the recover password, reports that the
+  daemon is already on the newest release, and reboots the reader cleanly.
+  Afterwards `/opt/trakrf/update/recover.log` holds what it printed.
+
+**Do all four while SSH still works:** after it ships, the broker and the
+`recover` login are the only ways in, and `install.sh` is the only thing that
+installs the rollback guard and that login.
 
 **Never run `/opt/trakrf/mqtt-rpcd --version`** (or any flag). It takes no
-arguments and starts a second daemon that fights the real one for its MQTT client
-id. Read the version from the journal: every line carries `"version":"…"`.
+arguments and starts a second daemon that fights the real one for its MQTT
+client id. Every journal line carries `"version":"…"`.
 
 ### Ready means `api=healthy golden=applied`
 
@@ -425,33 +435,20 @@ export MQTT_URL    # mqtts://<user>:<password>@<broker-host>:8883, read from a f
 ```
 
 `-watch` prints one line per change. The reader is ready on
-`online … api=healthy golden=applied`, with no `cloudserver_fault`.
+`online … api=healthy golden=applied`, with no `cloudserver_fault`. Every other
+line it can show, and what to do about each, is on the
+[status page](cs463-status-and-updates.md).
 
 **A wedged boot recovers without you.** After 6 minutes of an unhealthy `/API`
-the line shows `api=degraded WEDGED recovery=app_restart`: the daemon restarts
-the vendor app, which took about 1.5 minutes each time it was seen, and re-runs
-the reconcile so inventory re-arms. Only if that fails does it reboot the
-reader cleanly, at most twice. `EXHAUSTED` means it has stopped trying and a
-person decides. The ladder is in "Reader-API health and wedge recovery" in
-[`mqtt-rpc/README.md`](../../mqtt-rpc/README.md).
-
-The daemon itself is on the broker within about half a minute of power-on (18
-to 27 s measured), because it credits the hardware RNG to the kernel at start.
-A daemon older than `v1.6.0` waits minutes for the kernel RNG instead
-(`crypto/rand: blocked for 60 seconds…` in the journal), and so does the
-vendor app's own MQTT client, which carries the reads. The image has no `ss`;
-use `netstat -tn | grep 8883` to see both connections.
+the daemon restarts the vendor app, and 6 minutes after that, if it must, it
+reboots the reader cleanly.
 
 ### Control without SSH
 
 The same tool reaches a reader that has no SSH, which is every reader on site:
-
-| Command | Does |
-|---|---|
-| `mqtt-rpcctl call -base <base> -method Reader.GetCapabilities` | any RPC; the reply is printed |
-| `mqtt-rpcctl update -base <base> -manifest <manifest.json URL>` | moves the daemon to a signed release; a bad build rolls itself back |
-| `mqtt-rpcctl reboot -base <base> -yes` | `Reader.Reboot`: a clean reboot |
-| `mqtt-rpcctl shutdown -base <base> -yes` | `Reader.Shutdown`: a clean power-off. It stays off until someone power-cycles it on site |
+`mqtt-rpcctl call` for any RPC, `update` to move the daemon to a signed
+release, and `reboot` and `shutdown` (each needs `-yes`) for a clean reboot or
+power-off. The same page covers each, with what the reader replies and refuses.
 
 ## 9. Verify
 
@@ -465,7 +462,8 @@ not clean, so each check there names the evidence to read:
 - **The port is the one you think it is:** `antennaPort` in the published reads.
 - **Reads reach the platform:** on the broker, then in `tag_scans`.
 - **RPC round-trip:** `Reader.GetCapabilities` and `Reader.GetOperProfile`.
-- **Daemon health:** `NRestarts=0`, a clean journal, `api=healthy golden=applied`.
+- **Daemon health:** `NRestarts=0`, a journal with only the lines that page
+  names as expected, and `api=healthy golden=applied`.
 
 ## 10. Soak
 
@@ -477,13 +475,20 @@ table on the [same page](cs463-verify-and-soak.md#soak).
 - **Reboot it once more** (`systemctl reboot`) and wait for
   `api=healthy golden=applied` and reads in the platform. One healthy boot is
   not enough evidence, and this one runs on the address it ships with.
+- **The status line shows no `auto_reboots=`.** The daemon allows itself two
+  automatic reboots, and the count clears only after an hour of healthy
+  running. A reader powered off showing `auto_reboots=2` has none left for its
+  first boot on site. Leave it running until the count is gone.
+- **Auto-recovery is on:** the journal's `mqtt-rpcd running` line carries
+  `"auto_recover":true`, and the status line's version is the release from §8.
 - Re-run the §1 link check (still `1000`, no new drops), the §3 nameserver
   check, and the §2 table (`csl` refused on the `/API`, the web form and SSH).
 - `listUsers` shows only `root`, `trakrf` and any operator account, and the
   password manager holds every password, the `recover` one included.
 - **Power it down cleanly, never by pulling power:** `systemctl poweroff`, or
-  `mqtt-rpcctl shutdown` (§8). From `v1.6.0` the daemon drives every GPO off
-  when it stops and again when it starts, so a reader with an
-  [alarm output](cs463-alarm-output.md) can be powered off as it is. An older
-  daemon leaves an output that was on latched on, because the halted board
-  keeps its last GPO state while it has power: update it first (§8).
+  `mqtt-rpcctl shutdown` (§8). The daemon drives every GPO off when it stops
+  and again when it starts, so a reader with an
+  [alarm output](cs463-alarm-output.md) can be powered off as it is. That holds
+  for the release §8 installs; a reader on a
+  [daemon older than `v1.5.0-341`](cs463-status-and-updates.md#readers-installed-earlier)
+  leaves an output latched on while the halted board has power.

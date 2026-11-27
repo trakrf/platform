@@ -78,11 +78,27 @@ same path; it shows "Reader did not respond" until this works.
 
 ## Daemon health
 
-`systemctl show mqtt-rpcd -p NRestarts` is `0`. The journal has `golden-config
-reconcile complete`, `connected; rpc subscribe…`, and no `"level":"error"` or
-`"level":"warn"` you can't account for. A `502` logged while the vendor app is
-still starting after a boot is expected. The status (§8) is
+`systemctl show mqtt-rpcd -p NRestarts` is `0` after the reboot that ends §8.
+An update restarts the daemon once, so between `update-to-release.sh` and that
+reboot the count is not `0`, and that is not a fault. The status (§8) is
 `api=healthy golden=applied`.
+
+The journal has `credited the hardware RNG to the kernel` (with
+`"source":"rng-caam"`), `golden-config reconcile complete` and
+`connected; rpc subscribe…`, and no `"level":"error"` or `"level":"warn"` you
+can't account for. These are accounted for:
+
+| Line | When |
+|---|---|
+| a `502` while the vendor app is still starting | every boot |
+| four `gpo off: vendor /API failed; drove the line off through sysfs` (warn) | every boot: the start-up sweep of the alarm outputs runs before the vendor app serves |
+| `this build is an update on probation; …` (warn), then `update committed: answered an rpc through the broker` | the first start after an update |
+| `reader api wedged` (error), `auto-recovery: restarting the reader app`, `reader app processes still running` (warn) | a wedged boot the daemon recovered. The journal does not survive a reboot, so after an automatic reboot the only trace is `auto_reboots=N` on the status line |
+
+These are faults: `gpo safe state: port NOT driven off`, `outputs safe state
+incomplete`, `golden-config reconcile failed; will retry` that keeps repeating,
+and `not crediting a hardware RNG…` or `could not credit the hardware RNG…`,
+which mean this unit reaches the broker minutes after a boot, not seconds.
 
 ## Soak
 
@@ -91,8 +107,9 @@ then compare in the morning:
 
 | Measure | Start | Morning, pass if |
 |---|---|---|
-| `systemctl show mqtt-rpcd -p NRestarts` | `0` | still `0` |
-| daemon `"level":"error"` / `"warn"` lines | count | no new ones |
+| `systemctl show mqtt-rpcd -p NRestarts` | the value, normally `0` | unchanged |
+| daemon `"level":"error"` / `"warn"` lines | count | no new ones beyond those listed above |
+| `auto_reboots=` on the status line | absent | still absent |
 | `MAC Error` lines in `CS463System.log` | count | no new ones |
 | `DataRate` | ~10/s with test tags on the antenna | still non-zero |
 | prod `tag_scans` for the topic | — | arriving every second, no gap of more than a few seconds |

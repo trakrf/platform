@@ -63,11 +63,16 @@ TagFilter=3 TagGroup=3 TagInventory=1 TimeSetting=3 Trigger=3 UserManagement=0 W
 No `/API` command is reserved for `root`: each one checks the caller's password
 and permissions. The error `not a root user` is the reader's generic
 authentication failure, so it means a wrong password, not a missing privilege.
-`Reader.GetCapabilities`, `Reader.GetOperProfile`, `Reader.SetOperProfile`
-(which writes through the web servlet) and `Gpo.Set` were verified as `trakrf`.
+`Reader.GetOperProfile`, `Reader.SetOperProfile` (which writes through the web
+servlet) and `Gpo.Set` were verified as `trakrf`.
 
-The daemon reads the account from its env file (§8): `READER_API_USER=trakrf`
-and `READER_API_PASS`. Without `READER_API_USER` it logs in as `root`.
+The daemon reads the account from its env file (§8): `READER_API_USER` and
+`READER_API_PASS`. `trakrf` is the default user, so only the password has to be
+set; the example file ships it as `CHANGEME`.
+
+This is the reader's web/API account, not a Linux user. The daemon process
+itself runs as Linux `root`, which it needs to drive an alarm output off below
+the vendor app.
 
 ### Operator account
 

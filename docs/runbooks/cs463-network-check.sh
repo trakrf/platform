@@ -1,4 +1,5 @@
-# CS463 network check: runs ON the reader, read-only, ~8 s healthy / ~1 min blocked.
+#!/bin/bash
+# CS463 network check: runs ON the reader, read-only, ~8 s healthy / ~1.5 min blocked.
 # Shows where the path to the broker stops: clock, DNS, TCP, TLS, NTP, logs.
 # How to run it and read the output: cs463-network-check.md (same directory).
 # B overrides the broker host, e.g. B=mqtt.preview.gke.trakrf.id bash cs463-network-check.sh
@@ -11,7 +12,9 @@ echo "=== 3. DNS: reader's local resolver, then a public resolver"
 timeout 10 nslookup "$B" 127.0.0.1 2>&1 | tail -n 3
 timeout 10 nslookup "$B" 8.8.8.8 2>&1 | tail -n 3
 echo "=== 4. TCP reachability (open / blocked)"
-for t in "$B 8883" "www.google.com 443" "app.trakrf.id 443"; do
+# github.com, api.github.com, release-assets…: remote update and the recover login.
+for t in "$B 8883" "www.google.com 443" "app.trakrf.id 443" "github.com 443" "api.github.com 443" "release-assets.githubusercontent.com 443"; do
+  # shellcheck disable=SC2086  # split "host port" into $1 $2 on purpose
   set -- $t
   if timeout 10 bash -c "</dev/tcp/$1/$2" 2>/dev/null; then echo "$1:$2 open"; else echo "$1:$2 BLOCKED or unreachable"; fi
 done

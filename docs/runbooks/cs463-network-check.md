@@ -2,8 +2,15 @@
 
 For a commissioned reader that works on one network and stays silent on
 another. [`cs463-network-check.sh`](cs463-network-check.sh) runs on the reader,
-changes nothing, and shows where the path to the broker stops. Anyone with the
-reader's SSH or serial console can run it, so it can go to a site's IT.
+changes nothing, and shows where the path to the broker stops. It needs a
+shell on the reader: SSH as `root`, or the serial console.
+
+**A site's IT usually has neither.** After commissioning they hold only the
+`recover` password, and that login opens no shell. Ask them to run
+`ssh recover@<reader>` first: it prints the link speed and the reader's
+addresses, says whether it could reach GitHub, and reboots the reader cleanly
+([the recover login](cs463-status-and-updates.md#the-recover-login)). Run this
+script yourself over a remote session they set up, or on a visit.
 
 ## Run it
 
@@ -20,7 +27,7 @@ tr -d '\r' < /tmp/cs463-network-check.sh | bash
 ```
 
 `tr` strips any Windows line endings the file picked up in transit. It takes
-about 8 s on a healthy network and up to about a minute when everything is
+about 8 s on a healthy network and up to about a minute and a half when everything is
 blocked, because each probe has its own timeout. To check against preview, set
 `B=mqtt.preview.gke.trakrf.id` before `bash`.
 
@@ -36,7 +43,8 @@ It uses only what the stock firmware ships: `nslookup`, bash's `/dev/tcp`,
 | §3: `127.0.0.1` right, `8.8.8.8` times out | normal for a site that forces its own DNS | nothing |
 | §3: both lookups fail | the site's resolvers don't answer for the name, and public DNS is blocked | site allowlists the domain on its resolvers |
 | §4: broker `:8883` blocked, `www.google.com:443` open | port block | site opens outbound TCP 8883 |
-| §5: issuer is not Let's Encrypt / ISRG | a firewall is decrypting TLS; the reader trusts only the anchors it was given (§7 of the commissioning runbook) | site exempts the reader from decryption |
+| §4: any of `github.com`, `api.github.com`, `release-assets.githubusercontent.com` on `:443` blocked | reads still flow, but the reader can take no remote update and the `recover` login can download nothing | site allows those three names on TCP 443 |
+| §5: issuer is not Let's Encrypt / ISRG | a firewall is decrypting TLS; the reader trusts only the first certificate in its bundle, `ISRG Root X1` (§0 of the commissioning runbook) | site exempts the reader from decryption |
 | §1 wrong date, or §7 fails | clock not synced, so TLS fails as "not yet valid" | site opens UDP 123, or the reader is pointed at the site's NTP server |
 | §8: `UnknownHostException` / `connect timed out` / `PKIX` | the vendor client's view of the same failures | as above |
 

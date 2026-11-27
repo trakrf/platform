@@ -351,8 +351,8 @@ reader. It logs "retained rpc request dropped". Clear one with an empty retained
 publish to the topic (`mosquitto_pub -r -n -t <base>/rpc`); the live daemon
 gets that empty frame too and logs it as an unparseable request, harmlessly.
 
-After a reboot the daemon takes 2–7 min to reach the broker again (boot-time
-entropy for TLS).
+After a reboot the daemon is back on the broker in about half a minute (see
+"Boot entropy" above). A daemon from before the hardware RNG credit took 2–7 min.
 
 ### Status document (retained `<base>/status`)
 ```jsonc
