@@ -63,8 +63,20 @@ func (e *Evaluator) Evaluate(ctx context.Context, orgID int, _ int64, receivedAt
 		return
 	}
 	candidates := make(map[int]int, len(reads))
+	explicit := map[time.Time][]pendingMove{}
 	for _, rd := range reads {
 		metricEvaluated.Inc()
+		// Zone arbitration owns these assets' moves and hands over the origin, so
+		// there is nothing to look up and nothing to derive from the observed
+		// location.
+		if rd.Arbitrated {
+			if rd.Move == nil {
+				metricSuppressed.WithLabelValues("arbitrated_no_change").Inc()
+				continue
+			}
+			explicit[rd.Move.At] = append(explicit[rd.Move.At], pendingMove{assetID: rd.AssetID, from: rd.Move.From, to: rd.Move.To})
+			continue
+		}
 		// A conflict-dropped read (TRA-1118): asset_scans already held this
 		// asset's minute bucket, so stored history did not change and emitting
 		// would re-publish the identical move once per message for the rest of
@@ -86,6 +98,9 @@ func (e *Evaluator) Evaluate(ctx context.Context, orgID int, _ int64, receivedAt
 			continue
 		}
 		candidates[rd.AssetID] = *rd.LocationID
+	}
+	for at, moves := range explicit {
+		e.emit(ctx, orgID, at, moves)
 	}
 	e.evaluate(ctx, orgID, receivedAt, candidates)
 }
