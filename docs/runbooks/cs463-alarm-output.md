@@ -63,6 +63,12 @@ ssh cs463-xxyyzz 'grep -a "writeGPIOOutputPortState" /opt/EmbeddedGlassFish/logs
     FROM trakrf.alarm_events WHERE created_at > now() - interval '30 minutes';
   ```
 
+**No ON latches.** Every ON releases itself (30 s by default, never later than
+60 s), and the platform holds a wanted output on by re-sending it. From `v1.6.0`
+the daemon also drives all four ports off when it starts and when it stops, so
+a reader can be rebooted or powered off with the alarm sounding and goes quiet.
+See "Alarm outputs" in [`mqtt-rpc/README.md`](../../mqtt-rpc/README.md).
+
 At the relay box, the green light is on with power, and the channel's red light
 comes on with State 1. If the red light comes on and the horn stays silent,
 check + and − at the horn: reversed, it does nothing.
