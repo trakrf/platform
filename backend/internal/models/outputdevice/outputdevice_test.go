@@ -119,3 +119,18 @@ func TestOutputDevice_ScanDeviceIDAndReaderBaseTopicJSON(t *testing.T) {
 		t.Errorf("ReaderBaseTopic should not decode from JSON, got %q", back.ReaderBaseTopic)
 	}
 }
+
+func TestConfirmsDrives(t *testing.T) {
+	if !(OutputDevice{Transport: TransportHTTP}).ConfirmsDrives() {
+		t.Error("an http device answers each drive")
+	}
+	if !(OutputDevice{}).ConfirmsDrives() {
+		t.Error("an unset transport is http, the default")
+	}
+	if (OutputDevice{Transport: TransportMQTT, Type: TypeCSLGPO}).ConfirmsDrives() {
+		t.Error("a cs463 gpo drive is fire-and-forget: the broker's ack is not the reader's")
+	}
+	if (OutputDevice{Transport: TransportMQTT, Type: TypeShellyGen4}).ConfirmsDrives() {
+		t.Error("a shelly over mqtt is published, not answered")
+	}
+}

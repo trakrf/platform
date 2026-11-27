@@ -85,7 +85,8 @@ func (s *Stage) Detect(ctx context.Context, tx pgx.Tx, in storage.DetectInput) (
 }
 
 func (s *Stage) write(ctx context.Context, tx pgx.Tx, in storage.DetectInput, fires []fire) error {
-	for _, f := range fires {
+	for i := range fires {
+		f := &fires[i]
 		err := s.writeFire(ctx, tx, in, f)
 		if err != nil {
 			s.engine.log.Error().Err(err).Int("org_id", in.OrgID).Str("epc", f.read.EPC).Msg("alarm write failed; the scan's alarms are discarded")
@@ -96,11 +97,15 @@ func (s *Stage) write(ctx context.Context, tx pgx.Tx, in storage.DetectInput, fi
 	return nil
 }
 
-func (s *Stage) writeFire(ctx context.Context, tx pgx.Tx, in storage.DetectInput, f fire) error {
-	id, err := s.store.InsertAlarmEventTx(ctx, tx, in.OrgID, s.engine.alarmRow(f, in.TagScanID, in.ReceivedAt))
+// writeFire writes one fire's alarm and trigger and notes the alarm's id on the
+// fire, so the drives settle sends after commit can name it.
+func (s *Stage) writeFire(ctx context.Context, tx pgx.Tx, in storage.DetectInput, f *fire) error {
+	id, err := s.store.InsertAlarmEventTx(ctx, tx, in.OrgID, s.engine.alarmRow(*f, in.TagScanID, in.ReceivedAt))
 	if err != nil {
 		return err
 	}
+	alarmID := int64(id)
+	f.alarmID = &alarmID
 	return s.rec.RecordAlarm(ctx, tx, in.OrgID, id)
 }
 
@@ -108,15 +113,20 @@ func (s *Stage) writeFire(ctx context.Context, tx pgx.Tx, in storage.DetectInput
 // survived: the pipeline can discard them even when Detect returned nil. Without
 // them a fire with drives still drives, and a fire with none is undone, so its
 // next read can record the alarm instead of it being lost for the re-arm window.
+// A drive made without them is recorded with no alarm id: the alarm it would
+// name is gone.
 func (s *Stage) settle(ctx context.Context, orgID int, fires []fire, rowsKept bool) {
 	for _, f := range fires {
 		if !rowsKept && len(f.drives) == 0 {
 			f.undo()
 			continue
 		}
-		s.engine.driveFire(ctx, orgID, f)
+		if !rowsKept {
+			f.alarmID = nil
+		}
+		delivered := s.engine.driveFire(ctx, orgID, f)
 		if rowsKept {
-			s.engine.noteFired(orgID, f)
+			s.engine.noteFired(orgID, f, delivered)
 		}
 	}
 }

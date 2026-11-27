@@ -1,6 +1,7 @@
 package geofence
 
 import (
+	"context"
 	"io"
 	"testing"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/trakrf/platform/backend/internal/models/outputdevice"
+	"github.com/trakrf/platform/backend/internal/storage"
 )
 
 // recordedTimer is a fake timer the test fires manually. Stop() reports whether
@@ -34,10 +36,18 @@ func (t *recordedTimer) fire() {
 	}
 }
 
+// plainDrive adapts a bare driver to the presence tracker's driveFunc, with no
+// recording, for tests of the tracker alone.
+func plainDrive(d outputDriver) driveFunc {
+	return func(ctx context.Context, _ int, dev outputdevice.OutputDevice, on bool, offAfter int, _ time.Time, _ storage.DriveCause, _ *int64) bool {
+		return d.Set(ctx, dev, on, offAfter) == nil
+	}
+}
+
 // newTestPresence builds a presence tracker whose timers are captured for manual
 // firing instead of running on the wall clock.
 func newTestPresence(driver outputDriver) (*presence, *[]*recordedTimer) {
-	p := newPresence(driver, zerolog.New(io.Discard))
+	p := newPresence(plainDrive(driver), zerolog.New(io.Discard))
 	timers := &[]*recordedTimer{}
 	p.afterFunc = func(d time.Duration, f func()) timerHandle {
 		rt := &recordedTimer{d: d, f: f}
