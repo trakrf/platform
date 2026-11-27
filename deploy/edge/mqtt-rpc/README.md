@@ -96,7 +96,8 @@ python3. The reader must already be commissioned: golden CloudServer, the
    on this reader: GitHub download, signature check, broker round trip.
 5. **Operator path, once per site network:** `ssh recover@<reader>` with that
    password. It should report the release as already intact, then reboot the
-   reader cleanly. Wait for it to come back (2–7 min) and check
+   reader cleanly. Wait for it to come back (about 2 min to reads on a healthy
+   boot, about 10 if the vendor app wedges) and check
    `/opt/trakrf/update/recover.log`.
 6. **Before shipping:** `systemctl poweroff`, never a power pull.
 

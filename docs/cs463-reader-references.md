@@ -165,17 +165,23 @@ The boot itself was unhealthy in ways nothing surfaced: the RTC started at
 **2019-04-12**, and the daemon logged `crypto/rand: blocked for 60 seconds
 waiting to read random data from the kernel`.
 
-**Recovery:**
+**Recovery:** mqtt-rpcd now does this itself ("Reader-API health and wedge
+recovery" in `mqtt-rpc/README.md`): it probes `/API` on content, restarts the
+vendor app after 6 minutes, reboots if that fails, and re-runs its golden-config
+reconcile once `/API` is healthy, so the daemon needs no restart. By hand, on a
+reader with no daemon yet:
 
-1. `systemctl restart embeddedglassfish`
+1. `systemctl reboot`. Or restart the app the way the daemon does:
+   `systemctl stop embeddedglassfish`, kill whatever is still listed in
+   `/sys/fs/cgroup/systemd/system.slice/embeddedglassfish.service/cgroup.procs`,
+   then `systemctl start embeddedglassfish`. **`systemctl restart` alone is not
+   a restart on this image:** the vendor stop script can leave the old java
+   running, and a second one starts beside it.
 2. Wait for `/API` to *actually answer* — roughly two minutes. **systemd "active"
    is not "serving"**, which is the whole trap.
-3. `systemctl restart mqtt-rpcd`, so its golden-config reconcile runs against a
-   healthy API rather than failing on a 502 and never retrying.
 
-Tracked as TRA-1041 (content-validating health probe + reconcile retry). The
-durable lesson: **assert on returned content, never on HTTP status or systemd
-state.**
+The durable lesson: **assert on returned content, never on HTTP status or
+systemd state.**
 
 **Fetching the manual** (21 MB, not checked in):
 
