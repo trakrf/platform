@@ -346,7 +346,7 @@ are the record of what the arm actually measured, and on 2026-08-31 the tell for
 a wrong-mock start was sitting in this file and got skimmed past.
 
 ```
-bridge transport      192.168.50.170:6053     <- a real proxy, NOT the stub
+bridge transport      192.168.50.25:6053      <- a real proxy, NOT the stub
 bridge code           4bca74bbbbba4a19 @ …    <- fingerprint, fixed at import
 field at start        held=… observer_count=0
 mock version          mismatches at start N   <- BASELINE, not a verdict. See below.
