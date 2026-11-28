@@ -29,6 +29,16 @@ type Config struct {
 	// room still hears it at -71 (homelab capture, 2026-11-27); handing over on
 	// a short silence would flap on exactly that.
 	Silence time.Duration
+	// ReturnWindow and ReturnDwell stop ping-pong at a boundary. Going back to
+	// the location the asset left less than ReturnWindow ago needs the lead
+	// held for ReturnDwell instead of Dwell, and never happens on a gap alone.
+	// A still asset that two rooms hear about equally is otherwise handed back
+	// and forth by each gateway's routine 10-30 s report gaps; a walk does not
+	// go straight back. Homelab bookshelf capture (2026-11-28): 16 moves in 51
+	// minutes without it, 5 with it, and the walk capture unchanged. Zero
+	// disables the rule.
+	ReturnWindow time.Duration
+	ReturnDwell  time.Duration
 	// DeviceTypes are the device types whose reads are arbitrated. Others are
 	// stored as they arrive, exactly as before arbitration existed.
 	DeviceTypes map[string]bool
@@ -44,14 +54,17 @@ var DefaultDeviceTypes = []string{
 }
 
 // DefaultConfig returns production defaults: 10s window, 6 dB margin, 5s dwell,
-// 10m silence, BLE gateways only.
+// 10m silence, a 30s dwell to return to a location left within 5m, BLE
+// gateways only.
 func DefaultConfig() Config {
 	return Config{
-		Window:      10 * time.Second,
-		MarginDB:    6,
-		Dwell:       5 * time.Second,
-		Silence:     10 * time.Minute,
-		DeviceTypes: setOf(DefaultDeviceTypes),
+		Window:       10 * time.Second,
+		MarginDB:     6,
+		Dwell:        5 * time.Second,
+		Silence:      10 * time.Minute,
+		ReturnWindow: 5 * time.Minute,
+		ReturnDwell:  30 * time.Second,
+		DeviceTypes:  setOf(DefaultDeviceTypes),
 	}
 }
 
@@ -59,10 +72,12 @@ func DefaultConfig() Config {
 func (c Config) Enabled(deviceType string) bool { return c.DeviceTypes[deviceType] }
 
 // ConfigFromEnv reads ARBITRATION_WINDOW, ARBITRATION_MARGIN_DB,
-// ARBITRATION_DWELL, ARBITRATION_SILENCE and ARBITRATION_DEVICE_TYPES (comma-separated; "none"
-// turns arbitration off), falling back to the default for any value that is
-// unset, unparseable or out of range. Durations must be positive; a margin of 0
-// is well-formed.
+// ARBITRATION_DWELL, ARBITRATION_SILENCE, ARBITRATION_RETURN_WINDOW,
+// ARBITRATION_RETURN_DWELL and ARBITRATION_DEVICE_TYPES (comma-separated;
+// "none" turns arbitration off), falling back to the default for any value
+// that is unset, unparseable or out of range. Durations must be positive,
+// except ARBITRATION_RETURN_WINDOW, where 0 turns the return rule off; a
+// margin of 0 is well-formed.
 func ConfigFromEnv() Config {
 	c := DefaultConfig()
 	for name, d := range map[string]*time.Duration{
@@ -73,6 +88,12 @@ func ConfigFromEnv() Config {
 		if v, err := time.ParseDuration(os.Getenv(name)); err == nil && v > 0 {
 			*d = v
 		}
+	}
+	if v, err := time.ParseDuration(os.Getenv("ARBITRATION_RETURN_WINDOW")); err == nil && v >= 0 {
+		c.ReturnWindow = v
+	}
+	if v, err := time.ParseDuration(os.Getenv("ARBITRATION_RETURN_DWELL")); err == nil && v > 0 {
+		c.ReturnDwell = v
 	}
 	if v, err := strconv.Atoi(os.Getenv("ARBITRATION_MARGIN_DB")); err == nil && v >= 0 {
 		c.MarginDB = v

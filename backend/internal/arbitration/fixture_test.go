@@ -27,9 +27,9 @@ type fixtureRow struct {
 	rssi    int
 }
 
-func loadFixture(t *testing.T) []fixtureRow {
+func loadFixture(t *testing.T, name string) []fixtureRow {
 	t.Helper()
-	f, err := os.Open("testdata/homelab_stationary_30m.csv.gz")
+	f, err := os.Open("testdata/" + name)
 	require.NoError(t, err)
 	defer f.Close()
 	gz, err := gzip.NewReader(f)
@@ -58,7 +58,7 @@ func median(v []int) int {
 // hours before the capture. Arbitrated, each tag must settle once and then
 // never move, at the gateway that hears it strongest.
 func TestHomelabStationaryFixtureNoFlaps(t *testing.T) {
-	rows := loadFixture(t)
+	rows := loadFixture(t, "homelab_stationary_30m.csv.gz")
 	require.NotEmpty(t, rows)
 
 	gateways := map[string]int{"A": 1, "B": 2, "C": 3} // scan point id == location id

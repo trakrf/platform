@@ -75,6 +75,8 @@ type assetState struct {
 	hasLastLevel bool                // false for a seed not yet heard
 	challenger   int                 // location leading by the margin; 0 = none
 	leadSince    time.Time
+	prevLocation int       // location assigned before this one; 0 = none
+	leftAt       time.Time // when the asset left prevLocation
 	lastRead     time.Time
 }
 
@@ -246,6 +248,13 @@ func (a *Arbiter) decide(st *assetState, now time.Time) bool {
 		return false
 	}
 
+	// Going straight back to the location just left is how a still asset at a
+	// boundary looks: two rooms hear it about equally, and each gateway's
+	// routine report gaps hand it back and forth. A walk does not go straight
+	// back. So a return holds its lead for ReturnDwell, and a gap alone never
+	// sends the asset back.
+	returning := a.cfg.ReturnWindow > 0 && challenger == st.prevLocation && now.Sub(st.leftAt) < a.cfg.ReturnWindow
+
 	// Unheard is not gone: a gateway can skip a tag it hears well for minutes.
 	// The unheard location yields at once only to one heard about as strongly as
 	// it last was, which means the asset turned up somewhere comparable. Anything
@@ -255,7 +264,7 @@ func (a *Arbiter) decide(st *assetState, now time.Time) bool {
 	if !heard {
 		st.challenger = 0
 		if now.Sub(st.lastHeard) >= a.cfg.Silence ||
-			(st.hasLastLevel && beats(best.mean, st.lastLevel, -a.cfg.MarginDB)) {
+			(!returning && st.hasLastLevel && beats(best.mean, st.lastLevel, -a.cfg.MarginDB)) {
 			a.assign(st, challenger, best.scanPoint, now)
 			st.lastLevel, st.hasLastLevel = best.mean, true
 			return true
@@ -270,7 +279,11 @@ func (a *Arbiter) decide(st *assetState, now time.Time) bool {
 	if st.challenger != challenger {
 		st.challenger, st.leadSince = challenger, now
 	}
-	if now.Sub(st.leadSince) >= a.cfg.Dwell {
+	dwell := a.cfg.Dwell
+	if returning {
+		dwell = a.cfg.ReturnDwell
+	}
+	if now.Sub(st.leadSince) >= dwell {
 		a.assign(st, challenger, best.scanPoint, now)
 		st.lastLevel, st.hasLastLevel = best.mean, true
 		return true
@@ -280,6 +293,9 @@ func (a *Arbiter) decide(st *assetState, now time.Time) bool {
 
 // assign makes location the asset's, heard now from scanPoint.
 func (a *Arbiter) assign(st *assetState, location, scanPoint int, now time.Time) {
+	if st.location != 0 && st.location != location {
+		st.prevLocation, st.leftAt = st.location, now
+	}
 	st.location, st.scanPoint, st.lastHeard = location, scanPoint, now
 	st.challenger = 0
 }
