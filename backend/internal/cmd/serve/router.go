@@ -22,6 +22,7 @@ import (
 	healthhandler "github.com/trakrf/platform/backend/internal/handlers/health"
 	inventoryhandler "github.com/trakrf/platform/backend/internal/handlers/inventory"
 	kitshandler "github.com/trakrf/platform/backend/internal/handlers/kits"
+	locationmapshandler "github.com/trakrf/platform/backend/internal/handlers/locationmaps"
 	locationshandler "github.com/trakrf/platform/backend/internal/handlers/locations"
 	lookuphandler "github.com/trakrf/platform/backend/internal/handlers/lookup"
 	musteringhandler "github.com/trakrf/platform/backend/internal/handlers/mustering"
@@ -234,6 +235,13 @@ func setupRouter(
 		// Admin gate resolves the org from JWT claims, NOT a URL param — these
 		// routes have no :orgId, so RequireOrgAdmin would 400 (TRA-1033).
 		webhooksHandler.RegisterRoutes(r, paidGate, middleware.RequireCurrentOrgRole(store, models.RoleAdmin))
+		// TRA-1402: location maps (a floor plan on a location, pins for the
+		// locations below it, live presence per pinned zone). Internal, and
+		// deliberately NOT capability-gated: a map is another view of the
+		// location and current-location base every org has. Reads open to any
+		// member; writes are paid mutations and admin-only. Built here rather
+		// than passed in because it needs nothing but the store.
+		locationmapshandler.NewHandler(store).RegisterRoutes(r, paidGate, middleware.RequireCurrentOrgRole(store, models.RoleAdmin))
 
 		r.Get("/swagger/openapi.internal.json", swaggerspec.ServeJSON)
 		r.Get("/swagger/openapi.internal.yaml", swaggerspec.ServeYAML)
