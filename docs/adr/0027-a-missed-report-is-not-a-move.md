@@ -40,6 +40,19 @@ against the capture, that rule switched two of the four tags 15 and 22 times in
    comparable, so it moved. Anything weaker waits out a long silence (10 min).
    A seeded location (after a restart) has no level, so it waits for the same
    silence (`backend/internal/arbitration/arbiter.go`, `decide`).
+
+   **Except going straight back.** At a boundary that two rooms hear about
+   equally, a still asset is handed back and forth on every gateway's routine
+   10–30 s report gaps, because the other room always counts as about as strong.
+   A walk does not go straight back to the room it just left. So a return to the
+   location left less than 5 minutes ago (`ARBITRATION_RETURN_WINDOW`) needs its
+   lead held for 30 s (`ARBITRATION_RETURN_DWELL`) instead of the dwell, and is
+   never made on a gap alone. Replayed against a homelab capture of a tag on a
+   bookshelf at such a boundary
+   (`backend/internal/arbitration/testdata/homelab_boundary_57m.csv.gz`), this
+   cuts 16 moves in 51 minutes to 5, and leaves a hand-timed walk through three
+   rooms unchanged: all 12 arrivals stored, the worst 8.7 s late
+   (`homelab_walk_4m.csv.gz`).
 3. **One component owns each move.** Arbitration works out the stored change,
    with its origin and the instant of the switch, and hands it over as
    `ResolvedRead.Move`. `MoveStage` and the `asset.moved` evaluator record and
@@ -59,6 +72,18 @@ against the capture, that rule switched two of the four tags 15 and 22 times in
 - A badge that leaves every room's strong coverage takes up to the silence
   (10 min) to be stored elsewhere. Rooms that each have a gateway are handled
   by rule 2 within seconds.
+- **A still asset at a true equal boundary still moves now and then**: about
+  six times an hour in the bookshelf capture, each one a real 6 dB lead or a
+  10 s gap that came more than 5 minutes after the last move. RSSI cannot tell
+  those from a short visit. Walking back into the room just left is stored up
+  to 30 s late.
+- So stored location is deliberately the strict tier. Two things are left for
+  later: stored history that records stays rather than passes, and a live
+  position (the strongest room right now, before these rules) for map views.
+  Neither is decided here.
+- Tuning: `TestSweep` (`ARBITRATION_SWEEP=1`) replays all three homelab
+  captures across margin, dwell and the return settings. Rerun it with new
+  captures before changing a default.
 - The arbiter is in-memory and assumes one ingest consumer. The backend runs
   one replica (`trakrf/infra` `helm/trakrf-backend/values.yaml`, `replicaCount:
   1`; a second replica would already double-write `asset_scans`, TRA-907). On
