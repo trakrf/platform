@@ -13,12 +13,13 @@ import {
 import { useNotificationAlerts } from '@/hooks/notifications/useNotificationAlerts';
 import { useNotificationRecipients } from '@/hooks/notifications';
 import { useAssets } from '@/hooks/assets';
+import { getApiErrorMessage } from '@/lib/api/errorMessage';
 
 function AlertHistory() {
   const [filters, setFilters] = useState<AlertFilterValues>({});
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
-  const { alerts, total, isLoading } = useNotificationAlerts({
+  const { alerts, total, isLoading, error } = useNotificationAlerts({
     ...filters,
     page,
     per_page: perPage,
@@ -32,7 +33,7 @@ function AlertHistory() {
     setPage(1);
   };
 
-  if (!isLoading && total === 0 && !hasFilters) {
+  if (!isLoading && !error && total === 0 && !hasFilters) {
     return (
       <EmptyState
         icon={Bell}
@@ -46,6 +47,12 @@ function AlertHistory() {
   let body;
   if (isLoading) {
     body = <p className="p-4 text-sm text-gray-500 dark:text-gray-400">Loading alerts…</p>;
+  } else if (error) {
+    body = (
+      <p role="alert" className="p-4 text-sm text-red-600 dark:text-red-400">
+        {getApiErrorMessage(error, 'Failed to load alerts')}
+      </p>
+    );
   } else if (total === 0) {
     body = (
       <div data-testid="alerts-no-match">
