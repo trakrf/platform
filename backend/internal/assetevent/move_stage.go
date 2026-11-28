@@ -49,6 +49,17 @@ func (s *MoveStage) Detect(ctx context.Context, tx pgx.Tx, in storage.DetectInpu
 	var candidates []moveCandidate
 	seen := make(map[int]struct{}, len(in.Reads))
 	for _, rd := range in.Reads {
+		// Zone arbitration decided where this asset is stored and already worked
+		// out whether that changed: record its move, never derive one here from
+		// the observed location. One component owns each move.
+		if rd.Arbitrated {
+			if rd.Move != nil {
+				if err := s.recordArbitrated(ctx, tx, in.OrgID, rd); err != nil {
+					return detection.Pending{}, err
+				}
+			}
+			continue
+		}
 		if !rd.Stored || rd.LocationID == nil {
 			continue
 		}
@@ -103,4 +114,25 @@ func (s *MoveStage) Detect(ctx context.Context, tx pgx.Tx, in storage.DetectInpu
 		}
 	}
 	return detection.Pending{}, nil
+}
+
+// recordArbitrated records an arbitrated move at the instant it happened, not
+// the minute floor, with the origin arbitration found.
+func (s *MoveStage) recordArbitrated(ctx context.Context, tx pgx.Tx, orgID int, rd storage.ResolvedRead) error {
+	mv := rd.Move
+	scanPoint := mv.ScanPointID
+	_, err := s.rec.RecordChange(ctx, tx, notificationevent.LocationChange{
+		OrgID:          orgID,
+		AssetID:        rd.AssetID,
+		FromLocationID: mv.From,
+		ToLocationID:   mv.To,
+		Origin:         notificationevent.OriginReader,
+		ScanPointID:    &scanPoint,
+		DetectedAt:     mv.At,
+	})
+	if err != nil {
+		s.log.Error().Err(err).Int("org_id", orgID).Int("asset_id", rd.AssetID).Msg("recording arbitrated move failed")
+		return fmt.Errorf("failed to record arbitrated move for asset %d: %w", rd.AssetID, err)
+	}
+	return nil
 }

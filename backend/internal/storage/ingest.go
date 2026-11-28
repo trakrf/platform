@@ -81,7 +81,9 @@ func (s *Storage) InsertRawTagScan(ctx context.Context, topic string, payload []
 // PersistResult summarizes a PersistReads run for logging/metrics.
 type PersistResult struct {
 	Inserted int
-	Dropped  map[string]int // reason -> count: no_scan_point, no_asset, conflict
+	// Updated counts minute rows an arbitrated message moved to a new location.
+	Updated int
+	Dropped map[string]int // reason -> count: no_scan_point, no_asset, conflict, arbitration_hold
 	// Resolved is every read that passed the membership filter (registered rfid
 	// tag → asset AND registered scan_point), enriched with the data the geofence
 	// engine (TRA-901) needs. A read appears here even when its asset_scans insert
@@ -109,6 +111,23 @@ type ResolvedRead struct {
 	// boundary is its signal either way — but assetevent filters on it so a
 	// conflict-dropped read cannot re-publish the same move for a whole minute.
 	Stored bool
+	// Arbitrated is true when zone arbitration decided this read's asset's
+	// stored location (PersistReadsArbitrated). LocationID above is still what
+	// was observed; the stored location may differ. Move consumers record only
+	// Move for these reads and never derive one from LocationID.
+	Arbitrated bool
+	// Move is the location change the arbitrated row recorded, on at most one
+	// read per asset per message. Nil when the stored location did not change.
+	Move *ArbitratedMove
+}
+
+// ArbitratedMove is a change in an asset's stored location made by arbitration.
+// From is nil for a first sighting or a previous row with no location. At is
+// the receive time of the message that made it, not the minute bucket.
+type ArbitratedMove struct {
+	From            *int
+	To, ScanPointID int
+	At              time.Time
 }
 
 // PersistReads writes asset_scans for parsed reads under org context (RLS).
@@ -150,72 +169,23 @@ func (s *Storage) PersistReadsDetect(ctx context.Context, orgID, scanDeviceID in
 	res := PersistResult{Dropped: map[string]int{}}
 	err := s.WithOrgTx(ctx, orgID, func(tx pgx.Tx) error {
 		for _, rd := range reads {
-			// Correlate the read to its scan_point by (device, antenna_port)
-			// (TRA-956). The device is the one the topic routed to; the antenna
-			// is on the read, defaulting to 1 for single-antenna devices. A read
-			// for an unprovisioned antenna is a clean no_scan_point miss.
-			antennaPort := rd.AntennaPort
-			if antennaPort < 1 {
-				antennaPort = 1
+			resolved, ok, err := resolveRead(ctx, tx, orgID, scanDeviceID, rd, res.Dropped)
+			if err != nil {
+				return err
 			}
-			var scanPointID int
-			var locationID *int
-			err := tx.QueryRow(ctx,
-				`SELECT id, location_id
-				 FROM trakrf.scan_points
-				 WHERE org_id = $1 AND scan_device_id = $2 AND antenna_port = $3 AND deleted_at IS NULL`,
-				orgID, scanDeviceID, antennaPort,
-			).Scan(&scanPointID, &locationID)
-			if errors.Is(err, pgx.ErrNoRows) {
-				res.Dropped["no_scan_point"]++
+			if !ok {
 				continue
 			}
-			if err != nil {
-				return fmt.Errorf("resolve scan_point for device %d antenna %d: %w", scanDeviceID, antennaPort, err)
-			}
-
-			var assetID int
-			err = tx.QueryRow(ctx,
-				`SELECT asset_id FROM trakrf.tags
-				 WHERE org_id = $1
-				   AND normalized_value = trakrf.normalize_tag_value($2)
-				   AND asset_id IS NOT NULL AND deleted_at IS NULL
-				 LIMIT 1`,
-				orgID, rd.EPC,
-			).Scan(&assetID)
-			if errors.Is(err, pgx.ErrNoRows) {
-				res.Dropped["no_asset"]++
-				continue
-			}
-			if err != nil {
-				return fmt.Errorf("resolve asset for epc %q: %w", rd.EPC, err)
-			}
-
 			// Membership passed: record the resolved read for the geofence engine
 			// before the dedup branch, so a within-message duplicate (conflict)
 			// still counts as a boundary observation.
-			res.Resolved = append(res.Resolved, ResolvedRead{
-				AssetID:     assetID,
-				ScanPointID: scanPointID,
-				LocationID:  locationID,
-				EPC:         rd.EPC,
-				RSSI:        rd.RSSI,
-
-				ReaderTimestamp: rd.ReaderTimestamp,
-			})
-
-			ct, err := tx.Exec(ctx,
-				`INSERT INTO trakrf.asset_scans
-				   (timestamp, org_id, asset_id, location_id, scan_point_id, tag_scan_id)
-				 VALUES ($1, $2, $3, $4, $5, $6)
-				 ON CONFLICT (timestamp, org_id, asset_id) DO NOTHING`,
-				receivedAt, orgID, assetID, locationID, scanPointID, tagScanID,
-			)
+			res.Resolved = append(res.Resolved, resolved)
+			stored, err := insertScanIfAbsent(ctx, tx, receivedAt, orgID, tagScanID, resolved)
 			if err != nil {
-				return fmt.Errorf("insert asset_scan: %w", err)
+				return err
 			}
-			res.Resolved[len(res.Resolved)-1].Stored = ct.RowsAffected() > 0
-			if ct.RowsAffected() == 0 {
+			res.Resolved[len(res.Resolved)-1].Stored = stored
+			if !stored {
 				res.Dropped["conflict"]++
 				continue
 			}
@@ -236,4 +206,71 @@ func (s *Storage) PersistReadsDetect(ctx context.Context, orgID, scanDeviceID in
 		return PersistResult{}, err
 	}
 	return res, nil
+}
+
+// resolveRead correlates a read to its scan_point by (device, antenna_port)
+// (TRA-956) and its EPC to a tagged asset. The device is the one the topic
+// routed to; the antenna is on the read, defaulting to 1 for single-antenna
+// devices. A miss counts its reason in dropped and returns ok=false.
+func resolveRead(ctx context.Context, tx pgx.Tx, orgID, scanDeviceID int, rd scanread.Read, dropped map[string]int) (ResolvedRead, bool, error) {
+	antennaPort := rd.AntennaPort
+	if antennaPort < 1 {
+		antennaPort = 1
+	}
+	var scanPointID int
+	var locationID *int
+	err := tx.QueryRow(ctx,
+		`SELECT id, location_id
+		 FROM trakrf.scan_points
+		 WHERE org_id = $1 AND scan_device_id = $2 AND antenna_port = $3 AND deleted_at IS NULL`,
+		orgID, scanDeviceID, antennaPort,
+	).Scan(&scanPointID, &locationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		dropped["no_scan_point"]++
+		return ResolvedRead{}, false, nil
+	}
+	if err != nil {
+		return ResolvedRead{}, false, fmt.Errorf("resolve scan_point for device %d antenna %d: %w", scanDeviceID, antennaPort, err)
+	}
+
+	var assetID int
+	err = tx.QueryRow(ctx,
+		`SELECT asset_id FROM trakrf.tags
+		 WHERE org_id = $1
+		   AND normalized_value = trakrf.normalize_tag_value($2)
+		   AND asset_id IS NOT NULL AND deleted_at IS NULL
+		 LIMIT 1`,
+		orgID, rd.EPC,
+	).Scan(&assetID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		dropped["no_asset"]++
+		return ResolvedRead{}, false, nil
+	}
+	if err != nil {
+		return ResolvedRead{}, false, fmt.Errorf("resolve asset for epc %q: %w", rd.EPC, err)
+	}
+	return ResolvedRead{
+		AssetID:         assetID,
+		ScanPointID:     scanPointID,
+		LocationID:      locationID,
+		EPC:             rd.EPC,
+		RSSI:            rd.RSSI,
+		ReaderTimestamp: rd.ReaderTimestamp,
+	}, true, nil
+}
+
+// insertScanIfAbsent writes the read's row for its minute bucket unless one is
+// already there, and reports whether it landed.
+func insertScanIfAbsent(ctx context.Context, tx pgx.Tx, bucket time.Time, orgID int, tagScanID int64, rd ResolvedRead) (bool, error) {
+	ct, err := tx.Exec(ctx,
+		`INSERT INTO trakrf.asset_scans
+		   (timestamp, org_id, asset_id, location_id, scan_point_id, tag_scan_id)
+		 VALUES ($1, $2, $3, $4, $5, $6)
+		 ON CONFLICT (timestamp, org_id, asset_id) DO NOTHING`,
+		bucket, orgID, rd.AssetID, rd.LocationID, rd.ScanPointID, tagScanID,
+	)
+	if err != nil {
+		return false, fmt.Errorf("insert asset_scan: %w", err)
+	}
+	return ct.RowsAffected() > 0, nil
 }
