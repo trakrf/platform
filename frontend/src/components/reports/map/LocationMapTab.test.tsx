@@ -107,4 +107,26 @@ describe('LocationMapTab', () => {
       ]),
     );
   });
+
+  it('with no maps yet, lets an admin pick a location and upload from the empty state', async () => {
+    role.current = 'admin';
+    api.list.mockResolvedValue({ data: { data: [] } });
+    api.putImage.mockResolvedValue({
+      data: { data: { location_id: 1, location_name: 'Warehouse', content_type: 'image/png', byte_size: 1, sha256: 'x', updated_at: '', pins: [] } },
+    });
+    render(<LocationMapTab />);
+    fireEvent.change(await screen.findByTestId('location-map-new-empty'), { target: { value: '1' } });
+    expect(screen.getByTestId('location-map-upload-empty')).toBeTruthy();
+    const file = new File(['\x89PNG'], 'plan.png', { type: 'image/png' });
+    fireEvent.change(screen.getByTestId('location-map-file'), { target: { files: [file] } });
+    await waitFor(() => expect(api.putImage).toHaveBeenCalledWith(1, file));
+  });
+
+  it('shows a viewer no upload controls', async () => {
+    api.list.mockResolvedValue({ data: { data: [] } });
+    render(<LocationMapTab />);
+    await screen.findByText('No maps have been set up for this organization.');
+    expect(screen.queryByTestId('location-map-new-empty')).toBeNull();
+    expect(screen.queryByTestId('location-map-file')).toBeNull();
+  });
 });

@@ -301,12 +301,26 @@ export function LocationMapTab() {
       {!mapsLoaded ? (
         <div className="text-sm text-gray-500 dark:text-gray-400">Loading maps…</div>
       ) : selectedId == null ? (
-        <EmptyMaps canEdit={canEdit} />
+        <EmptyMaps canEdit={canEdit} hasMaps={maps.length > 0} unmapped={unmapped} onChoose={choose} />
       ) : !map ? (
-        <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-8 text-center text-gray-500 dark:text-gray-400">
-          {canEdit
-            ? 'Upload a floor plan or site image (PNG, JPEG or WebP, up to 5 MB) for this location.'
-            : 'This location has no map yet.'}
+        <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-8 text-center text-gray-500 dark:text-gray-400 space-y-3">
+          <p>
+            {canEdit
+              ? `Upload a floor plan or site image for ${nameOf.get(selectedId) ?? 'this location'} (PNG, JPEG or WebP, up to 5 MB).`
+              : 'This location has no map yet.'}
+          </p>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => fileInput.current?.click()}
+              disabled={busy}
+              className="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              data-testid="location-map-upload-empty"
+            >
+              <Upload className="inline w-4 h-4 mr-1" />
+              Upload image
+            </button>
+          )}
         </div>
       ) : (
         <div className="flex flex-col lg:flex-row gap-4 items-start">
@@ -340,13 +354,43 @@ export function LocationMapTab() {
   );
 }
 
-function EmptyMaps({ canEdit }: { canEdit: boolean }) {
+function EmptyMaps({
+  canEdit,
+  hasMaps,
+  unmapped,
+  onChoose,
+}: {
+  canEdit: boolean;
+  hasMaps: boolean;
+  unmapped: { id: number; name: string }[];
+  onChoose: (id: number) => void;
+}) {
   return (
-    <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-8 text-center text-gray-500 dark:text-gray-400">
-      <MapIcon className="mx-auto mb-2 w-8 h-8" />
-      {canEdit
-        ? 'No maps yet. Use "Add a map to…" to put a floor plan on a site, building or floor, then pin the rooms below it.'
-        : 'No maps have been set up for this organization.'}
+    <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-8 text-center text-gray-500 dark:text-gray-400 space-y-3">
+      <MapIcon className="mx-auto w-8 h-8" />
+      {!canEdit ? (
+        <p>{hasMaps ? 'Choose a map above.' : 'No maps have been set up for this organization.'}</p>
+      ) : unmapped.length === 0 ? (
+        <p>Every location already has a map. Choose one above.</p>
+      ) : (
+        <>
+          <p>Put a floor plan on a site, building or floor, then pin the rooms below it.</p>
+          <select
+            value=""
+            onChange={(e) => e.target.value && onChoose(Number(e.target.value))}
+            className={selectClass}
+            aria-label="Location for the new map"
+            data-testid="location-map-new-empty"
+          >
+            <option value="">Choose a location…</option>
+            {unmapped.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
     </div>
   );
 }
