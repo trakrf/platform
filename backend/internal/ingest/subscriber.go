@@ -9,6 +9,7 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/rs/zerolog"
 
+	"github.com/trakrf/platform/backend/internal/arbitration"
 	"github.com/trakrf/platform/backend/internal/detection"
 	"github.com/trakrf/platform/backend/internal/models/scanread"
 	"github.com/trakrf/platform/backend/internal/services/topicroute"
@@ -39,6 +40,7 @@ type scanStore interface {
 	ResolveScanTopic(ctx context.Context, topic string) (storage.ScanRoute, bool, error)
 	PersistReads(ctx context.Context, orgID, scanDeviceID int, tagScanID int64, receivedAt time.Time, reads []scanread.Read) (storage.PersistResult, error)
 	PersistReadsDetect(ctx context.Context, orgID, scanDeviceID int, tagScanID int64, receivedAt time.Time, reads []scanread.Read, detect storage.DetectFunc) (storage.PersistResult, error)
+	PersistReadsArbitrated(ctx context.Context, orgID, scanDeviceID int, tagScanID int64, receivedAt time.Time, reads []scanread.Read, arbitrate storage.ArbitrateFunc, detect storage.DetectFunc) (storage.PersistResult, error)
 }
 
 // Subscriber consumes MQTT reads and derives asset_scans (TRA-900). It is the
@@ -50,6 +52,8 @@ type Subscriber struct {
 	eval     ReadEvaluator        // optional; nil disables post-commit evaluation
 	feed     ReadPublisher        // optional; nil disables live-feed fan-out
 	detector *detection.Pipeline  // optional; nil disables in-transaction detection
+	arbiter  *arbitration.Stage   // optional; nil stores every read as observed
+	arbCfg   arbitration.Config   // which device types the arbiter decides for
 	log      zerolog.Logger
 	client   mqtt.Client
 }
@@ -67,6 +71,15 @@ func NewSubscriber(cfg Config, store *storage.Storage, registry *topicroute.Regi
 // SetDetector runs d inside each scan's transaction. Call it before Start: the
 // message handler reads it without a lock.
 func (s *Subscriber) SetDetector(d *detection.Pipeline) { s.detector = d }
+
+// SetArbiter stores the location a decides, not the reporting device's,
+// for messages from the device types cfg enables. Call it before Start. The
+// arbiter is in-memory, which is safe because the backend runs a single
+// ingest consumer (one replica; a second would also double-write asset_scans
+// until shared subscriptions land, TRA-907).
+func (s *Subscriber) SetArbiter(a *arbitration.Stage, cfg arbitration.Config) {
+	s.arbiter, s.arbCfg = a, cfg
+}
 
 // Subscribe adds a single topic to the live broker subscription (TRA-922).
 // Called by the registry when a scan device is created/updated. While
@@ -235,6 +248,7 @@ func (s *Subscriber) handleMessage(_ mqtt.Client, m mqtt.Message) {
 		return
 	}
 	metricAssetScansInserted.Add(float64(res.Inserted))
+	metricAssetScansUpdated.Add(float64(res.Updated))
 	for reason, n := range res.Dropped {
 		metricReadsDropped.WithLabelValues(reason).Add(float64(n))
 	}
@@ -253,6 +267,9 @@ func (s *Subscriber) handleMessage(_ mqtt.Client, m mqtt.Message) {
 // inside the same transaction, and the outcome is reported to them before persist
 // returns: outputs drive here, after commit and before post-commit evaluation.
 func (s *Subscriber) persist(ctx context.Context, route storage.ScanRoute, tagScanID int64, receivedAt time.Time, reads []scanread.Read) (storage.PersistResult, error) {
+	if s.arbiter != nil && s.arbCfg.Enabled(route.DeviceType) {
+		return s.persistArbitrated(ctx, route, tagScanID, receivedAt, reads)
+	}
 	if s.detector == nil {
 		return s.store.PersistReads(ctx, route.OrgID, route.ScanDeviceID, tagScanID, receivedAt, reads)
 	}
@@ -272,6 +289,35 @@ func (s *Subscriber) persist(ctx context.Context, route storage.ScanRoute, tagSc
 	}
 	committed = true
 	run.Committed()
+	return res, nil
+}
+
+// persistArbitrated is persist for an arbitrated device type. The arbiter's
+// decision commits only with the scan; detection, when configured, runs in the
+// same transaction exactly as on the ordinary path.
+func (s *Subscriber) persistArbitrated(ctx context.Context, route storage.ScanRoute, tagScanID int64, receivedAt time.Time, reads []scanread.Read) (storage.PersistResult, error) {
+	arb := s.arbiter.Begin()
+	var detect storage.DetectFunc
+	var run *detection.Run
+	if s.detector != nil {
+		run = s.detector.Begin()
+		detect = run.Detect
+	}
+	committed := false
+	defer func() {
+		if !committed && run != nil {
+			run.RolledBack()
+		}
+	}()
+	res, err := s.store.PersistReadsArbitrated(ctx, route.OrgID, route.ScanDeviceID, tagScanID, receivedAt, reads, arb.Arbitrate, detect)
+	if err != nil {
+		return res, err
+	}
+	committed = true
+	arb.Committed()
+	if run != nil {
+		run.Committed()
+	}
 	return res, nil
 }
 

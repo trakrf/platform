@@ -42,14 +42,20 @@ type fakeScanStore struct {
 	persistPanic bool
 	plain        int
 	withHook     int
+	arbitrated   int
+	deviceType   string // routed device type; CS463 when empty
 }
 
 func (*fakeScanStore) InsertRawTagScan(context.Context, string, []byte) (int64, error) {
 	return 1, nil
 }
 
-func (*fakeScanStore) ResolveScanTopic(context.Context, string) (storage.ScanRoute, bool, error) {
-	return storage.ScanRoute{OrgID: 1, ScanDeviceID: 2, DeviceType: scandevice.DeviceTypeCS463}, true, nil
+func (f *fakeScanStore) ResolveScanTopic(context.Context, string) (storage.ScanRoute, bool, error) {
+	dt := f.deviceType
+	if dt == "" {
+		dt = scandevice.DeviceTypeCS463
+	}
+	return storage.ScanRoute{OrgID: 1, ScanDeviceID: 2, DeviceType: dt}, true, nil
 }
 
 func (f *fakeScanStore) PersistReads(context.Context, int, int, int64, time.Time, []scanread.Read) (storage.PersistResult, error) {

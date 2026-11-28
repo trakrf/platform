@@ -24,8 +24,13 @@ var (
 		Help: "asset_scans rows inserted by the subscriber.",
 	})
 
+	metricAssetScansUpdated = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "ingest_asset_scans_updated_total",
+		Help: "asset_scans minute rows moved to a new location by zone arbitration.",
+	})
+
 	metricReadsDropped = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ingest_reads_dropped_total",
 		Help: "Parsed reads dropped during derivation, by reason.",
-	}, []string{"reason"}) // no_scan_point, no_asset, conflict
+	}, []string{"reason"}) // no_scan_point, no_asset, conflict, arbitration_hold
 )

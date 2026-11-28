@@ -13,6 +13,7 @@ import (
 
 	"github.com/trakrf/platform/backend/internal/alarm"
 	"github.com/trakrf/platform/backend/internal/alarm/shelly"
+	"github.com/trakrf/platform/backend/internal/arbitration"
 	"github.com/trakrf/platform/backend/internal/assetevent"
 	"github.com/trakrf/platform/backend/internal/buildinfo"
 	"github.com/trakrf/platform/backend/internal/crossing"
@@ -289,6 +290,11 @@ func Run(ctx context.Context, info buildinfo.Info, frontendFS fs.FS) error {
 
 		subscriber := ingest.NewSubscriber(mqttCfg, store, topicRegistry, subscriberEvaluators, readBroadcaster, log)
 		subscriber.SetDetector(detector)
+		// TRA-1365: BLE gateways at room density all hear the same badge; the
+		// arbiter stores the strongest one's location instead of the first
+		// message of each minute. Fixed RFID readers keep the ordinary path.
+		arbCfg := arbitration.ConfigFromEnv()
+		subscriber.SetArbiter(arbitration.NewStage(arbitration.New(arbCfg), store), arbCfg)
 		if err := subscriber.Start(); err != nil {
 			log.Error().Err(err).Msg("Failed to start MQTT subscriber")
 			return err
