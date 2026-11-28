@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Asset, CreateAssetRequest, UpdateAssetRequest, TagInput } from '@/types/assets';
 import { validateDateRange } from '@/lib/asset/validators';
+import { isPersonAsset, withPersonFlag } from '@/lib/asset/person';
 import { ErrorBanner } from '@/components/shared';
 import { useDeviceStore } from '@/stores';
 import { useScanToInput } from '@/hooks/useScanToInput';
@@ -29,6 +30,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
     valid_from: asset?.valid_from?.split('T')[0] || new Date().toISOString().split('T')[0],
     valid_to: asset?.valid_to?.split('T')[0] || '',
     is_active: asset?.is_active ?? true,
+    person: isPersonAsset(asset?.metadata),
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -74,6 +76,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         valid_from: asset.valid_from?.split('T')[0] || '',
         valid_to: asset.valid_to?.split('T')[0] || '',
         is_active: asset.is_active,
+        person: isPersonAsset(asset.metadata),
       });
       // Initialize tags from existing asset + add blank row for new entry
       const existingTags = (asset.tags || []).map((id) => ({
@@ -237,7 +240,7 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         ...(formData.valid_from ? { valid_from: toRFC3339(formData.valid_from) } : {}),
         valid_to: formData.valid_to ? toRFC3339(formData.valid_to) : null,
         is_active: formData.is_active,
-        metadata: {},
+        metadata: withPersonFlag(mode === 'edit' ? asset?.metadata : undefined, formData.person),
       };
 
       // Include tags for the modal to handle (modal extracts and processes separately)
@@ -339,6 +342,17 @@ export function AssetForm({ mode, asset, onSubmit, onCancel, loading = false, er
         />
         <label htmlFor="is_active" className="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">
           Active
+        </label>
+        <input
+          type="checkbox"
+          id="person"
+          checked={formData.person}
+          onChange={(e) => handleChange('person', e.target.checked)}
+          disabled={loading}
+          className="ml-6 h-4 w-4 text-blue-600 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 disabled:opacity-50"
+        />
+        <label htmlFor="person" className="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+          Person
         </label>
       </div>
 
