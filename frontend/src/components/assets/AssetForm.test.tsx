@@ -358,4 +358,49 @@ describe('AssetForm - Tag conflict', () => {
     // Save button should be disabled.
     expect(screen.getByRole('button', { name: /create/i })).toBeDisabled();
   });
+
+  describe('person flag and metadata', () => {
+    const person: Asset = {
+      id: 7,
+      external_key: 'BADGE-1',
+      name: 'Alice',
+      description: '',
+      valid_from: '2024-01-01T00:00:00Z',
+      valid_to: null,
+      metadata: { person: true, color: 'red' },
+      is_active: true,
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    };
+    const submitted = (fn: ReturnType<typeof vi.fn>) => fn.mock.calls[0][0] as { metadata: Record<string, unknown> };
+
+    it('keeps existing metadata when an edit saves', async () => {
+      const onSubmit = vi.fn();
+      render(<AssetForm mode="edit" asset={person} onSubmit={onSubmit} onCancel={vi.fn()} />);
+      expect(screen.getByLabelText('Person')).toBeChecked();
+      fireEvent.click(screen.getByRole('button', { name: /Update Asset/ }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+      expect(submitted(onSubmit).metadata).toEqual({ person: true, color: 'red' });
+    });
+
+    it('unchecking Person removes only the person key', async () => {
+      const onSubmit = vi.fn();
+      render(<AssetForm mode="edit" asset={person} onSubmit={onSubmit} onCancel={vi.fn()} />);
+      fireEvent.click(screen.getByLabelText('Person'));
+      fireEvent.click(screen.getByRole('button', { name: /Update Asset/ }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+      expect(submitted(onSubmit).metadata).toEqual({ color: 'red' });
+    });
+
+    it('creates a person when Person is checked', async () => {
+      const onSubmit = vi.fn();
+      render(<AssetForm mode="create" onSubmit={onSubmit} onCancel={vi.fn()} />);
+      fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Alice' } });
+      expect(screen.getByLabelText('Person')).not.toBeChecked();
+      fireEvent.click(screen.getByLabelText('Person'));
+      fireEvent.click(screen.getByRole('button', { name: /Create Asset/ }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+      expect(submitted(onSubmit).metadata).toEqual({ person: true });
+    });
+  });
 });

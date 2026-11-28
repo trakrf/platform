@@ -7,6 +7,7 @@ import { CurrentLocationCard } from '@/components/reports/CurrentLocationCard';
 import { ReportStatCard } from '@/components/reports/ReportStatCard';
 import { AssetDetailPanel } from '@/components/reports/AssetDetailPanel';
 import { AssetHistoryTab } from '@/components/reports/AssetHistoryTab';
+import { LocationMapTab } from '@/components/reports/map/LocationMapTab';
 import { LocationFilter } from '@/components/reports/LocationFilter';
 import { TimeRangeFilter } from '@/components/reports/TimeRangeFilter';
 import { ShareButton } from '@/components/ShareButton';
@@ -23,7 +24,7 @@ import {
 import type { CurrentLocationItem } from '@/types/reports';
 import type { ExportFormat, ExportResult } from '@/types/export';
 
-type TabId = 'current' | 'movement';
+type TabId = 'current' | 'movement' | 'map';
 
 export default function ReportsScreen() {
   const [currentPage, setCurrentPage] = useState(1);
@@ -143,6 +144,7 @@ export default function ReportsScreen() {
   const tabs: { id: TabId; label: string }[] = [
     { id: 'current', label: 'Locations History' },
     { id: 'movement', label: 'Asset History' },
+    { id: 'map', label: 'Map' },
   ];
 
   return (
@@ -330,6 +332,7 @@ export default function ReportsScreen() {
         )}
 
         {activeTab === 'movement' && <AssetHistoryTab />}
+        {activeTab === 'map' && <LocationMapTab />}
       </div>
 
       {/* Asset Detail Side Panel */}
